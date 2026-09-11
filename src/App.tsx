@@ -33,17 +33,26 @@ import { DeviceSetup } from './components/devices/DeviceSetup';
 import { AIOnboarding } from './components/onboarding/AIOnboarding';
 import { OnboardingList } from './components/onboarding/OnboardingList';
 import { EquipmentDetailsView } from './components/onboarding/EquipmentDetailsView';
-import { 
-  DashboardView, 
-  AlertRulesView, 
-  VendorsView, 
-  UsersView, 
-  DiagnosticsView, 
-  SettingsView 
+import {
+  DashboardView,
+  AlertRulesView,
+  VendorsView,
+  UsersView,
+  DiagnosticsView,
+  SettingsView
 } from './components/views/OtherViews';
+import { PmOverview } from './pm/screens/Overview';
+import { PmMachineDetails } from './pm/screens/MachineDetails';
+import { PmPredictiveTrends } from './pm/screens/PredictiveTrends';
+import { PmActionCenter } from './pm/screens/ActionCenter';
+import { PmFuelTheftDetection } from './pm/screens/FuelTheftDetection';
+import { PmUtilizationReporting } from './pm/screens/UtilizationReporting';
+import { PmGeofencing } from './pm/screens/Geofencing';
+import { PmDeviceHealth } from './pm/screens/DeviceHealth';
+import { PmReports, ReportsTab } from './pm/screens/Reports';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('admin');
+  const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
   const [adminSubTab, setAdminSubTab] = useState<AdminSubTab>('sensor');
   const [subRoute, setSubRoute] = useState<'device-setup' | null>(null);
   const [aiOnboardingView, setAiOnboardingView] = useState<'list' | 'chat' | 'equipment-detail'>('list');
@@ -59,6 +68,21 @@ export default function App() {
   const [protocols] = useState(INITIAL_PROTOCOLS);
   const [plants, setPlants] = useState<PlantItem[]>(INITIAL_PLANTS);
   const [onboardingSessions, setOnboardingSessions] = useState(INITIAL_ONBOARDING_SESSIONS);
+
+  // Predictive Maintenance navigation state
+  const [pmSelectedMachineId, setPmSelectedMachineId] = useState<string | null>(null);
+  const [pmTrendsPreset, setPmTrendsPreset] = useState<{ machineId?: string; parameterKey?: string }>({});
+  const [reportsTab, setReportsTab] = useState<ReportsTab>('operator');
+
+  const handleViewMachine = (machineId: string) => {
+    setPmSelectedMachineId(machineId);
+    setCurrentTab('pm-machine-details');
+  };
+
+  const handleViewTrends = (machineId: string, parameterKey?: string) => {
+    setPmTrendsPreset({ machineId, parameterKey });
+    setCurrentTab('pm-trends');
+  };
 
   // Sync Dark Mode class on document
   useEffect(() => {
@@ -192,6 +216,50 @@ export default function App() {
         headerTitle = 'Settings';
         headerSubtitle = 'System Parameters';
         break;
+      case 'pm-overview':
+        headerTitle = 'Overview';
+        headerSubtitle = 'Predictive Maintenance';
+        break;
+      case 'pm-machine-details':
+        headerTitle = 'Machine Details';
+        headerSubtitle = undefined;
+        headerBreadcrumb = 'Predictive Maintenance';
+        onBackHandler = () => setCurrentTab('pm-overview');
+        break;
+      case 'pm-trends':
+        headerTitle = 'Predictive Trends';
+        headerSubtitle = 'Deep Signal Analysis';
+        headerBreadcrumb = 'Predictive Maintenance';
+        break;
+      case 'pm-action-center':
+        headerTitle = 'Action Center';
+        headerSubtitle = 'Maintenance Queue';
+        headerBreadcrumb = 'Predictive Maintenance';
+        break;
+      case 'mon-fuel-theft':
+        headerTitle = 'Fuel Theft Detection';
+        headerSubtitle = undefined;
+        headerBreadcrumb = 'Monitoring';
+        break;
+      case 'mon-utilization':
+        headerTitle = 'Utilization Reporting';
+        headerSubtitle = undefined;
+        headerBreadcrumb = 'Monitoring';
+        break;
+      case 'mon-geofencing':
+        headerTitle = 'Geofencing';
+        headerSubtitle = undefined;
+        headerBreadcrumb = 'Monitoring';
+        break;
+      case 'mon-device-health':
+        headerTitle = 'Device Health';
+        headerSubtitle = 'Telematics Device Fleet';
+        headerBreadcrumb = 'Monitoring';
+        break;
+      case 'reports':
+        headerTitle = 'Reports';
+        headerSubtitle = undefined;
+        break;
     }
   }
 
@@ -267,6 +335,8 @@ export default function App() {
                     devices={devices}
                     onNavigateToDevices={() => { setCurrentTab('admin'); setAdminSubTab('devices'); }}
                     onNavigateToEquipment={() => { setCurrentTab('admin'); setAdminSubTab('equipment'); }}
+                    onNavigate={setCurrentTab}
+                    onViewMachine={handleViewMachine}
                   />
                 )}
 
@@ -300,6 +370,39 @@ export default function App() {
                 {currentTab === 'administrator' && <UsersView />}
                 {currentTab === 'diagnostics' && <DiagnosticsView />}
                 {currentTab === 'settings' && <SettingsView />}
+
+                {/* Predictive Maintenance */}
+                {currentTab === 'pm-overview' && (
+                  <PmOverview onViewMachine={handleViewMachine} />
+                )}
+                {currentTab === 'pm-machine-details' && (
+                  <PmMachineDetails
+                    machineId={pmSelectedMachineId ?? undefined}
+                    onBack={() => setCurrentTab('pm-overview')}
+                    onViewTrends={handleViewTrends}
+                  />
+                )}
+                {currentTab === 'pm-trends' && (
+                  <PmPredictiveTrends
+                    initialMachineId={pmTrendsPreset.machineId}
+                    initialParameterKey={pmTrendsPreset.parameterKey}
+                    onViewMachine={handleViewMachine}
+                  />
+                )}
+                {currentTab === 'pm-action-center' && (
+                  <PmActionCenter onViewMachine={handleViewMachine} />
+                )}
+
+                {/* Monitoring */}
+                {currentTab === 'mon-fuel-theft' && <PmFuelTheftDetection />}
+                {currentTab === 'mon-utilization' && <PmUtilizationReporting />}
+                {currentTab === 'mon-geofencing' && <PmGeofencing />}
+                {currentTab === 'mon-device-health' && <PmDeviceHealth />}
+
+                {/* Reports */}
+                {currentTab === 'reports' && (
+                  <PmReports activeTab={reportsTab} onChangeTab={setReportsTab} />
+                )}
               </>
             )}
 

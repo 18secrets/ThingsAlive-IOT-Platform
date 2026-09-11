@@ -8,7 +8,19 @@ export type NavigationTab =
   | 'users'
   | 'administrator'
   | 'diagnostics'
-  | 'settings';
+  | 'settings'
+  // Predictive Maintenance
+  | 'pm-overview'
+  | 'pm-machine-details'
+  | 'pm-trends'
+  | 'pm-action-center'
+  // Monitoring
+  | 'mon-fuel-theft'
+  | 'mon-utilization'
+  | 'mon-geofencing'
+  | 'mon-device-health'
+  // Reports
+  | 'reports';
 
 export type AdminSubTab =
   | 'industry'

@@ -13,13 +13,16 @@ import {
   TrendingUp,
   Clock
 } from 'lucide-react';
-import { EquipmentItem, DeviceItem } from '../../types';
+import { EquipmentItem, DeviceItem, NavigationTab } from '../../types';
+import { PmDashboardSummary } from '../../pm/screens/DashboardSummary';
 
 interface DashboardViewProps {
   equipment: EquipmentItem[];
   devices: DeviceItem[];
   onNavigateToDevices: () => void;
   onNavigateToEquipment: () => void;
+  onNavigate: (tab: NavigationTab) => void;
+  onViewMachine: (machineId: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -27,10 +30,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   devices,
   onNavigateToDevices,
   onNavigateToEquipment,
+  onNavigate,
+  onViewMachine,
 }) => {
   return (
-    <div className="space-y-6">
-      {/* Fleet Telematics Overview */}
+    <div className="space-y-10">
+      {/*
+        Original fleet telematics overview (Fleet Health Index / Active Equipment /
+        Online Telematics / Active Diagnostics KPI row, Industrial Telemetry Streams,
+        System Health & Telematics OS) is hidden for now — the Predictive Maintenance
+        + Monitoring + Reports overview below is the only Dashboard content. Restore
+        this block (and drop the props/imports it needs: equipment, devices,
+        onNavigateToDevices, onNavigateToEquipment, Activity, AlertTriangle, Zap,
+        Radio, TrendingUp) if the fleet telematics cards should come back.
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="p-5 bg-[#FFFFFF] dark:bg-[#1A1918] border border-[#121212]/15 dark:border-white/15 shadow-xs">
           <div className="flex items-center justify-between text-[10px] font-sans uppercase tracking-[0.2em] font-bold text-[#121212]/60 dark:text-[#FDFCF5]/60">
@@ -43,7 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div 
+        <div
           onClick={onNavigateToEquipment}
           className="p-5 bg-[#FFFFFF] dark:bg-[#1A1918] border border-[#121212]/15 dark:border-white/15 shadow-xs hover:border-[#FF4D00] cursor-pointer transition-all"
         >
@@ -55,7 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-[11px] text-[#121212]/50 dark:text-[#FDFCF5]/50 mt-1 font-mono">Across 3 industrial plants</div>
         </div>
 
-        <div 
+        <div
           onClick={onNavigateToDevices}
           className="p-5 bg-[#FFFFFF] dark:bg-[#1A1918] border border-[#121212]/15 dark:border-white/15 shadow-xs hover:border-[#FF4D00] cursor-pointer transition-all"
         >
@@ -79,7 +92,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Real-time Telemetry Status Matrix */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-[#FFFFFF] dark:bg-[#1A1918] p-6 border border-[#121212]/15 dark:border-white/15 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
@@ -88,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Live Gateway Feed
             </span>
           </div>
-          
+
           <div className="space-y-3">
             {[
               { plant: 'Lucknow Infrastructure Plant', equip: 'Volvo EC210 Crawler Excavator', param: 'Hydraulic Pump Pressure: 34.2 MPa', status: 'Optimal', time: '1s ago' },
@@ -107,8 +119,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <div className="text-right">
                   <span className={`px-2 py-0.5 border text-[10px] font-mono uppercase font-bold ${
-                    feed.status === 'Optimal' 
-                      ? 'bg-[#F4F2EA] dark:bg-stone-800 text-[#121212] dark:text-[#FDFCF5] border-[#121212]/30 dark:border-white/30' 
+                    feed.status === 'Optimal'
+                      ? 'bg-[#F4F2EA] dark:bg-stone-800 text-[#121212] dark:text-[#FDFCF5] border-[#121212]/30 dark:border-white/30'
                       : 'bg-[#FF4D00]/10 text-[#FF4D00] border-[#FF4D00]/30'
                   }`}>
                     {feed.status}
@@ -120,7 +132,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Quick Actions & Protocols */}
         <div className="bg-[#FFFFFF] dark:bg-[#1A1918] p-6 border border-[#121212]/15 dark:border-white/15 shadow-xs space-y-4">
           <h3 className="font-serif font-bold text-[#121212] dark:text-[#FDFCF5] text-base">System Health & Telematics OS</h3>
           <div className="space-y-3 text-xs">
@@ -139,6 +150,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+      */}
+
+      <PmDashboardSummary onNavigate={onNavigate} onViewMachine={onViewMachine} />
     </div>
   );
 };
