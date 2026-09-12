@@ -13,6 +13,9 @@ import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-ent
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
+import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
+import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
+import { DomainEvent } from '../events/domain-event.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -34,6 +37,9 @@ export const ENTITIES = [
   EquipmentProfile,
   ClientEquipmentClass,
   ClientScenario,
+  EquipmentScenario,
+  ScenarioActivationEvent,
+  DomainEvent,
 ];
 
 export interface DataSourceChoices {

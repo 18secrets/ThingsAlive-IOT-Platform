@@ -43,6 +43,12 @@ describeDb('row-level security coverage', () => {
     // Commercial grants, written by Things Alive and read through the entitlement
     // join rather than by ownership.
     client_catalog_entitlement: 'platform-owned commercial record',
+    // An outbox is infrastructure: drained by a worker with no request behind it,
+    // spanning tenants, carrying delivery state no customer should read. The tenant's
+    // view of the same facts is scenario_activation_event, which is theirs and is
+    // protected. Narrowing this by tenant would make it unreadable to the publisher
+    // at exactly the moment it needs to drain it.
+    domain_event: 'integration outbox, drained by a worker that has no tenant session',
   };
 
   it('protects every table that carries a tenant column', async () => {
