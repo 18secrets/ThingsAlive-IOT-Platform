@@ -28,8 +28,21 @@ export const describeDb: jest.Describe = process.env.DB_HOST
       return describe.skip(name, fn);
     }) as any;
 
-export async function createTestDataSource(): Promise<DataSource> {
-  const ds = new DataSource(dataSourceOptions(TEST_DB as any));
+/**
+ * Two connections, because they prove different things.
+ *
+ * The owner runs migrations and sets up fixtures. The application connection runs as
+ * `ta_app`, exactly as the service does, and is the only one that can demonstrate
+ * anything about row-level security: a superuser bypasses every policy, so a test
+ * run as one is a test of nothing.
+ */
+export async function createTestDataSource(
+  choices: { appRole?: string | null } = { appRole: null },
+): Promise<DataSource> {
+  const ds = new DataSource(dataSourceOptions(TEST_DB as any, choices));
   await ds.initialize();
   return ds;
 }
+
+/** The constrained connection. Mirrors how the running service connects. */
+export const createAppDataSource = (): Promise<DataSource> => createTestDataSource({});
