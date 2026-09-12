@@ -10,7 +10,7 @@ verifies the token the existing platform issues and reads the tenant from it.
 npm install
 cp .env.example .env      # fill in AUTH_JWT_SECRET; never commit the result
 npm run start:dev         # http://localhost:8080/api/v1/health
-npm test                  # 31 without a database; 58 with one
+npm test                  # 37 without a database; 88 with one
 npm run lint              # tsc --noEmit
 ```
 
@@ -118,6 +118,35 @@ the browser is a rendering choice, not a boundary — the response is still one
 devtools panel away. There is no implicit exemption for platform roles: if support
 should see a field, its role is named like anyone else's.
 
+**The catalog is platform-owned; the entitlement join is what narrows it.** One row
+describes a class of machine for every customer that owns one, so there is no tenant
+column and row-level security has nothing to match on — `CatalogService` is the single
+place a tenant-context read may happen, and every method takes a scope for the same
+reason `ScopedRepository` does. Copying the catalog per tenant would mean an OEM
+threshold correction had to be applied in fifty places, and the fiftieth would be
+missed.
+
+**An unentitled class is a 404, never a 403.** A 403 confirms the class exists, which
+is commercial information: it tells a customer what Things Alive sells, and by
+enumeration, roughly to whom.
+
+**Published catalog definitions are immutable.** A change publishes a new version and
+activations pin the version they ran against. Editing a live definition would move the
+thresholds under every alert already running on it — the incident looks like a model
+regression, and the evidence of what changed is gone, because it was overwritten.
+
+**2.0 does not write into the projection.** The class binding, tier and readiness live
+in `equipment_profile`, keyed on the same external identity. A 2.0 column inside the
+mirror would leave the next full reconcile unable to tell upstream drift from a local
+edit, so it would either clobber the tenant's data or refuse to repair real drift.
+
+**Recommendations come from recorded metadata, never inference**, and a blocker is a
+reason code with specifics rather than a sentence: `{ code: 'missing-signals',
+signals: ['coolant_temp'] }` tells an operator which sensor to fit, where "not enough
+data" tells them nothing. An estimated ready date is offered only when time alone will
+clear the blockage — a date printed next to a missing sensor is a promise nobody is
+keeping.
+
 **Telemetry dedupes on `(imei, signal, source_timestamp)`, enforced by a unique index
 rather than a check-then-insert** — two workers on the same queue would both pass a
 check. Duplicates are counted no-ops. A duplicate silently corrupts a rolling
@@ -131,10 +160,12 @@ platform. They diverge routinely, because loggers drift and reconnect with backl
 ```
 src/
   audit/         platform access log — who from Things Alive read which tenant's data
+  catalog/       equipment classes, scenarios, signal aliases, entitlements, recommendations
   auth/          guard, request scope, @Public and @CurrentScope
   common/        severity vocabulary, pagination contract, error envelope, @VisibleTo
   config/        boot-time environment validation
   database/      data source, migrations, the stand-in seed producer
+  equipment/     equipment_profile — what 2.0 knows that the mirror must not hold
   health/        /health (liveness) and /ready (readiness — what the platform probes)
   me/            /me and /me/permissions — capability list the UI guards read
   projection/    read-only mirrors of equipment, devices and sensor mapping + contracts
@@ -148,6 +179,10 @@ test/
   projection     idempotent sync, tenant refusal, reconcile, and replay integrity
   scope          both isolation layers, including a query that deliberately skips the first
   field-policy   what each role's raw JSON does and does not contain
+  capabilities   the guard and /me/permissions cannot disagree, for every role
+  catalog        the entitlement join, version selection, alias resolution
+  recommendation every bucket and every blocker code, on seeded assets
+  rls-coverage   derived from entity metadata: no tenant-owned table without a policy
 ```
 
 The auth matrix test enumerates routes from the running router, so a new controller is
