@@ -242,6 +242,11 @@ covered the moment it is added — nobody has to remember to extend the file.
 
 ## Not here yet
 
-No broker subscription and no scoring. `/ready` still reports `not_configured` for
-the broker, deliberately: a readiness probe that claims health it cannot verify is
-worse than one that admits the gap.
+No broker subscription, so nothing scores on its own. `/ready` still reports
+`not_configured` for the broker, deliberately: a readiness probe that claims health
+it cannot verify is worse than one that admits the gap. Scoring runs when something
+asks for it — `POST /predictions/:sourceSystem/:externalId/score` — and will run on
+arriving telemetry once P0-16 gives us a broker to subscribe to.
+
+Nothing drains the outbox either. `domain_event` rows accumulate as `pending`, which
+is the right failure mode for an outbox and not a permanent one.
