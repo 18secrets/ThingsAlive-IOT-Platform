@@ -52,6 +52,15 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // appears in this list and why adding one later would be a change of model rather
   // than a change of permission.
   'client-catalog.write': ['super admin'],
+  // Predictions are the product the customer bought, so every role inside the tenant
+  // reads them. Support is included because the first question on any ticket is what
+  // the platform actually said about the machine, and asking the customer to read it
+  // back is how the wrong number gets diagnosed.
+  'prediction.read': ['super admin', 'admin', 'operational', 'support', 'platform-support'],
+  // Re-running the scorer by hand. Narrow deliberately: it is cheap but it rewrites a
+  // stored outcome, and an outcome that changes without an explanation is worse than
+  // a stale one.
+  'prediction.run': ['super admin', 'admin'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
 };
