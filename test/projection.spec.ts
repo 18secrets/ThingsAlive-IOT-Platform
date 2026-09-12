@@ -10,7 +10,8 @@ import { TenantMap } from '../src/projection/entities/tenant-map.entity';
 import {
   EQUIPMENT_SNAPSHOT_V1, EquipmentSnapshotEnvelope, TELEMETRY_READING_V1, TelemetryBatchEnvelope,
 } from '../src/projection/contracts/contracts';
-import { TEST_DB, describeDb } from './db';
+import { TEST_DB, createTestDataSource, describeDb } from './db';
+import { withTenantId } from '../src/scope/tenant-session';
 
 const SOURCE = 'iot-platform-1';
 const IMEI = '862211074240870';

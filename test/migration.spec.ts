@@ -48,9 +48,19 @@ describeDb('migrations', () => {
   });
 
   it('leaves nothing behind on the way down', async () => {
-    await ds.undoLastMigration({ transaction: 'all' });
+    // Every migration, not just the last one. Undoing one of two and finding the
+    // first migration's tables still present would pass a weaker assertion while
+    // proving nothing about the down path of anything but the newest file.
+    await undoAll();
     const names = await tableNames();
     for (const t of TABLES) expect(names).not.toContain(t);
+  });
+
+  it('leaves no row-level-security policy behind either', async () => {
+    // A dropped table takes its policies with it, so this only says something once
+    // the tables are back: the check belongs after the second up, below.
+    const policies = await ds.query(`SELECT policyname FROM pg_policies WHERE schemaname = 'public'`);
+    expect(policies).toHaveLength(0);
   });
 
   it('runs up again cleanly after a down', async () => {
@@ -60,4 +70,30 @@ describeDb('migrations', () => {
     const names = await tableNames();
     for (const t of TABLES) expect(names).toContain(t);
   });
+
+  it('re-applies row-level security on the second up', async () => {
+    // The isolation policy is part of the schema, not a one-off setup step someone
+    // runs by hand. If a rebuilt database came back without it, every tenant filter
+    // would rest on application code alone and nothing would say so.
+    const policies = await ds.query(
+      `SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public'`,
+    );
+    const guarded = policies.map((p: any) => p.tablename).sort();
+    expect(guarded).toEqual([
+      'device_projection', 'equipment_projection', 'sensor_map_projection', 'telemetry_reading',
+    ]);
+    // FORCE, or the owner — which is who the service connects as — is exempt.
+    const forced = await ds.query(
+      `SELECT relname FROM pg_class WHERE relrowsecurity AND NOT relforcerowsecurity AND relnamespace = 'public'::regnamespace`,
+    );
+    expect(forced).toHaveLength(0);
+  });
+
+  async function undoAll(): Promise<void> {
+    while ((await ds.query(`SELECT to_regclass('public.migrations') IS NOT NULL AS present`))[0].present) {
+      const [{ count }] = await ds.query(`SELECT count(*)::int AS count FROM migrations`);
+      if (!count) break;
+      await ds.undoLastMigration({ transaction: 'all' });
+    }
+  }
 });
