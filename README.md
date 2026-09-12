@@ -10,7 +10,7 @@ verifies the token the existing platform issues and reads the tenant from it.
 npm install
 cp .env.example .env      # fill in AUTH_JWT_SECRET; never commit the result
 npm run start:dev         # http://localhost:8080/api/v1/health
-npm test                  # 24 without a database; 37 with one
+npm test                  # 31 without a database; 58 with one
 npm run lint              # tsc --noEmit
 ```
 
@@ -30,6 +30,19 @@ DB_HOST=localhost DB_PORT=5433 DB_DATABASE=ta2_test npm test
 pg-mem and sqlite would run faster and prove less: what these tests check is a unique
 index deciding a conflict and a migration's down path, and both are Postgres
 behaviour. CI runs them against `postgres:16-alpine`.
+
+### The two database roles
+
+Migrations run as `DB_USERNAME`, which must own the schema. Everything else runs as
+`ta_app` — an unprivileged, NOLOGIN role the RLS migration creates, which the
+connection pool switches into at startup. Run the migrations before starting the
+service on a fresh database, or it will refuse to connect: the role will not exist
+yet.
+
+That refusal is the design. A superuser bypasses row-level security unconditionally,
+`FORCE` included, and a managed Postgres hands out a superuser by default — so a
+service that quietly fell back to its login user would pass every test, look healthy,
+and enforce nothing.
 
 ### Seeding the projections
 
@@ -78,6 +91,33 @@ would mark an entire fleet missing.
 `projection_rejection` where somebody can see it. An untenanted row is a row every
 tenant can read.
 
+**Tenant isolation is two layers, and the second is tested by going around the
+first.** `ScopedRepository` takes a `RequestScope` as the first argument of every
+method and removes `tenantId` from the `where` type, so an unscoped query is a
+compile error rather than something a reviewer has to catch. Postgres then applies
+the same rule again: every scoped session sets `ta.tenant_id` and drops to `ta_app`
+for the length of the transaction, and the policy on each tenant-owned table matches
+against that setting. Code that reaches a table without a session reads zero rows —
+not everybody's. `test/scope.spec.ts` issues exactly that query to prove it.
+
+**Crossing tenants is possible, deliberate and recorded.** `acrossTenants()` requires
+a platform role and a reason, and writes to `platform_access_log` *before* it reads.
+If the audit write fails, the read fails — a log that silently stops writing is worse
+than no log, because it still reassures. Write auditing alone would miss the access
+that matters here: a support engineer opening a customer's data changes nothing and
+otherwise leaves no trace.
+
+**One escape hatch, and CI keeps it singular.** `runTenantSpanning()` is the only
+thing that sets `ta.bypass`, for the two paths that are legitimately tenant-spanning:
+the sync and ingest producers, which write rows for many tenants at once, and the
+audited support read. A pipeline job fails if that setting appears anywhere else. An
+exemption that can be copied is not an exemption; it is the new default.
+
+**Response fields are filtered on the server, per role** (`@VisibleTo`). Filtering in
+the browser is a rendering choice, not a boundary — the response is still one
+devtools panel away. There is no implicit exemption for platform roles: if support
+should see a field, its role is named like anyone else's.
+
 **Telemetry dedupes on `(imei, signal, source_timestamp)`, enforced by a unique index
 rather than a check-then-insert** — two workers on the same queue would both pass a
 check. Duplicates are counted no-ops. A duplicate silently corrupts a rolling
@@ -90,13 +130,15 @@ platform. They diverge routinely, because loggers drift and reconnect with backl
 
 ```
 src/
+  audit/         platform access log — who from Things Alive read which tenant's data
   auth/          guard, request scope, @Public and @CurrentScope
-  common/        severity vocabulary, pagination contract, error envelope
+  common/        severity vocabulary, pagination contract, error envelope, @VisibleTo
   config/        boot-time environment validation
   database/      data source, migrations, the stand-in seed producer
   health/        /health (liveness) and /ready (readiness — what the platform probes)
   me/            /me and /me/permissions — capability list the UI guards read
   projection/    read-only mirrors of equipment, devices and sensor mapping + contracts
+  scope/         ScopedRepository, the tenant session, the one tenant-spanning hatch
   telemetry/     readings, deduped at the database
 test/
   auth-matrix    enumerates every registered route and asserts it refuses anonymous callers
@@ -104,6 +146,8 @@ test/
   error-envelope shape of every failure, including that a 500 leaks nothing
   migration      up, down, and up again — a down path that drops less than it created
   projection     idempotent sync, tenant refusal, reconcile, and replay integrity
+  scope          both isolation layers, including a query that deliberately skips the first
+  field-policy   what each role's raw JSON does and does not contain
 ```
 
 The auth matrix test enumerates routes from the running router, so a new controller is
