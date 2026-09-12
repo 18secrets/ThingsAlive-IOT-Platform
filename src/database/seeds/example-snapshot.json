@@ -1,0 +1,46 @@
+{
+  "contract": "equipment-snapshot/v1",
+  "sourceSystem": "iot-platform-1",
+  "mode": "full",
+  "generatedAt": "2026-09-12T00:00:00.000Z",
+  "equipment": [
+    {
+      "externalId": "4100201",
+      "externalClientId": "client-7",
+      "name": "Diesel Generator Set 320 KVA",
+      "classId": "diesel-generator",
+      "category": "Genset",
+      "plantExternalId": "0556",
+      "sourceUpdatedAt": "2026-09-11T10:14:00.000Z",
+      "raw": { "manufacturer": "LEROY SOMER", "model": "LSA46.2VL12" }
+    }
+  ],
+  "devices": [
+    {
+      "externalId": "dev-8841",
+      "externalClientId": "client-7",
+      "imei": "862211074240870",
+      "equipmentExternalId": "4100201",
+      "name": "OBD CAN logger",
+      "sourceUpdatedAt": "2026-09-11T10:14:00.000Z"
+    }
+  ],
+  "sensorMap": [
+    {
+      "externalId": "map-1",
+      "externalClientId": "client-7",
+      "imei": "862211074240870",
+      "signal": "fuel_consumption_lph",
+      "sensorName": "Fuel flow",
+      "unit": "L/h"
+    },
+    {
+      "externalId": "map-2",
+      "externalClientId": "client-7",
+      "imei": "862211074240870",
+      "signal": "running_hours_cumulative",
+      "sensorName": "Engine hours",
+      "unit": "h"
+    }
+  ]
+}
