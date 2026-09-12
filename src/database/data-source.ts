@@ -6,6 +6,11 @@ import { ProjectionRejection } from '../projection/entities/projection-rejection
 import { TenantMap } from '../projection/entities/tenant-map.entity';
 import { TelemetryReading } from '../telemetry/telemetry-reading.entity';
 import { PlatformAccessLog } from '../audit/platform-access-log.entity';
+import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
+import { ScenarioDefinition } from '../catalog/entities/scenario-definition.entity';
+import { SignalAlias } from '../catalog/entities/signal-alias.entity';
+import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-entitlement.entity';
+import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -20,6 +25,11 @@ export const ENTITIES = [
   ProjectionRejection,
   TelemetryReading,
   PlatformAccessLog,
+  EquipmentClassProfile,
+  ScenarioDefinition,
+  SignalAlias,
+  ClientCatalogEntitlement,
+  EquipmentProfile,
 ];
 
 export interface DataSourceChoices {

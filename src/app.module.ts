@@ -11,6 +11,7 @@ import { dataSourceOptions } from './database/data-source';
 import { HealthController } from './health/health.controller';
 import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { ScopeModule } from './scope/scope.module';
 import { PlatformReadInterceptor } from './audit/platform-read.interceptor';
 import { FieldPolicyInterceptor } from './common/interceptors/field-policy.interceptor';
@@ -52,6 +53,7 @@ export class AppModule {
               }),
               ScopeModule,
               ProjectionModule,
+              CatalogModule,
             ]
           : []),
       ],
