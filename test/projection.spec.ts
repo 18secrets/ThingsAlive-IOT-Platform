@@ -28,11 +28,20 @@ function snapshot(mode: 'full' | 'delta', equipment: any[], extras: Partial<Equi
 }
 
 describeDb('projection + telemetry (P1-41 … P1-50)', () => {
+  /** The services, on the constrained connection the running service uses. */
   let ds: DataSource;
+  /** Schema and fixtures. ta_app can create nothing and may only read the tenant map. */
+  let owner: DataSource;
   let projections: ProjectionService;
   let telemetry: TelemetryService;
 
   beforeAll(async () => {
+    // Migrations first: they create the ta_app role, and the application pool asks
+    // for it in its startup parameters — so a pool opened before this would not
+    // connect at all.
+    owner = await createTestDataSource();
+    await resetSchema();
+
     const moduleRef = await Test.createTestingModule({
       imports: [TypeOrmModule.forRoot(dataSourceOptions(TEST_DB as any)), ProjectionModule],
     }).compile();
@@ -41,15 +50,28 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
     telemetry = moduleRef.get(TelemetryService);
   });
 
-  afterAll(async () => { await ds?.destroy(); });
+  afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
   beforeEach(async () => {
-    await ds.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
-    await ds.runMigrations({ transaction: 'all' });
-    await ds.getRepository(TenantMap).save({
+    await resetSchema();
+  });
+
+  /**
+   * Reads the way a request would: inside that tenant's session, so row-level
+   * security applies. Querying the table directly returns nothing now, which would
+   * make an assertion like `expect(thrice).toEqual(once)` pass on two empty results
+   * — a test that proves the opposite of what it claims.
+   */
+  const asTenant = (sql: string, tenantId = 'tenant-7'): Promise<any[]> =>
+    withTenantId(ds, tenantId, (m) => m.query(sql));
+
+  async function resetSchema(): Promise<void> {
+    await owner.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
+    await owner.runMigrations({ transaction: 'all' });
+    await owner.getRepository(TenantMap).save({
       sourceSystem: SOURCE, externalClientId: 'client-7', tenantId: 'tenant-7', displayName: 'Cemdindia',
     });
-  });
+  }
 
   it('inserts on first apply and changes nothing on the second', async () => {
     const env = snapshot('delta', [
