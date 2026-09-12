@@ -58,6 +58,7 @@ export class AppModule {
               CatalogModule,
               ClientCatalogModule,
               ActivationModule,
+              PredictionModule,
             ]
           : []),
       ],
