@@ -67,8 +67,11 @@ escape-hatch:
     - |
       # Setting it, not mentioning it: the migration defines the policy that reads
       # this value, and the README explains it. Neither grants anything.
-      OFFENDERS=$(grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
-        --exclude-dir=dist --exclude=.gitlab-ci.yml \
+      # Restricted to TypeScript. Only code can set these, and a guard that also
+      # reads prose makes documenting the rule break the build — which is how a rule
+      # ends up undocumented.
+      OFFENDERS=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist \
         -E "set_config\(\s*'ta\.bypass'" . \
         | grep -v '^\./src/scope/tenant-session\.ts:' || true)
       if [ -n "$OFFENDERS" ]; then
