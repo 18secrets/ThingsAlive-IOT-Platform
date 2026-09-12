@@ -19,6 +19,8 @@ export type Capability =
   | 'catalog.write'
   | 'client-catalog.read'
   | 'client-catalog.write'
+  | 'prediction.read'
+  | 'prediction.run'
   | 'entitlement.grant'
   | 'platform.admin';
 
