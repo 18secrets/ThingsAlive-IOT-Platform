@@ -9,6 +9,7 @@ import { SensorMapProjection } from '../../projection/entities/sensor-map-projec
 import { TenantMap } from '../../projection/entities/tenant-map.entity';
 import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
 import { runTenantSpanning } from '../../scope/tenant-session';
+import { CopyOnGrantService } from '../../client-catalog/services/copy-on-grant.service';
 import dataSource from '../data-source';
 
 /**
@@ -106,6 +107,20 @@ export const DEMO_FLEET: AssetSpec[] = [
 ];
 
 export async function seedDemoFleet(ds: DataSource, now = new Date()): Promise<number> {
+  const count = await seedFleetRows(ds, now);
+
+  // Granting a class copies it into the client's account. The demo seeder grants
+  // directly rather than through the entitlement service, so it has to do the copy
+  // itself — otherwise the account would have entitlements and no catalog, which is
+  // a state the product cannot reach and the fixture should not either.
+  const copies = new CopyOnGrantService(ds);
+  for (const slug of ['diesel-generator', 'cnc-machining-centre']) {
+    await copies.copyForTenant(TENANT, slug, 'seed-demo-fleet', now);
+  }
+  return count;
+}
+
+async function seedFleetRows(ds: DataSource, now: Date): Promise<number> {
   return runTenantSpanning(ds, 'demo fleet fixture', async (m: EntityManager) => {
     // Re-runnable: a seeder that only works on an empty database is a seeder people
     // stop using the second time they need it.

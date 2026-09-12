@@ -6,7 +6,9 @@ import { DeviceProjection } from '../../projection/entities/device-projection.en
 import { SensorMapProjection } from '../../projection/entities/sensor-map-projection.entity';
 import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
 import { withTenantSession } from '../../scope/tenant-session';
-import { ScenarioDefinition, ScenarioTier } from '../entities/scenario-definition.entity';
+import { ScenarioTier } from '../entities/scenario-definition.entity';
+import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
+import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { CatalogService } from './catalog.service';
 
 export type Bucket = 'availableNow' | 'availableLater' | 'notApplicable';
@@ -20,7 +22,8 @@ export type Bucket = 'availableNow' | 'availableLater' | 'notApplicable';
  */
 export type Blocker =
   | { code: 'unclassified' }
-  | { code: 'class-not-entitled' }
+  | { code: 'class-not-in-account' }
+  | { code: 'scenario-disabled' }
   | { code: 'no-device' }
   | { code: 'missing-signals'; signals: string[] }
   | { code: 'insufficient-history'; haveDays: number; needDays: number }
@@ -53,9 +56,14 @@ const TIER_CEILING: Record<string, ScenarioTier> = {
  * the product is activating a scenario that then never fires.
  *
  * The three buckets answer different questions. `notApplicable` means nothing about
- * this asset will change the answer: wrong class, or a class the tenant has not been
- * granted. `availableLater` means blocked by something nameable with a path out of
+ * this asset will change the answer: it is classified as something this account does
+ * not have. `availableLater` means blocked by something nameable with a path out of
  * it. `availableNow` means every declared requirement is already met.
+ *
+ * It reads the client's own copies, not the Things Alive templates. Under the copy
+ * model the template stopped being authoritative the moment the class was granted:
+ * reporting against it would describe scenarios with thresholds nobody is running,
+ * and a customer asking why an alert did not fire would be shown the wrong numbers.
  */
 @Injectable()
 export class RecommendationService {
@@ -77,25 +85,24 @@ export class RecommendationService {
     // than the asset showing an empty list, which reads as "nothing is available for
     // this machine" and is the wrong conclusion to leave a customer with.
     if (!facts.classSlug) {
-      const all = await this.catalog.scenarios(scope);
+      const all = await this.clientScenarios(scope);
       return {
         equipmentClassSlug: null,
         recommendations: all.map((s) => base(s, [{ code: 'unclassified' }], 'availableLater')),
       };
     }
 
-    // Classified as something this tenant is not entitled to, or that is no longer
-    // published. Nothing about the asset will change that, so its scenarios are
-    // notApplicable rather than blocked — and the tenant's own catalog is still
-    // listed the same way, so the screen explains itself instead of going blank.
-    let candidates: ScenarioDefinition[];
-    try {
-      candidates = await this.catalog.scenariosForClass(scope, facts.classSlug);
-    } catch {
-      const all = await this.catalog.scenarios(scope);
+    // Classified as something this account does not have a copy of — never granted,
+    // or renamed, or archived. Nothing about the asset will change that, so its
+    // scenarios are notApplicable rather than blocked; and the account's own
+    // scenarios are still listed, so the screen explains itself instead of going
+    // blank.
+    const candidates = await this.clientScenarios(scope, facts.classSlug);
+    if (!candidates.length && !(await this.hasClass(scope, facts.classSlug))) {
+      const all = await this.clientScenarios(scope);
       return {
         equipmentClassSlug: facts.classSlug,
-        recommendations: all.map((s) => base(s, [{ code: 'class-not-entitled' }], 'notApplicable')),
+        recommendations: all.map((s) => base(s, [{ code: 'class-not-in-account' }], 'notApplicable')),
       };
     }
 
@@ -105,8 +112,13 @@ export class RecommendationService {
     };
   }
 
-  private assess(scenario: ScenarioDefinition, facts: AssetFacts, now: Date): Recommendation {
+  private assess(scenario: ClientScenario, facts: AssetFacts, now: Date): Recommendation {
     const blockers: Blocker[] = [];
+
+    // Switched off by the client. Reported rather than hidden: "we turned it off" is
+    // a different answer from "it cannot run here", and only one of them is a
+    // question for support.
+    if (!scenario.enabled) blockers.push({ code: 'scenario-disabled' });
 
     const noDevice = facts.imeis.length === 0;
     if (noDevice) blockers.push({ code: 'no-device' });
@@ -152,6 +164,28 @@ export class RecommendationService {
       ...base(scenario, blockers, 'availableLater'),
       estimatedReadyDate: onlyTime ? readyDate : null,
     };
+  }
+
+  /** The account's own scenarios, which are the only ones anybody is running. */
+  private clientScenarios(scope: RequestScope, classSlug?: string): Promise<ClientScenario[]> {
+    return withTenantSession(this.ds, scope, (m) =>
+      m.getRepository(ClientScenario).find({
+        where: {
+          tenantId: scope.tenantId,
+          status: 'active',
+          ...(classSlug ? { clientEquipmentClassSlug: classSlug } : {}),
+        },
+        order: { slug: 'ASC' },
+      }),
+    );
+  }
+
+  private async hasClass(scope: RequestScope, slug: string): Promise<boolean> {
+    return withTenantSession(this.ds, scope, async (m) =>
+      (await m.getRepository(ClientEquipmentClass).count({
+        where: { tenantId: scope.tenantId, slug, status: 'active' },
+      })) > 0,
+    );
   }
 
   /** One pass over the tenant's own rows, inside that tenant's session. */
@@ -219,10 +253,10 @@ interface AssetFacts {
   historyDays: number;
 }
 
-function base(s: ScenarioDefinition, blockers: Blocker[], bucket: Bucket): Recommendation {
+function base(s: ClientScenario, blockers: Blocker[], bucket: Bucket): Recommendation {
   return {
     scenarioSlug: s.slug,
-    scenarioVersion: s.version,
+    scenarioVersion: s.templateVersion ?? 0,
     name: s.name,
     severity: s.severity,
     tier: s.tier,
