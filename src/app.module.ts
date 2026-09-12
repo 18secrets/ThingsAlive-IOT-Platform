@@ -1,6 +1,6 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthGuard } from './auth/guards/auth.guard';
@@ -10,6 +10,9 @@ import { dataSourceOptions } from './database/data-source';
 import { HealthController } from './health/health.controller';
 import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
+import { ScopeModule } from './scope/scope.module';
+import { PlatformReadInterceptor } from './audit/platform-read.interceptor';
+import { FieldPolicyInterceptor } from './common/interceptors/field-policy.interceptor';
 
 export interface AppOptions {
   /** Defaults to "whenever DB_HOST is configured". */
@@ -46,6 +49,7 @@ export class AppModule {
                 // that a connection string is wrong.
                 retryAttempts: 0,
               }),
+              ScopeModule,
               ProjectionModule,
             ]
           : []),
@@ -55,6 +59,14 @@ export class AppModule {
         // Authenticated by default. Opting out is per-route and carries a reason.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },
+        // Redaction happens on the way out, once, for every route that declares a
+        // policy — not in each handler, where forgetting is silent.
+        { provide: APP_INTERCEPTOR, useClass: FieldPolicyInterceptor },
+        // Needs the audit table, so it exists only where there is a database. A
+        // database-less boot is tests and `--help`; neither reads customer data.
+        ...(withDatabase
+          ? [{ provide: APP_INTERCEPTOR, useClass: PlatformReadInterceptor }]
+          : []),
       ],
     };
   }
