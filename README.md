@@ -218,6 +218,7 @@ src/
   me/            /me and /me/permissions — capability list the UI guards read
   projection/    read-only mirrors of equipment, devices and sensor mapping + contracts
   scope/         ScopedRepository, the tenant session, the one tenant-spanning hatch
+  prediction/    baselines, the Tier 1 scorer, and the partitioned prediction store
   telemetry/     readings, deduped at the database
 test/
   auth-matrix    enumerates every registered route and asserts it refuses anonymous callers
