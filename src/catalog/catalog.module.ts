@@ -6,6 +6,8 @@ import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from './entities/scenario-definition.entity';
 import { SignalAlias } from './entities/signal-alias.entity';
+import { ClientCatalogModule } from '../client-catalog/client-catalog.module';
+import { CatalogAuthoringService } from './services/catalog-authoring.service';
 import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
 import { RecommendationService } from './services/recommendation.service';
@@ -25,9 +27,10 @@ import { RecommendationService } from './services/recommendation.service';
       EquipmentClassProfile, ScenarioDefinition, SignalAlias,
       ClientCatalogEntitlement, EquipmentProfile,
     ]),
+    ClientCatalogModule,
   ],
   controllers: [CatalogController],
-  providers: [CatalogService, EntitlementService, RecommendationService],
+  providers: [CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService],
   exports: [CatalogService, RecommendationService],
 })
 export class CatalogModule {}
