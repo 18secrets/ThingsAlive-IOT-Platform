@@ -2,11 +2,11 @@ import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
+import { AppModule, AppOptions } from './app.module';
 import { corsOrigins } from './config/env.validation';
 
-export async function createApp() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+export async function createApp(options: AppOptions = {}) {
+  const app = await NestFactory.create(AppModule.register(options), { bufferLogs: false });
   const config = app.get(ConfigService);
 
   // Versioned from the first commit (task P0-01). There are no legacy callers to

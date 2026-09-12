@@ -13,7 +13,9 @@ describe('error envelope', () => {
   beforeAll(async () => {
     process.env.AUTH_JWT_SECRET = 'test-secret';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
-    app = await createApp();
+    // These suites exercise HTTP behaviour and need no database. Saying so
+    // explicitly beats depending on whether DB_HOST happens to be set.
+    app = await createApp({ database: false });
     await app.init();
   });
 

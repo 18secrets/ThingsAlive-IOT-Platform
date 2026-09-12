@@ -22,6 +22,10 @@ variables:
   NODE_ENV: test
   AUTH_JWT_SECRET: ci-test-secret
   CORS_ORIGINS: http://localhost:3000
+  POSTGRES_DB: ta2_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST_AUTH_METHOD: trust
 
 # Runs without node_modules — the point is to fail in seconds, before anything installs.
 secrets:
@@ -65,4 +69,16 @@ build:
 
 test:
   stage: verify
+  # A real Postgres, not an in-memory stand-in. What these tests prove — a unique
+  # index deciding a conflict, and a migration's down path — is Postgres behaviour,
+  # and an emulator that gets it subtly right proves nothing about production.
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USERNAME: postgres
+    DB_PASSWORD: postgres
+    DB_DATABASE: ta2_test
   script: [npm test]
