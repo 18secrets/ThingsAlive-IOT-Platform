@@ -56,6 +56,40 @@ secrets:
       fi
       echo "No tracked env files, connection strings or key-shaped literals."
 
+# The tenant-isolation escape hatch must stay singular. An exemption that can be
+# copied into a second file is not an exemption; it is the new default, and the
+# copy is always made under deadline by someone who will not write the comment.
+escape-hatch:
+  stage: guard
+  image: alpine:3.20
+  before_script: []
+  script:
+    - |
+      # Setting it, not mentioning it: the migration defines the policy that reads
+      # this value, and the README explains it. Neither grants anything.
+      OFFENDERS=$(grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist --exclude=.gitlab-ci.yml \
+        -E "set_config\(\s*'ta\.bypass'" . \
+        | grep -v '^\./src/scope/tenant-session\.ts:' || true)
+      if [ -n "$OFFENDERS" ]; then
+        echo "ta.bypass is set outside src/scope/tenant-session.ts:"
+        echo "$OFFENDERS"
+        echo "Use runTenantSpanning() — it logs, and it is the only thing CI allows."
+        exit 1
+      fi
+      # SET ROLE is how a scoped session stops being a superuser. Anywhere else it is
+      # how code stops being scoped.
+      ROLES=$(grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist --exclude=.gitlab-ci.yml -E "SET (LOCAL )?ROLE" . \
+        | grep -v 'src/scope/tenant-session\.ts' \
+        | grep -v 'src/database/migrations/' || true)
+      if [ -n "$ROLES" ]; then
+        echo "SET ROLE outside the session helper and the migrations:"
+        echo "$ROLES"
+        exit 1
+      fi
+      echo "Tenant-isolation escape hatches are where they should be."
+
 types:
   stage: guard
   script: [npm run lint]
