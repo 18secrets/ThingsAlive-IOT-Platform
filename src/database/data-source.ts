@@ -42,6 +42,8 @@ export const ENTITIES = [
   EquipmentScenario,
   ScenarioActivationEvent,
   DomainEvent,
+  Prediction,
+  PredictionBaseline,
 ];
 
 export interface DataSourceChoices {
