@@ -11,6 +11,8 @@ import { DeviceProjection } from '../src/projection/entities/device-projection.e
 import { SensorMapProjection } from '../src/projection/entities/sensor-map-projection.entity';
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
+import { ClientEquipmentClass } from '../src/client-catalog/entities/client-equipment-class.entity';
+import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 /**
@@ -53,35 +55,40 @@ describeDb('recommendations', () => {
 
   beforeEach(async () => {
     for (const t of ['telemetry_reading', 'sensor_map_projection', 'device_projection',
-      'equipment_profile', 'client_catalog_entitlement', 'scenario_definition',
-      'equipment_class_profile']) {
+      'equipment_profile', 'client_scenario', 'client_equipment_class',
+      'client_catalog_entitlement', 'scenario_definition', 'equipment_class_profile']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
 
-    await owner.getRepository(EquipmentClassProfile).save({
-      slug: 'diesel-generator', version: 1, status: 'published', name: 'Diesel generator',
-      description: null, category: 'power', expectedSignals: [], failureModes: [],
-      defaultThresholds: {}, publishedAt: NOW,
-    });
-    await owner.getRepository(ScenarioDefinition).save([
-      // Needs one signal, no history. The simple case.
-      define('fuel-theft', ['fuel_level'], 0, 1),
-      // Needs a signal the asset does not report.
-      define('coolant-loss', ['coolant_temp'], 0, 1),
-      // Needs history the asset has not accumulated.
-      define('load-drift', ['fuel_level'], 30, 1),
-      // Needs a tier the asset is not on.
-      define('bearing-failure', ['fuel_level'], 0, 3),
-    ]);
-    await owner.getRepository(ClientCatalogEntitlement).save({
-      tenantId: 'acme', equipmentClassSlug: 'diesel-generator', grantedBy: 'u-master', note: null,
+    // The engine reads what the account owns, not the template library, so the
+    // fixture is the account's own copies. Seeding templates here would test a path
+    // nobody's recommendations actually travel.
+    await runTenantSpanning(owner, 'test fixture', async (m) => {
+      await m.getRepository(ClientEquipmentClass).save({
+        tenantId: 'acme', slug: 'diesel-generator', name: 'Diesel generator',
+        description: null, category: 'power', expectedSignals: [], failureModes: [],
+        defaultThresholds: {}, templateSlug: 'diesel-generator', templateVersion: 1,
+        templateChecksum: 'c', copiedAt: NOW, status: 'active', updatedBy: 'u-master',
+      });
+      await m.getRepository(ClientScenario).save([
+        // Needs one signal, no history. The simple case.
+        define('fuel-theft', ['fuel_level'], 0, 1),
+        // Needs a signal the asset does not report.
+        define('coolant-loss', ['coolant_temp'], 0, 1),
+        // Needs history the asset has not accumulated.
+        define('load-drift', ['fuel_level'], 30, 1),
+        // Needs a tier the asset is not on.
+        define('bearing-failure', ['fuel_level'], 0, 3),
+      ]);
     });
   });
 
   const define = (slug: string, requiredSignals: string[], minimumHistoryDays: number, tier: any) => ({
-    slug, version: 1, equipmentClassSlug: 'diesel-generator', status: 'published' as any,
+    tenantId: 'acme', slug, clientEquipmentClassSlug: 'diesel-generator',
     name: slug, description: null, severity: 'high' as any, tier,
-    requiredSignals, minimumHistoryDays, parameters: [], publishedAt: NOW,
+    requiredSignals, minimumHistoryDays, parameters: [], enabled: true,
+    templateSlug: slug, templateVersion: 1, templateChecksum: 'c', copiedAt: NOW,
+    status: 'active' as const, updatedBy: 'u-master',
   });
 
   /** An asset with a device, a sensor map and some history. */
@@ -186,11 +193,28 @@ describeDb('recommendations', () => {
     expect(recommendations.every((r) => r.blockedBy[0].code === 'unclassified')).toBe(true);
   });
 
-  it('reports notApplicable when the class is not entitled, not an empty list', async () => {
-    await owner.query(`UPDATE client_catalog_entitlement SET revoked_at = now()`);
-    await seedAsset({ externalId: 'DG-1', firstReadingDaysAgo: 60 });
+  it('reports notApplicable when the account has no copy of that class', async () => {
+    // Classified as something this account does not have — never granted, archived,
+    // or renamed out from under the asset. Nothing about the asset changes that.
+    await seedAsset({ externalId: 'DG-1', classSlug: 'air-compressor', firstReadingDaysAgo: 60 });
     const { recommendations } = await service.forEquipment(acme, SOURCE, 'DG-1', NOW);
+    expect(recommendations.length).toBeGreaterThan(0);
     expect(recommendations.every((r) => r.bucket === 'notApplicable')).toBe(true);
+    expect(recommendations.every((r) => r.blockedBy[0].code === 'class-not-in-account')).toBe(true);
+  });
+
+  it('reports a scenario the client switched off, rather than hiding it', async () => {
+    // "We turned it off" and "it cannot run here" are different answers, and only
+    // one of them is a question for support.
+    await seedAsset({ externalId: 'DG-1', firstReadingDaysAgo: 60 });
+    await runTenantSpanning(owner, 'test fixture', (m) =>
+      m.getRepository(ClientScenario).update(
+        { tenantId: 'acme', slug: 'fuel-theft' }, { enabled: false },
+      ),
+    );
+    const rec = bucketOf((await service.forEquipment(acme, SOURCE, 'DG-1', NOW)).recommendations, 'fuel-theft');
+    expect(rec.bucket).toBe('availableLater');
+    expect(rec.blockedBy.map((b: any) => b.code)).toContain('scenario-disabled');
   });
 
   it('says there is no device when there is no device', async () => {
