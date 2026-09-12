@@ -19,6 +19,7 @@ describeDb('migrations', () => {
   const TABLES = [
     'tenant_map', 'equipment_projection', 'device_projection',
     'sensor_map_projection', 'projection_rejection', 'telemetry_reading',
+    'platform_access_log',
   ];
 
   async function tableNames(): Promise<string[]> {
