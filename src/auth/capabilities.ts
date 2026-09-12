@@ -17,6 +17,8 @@ export type Capability =
   | 'action.work'
   | 'catalog.read'
   | 'catalog.write'
+  | 'client-catalog.read'
+  | 'client-catalog.write'
   | 'entitlement.grant'
   | 'platform.admin';
 
@@ -36,7 +38,18 @@ const GRANTS: Record<Capability, readonly string[]> = {
     'super admin', 'admin', 'operational', 'support',
     'master-admin', 'catalog-author', 'platform-support',
   ],
+  // Authoring the *templates*. Things Alive only: the catalog is what Things Alive
+  // sells, and a customer editing it would be editing the product.
   'catalog.write': ['master-admin', 'catalog-author'],
+  // Reading the *client's own copies*. Every role inside the tenant; Things Alive
+  // roles are absent on purpose — a platform role reaching a client's copy goes
+  // through the audited cross-tenant path, not through an ordinary read.
+  'client-catalog.read': ['super admin', 'admin', 'operational', 'support'],
+  // Editing them. Super admin alone. Once a class is granted, the copy is the
+  // client's and nobody at Things Alive can write it, which is why no platform role
+  // appears in this list and why adding one later would be a change of model rather
+  // than a change of permission.
+  'client-catalog.write': ['super admin'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
 };

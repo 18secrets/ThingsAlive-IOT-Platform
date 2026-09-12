@@ -11,6 +11,8 @@ import { ScenarioDefinition } from '../catalog/entities/scenario-definition.enti
 import { SignalAlias } from '../catalog/entities/signal-alias.entity';
 import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-entitlement.entity';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
+import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
+import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -30,6 +32,8 @@ export const ENTITIES = [
   SignalAlias,
   ClientCatalogEntitlement,
   EquipmentProfile,
+  ClientEquipmentClass,
+  ClientScenario,
 ];
 
 export interface DataSourceChoices {
