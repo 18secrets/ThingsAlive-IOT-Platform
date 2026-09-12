@@ -40,7 +40,9 @@ describe('error envelope', () => {
     const filter = new ErrorEnvelopeFilter();
     const json = jest.fn();
     const status = jest.fn(() => ({ json }));
-    filter.catch(new Error('connection string is postgres://user:hunter2@host/db'), {
+    // A deliberately realistic fake, so the assertion below means something.
+    const leaky = 'connection string is postgres://user:hunter2@host/db'; // scan-allow
+    filter.catch(new Error(leaky), {
       switchToHttp: () => ({
         getResponse: () => ({ status }),
         getRequest: () => ({ method: 'GET', url: '/api/v1/x' }),

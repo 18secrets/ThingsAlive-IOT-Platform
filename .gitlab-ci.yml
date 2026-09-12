@@ -1,0 +1,68 @@
+# Every merge request runs this. Nothing merges on an author's assurance that it works.
+#
+# Stages are ordered by how fast they fail: a type error should not wait for the
+# test suite, and the secret scan should not wait for anything.
+
+stages: [guard, verify]
+
+default:
+  image: node:22-alpine
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [.npm/]
+  before_script:
+    # `npm install`, not `npm ci`, only because package-lock.json is not in the repo
+    # yet — it could not be pushed through the tooling that created this branch.
+    # First task for whoever clones this: run `npm install`, commit the lockfile, and
+    # change this line to `npm ci --cache .npm --prefer-offline`. Until then the build
+    # is not reproducible: two pipelines a week apart can resolve different versions.
+    - npm install --cache .npm --prefer-offline --no-audit --no-fund
+
+variables:
+  NODE_ENV: test
+  AUTH_JWT_SECRET: ci-test-secret
+  CORS_ORIGINS: http://localhost:3000
+
+# Runs without node_modules — the point is to fail in seconds, before anything installs.
+secrets:
+  stage: guard
+  image: alpine:3.20
+  before_script: []
+  script:
+    - |
+      # A .env file must never enter this repository. The existing platform learned
+      # this the expensive way: live database credentials, a JWT secret and a mailbox
+      # password sat in its history for months.
+      if git ls-files --error-unmatch .env .env.* 2>/dev/null | grep -v '\.env\.example$'; then
+        echo "A .env file is tracked. Remove it and rotate whatever was in it."
+        exit 1
+      fi
+      # Cheap shape checks for credentials pasted into source. A line may opt out with
+      # a trailing `scan-allow` comment when the literal is deliberately fake — the
+      # fixture in error-envelope.spec.ts needs a realistic connection string to prove
+      # one never reaches a caller. The marker is greppable, so opt-outs stay reviewable.
+      SCAN="grep -rIn --exclude-dir=node_modules --exclude-dir=.git --exclude=.gitlab-ci.yml"
+      if $SCAN -E '(postgres|postgresql|amqp|redis)://[^:]+:[^@[:space:]]+@' . | grep -v 'scan-allow'; then
+        echo "A connection string with an inline password is committed."
+        exit 1
+      fi
+      if $SCAN -E '\b(AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,})\b' . | grep -v 'scan-allow'; then
+        echo "Something shaped like an API key is committed."
+        exit 1
+      fi
+      echo "No tracked env files, connection strings or key-shaped literals."
+
+types:
+  stage: guard
+  script: [npm run lint]
+
+build:
+  stage: verify
+  script: [npm run build]
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 day
+
+test:
+  stage: verify
+  script: [npm test]
