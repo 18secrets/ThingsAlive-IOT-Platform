@@ -19,7 +19,8 @@ describeDb('migrations', () => {
   const TABLES = [
     'tenant_map', 'equipment_projection', 'device_projection',
     'sensor_map_projection', 'projection_rejection', 'telemetry_reading',
-    'platform_access_log',
+    'platform_access_log', 'equipment_class_profile', 'scenario_definition',
+    'signal_alias', 'client_catalog_entitlement', 'equipment_profile',
   ];
 
   async function tableNames(): Promise<string[]> {
@@ -78,10 +79,15 @@ describeDb('migrations', () => {
     const policies = await ds.query(
       `SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public'`,
     );
+    // What this test owns is that a rebuilt database comes back guarded — whether the
+    // guard list is *complete* is derived from the entity metadata in
+    // rls-coverage.spec.ts, so a new tenant-owned table cannot pass by being absent
+    // from a hand-maintained array in two places.
     const guarded = policies.map((p: any) => p.tablename).sort();
-    expect(guarded).toEqual([
-      'device_projection', 'equipment_projection', 'sensor_map_projection', 'telemetry_reading',
-    ]);
+    for (const table of ['device_projection', 'equipment_projection',
+      'sensor_map_projection', 'telemetry_reading']) {
+      expect(guarded).toContain(table);
+    }
     // FORCE, or the owner — which is who the service connects as — is exempt.
     const forced = await ds.query(
       `SELECT relname FROM pg_class WHERE relrowsecurity AND NOT relforcerowsecurity AND relnamespace = 'public'::regnamespace`,
