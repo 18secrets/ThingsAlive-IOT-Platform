@@ -19,7 +19,8 @@ describeDb('migrations', () => {
   const TABLES = [
     'tenant_map', 'equipment_projection', 'device_projection',
     'sensor_map_projection', 'projection_rejection', 'telemetry_reading',
-    'platform_access_log', 'equipment_class_profile', 'scenario_definition',
+    'platform_access_log',
+    'equipment_class_profile', 'scenario_definition',
     'signal_alias', 'client_catalog_entitlement', 'equipment_profile',
   ];
 
