@@ -1,93 +1,65 @@
-# Things Alive IOT Platform 2.0
+# Things Alive IoT Platform 2.0
 
+Prediction scenarios, catalog, actions and integrations — a new service alongside the
+existing platform, with its own database. It issues no credentials of its own: it
+verifies the token the existing platform issues and reads the tenant from it.
 
+## Run
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/things-alive-2.0/things-alive-iot-platform-2.0.git
-git branch -M main
-git push -uf origin main
+```bash
+npm install
+cp .env.example .env      # fill in AUTH_JWT_SECRET; never commit the result
+npm run start:dev         # http://localhost:8080/api/v1/health
+npm test                  # 24 tests
+npm run lint              # tsc --noEmit
 ```
 
-## Integrate with your tools
+Swagger: `/api-docs`. All routes live under `/api/v1`.
 
-* [Set up project integrations](https://gitlab.com/things-alive-2.0/things-alive-iot-platform-2.0/-/settings/integrations)
+## What is deliberate here
 
-## Collaborate with your team
+**Versioned from the first commit.** `/api/v1` costs nothing now and cannot be added
+cheaply once callers exist — the existing platform serves its routes bare and adding a
+prefix there would break every client.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+**Authenticated by default.** The guard is global. `@Public('reason')` marks *one route*
+and takes a reason; it cannot be applied to a controller class. The existing platform has
+fifteen class-level `@Public()` decorators, which is how tenant records ended up answering
+unauthenticated callers.
 
-## Test and Deploy
+**A token with no tenant claim is rejected**, never treated as "all tenants". That failure
+mode turns a bug into a cross-customer data leak.
 
-Use the built-in continuous integration in GitLab.
+**One severity vocabulary** (`src/common/severity.ts`). Foreign values are mapped at the
+boundary and an unknown value throws rather than defaulting — a silently downgraded
+severity is a missed alert.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+**CORS from configuration with no permissive fallback**, and the service refuses to start
+in production without its secrets.
 
-***
+**Errors share one envelope**: `{ error: { code, message, details } }`, with internal
+messages logged and never returned.
 
-# Editing this README
+## Layout
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```
+src/
+  auth/          guard, request scope, @Public and @CurrentScope
+  common/        severity vocabulary, pagination contract, error envelope
+  config/        boot-time environment validation
+  health/        /health (liveness) and /ready (readiness — what the platform probes)
+  me/            /me and /me/permissions — capability list the UI guards read
+test/
+  auth-matrix    enumerates every registered route and asserts it refuses anonymous callers
+  severity       mapping is total, and refuses to guess
+  error-envelope shape of every failure, including that a 500 leaks nothing
+```
 
-## Suggestions for a good README
+The auth matrix test enumerates routes from the running router, so a new controller is
+covered the moment it is added — nobody has to remember to extend the file.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Not here yet
 
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+No database, broker or scoring — those arrive with the projection and runtime tasks.
+`/ready` reports `not_configured` for each until then, deliberately: a readiness probe
+that claims health it cannot verify is worse than one that admits the gap.
