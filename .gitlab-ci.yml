@@ -82,8 +82,8 @@ escape-hatch:
       fi
       # SET ROLE is how a scoped session stops being a superuser. Anywhere else it is
       # how code stops being scoped.
-      ROLES=$(grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
-        --exclude-dir=dist --exclude=.gitlab-ci.yml -E "SET (LOCAL )?ROLE" . \
+      ROLES=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist -E "SET (LOCAL )?ROLE" . \
         | grep -v 'src/scope/tenant-session\.ts' \
         | grep -v 'src/database/migrations/' || true)
       if [ -n "$ROLES" ]; then

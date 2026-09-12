@@ -175,6 +175,34 @@ baseline, and a corrupted baseline silently corrupts every z-score built on it.
 **Two clocks, both UTC**: `source_timestamp` from the logger, `received_at` from the
 platform. They diverge routinely, because loggers drift and reconnect with backlogs.
 
+### The prediction runtime
+
+A baseline is what normal looks like for one signal on one asset over one window. The
+scorer compares the latest reading against it and reports a z-score, a band and a
+composite risk. Three things about that are worth knowing before reading the code.
+
+**A prediction is keyed to the logger's clock, not the server's.** `occurred_at` is the
+source timestamp of the newest reading behind the score. That is what makes re-scoring
+idempotent, and what stops a replay of last year's telemetry writing a year of
+predictions dated today.
+
+**`confidence` is not severity.** A machine whose sensors all went quiet scores `none`
+on every signal, exactly like a healthy one. `confidence` is the field that separates
+"nothing is wrong" from "we could not tell", and a screen that ignores it will show a
+blind asset in the healthy column.
+
+**A signal that never varies is unscored, not normal.** A standard deviation of zero
+makes a z-score undefined, and it usually means a sensor stuck on one number — which
+is precisely the fault worth catching. It is reported with a reason rather than
+quietly passed.
+
+`prediction` is range-partitioned by month from the first migration. Partitions are
+created by `ta_ensure_prediction_partition(date)` rather than by hand, because a
+partition created without its row-level security policy works perfectly and is
+readable by every tenant. The default partition is a safety net that is meant to stay
+empty, and a test asserts it: once it holds a row for a month, the partition for that
+month can no longer be created.
+
 ## Layout
 
 ```
