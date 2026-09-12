@@ -10,7 +10,7 @@ verifies the token the existing platform issues and reads the tenant from it.
 npm install
 cp .env.example .env      # fill in AUTH_JWT_SECRET; never commit the result
 npm run start:dev         # http://localhost:8080/api/v1/health
-npm test                  # 37 without a database; 88 with one
+npm test                  # 37 without a database; 102 with one
 npm run lint              # tsc --noEmit
 ```
 
@@ -43,6 +43,26 @@ That refusal is the design. A superuser bypasses row-level security unconditiona
 `FORCE` included, and a managed Postgres hands out a superuser by default — so a
 service that quietly fell back to its login user would pass every test, look healthy,
 and enforce nothing.
+
+### Seeding the catalog
+
+```bash
+npm run seed:catalog              # loads as draft — invisible to tenants
+npm run seed:catalog -- --publish # test and demo databases only
+npm run seed:demo                 # 9 assets spanning every possible answer
+```
+
+The DG and CNC profiles in `src/database/seeds/catalog/` are drafted from OEM
+documentation — Kirloskar KG934 controller defaults, Caterpillar's underloading
+guidance, ISO 10816-3, metalworking fluid practice. They ship as `draft` because a
+drafted threshold and a reviewed one look identical in a JSON file, and the status
+column is the only thing that tells them apart. `docs/catalog-research-notes.md` has
+the sources and the open questions.
+
+The seeder refuses to load a scenario requiring a signal its class does not declare.
+A typo produces a scenario permanently blocked with `missing-signals:
+['coolent_temp']` — telling a customer to fit a sensor that is already fitted — and
+the recommendation engine cannot tell a misspelling from an absent sensor.
 
 ### Seeding the projections
 
