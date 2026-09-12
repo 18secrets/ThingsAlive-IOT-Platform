@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+
+# Environment — never commit a real value. See .env.example.
+.env
+.env.*
+!.env.example
