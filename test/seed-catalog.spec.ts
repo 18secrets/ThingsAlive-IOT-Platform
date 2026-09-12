@@ -176,8 +176,12 @@ describeDb('seeded catalog', () => {
     });
 
     it('separates "wait" from "there is nothing to wait for"', async () => {
+      // Classified as something this account has no copy of. Under the copy model
+      // that is the question — not whether an entitlement exists, but whether the
+      // client actually holds the class, since the copy is what anybody runs.
       const { recommendations: recs } = await forAsset('DG-RETIRED-CLASS-009');
       expect(recs.every((r) => r.bucket === 'notApplicable')).toBe(true);
+      expect(recs.every((r) => r.blockedBy[0].code === 'class-not-in-account')).toBe(true);
     });
 
     it('tells the truth about the CNC: the fleet cannot collect any of it', async () => {
@@ -205,7 +209,7 @@ describeDb('seeded catalog', () => {
       }
       expect([...buckets].sort()).toEqual(['availableLater', 'availableNow', 'notApplicable']);
       expect([...codes].sort()).toEqual([
-        'class-not-entitled', 'insufficient-history', 'missing-signals',
+        'class-not-in-account', 'insufficient-history', 'missing-signals',
         'no-device', 'tier-too-low', 'unclassified',
       ]);
     }, 30_000);

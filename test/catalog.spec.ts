@@ -7,6 +7,7 @@ import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { CatalogService } from '../src/catalog/services/catalog.service';
 import { EntitlementService } from '../src/catalog/services/entitlement.service';
+import { CopyOnGrantService } from '../src/client-catalog/services/copy-on-grant.service';
 import { createTestDataSource, describeDb } from './db';
 
 /**
@@ -44,12 +45,15 @@ describeDb('catalog', () => {
     entitlements = new EntitlementService(
       ds.getRepository(ClientCatalogEntitlement),
       ds.getRepository(EquipmentClassProfile),
+      new CopyOnGrantService(ds),
     );
   });
 
   afterAll(async () => { await ds?.destroy(); });
 
   beforeEach(async () => {
+    await ds.query(`DELETE FROM client_scenario`);
+    await ds.query(`DELETE FROM client_equipment_class`);
     await ds.query(`DELETE FROM client_catalog_entitlement`);
     await ds.query(`DELETE FROM scenario_definition`);
     await ds.query(`DELETE FROM equipment_class_profile`);
@@ -103,10 +107,24 @@ describeDb('catalog', () => {
     expect(dg.version).toBe(2);
   });
 
-  it('never shows a draft, even to the tenant that owns the class', async () => {
+  it('refuses to grant a class that has never been published', async () => {
+    // A grant is two writes now — the entitlement, and the copy into the client's
+    // account. Refusing here rather than failing between them keeps an account from
+    // holding an entitlement with no catalog behind it, which is a state the product
+    // has no screen for.
+    await expect(entitlements.grant(master, 'acme', 'air-compressor'))
+      .rejects.toThrow(/no published version/i);
+    expect((await catalog.equipmentClasses(acme)).map((c) => c.slug)).not.toContain('air-compressor');
+  });
+
+  it('never shows a draft to a tenant, even one entitled to that slug', async () => {
+    await ds.getRepository(EquipmentClassProfile).save(
+      classRow('air-compressor', 2, 'published'),
+    );
     await entitlements.grant(master, 'acme', 'air-compressor');
-    const slugs = (await catalog.equipmentClasses(acme)).map((c) => c.slug);
-    expect(slugs).not.toContain('air-compressor');
+    // v2 is published and visible; the v1 draft is not, and never becomes so.
+    const shown = (await catalog.equipmentClasses(acme)).find((c) => c.slug === 'air-compressor');
+    expect(shown?.version).toBe(2);
   });
 
   it('404s an unentitled class rather than 403ing it', async () => {
