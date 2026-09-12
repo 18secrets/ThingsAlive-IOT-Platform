@@ -10,6 +10,8 @@
     "lint": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts",
+    "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
+    "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts",
     "test:watch": "jest --watch"
   },
   "dependencies": {
