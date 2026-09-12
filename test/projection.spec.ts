@@ -124,7 +124,7 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
     ]));
     expect(res.equipment.markedMissing).toBe(1);
 
-    const rows = await ds.query(
+    const rows = await asTenant(
       `SELECT external_id, status FROM equipment_projection ORDER BY external_id`,
     );
     expect(rows).toEqual([
