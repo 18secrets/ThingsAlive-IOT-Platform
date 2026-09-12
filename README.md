@@ -232,6 +232,9 @@ test/
   catalog        the entitlement join, version selection, alias resolution
   recommendation every bucket and every blocker code, on seeded assets
   rls-coverage   derived from entity metadata: no tenant-owned table without a policy
+  activation     every edge of the transition table, and three writes that are one
+  tier1          the scorer as a pure function — bands, confidence, the 3-signal flag
+  prediction     partition routing, baseline idempotency, and re-scoring the same window
 ```
 
 The auth matrix test enumerates routes from the running router, so a new controller is
