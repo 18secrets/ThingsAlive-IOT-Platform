@@ -33,22 +33,12 @@ export class MeController {
   @Get('permissions')
   @ApiOperation({ summary: 'Capabilities this caller has, for UI guards' })
   permissions(@CurrentScope() scope: RequestScope) {
-    // Capabilities grow with each feature. Derived from roles today; the resource-level
-    // check (can(action, resourceId)) arrives with the scope-aware data layer in P1-52.
-    const has = (...roles: string[]) => roles.some((r) => scope.roles.includes(r));
+    // Computed by the same function CapabilityGuard enforces with. Two lists that
+    // agree today are two lists that will disagree eventually, and the day they do,
+    // the UI offers a control the API refuses — or hides one it would have allowed.
     return {
       tenantId: scope.tenantId,
-      capabilities: {
-        'tenant.manage': has('super admin', 'master-admin'),
-        'user.manage': has('super admin', 'master-admin'),
-        'equipment.write': has('super admin', 'admin', 'master-admin'),
-        'scenario.activate': has('super admin', 'admin'),
-        'scenario.author': has('super admin', 'admin'),
-        'alert.author': has('super admin', 'admin'),
-        'action.work': has('super admin', 'admin', 'operational', 'support'),
-        'catalog.write': has('master-admin', 'catalog-author'),
-        'platform.admin': scope.isPlatformRole,
-      },
+      capabilities: capabilitiesFor(scope),
     };
   }
 }

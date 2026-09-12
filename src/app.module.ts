@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthGuard } from './auth/guards/auth.guard';
+import { CapabilityGuard } from './auth/guards/capability.guard';
 import { ErrorEnvelopeFilter } from './common/filters/error-envelope.filter';
 import { validateEnv } from './config/env.validation';
 import { dataSourceOptions } from './database/data-source';
@@ -58,6 +59,11 @@ export class AppModule {
       providers: [
         // Authenticated by default. Opting out is per-route and carries a reason.
         { provide: APP_GUARD, useClass: AuthGuard },
+        // Runs after the auth guard, so a scope exists by the time it looks. Global
+        // rather than per-controller: a route that declares @Requires must be
+        // enforced whether or not somebody remembered to attach the guard to its
+        // controller.
+        { provide: APP_GUARD, useClass: CapabilityGuard },
         { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },
         // Redaction happens on the way out, once, for every route that declares a
         // policy — not in each handler, where forgetting is silent.
