@@ -183,7 +183,7 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
       expect(replayA).toMatchObject({ accepted: 0, duplicates: 100 });
       expect(replayB).toMatchObject({ accepted: 0, duplicates: 100 });
 
-      const [{ count }] = await ds.query(`SELECT count(*)::int FROM telemetry_reading`);
+      const [{ count }] = await asTenant(`SELECT count(*)::int FROM telemetry_reading`);
       expect(count).toBe(100);
     });
 
