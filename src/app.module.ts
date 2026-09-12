@@ -13,6 +13,7 @@ import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
+import { ActivationModule } from './activation/activation.module';
 import { ScopeModule } from './scope/scope.module';
 import { PlatformReadInterceptor } from './audit/platform-read.interceptor';
 import { FieldPolicyInterceptor } from './common/interceptors/field-policy.interceptor';
@@ -56,6 +57,7 @@ export class AppModule {
               ProjectionModule,
               CatalogModule,
               ClientCatalogModule,
+              ActivationModule,
             ]
           : []),
       ],
