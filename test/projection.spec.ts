@@ -189,12 +189,12 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
 
     it('produces identical aggregates across one pass and three', async () => {
       await telemetry.ingest(batch(50));
-      const once = await ds.query(
+      const once = await asTenant(
         `SELECT count(*)::int AS n, sum(value) AS total, avg(value) AS mean FROM telemetry_reading`,
       );
       await telemetry.ingest(batch(50));
       await telemetry.ingest(batch(50));
-      const thrice = await ds.query(
+      const thrice = await asTenant(
         `SELECT count(*)::int AS n, sum(value) AS total, avg(value) AS mean FROM telemetry_reading`,
       );
       // Aggregates, not row counts: this is the shape a baseline actually reads.
@@ -204,7 +204,7 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
     it('keeps both clocks', async () => {
       const receivedAt = new Date('2026-09-02T10:00:00.000Z');
       await telemetry.ingest(batch(1), receivedAt);
-      const [row] = await ds.query(
+      const [row] = await asTenant(
         `SELECT source_timestamp, received_at FROM telemetry_reading LIMIT 1`,
       );
       // Loggers drift and reconnect with backlogs, so these routinely differ.
