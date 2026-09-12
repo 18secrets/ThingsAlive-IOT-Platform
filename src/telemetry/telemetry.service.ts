@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { TelemetryBatchEnvelope } from '../projection/contracts/contracts';
 import { SensorMapProjection } from '../projection/entities/sensor-map-projection.entity';
 import { ProjectionRejection } from '../projection/entities/projection-rejection.entity';
 import { TelemetryReading } from './telemetry-reading.entity';
+import { runTenantSpanning } from '../scope/tenant-session';
 
 export interface IngestResult {
   accepted: number;
@@ -25,19 +25,35 @@ export class TelemetryService {
   private readonly logger = new Logger(TelemetryService.name);
 
   constructor(
-    @InjectRepository(TelemetryReading) private readonly readings: Repository<TelemetryReading>,
-    @InjectRepository(SensorMapProjection) private readonly sensorMap: Repository<SensorMapProjection>,
-    @InjectRepository(ProjectionRejection) private readonly rejections: Repository<ProjectionRejection>,
+    private readonly ds: DataSource,
   ) {}
 
+  /**
+   * A batch off the broker carries readings for whatever devices happened to report,
+   * which is to say several tenants at once. Like the projection sync, ingest is a
+   * producer of tenant data and runs tenant-spanning; the tenant of each row is
+   * decided here, from the sensor map, and a reading that cannot resolve one is
+   * refused rather than stored under a guess.
+   */
   async ingest(envelope: TelemetryBatchEnvelope, receivedAt = new Date()): Promise<IngestResult> {
+    if (!envelope.readings.length) return { accepted: 0, duplicates: 0, rejected: 0 };
+    return runTenantSpanning(this.ds, `telemetry ingest from ${envelope.sourceSystem}`, (m) =>
+      this.ingestWithin(m, envelope, receivedAt),
+    );
+  }
+
+  private async ingestWithin(
+    m: EntityManager,
+    envelope: TelemetryBatchEnvelope,
+    receivedAt: Date,
+  ): Promise<IngestResult> {
     const result: IngestResult = { accepted: 0, duplicates: 0, rejected: 0 };
-    if (!envelope.readings.length) return result;
 
     // A reading whose device is not mapped has no tenant, and therefore no home.
     const imeis = [...new Set(envelope.readings.map((r) => r.imei))];
     const tenantByImei = new Map<string, string>();
-    for (const row of await this.sensorMap.find({ where: imeis.map((imei) => ({ imei })) })) {
+    const sensorMapRepo = m.getRepository(SensorMapProjection);
+    for (const row of await sensorMapRepo.find({ where: imeis.map((imei) => ({ imei })) })) {
       tenantByImei.set(row.imei, row.tenantId);
     }
 
@@ -45,8 +61,9 @@ export class TelemetryService {
     for (const r of envelope.readings) {
       const tenantId = tenantByImei.get(r.imei);
       if (!tenantId) {
-        await this.rejections.save(
-          this.rejections.create({
+        const rejections = m.getRepository(ProjectionRejection);
+        await rejections.save(
+          rejections.create({
             sourceSystem: envelope.sourceSystem,
             kind: 'telemetry',
             externalId: r.imei,
@@ -71,7 +88,7 @@ export class TelemetryService {
 
     if (!rows.length) return result;
 
-    const inserted = await this.readings
+    const inserted = await m
       .createQueryBuilder()
       .insert()
       .into(TelemetryReading)

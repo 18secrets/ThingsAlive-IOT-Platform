@@ -34,13 +34,7 @@ async function main() {
 
   const ds: DataSource = await dataSource.initialize();
   try {
-    const service = new ProjectionService(
-      ds.getRepository(EquipmentProjection),
-      ds.getRepository(DeviceProjection),
-      ds.getRepository(SensorMapProjection),
-      ds.getRepository(TenantMap),
-      ds.getRepository(ProjectionRejection),
-    );
+    const service = new ProjectionService(ds.getRepository(TenantMap), ds);
 
     const result = await service.apply(envelope);
     // eslint-disable-next-line no-console

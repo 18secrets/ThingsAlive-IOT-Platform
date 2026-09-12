@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   DeviceSnapshotItem, EquipmentSnapshotEnvelope, EquipmentSnapshotItem, SensorMapSnapshotItem,
 } from '../contracts/contracts';
@@ -10,6 +10,7 @@ import { ProjectionRejection } from '../entities/projection-rejection.entity';
 import { SensorMapProjection } from '../entities/sensor-map-projection.entity';
 import { TenantMap } from '../entities/tenant-map.entity';
 import { checksumOf } from './checksum';
+import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
 
 export interface SyncResult {
   inserted: number;
@@ -37,18 +38,31 @@ export class ProjectionService {
   private readonly logger = new Logger(ProjectionService.name);
 
   constructor(
-    @InjectRepository(EquipmentProjection) private readonly equipment: Repository<EquipmentProjection>,
-    @InjectRepository(DeviceProjection) private readonly devices: Repository<DeviceProjection>,
-    @InjectRepository(SensorMapProjection) private readonly sensorMap: Repository<SensorMapProjection>,
     @InjectRepository(TenantMap) private readonly tenants: Repository<TenantMap>,
-    @InjectRepository(ProjectionRejection) private readonly rejections: Repository<ProjectionRejection>,
+    private readonly ds: DataSource,
   ) {}
 
+  /**
+   * The sync writes rows for many tenants in one pass, so it runs tenant-spanning —
+   * there is no single tenant whose row-level-security session it could adopt. It is
+   * the producer of tenant data, not a consumer of it, and the boundary it must
+   * respect is the tenant map, which is enforced above by refusing unmapped rows.
+   */
   async apply(envelope: EquipmentSnapshotEnvelope, now = new Date()): Promise<Record<string, SyncResult>> {
+    return runTenantSpanning(this.ds, `projection sync from ${envelope.sourceSystem}`, (m) =>
+      this.applyWithin(m, envelope, now),
+    );
+  }
+
+  private async applyWithin(
+    m: EntityManager,
+    envelope: EquipmentSnapshotEnvelope,
+    now: Date,
+  ): Promise<Record<string, SyncResult>> {
     const tenantByClient = await this.tenantLookup(envelope.sourceSystem);
 
     const equipment = await this.applyKind(
-      'equipment', envelope, envelope.equipment ?? [], this.equipment, tenantByClient, now,
+      'equipment', envelope, envelope.equipment ?? [], m.getRepository(EquipmentProjection), m, tenantByClient, now,
       (item: EquipmentSnapshotItem) => ({
         name: item.name ?? null,
         classId: item.classId ?? null,
@@ -57,7 +71,7 @@ export class ProjectionService {
       }),
     );
     const devices = await this.applyKind(
-      'device', envelope, envelope.devices ?? [], this.devices, tenantByClient, now,
+      'device', envelope, envelope.devices ?? [], m.getRepository(DeviceProjection), m, tenantByClient, now,
       (item: DeviceSnapshotItem) => ({
         imei: item.imei,
         equipmentExternalId: item.equipmentExternalId ?? null,
@@ -65,7 +79,7 @@ export class ProjectionService {
       }),
     );
     const sensorMap = await this.applyKind(
-      'sensor_map', envelope, envelope.sensorMap ?? [], this.sensorMap, tenantByClient, now,
+      'sensor_map', envelope, envelope.sensorMap ?? [], m.getRepository(SensorMapProjection), m, tenantByClient, now,
       (item: SensorMapSnapshotItem) => ({
         imei: item.imei,
         signal: item.signal,
@@ -77,12 +91,19 @@ export class ProjectionService {
     return { equipment, devices, sensorMap };
   }
 
-  /** How stale the freshest row for a tenant is, in milliseconds. Null when empty. */
+  /**
+   * How stale the freshest row for a tenant is, in milliseconds. Null when empty.
+   * Runs in that tenant's session, so row-level security applies to it exactly as it
+   * would to a request — a staleness figure computed across tenants would be wrong
+   * and reassuring at the same time.
+   */
   async stalenessMs(tenantId: string, now = new Date()): Promise<number | null> {
-    const row = await this.equipment.findOne({
-      where: { tenantId },
-      order: { syncedAt: 'DESC' },
-    });
+    const row = await withTenantId(this.ds, tenantId, (m) =>
+      m.getRepository(EquipmentProjection).findOne({
+        where: { tenantId },
+        order: { syncedAt: 'DESC' },
+      }),
+    );
     return row ? now.getTime() - row.syncedAt.getTime() : null;
   }
 
@@ -96,6 +117,7 @@ export class ProjectionService {
     envelope: EquipmentSnapshotEnvelope,
     items: any[],
     repo: Repository<any>,
+    m: EntityManager,
     tenantByClient: Map<string, string>,
     now: Date,
     fields: (item: any) => Record<string, unknown>,
@@ -109,8 +131,9 @@ export class ProjectionService {
       const tenantId = tenantByClient.get(item.externalClientId);
       if (!tenantId) {
         // Refused, not defaulted. An untenanted row is a row every tenant can read.
-        await this.rejections.save(
-          this.rejections.create({
+        const rejections = m.getRepository(ProjectionRejection);
+        await rejections.save(
+          rejections.create({
             sourceSystem: envelope.sourceSystem,
             kind,
             externalId: item.externalId ?? null,
