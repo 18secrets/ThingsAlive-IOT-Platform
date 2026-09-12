@@ -107,15 +107,30 @@ export class ScopeAndRls1757670000000 implements MigrationInterface {
     }
     await q.query(`DROP TABLE IF EXISTS "platform_access_log"`);
 
-    // Privileges must go before the role does; Postgres refuses to drop a role that
-    // still owns or is granted anything.
+    // Give back this database's privileges, and leave the role alone.
+    //
+    // Two findings, both from watching this down path fail. The first version listed
+    // REVOKE statements table by table, which worked until a later migration added
+    // grants of its own — a revoke list has to be kept in step with every grant
+    // anybody adds afterwards, and it fails in the direction of leaving a dependency
+    // behind. DROP OWNED BY needs no such list.
+    //
+    // The second is why DROP ROLE is gone entirely. A role is cluster-wide while a
+    // migration is per-database, so on a cluster hosting staging and test from the
+    // same Postgres, one database rolling back would be deleting a role the other is
+    // still using. Postgres refuses, correctly — and making the failure go away by
+    // catching it would mean the drop succeeds exactly when the other database
+    // happens to be empty, which is a worse bug than a leftover role.
+    //
+    // What remains after a full rollback is an unprivileged NOLOGIN role that owns
+    // nothing and can do nothing. `up` creates it only IF NOT EXISTS, so re-applying
+    // is clean. DROP OWNED BY drops no objects here because ta_app is never granted
+    // CREATE — which is also why it must never be.
     await q.query(`
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ta_app') THEN
-          EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "ta_app"';
-          EXECUTE 'REVOKE ALL ON SCHEMA public FROM "ta_app"';
-          DROP ROLE "ta_app";
+          EXECUTE 'DROP OWNED BY "ta_app"';
         END IF;
       END
       $$`);

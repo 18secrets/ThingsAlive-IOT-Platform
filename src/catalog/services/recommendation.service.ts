@@ -108,9 +108,14 @@ export class RecommendationService {
   private assess(scenario: ScenarioDefinition, facts: AssetFacts, now: Date): Recommendation {
     const blockers: Blocker[] = [];
 
-    if (!facts.imeis.length) blockers.push({ code: 'no-device' });
+    const noDevice = facts.imeis.length === 0;
+    if (noDevice) blockers.push({ code: 'no-device' });
 
-    const missing = scenario.requiredSignals.filter((s) => !facts.signals.has(s));
+    // With no logger fitted, every signal is missing and naming them is noise: the
+    // action is "fit a logger", not "fit eight sensors", and nobody knows yet which
+    // signals that logger will carry. A blocker list is only useful while somebody
+    // reads it.
+    const missing = noDevice ? [] : scenario.requiredSignals.filter((s) => !facts.signals.has(s));
     if (missing.length) blockers.push({ code: 'missing-signals', signals: missing });
 
     const ceiling = TIER_CEILING[facts.tier] ?? 1;
