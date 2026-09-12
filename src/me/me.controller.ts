@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { RequestScope } from '../auth/types/request-scope';
+import { capabilitiesFor } from '../auth/capabilities';
 
 /**
  * What the caller is, and what they may do.
