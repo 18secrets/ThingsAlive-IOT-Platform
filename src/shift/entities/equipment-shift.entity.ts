@@ -83,6 +83,23 @@ export class EquipmentShift {
   @Column({ name: 'scored_through', type: 'timestamptz', nullable: true })
   scoredThrough: Date | null;
 
+  /**
+   * The newest arrival time this shift has already accounted for.
+   *
+   * The second watermark, and the one that makes store-and-forward survivable. A
+   * logger holds up to two days of readings while it is off the network and pushes
+   * them when it comes back; those readings carry the *logger's* timestamps, which
+   * fall inside windows that have already been scored and passed.
+   *
+   * `scored_through` alone would never look at them again: the window is not owed, so
+   * nothing pulls it, so a prediction made from the third of a shift that happened to
+   * be online stands for ever as the answer for the whole shift. Tracking arrival
+   * separately is what lets a late push rewind the event-time watermark and have the
+   * affected windows scored again.
+   */
+  @Column({ name: 'arrivals_through', type: 'timestamptz', nullable: true })
+  arrivalsThrough: Date | null;
+
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;
 

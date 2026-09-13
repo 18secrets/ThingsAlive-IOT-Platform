@@ -17,6 +17,24 @@ export interface PullRequest {
   to: Date;
 }
 
+export interface LateArrivalRequest {
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  /** The newest arrival already accounted for. Null means nothing has been. */
+  since: Date | null;
+  /** Now. Readings arriving during the sweep belong to the next one. */
+  upTo: Date;
+}
+
+export interface LateArrival {
+  /** The oldest logger timestamp among the readings that arrived late. */
+  earliestReading: Date;
+  /** The newest arrival time seen, to be recorded so this does not repeat forever. */
+  seenThrough: Date;
+  count: number;
+}
+
 export interface PullResult {
   envelope: TelemetryBatchEnvelope | null;
   /** Why nothing came back, when nothing did. */
@@ -122,6 +140,44 @@ export class LegacyTelemetryReader {
   }
 
   /**
+   * Readings that turned up after the window they belong to had been scored.
+   *
+   * The loggers buffer up to two days off the network and push when they return, so
+   * this is the ordinary case rather than the exotic one. Their table carries both
+   * clocks — `timestamp` is the logger's, `created_at` is when the row reached them —
+   * and the difference between the two is the whole mechanism: ask for rows that
+   * arrived after we last looked, and report the oldest *reading* among them.
+   *
+   * Aggregated rather than returned row by row. The answer this needs is "how far back
+   * do we have to go", and a two-day backfill on a busy machine is a great many rows
+   * to carry across the network to compute one minimum.
+   */
+  async lateArrivals(request: LateArrivalRequest): Promise<LateArrival | null> {
+    if (!this.legacy?.isInitialized) return null;
+
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) return null;
+
+    const [row] = await this.legacy.query(
+      `SELECT min("timestamp") AS earliest,
+              max("created_at") AS seen_through,
+              count(*)::int AS count
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[])
+          AND "created_at" > $2
+          AND "created_at" <= $3`,
+      [[...map.keys()], request.since ?? new Date(0), request.upTo],
+    );
+    if (!row?.count) return null;
+
+    return {
+      earliestReading: new Date(row.earliest),
+      seenThrough: new Date(row.seen_through),
+      count: Number(row.count),
+    };
+  }
+
+  /**
    * Which upstream measurement ids belong to this machine, and what each one means.
    *
    * Tenant-spanning because it is a read of the mirror on behalf of a runner with no
@@ -129,7 +185,7 @@ export class LegacyTelemetryReader {
    * session, so it cannot widen.
    */
   private async sensorMapFor(
-    request: PullRequest,
+    request: { tenantId: string; sourceSystem: string; externalId: string },
   ): Promise<Map<string, { imei: string; signal: string; unit: string | null }>> {
     return runTenantSpanning(this.ds, `telemetry pull for ${request.externalId}`, async (m) => {
       const devices = await m.getRepository(DeviceProjection).find({
@@ -153,7 +209,9 @@ export class LegacyTelemetryReader {
     });
   }
 
-  private async hasDevices(request: PullRequest): Promise<boolean> {
+  private async hasDevices(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+  ): Promise<boolean> {
     return runTenantSpanning(this.ds, `telemetry pull for ${request.externalId}`, async (m) =>
       (await m.getRepository(DeviceProjection).count({
         where: {
