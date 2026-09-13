@@ -22,6 +22,8 @@ export interface RunSummary {
   scored: number;
   skipped: number;
   failed: number;
+  /** Shifts rewound because readings turned up for a window already scored. */
+  rewound: number;
   outcomes: RunOutcome[];
 }
 
@@ -50,8 +52,16 @@ export class ShiftRunner {
   ) {}
 
   async run(now = new Date()): Promise<RunSummary> {
+    // Sweep first, score second. A logger that has been off the network pushes its
+    // buffer stamped with its own clock, so those readings belong to windows that have
+    // already been scored and passed; sweeping afterwards would mean every late push
+    // waits a whole extra pass before anybody looks at it.
+    const rewound = await this.sweepLateArrivals(now);
+
     const owed = await this.shifts.owed(now);
-    const summary: RunSummary = { considered: owed.length, scored: 0, skipped: 0, failed: 0, outcomes: [] };
+    const summary: RunSummary = {
+      considered: owed.length, scored: 0, skipped: 0, failed: 0, rewound, outcomes: [],
+    };
     if (owed.length === 0) return summary;
 
     if (!this.reader.connected) {
@@ -74,6 +84,54 @@ export class ShiftRunner {
       else summary.skipped += 1;
     }
     return summary;
+  }
+
+  /**
+   * Put back any window whose readings turned up after it was scored.
+   *
+   * The loggers hold up to two days off the network, so this is the ordinary case. A
+   * prediction built from the third of a shift that happened to be online is not
+   * wrong in a way anybody can see — it is a confident answer about a machine, made
+   * from a fraction of the evidence, with nothing to say so.
+   *
+   * Re-scoring appends: a prediction is keyed by the moment of its newest reading, so
+   * the window ends up carrying the thin answer and then the fuller one. Both were
+   * true when made, and the newest is the one that counts.
+   */
+  private async sweepLateArrivals(now: Date): Promise<number> {
+    if (!this.reader.connected) return 0;
+    let rewound = 0;
+
+    for (const shift of await this.shifts.activeShifts()) {
+      try {
+        const late = await this.reader.lateArrivals({
+          tenantId: shift.tenantId,
+          sourceSystem: shift.sourceSystem,
+          externalId: shift.externalId,
+          since: shift.arrivalsThrough,
+          upTo: now,
+        });
+        if (!late) continue;
+
+        const didRewind = await this.shifts.rewindForLateArrivals(
+          shift.tenantId, shift.id, late.earliestReading, late.seenThrough,
+        );
+        if (didRewind) {
+          rewound += 1;
+          this.logger.log(
+            `${late.count} reading(s) arrived late for ${shift.externalId}, oldest `
+            + `${late.earliestReading.toISOString()}. Re-scoring from there.`,
+          );
+        }
+      } catch (error) {
+        // A sweep that fails leaves both watermarks where they were, so the same late
+        // readings are found again next pass. Nothing is lost by moving on.
+        this.logger.error(
+          `Could not sweep late arrivals for ${shift.externalId}: ${(error as Error).message}`,
+        );
+      }
+    }
+    return rewound;
   }
 
   private async one(window: OwedWindow): Promise<RunOutcome> {

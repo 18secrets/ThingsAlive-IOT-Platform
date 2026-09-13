@@ -94,6 +94,7 @@ export class ShiftService {
         // than every shift since the machine was commissioned, which on a fleet being
         // onboarded is the difference between one scoring pass and several thousand.
         scoredThrough: null,
+        arrivalsThrough: null,
         createdBy: scope.userId,
         updatedBy: scope.userId,
       }));
@@ -201,6 +202,61 @@ export class ShiftService {
       }
     }
     return out.sort((a, b) => a.end.getTime() - b.end.getTime());
+  }
+
+  /**
+   * Every active shift, for a runner that has to sweep before it scores.
+   *
+   * Tenant-spanning for the same reason `owed` is: no request behind it, and no one
+   * customer it is acting for.
+   */
+  async activeShifts(): Promise<EquipmentShift[]> {
+    return runTenantSpanning(this.ds, 'shift runner: active shifts',
+      (m) => m.getRepository(EquipmentShift).find({ where: { status: 'active' } }));
+  }
+
+  /**
+   * Readings turned up for a window this shift had already scored.
+   *
+   * The watermark goes *backwards*, which is the whole point: a logger that was off
+   * the network for two days pushes readings stamped with the logger's clock, and they
+   * belong to windows nothing would otherwise look at again. Rewinding puts those
+   * windows back in the owed list and the ordinary machinery takes them in order,
+   * capped, exactly as it would a backlog.
+   *
+   * `arrivalsThrough` moves forward in the same write. It has to: without it the same
+   * late push would be discovered on every pass and the shift would rewind for ever.
+   * And it is recorded even when the rewind is a no-op, so a machine that is simply
+   * busy does not get swept from the beginning of time each pass.
+   */
+  async rewindForLateArrivals(
+    tenantId: string, shiftId: string, earliestReading: Date, seenThrough: Date,
+  ): Promise<boolean> {
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const repo = m.getRepository(EquipmentShift);
+      const shift = await repo.findOne({ where: { tenantId, id: shiftId } });
+      if (!shift) return false;
+
+      // One millisecond before the oldest late reading, so the window containing it is
+      // owed again rather than just missed.
+      const rewindTo = new Date(earliestReading.getTime() - 1);
+      const rewound = !!shift.scoredThrough && rewindTo < shift.scoredThrough;
+
+      await repo.update({ tenantId, id: shiftId }, {
+        // One millisecond past what was seen, because the round trip through a
+        // JavaScript Date truncates Postgres's microseconds: storing the max verbatim
+        // leaves every row that arrived later in the same millisecond looking new on
+        // the next pass, and the shift sweeps itself for ever.
+        //
+        // Nothing is lost by stepping past them. This sweep only decides how far to
+        // rewind; the readings themselves come from the pull, which selects on the
+        // logger's clock rather than on arrival, so a row skipped here is still read
+        // when its window is scored again.
+        arrivalsThrough: new Date(seenThrough.getTime() + 1),
+        ...(rewound ? { scoredThrough: rewindTo } : {}),
+      });
+      return rewound;
+    });
   }
 
   /**

@@ -227,6 +227,90 @@ describeDb('the shift runner', () => {
     expect(job).toMatchObject({ origin: 'prediction', status: 'created', assignedToUserId: null });
   });
 
+  describe('when a logger has been off the network', () => {
+    /**
+     * The case Things Alive described: the hardware buffers up to two days and pushes
+     * when the network comes back. Those readings carry the logger's clock, so they
+     * land inside windows that have already been scored — and a watermark on event
+     * time alone would never look at them again.
+     */
+    it('re-scores a window when its readings turn up afterwards', async () => {
+      // A thin shift: one reading was online at the time, so the window scores.
+      await owner.query(
+        `INSERT INTO "device_sensor_measurement_logs"
+           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T01:00:00Z',80)`,
+        [MEASUREMENT_ID]);
+      await shifts.create(boss, ref, morning);
+
+      const first = await runner.run(NOW);
+      expect(first).toMatchObject({ scored: 1, rewound: 0 });
+      expect(first.outcomes[0].readings).toBe(1);
+
+      // The logger comes back and pushes the rest of that morning. Same window,
+      // arriving now.
+      for (const at of ['2026-09-14T02:00:00Z', '2026-09-14T03:00:00Z', '2026-09-14T04:00:00Z']) {
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$2,81)`,
+          [MEASUREMENT_ID, at]);
+      }
+
+      const second = await runner.run(NOW);
+      // Without the arrival watermark this is considered: 0 — the window is not owed,
+      // so nothing pulls it, and a prediction built from a quarter of the shift stands
+      // for ever as the answer for all of it.
+      expect(second).toMatchObject({ rewound: 1, scored: 1 });
+      expect(second.outcomes[0].readings).toBe(3);
+      expect(second.outcomes[0].localDate).toBe('2026-09-14');
+
+      const predictions = await owner.query(
+        `SELECT "occurred_at" FROM "prediction" WHERE "external_id" = $1
+          ORDER BY "occurred_at" ASC`, [ASSET]);
+      // Two rows, and this is worth being precise about rather than glossing. A
+      // prediction is keyed by the moment of the newest reading behind it, so the
+      // thin answer (built at 01:00) and the fuller one (04:00) are different rows
+      // rather than an upsert. That is the existing rule — predictions are a history,
+      // not a current value — and both rows are true: at 01:00 that genuinely was the
+      // best available answer.
+      //
+      // What it does mean is that one shift can carry more than one answer, and the
+      // newest is the one that counts. Tying a prediction to its shift window instead
+      // is tracked separately; it is a change to a key twelve slices depend on.
+      expect(predictions.map((p: any) => new Date(p.occurred_at).toISOString()))
+        .toEqual(['2026-09-14T01:00:00.000Z', '2026-09-14T04:00:00.000Z']);
+    });
+
+    it('settles, rather than sweeping itself for ever', async () => {
+      await owner.query(
+        `INSERT INTO "device_sensor_measurement_logs"
+           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T01:00:00Z',80)`,
+        [MEASUREMENT_ID]);
+      await shifts.create(boss, ref, morning);
+
+      await runner.run(NOW);
+      // Nothing new has arrived, so nothing rewinds. The arrival watermark has to step
+      // past what it saw, or every pass rediscovers the same rows.
+      expect(await runner.run(NOW)).toMatchObject({ rewound: 0, considered: 0 });
+      expect(await runner.run(NOW)).toMatchObject({ rewound: 0, considered: 0 });
+    });
+
+    it('does not rewind a window that was never scored', async () => {
+      // A machine being onboarded has two days of buffered readings and no scoring
+      // history. Rewinding from a watermark that does not exist yet would drag the
+      // first run back through all of it.
+      for (let i = 0; i < 5; i += 1) {
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$2,80)`,
+          [MEASUREMENT_ID, new Date(NOW.getTime() - i * 6 * 3_600_000).toISOString()]);
+      }
+      await shifts.create(boss, ref, morning);
+
+      const summary = await runner.run(NOW);
+      expect(summary).toMatchObject({ rewound: 0, considered: 1 });
+    });
+  });
+
   it('moves past a shift the machine did not run, rather than retrying it forever', async () => {
     // No readings at all in the window: the machine was off. That is a fact about the
     // shift, not a failure — coming back to the same empty window on every pass would
