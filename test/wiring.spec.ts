@@ -1,9 +1,50 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { join, relative } from 'node:path';
 import { ENTITIES } from '../src/database/data-source';
 
 const SRC = join(__dirname, '..', 'src');
+
+/**
+ * 2.0 never writes to the existing platform (task P1-110).
+ *
+ * The connection is opened read-only, so Postgres refuses a write whatever the code
+ * asks for — that is the real guarantee and there is a test for it. This is the
+ * cheaper, earlier one: it fails in a diff rather than at runtime, and it catches the
+ * shape of the mistake before anybody has to reason about transactions.
+ *
+ * Two rules. Nothing in the legacy module may contain a writing statement, and no
+ * module outside it may reach for the legacy connection at all — a second caller
+ * opening its own connection is how the read-only guarantee stops being one.
+ */
+describe('the boundary with the existing platform', () => {
+  const legacyDir = join(SRC, 'legacy');
+
+  const readFiles = (dir: string): { path: string; body: string }[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) return readFiles(full);
+      return e.name.endsWith('.ts') ? [{ path: full, body: readFileSync(full, 'utf8') }] : [];
+    });
+
+  it('issues nothing but reads against the existing platform', () => {
+    // Deliberately crude: a comment mentioning INSERT trips it, and having to reword a
+    // comment is a much smaller cost than a write reaching a customer's live database.
+    const writing = /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|TRUNCATE|ALTER\s+TABLE|DROP\s+TABLE|CREATE\s+TABLE)\b/i;
+    const offenders = readFiles(legacyDir)
+      .filter((f) => writing.test(f.body))
+      .map((f) => relative(SRC, f.path));
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the legacy connection to one module', () => {
+    const reachers = readFiles(SRC)
+      .filter((f) => !f.path.startsWith(legacyDir))
+      .filter((f) => /LEGACY_DATA_SOURCE|createLegacyDataSource|legacyConfigFrom/.test(f.body))
+      .map((f) => relative(SRC, f.path));
+    // The reader is injected; the connection itself is nobody else's to open.
+    expect(reachers).toEqual([]);
+  });
+});
 
 function filesUnder(dir: string, suffix: string): string[] {
   const out: string[] = [];
