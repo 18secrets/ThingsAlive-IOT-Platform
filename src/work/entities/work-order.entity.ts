@@ -50,7 +50,7 @@ export class WorkOrder {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'text', default: 'open' })
+  @Column({ type: 'text', default: 'created' })
   status: WorkOrderStatus;
 
   @Column({ type: 'text', default: 'normal' })

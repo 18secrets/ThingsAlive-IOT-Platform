@@ -16,7 +16,7 @@ describe('the work-order state machine', () => {
   it('lets a quick job be completed without being started first', () => {
     // Forcing a start would only teach everybody to press two buttons, and the
     // timestamps would then describe the buttons rather than the work.
-    expect(workOrderTransition('complete', 'open', 'tightened the mount').to).toBe('completed');
+    expect(workOrderTransition('complete', 'created', 'tightened the mount').to).toBe('completed');
   });
 
   it('refuses to finish a job twice', () => {
@@ -26,14 +26,14 @@ describe('the work-order state machine', () => {
 
   it('demands a note for every ending, and for undoing one', () => {
     for (const action of ['complete', 'cancel'] as const) {
-      expect(() => workOrderTransition(action, 'open', '  ')).toThrow(/note is required/);
+      expect(() => workOrderTransition(action, 'created', '  ')).toThrow(/note is required/);
     }
     expect(() => workOrderTransition('reopen', 'completed', '')).toThrow(/note is required/);
   });
 
-  it('reopens to open rather than to wherever it was', () => {
+  it('reopens to created rather than to wherever it was', () => {
     // "In progress" would be a claim about somebody working on it right now.
-    expect(WORK_ORDER_TRANSITIONS.reopen.to).toBe('open');
+    expect(WORK_ORDER_TRANSITIONS.reopen.to).toBe('created');
   });
 });
 
@@ -226,7 +226,7 @@ describeDb('work orders', () => {
 
       // A reopened job still carrying its completion reads, on any screen and in any
       // export, as finished.
-      expect(again.status).toBe('open');
+      expect(again.status).toBe('created');
       expect(again.endedAt).toBeNull();
       expect(again.resolution).toBeNull();
     });

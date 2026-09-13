@@ -71,7 +71,7 @@ export class WorkOrderService {
         externalId: input.externalId,
         title: input.title.trim(),
         description: input.description ?? null,
-        status: 'open',
+        status: 'created',
         priority: input.priority ?? 'normal',
         assignedToUserId: input.assignedToUserId ?? null,
         predictionId: input.predictionId ?? null,
@@ -83,7 +83,7 @@ export class WorkOrderService {
       }));
 
       await this.record(m, scope, order.id, 'raised', {
-        toStatus: 'open', toAssignee: order.assignedToUserId, note: order.title,
+        toStatus: 'created', toAssignee: order.assignedToUserId, note: order.title,
       });
       if (order.assignedToUserId) {
         await this.record(m, scope, order.id, 'assigned', { toAssignee: order.assignedToUserId });

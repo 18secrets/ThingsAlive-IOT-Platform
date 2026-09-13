@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 /** Where a job is, not who has it. Assignment is a field; see the entity. */
-export type WorkOrderStatus = 'open' | 'in-progress' | 'completed' | 'cancelled';
+export type WorkOrderStatus = 'created' | 'in-progress' | 'completed' | 'cancelled';
 
 export type WorkOrderAction = 'start' | 'complete' | 'cancel' | 'reopen';
 
@@ -13,17 +13,17 @@ export type WorkOrderAction = 'start' | 'complete' | 'cancel' | 'reopen';
  * always the one somebody reads wrong.
  */
 const TRANSITIONS: Record<WorkOrderAction, { from: WorkOrderStatus[]; to: WorkOrderStatus }> = {
-  start: { from: ['open'], to: 'in-progress' },
-  // Reachable from 'open' as well as 'in-progress'. A fitter who tightens a bolt and
-  // closes the job did the work; forcing a start first would only teach everybody to
-  // press two buttons, and the timestamps would then describe the buttons rather than
-  // the work.
-  complete: { from: ['open', 'in-progress'], to: 'completed' },
-  cancel: { from: ['open', 'in-progress'], to: 'cancelled' },
+  start: { from: ['created'], to: 'in-progress' },
+  // Reachable from 'created' as well as 'in-progress'. A fitter who tightens a bolt
+  // and closes the job did the work; forcing a start first would only teach everybody
+  // to press two buttons, and the timestamps would then describe the buttons rather
+  // than the work.
+  complete: { from: ['created', 'in-progress'], to: 'completed' },
+  cancel: { from: ['created', 'in-progress'], to: 'cancelled' },
   // Neither ending is final. A job completed against the wrong machine, or cancelled
-  // by mistake, comes back — and it comes back as 'open' rather than to wherever it
-  // was, because "in progress" would be a claim about somebody working right now.
-  reopen: { from: ['completed', 'cancelled'], to: 'open' },
+  // by mistake, comes back — and it comes back as 'created' rather than to wherever
+  // it was, because "in progress" would be a claim about somebody working right now.
+  reopen: { from: ['completed', 'cancelled'], to: 'created' },
 };
 
 /**
