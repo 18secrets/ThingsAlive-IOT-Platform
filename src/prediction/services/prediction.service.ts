@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
+import { WORK_RAISER, WorkRaiser } from '../work-raiser';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
@@ -19,6 +20,12 @@ export interface ScoreResult {
   written: Prediction[];
   /** Scenarios that were active but produced nothing, each with the reason. */
   skipped: { clientScenarioSlug: string; reason: SkipReason }[];
+  /**
+   * Jobs raised by this run. Usually empty, and empty is not the same as "nothing
+   * was critical" — a machine already carrying a live job for the same scenario
+   * raises nothing, which is the point of the de-duplication.
+   */
+  raised: { clientScenarioSlug: string; workOrderId: string }[];
 }
 
 interface LatestRow {
@@ -43,7 +50,10 @@ interface LatestRow {
 export class PredictionService {
   private readonly logger = new Logger(PredictionService.name);
 
-  constructor(private readonly ds: DataSource) {}
+  constructor(
+    private readonly ds: DataSource,
+    @Optional() @Inject(WORK_RAISER) private readonly raiser?: WorkRaiser,
+  ) {}
 
   async scoreAsset(
     scope: RequestScope,
@@ -60,7 +70,7 @@ export class PredictionService {
         },
       });
 
-      const result: ScoreResult = { written: [], skipped: [] };
+      const result: ScoreResult = { written: [], skipped: [], raised: [] };
       if (active.length === 0) return result;
 
       const devices = await m.getRepository(DeviceProjection).find({
@@ -94,7 +104,14 @@ export class PredictionService {
         }
 
         const written = await this.scoreOne(m, scope, target, row, scenario, imeis, now);
-        if (written) result.written.push(written);
+        if (written) {
+          result.written.push(written);
+          // Raised in this same transaction, deliberately. A prediction that says
+          // critical and a job that does not exist is a failure with two halves that
+          // each look fine, and it surfaces as "nobody was ever sent" weeks later.
+          const raised = await this.raiseWork(m, scope, target, written);
+          if (raised) result.raised.push({ clientScenarioSlug: row.clientScenarioSlug, workOrderId: raised });
+        }
         else result.skipped.push({ clientScenarioSlug: row.clientScenarioSlug, reason: 'no-readings' });
       }
 
@@ -201,6 +218,42 @@ export class PredictionService {
       ],
     );
     return saved;
+  }
+
+  /**
+   * Hand the prediction to whoever raises work, if anybody does.
+   *
+   * A scorer that could not score dispatches nobody: confidence 'none' means the
+   * signals were missing or flat, and a fitter sent on the strength of that is a
+   * fitter who stops trusting the next one.
+   */
+  private async raiseWork(
+    m: EntityManager, scope: RequestScope,
+    target: { sourceSystem: string; externalId: string },
+    written: Prediction,
+  ): Promise<string | null> {
+    if (!this.raiser) return null;
+    if (written.confidence === 'none') return null;
+    try {
+      return await this.raiser.raiseFromPrediction(m, scope, {
+        sourceSystem: target.sourceSystem,
+        externalId: target.externalId,
+        predictionId: written.id,
+        clientScenarioSlug: written.clientScenarioSlug,
+        severity: written.severity,
+        riskScore: written.riskScore,
+        occurredAt: written.occurredAt,
+      });
+    } catch (error) {
+      // Deliberately not swallowed quietly and deliberately not fatal either: the
+      // prediction is the product and losing it because a job could not be raised
+      // would be the wrong trade. Loud enough to find, and the gap is recoverable
+      // from the prediction itself.
+      this.logger.error(
+        `Scored ${target.externalId} but could not raise work: ${(error as Error).message}`,
+      );
+      return null;
+    }
   }
 
   /** The latest prediction per scenario for one asset. */
