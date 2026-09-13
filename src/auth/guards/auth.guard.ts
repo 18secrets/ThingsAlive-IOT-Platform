@@ -1,5 +1,5 @@
 import {
-  CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException,
+  CanActivate, ExecutionContext, Inject, Injectable, Logger, Optional, UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
