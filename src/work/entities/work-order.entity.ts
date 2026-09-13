@@ -3,6 +3,8 @@ import { WorkOrderStatus } from '../services/work-order-state-machine';
 
 export type WorkOrderPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export type WorkOrderOrigin = 'manual' | 'prediction';
+
 /**
  * A job on a machine (task P1-87).
  *
@@ -77,6 +79,26 @@ export class WorkOrder {
    */
   @Column({ name: 'prediction_id', type: 'uuid', nullable: true })
   predictionId: string | null;
+
+  /**
+   * Raised by a person, or raised by the scorer.
+   *
+   * Kept apart because they answer different questions and are de-duplicated
+   * differently. A manager raising the same job twice is a manager's business; the
+   * scorer raising it 288 times a day is a queue nobody reads.
+   */
+  @Column({ type: 'text', default: 'manual' })
+  origin: WorkOrderOrigin;
+
+  /**
+   * The scenario that raised it, when the scorer did.
+   *
+   * The grain of the de-duplication: the same fault does not raise a second job while
+   * the first is unfinished, but a different scenario on the same machine still does —
+   * "high vibration" and "oil temperature climbing" are two visits, not one.
+   */
+  @Column({ name: 'raised_for_scenario', type: 'text', nullable: true })
+  raisedForScenario: string | null;
 
   @Column({ name: 'due_at', type: 'timestamptz', nullable: true })
   dueAt: Date | null;

@@ -75,6 +75,8 @@ export class WorkOrderService {
         priority: input.priority ?? 'normal',
         assignedToUserId: input.assignedToUserId ?? null,
         predictionId: input.predictionId ?? null,
+        origin: 'manual',
+        raisedForScenario: null,
         dueAt: input.dueAt ?? null,
         startedAt: null,
         endedAt: null,
