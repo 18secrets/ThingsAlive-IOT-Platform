@@ -14,7 +14,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
  * order closes, and does not have to be reinstated when the next one opens.
  */
 @Entity('user_plant_access')
-@Index('uq_user_plant_access', ['tenantId', 'userId', 'sourceSystem', 'plantExternalId'], { unique: true })
+@Index('uq_user_plant_access', ['tenantId', 'userId', 'plantId'], { unique: true })
 @Index('ix_user_plant_access_user', ['tenantId', 'userId'])
 export class UserPlantAccess {
   @PrimaryGeneratedColumn('uuid')
@@ -26,11 +26,17 @@ export class UserPlantAccess {
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
 
-  @Column({ name: 'source_system', type: 'text' })
-  sourceSystem: string;
-
-  @Column({ name: 'plant_external_id', type: 'text' })
-  plantExternalId: string;
+  /**
+   * A site in this account.
+   *
+   * This was an upstream identifier when sites lived only in the existing platform,
+   * and the note left here then — that the key would survive equipment moving into
+   * 2.0 — was wrong. Sites became rows with their own ids, so an assignment points at
+   * a row. Keeping the old pair would have meant a site could be renamed upstream and
+   * quietly take somebody's access with it.
+   */
+  @Column({ name: 'plant_id', type: 'uuid' })
+  plantId: string;
 
   @Column({ name: 'granted_by', type: 'text', nullable: true })
   grantedBy: string | null;

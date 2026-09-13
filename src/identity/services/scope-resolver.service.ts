@@ -2,6 +2,8 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { ResolvedIdentity, ScopeResolver } from '../../auth/scope-resolver';
 import { withTenantId } from '../../scope/tenant-session';
+import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { Plant } from '../../equipment/entities/plant.entity';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
 import { Tenant } from '../../tenancy/entities/tenant.entity';
 import { AppUser } from '../entities/app-user.entity';

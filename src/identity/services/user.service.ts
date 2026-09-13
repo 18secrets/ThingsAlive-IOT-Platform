@@ -12,12 +12,12 @@ export interface InviteInput {
   fullName: string;
   roleSlug: string;
   phone?: string | null;
-  plants?: { sourceSystem: string; plantExternalId: string }[];
+  plants?: { plantId: string }[];
   equipment?: { sourceSystem: string; equipmentExternalId: string }[];
 }
 
 export interface UserView extends AppUser {
-  plants: { sourceSystem: string; plantExternalId: string }[];
+  plants: { plantId: string }[];
   equipment: { sourceSystem: string; equipmentExternalId: string }[];
 }
 
@@ -210,9 +210,7 @@ export class UserService {
     const plants = m.getRepository(UserPlantAccess);
     for (const p of input.plants ?? []) {
       await plants.save(plants.create({
-        tenantId: scope.tenantId, userId,
-        sourceSystem: p.sourceSystem, plantExternalId: p.plantExternalId,
-        grantedBy: scope.userId,
+        tenantId: scope.tenantId, userId, plantId: p.plantId, grantedBy: scope.userId,
       }));
     }
     const equipment = m.getRepository(UserEquipmentAccess);
@@ -229,14 +227,14 @@ export class UserService {
     m: import('typeorm').EntityManager, tenantId: string, user: AppUser,
   ): Promise<UserView> {
     const plants = await m.getRepository(UserPlantAccess).find({
-      where: { tenantId, userId: user.id }, order: { plantExternalId: 'ASC' },
+      where: { tenantId, userId: user.id }, order: { plantId: 'ASC' },
     });
     const equipment = await m.getRepository(UserEquipmentAccess).find({
       where: { tenantId, userId: user.id }, order: { equipmentExternalId: 'ASC' },
     });
     return {
       ...user,
-      plants: plants.map((p) => ({ sourceSystem: p.sourceSystem, plantExternalId: p.plantExternalId })),
+      plants: plants.map((p) => ({ plantId: p.plantId })),
       equipment: equipment.map((e) => ({ sourceSystem: e.sourceSystem, equipmentExternalId: e.equipmentExternalId })),
     };
   }

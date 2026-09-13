@@ -9,8 +9,7 @@ import { RoleService } from './services/role.service';
 import { UserService } from './services/user.service';
 
 export class PlantRefDto {
-  @IsString() @IsNotEmpty() sourceSystem: string;
-  @IsString() @IsNotEmpty() plantExternalId: string;
+  @IsString() @IsNotEmpty() plantId: string;
 }
 
 export class EquipmentRefDto {
