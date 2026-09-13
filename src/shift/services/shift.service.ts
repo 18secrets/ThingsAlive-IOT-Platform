@@ -41,6 +41,15 @@ export interface OwedWindow extends ShiftWindow {
 export const MINIMUM_SHIFT_MINUTES = 30;
 
 /**
+ * How far back a shift that has never been scored looks for its first window.
+ *
+ * Wide enough that a pass firing late, or a service restarted the next morning, still
+ * finds the instance that has just finished; only the most recent one is taken, so
+ * widening it costs nothing and narrowing it silently skips a shift.
+ */
+export const FIRST_RUN_LOOK_BACK_DAYS = 3;
+
+/**
  * The client's working day (task P1-109).
  *
  * Owned by the CEO or manager, like the equipment master it hangs off. Every method
@@ -167,12 +176,20 @@ export class ShiftService {
 
     const out: OwedWindow[] = [];
     for (const shift of shifts) {
-      // Never run: take the shift that has just finished, not every one since the
-      // machine was commissioned.
+      const firstRun = !shift.scoredThrough;
+      // A shift that has never run looks back far enough to be sure of catching the
+      // instance that has just finished, however late this pass is firing — and then
+      // keeps only that one. Backing off by a fixed amount instead is wrong in both
+      // directions at once: too little and a pass running ten hours late misses the
+      // shift entirely, too much and a daily shift returns two.
       const after = shift.scoredThrough
-        ?? new Date(now.getTime() - nominalLengthMinutes(shift) * 60_000 - MINUTES_PER_DAY * 60_000);
+        ?? new Date(now.getTime() - FIRST_RUN_LOOK_BACK_DAYS * MINUTES_PER_DAY * 60_000);
 
-      const windows = windowsEndingBetween(shift as ShiftDefinition, after, now);
+      const all = windowsEndingBetween(shift as ShiftDefinition, after, now);
+      // The most recent one only on a first run: the history of a machine before 2.0
+      // knew about it is not owed, and on a fleet being onboarded the difference is
+      // one scoring pass against several hundred thousand.
+      const windows = firstRun ? all.slice(-1) : all;
       // Capped so one machine left unscored for a month cannot starve every other
       // machine on the same pass. The rest are still owed on the next one.
       for (const w of windows.slice(0, limitPerShift)) {
