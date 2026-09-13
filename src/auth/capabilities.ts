@@ -32,7 +32,16 @@ export type Capability =
 /** The four consumer roles, plus the Things Alive roles that act across tenants. */
 const GRANTS: Record<Capability, readonly string[]> = {
   'tenant.manage': ['super admin', 'master-admin'],
-  'user.manage': ['super admin', 'master-admin'],
+  // The account's own users. Super admin alone: a master admin adding a user to a
+  // client account would be Things Alive deciding who works for a customer, which is
+  // the same boundary that keeps them out of the client's catalog copies.
+  'user.manage': ['super admin'],
+  // The account's own roles. Roles are rows rather than code, so a client can add the
+  // ones they need — composed from the capability list below, which they cannot add to.
+  'role.manage': ['super admin'],
+  // Creating an account and seeding its first super admin. The one user-shaped thing
+  // Things Alive does do, because somebody has to exist before anybody can be invited.
+  'tenant.provision': ['master-admin'],
   'equipment.write': ['super admin', 'admin', 'master-admin'],
   'scenario.activate': ['super admin', 'admin'],
   'scenario.author': ['super admin', 'admin'],
