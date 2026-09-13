@@ -15,6 +15,8 @@ import { ClientEquipmentClass } from '../client-catalog/entities/client-equipmen
 import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
+import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
+import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
 import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';

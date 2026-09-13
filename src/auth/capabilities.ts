@@ -55,6 +55,19 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // appears in this list and why adding one later would be a change of model rather
   // than a change of permission.
   'client-catalog.write': ['super admin'],
+  // The pool is Things Alive's stock ledger. Registering, assigning, releasing and
+  // retiring are commercial acts, and none of them are a customer's to perform on
+  // hardware they are renting.
+  'device.manage': ['master-admin'],
+  // Seeing the devices in your own account. Every role inside the tenant, because
+  // "which loggers do we have" is not a privileged question about your own kit.
+  'device.read': [
+    'super admin', 'admin', 'operational', 'support',
+    'master-admin', 'platform-support',
+  ],
+  // Fitting a device to a machine and taking it off again. The customer's act, not
+  // ours — nobody at Things Alive knows which generator the logger ended up on.
+  'device.claim': ['super admin', 'admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it
