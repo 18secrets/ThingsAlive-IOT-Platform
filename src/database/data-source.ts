@@ -15,6 +15,8 @@ import { ClientEquipmentClass } from '../client-catalog/entities/client-equipmen
 import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
+import { Plant } from '../equipment/entities/plant.entity';
+import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placement-event.entity';
 import { Tenant } from '../tenancy/entities/tenant.entity';
 import { AppUser } from '../identity/entities/app-user.entity';
 import { UserInvitation } from '../identity/entities/user-invitation.entity';
@@ -63,6 +65,8 @@ export const ENTITIES = [
   UserSession,
   UserSecurityEvent,
   Tenant,
+  Plant,
+  EquipmentPlacementEvent,
 ];
 
 export interface DataSourceChoices {
