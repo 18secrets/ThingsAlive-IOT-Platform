@@ -76,16 +76,38 @@ export class ScopeResolverService implements ScopeResolver {
 
       if (role.scopeShape === 'plant') {
         const rows = await m.getRepository(UserPlantAccess).find({ where: { tenantId, userId } });
-        const plantIds = rows.map((r) => r.plantExternalId);
+        const plantIds = rows.map((r) => r.plantId);
+        if (plantIds.length === 0) {
+          return { roles: [role.slug], capabilities: role.capabilities, plantIds: [], equipmentIds: [] };
+        }
+
         // Equipment is derived rather than stored. A machine moved into one of this
         // person's sites is theirs from that moment, and a list maintained by hand
         // would have to be rewritten every time anything moved.
-        const equipmentIds = plantIds.length
-          ? (await m.getRepository(EquipmentProjection).find({
-              where: { tenantId, plantExternalId: In(plantIds) },
+        const owned = await m.getRepository(EquipmentProfile).find({
+          where: { tenantId, plantId: In(plantIds), status: 'active' },
+          select: { externalId: true },
+        });
+
+        // And the machines that have not been adopted into the register yet. The
+        // register is the authority the moment an asset is in it, but a customer
+        // mid-migration has a fleet that is half-adopted, and a site manager seeing
+        // nothing until somebody finishes an import is not a defensible reading of
+        // "sees their site". Dropped naturally once everything is imported, because
+        // an adopted asset stops being only in the mirror.
+        const plants = await m.getRepository(Plant).find({ where: { tenantId, id: In(plantIds) } });
+        const upstream = plants.map((p) => p.externalId).filter((x): x is string => !!x);
+        const mirrored = upstream.length
+          ? await m.getRepository(EquipmentProjection).find({
+              where: { tenantId, plantExternalId: In(upstream) },
               select: { externalId: true },
-            })).map((e) => e.externalId)
+            })
           : [];
+
+        const equipmentIds = [...new Set([
+          ...owned.map((e) => e.externalId),
+          ...mirrored.map((e) => e.externalId),
+        ])];
         return { roles: [role.slug], capabilities: role.capabilities, plantIds, equipmentIds };
       }
 
