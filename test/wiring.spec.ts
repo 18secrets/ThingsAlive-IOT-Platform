@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { join, relative } from 'node:path';
 import { ENTITIES } from '../src/database/data-source';
 

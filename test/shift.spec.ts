@@ -121,9 +121,21 @@ describeDb('equipment shifts', () => {
   describe('what is owed', () => {
     const MONDAY_NOON_IST = new Date('2026-09-14T06:30:00.000Z');
 
-    it('owes nothing for a shift that has not finished yet', async () => {
+    it('scores the last completed shift on its first run, not nothing', async () => {
       await shifts.create(boss, ref, morning);
-      // It is noon in Kolkata and the morning shift runs until 14:00.
+      // It is Monday noon in Kolkata and today's morning shift has not finished. The
+      // most recent one that has is Friday's, and it is taken — so a customer who
+      // configures a machine at lunchtime gets a prediction from telemetry that
+      // already exists rather than silence until tomorrow.
+      const owed = await shifts.owed(MONDAY_NOON_IST);
+      expect(owed).toHaveLength(1);
+      expect(owed[0].localDate).toBe('2026-09-11');
+    });
+
+    it('owes nothing once the watermark is set and nothing has finished since', async () => {
+      const shift = await shifts.create(boss, ref, morning);
+      await shifts.markScored('acme', shift.id, new Date('2026-09-11T09:00:00.000Z'));
+      // Monday's shift runs until 14:00 local, which has not happened yet.
       expect(await shifts.owed(MONDAY_NOON_IST)).toEqual([]);
     });
 
