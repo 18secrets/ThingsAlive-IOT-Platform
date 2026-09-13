@@ -16,6 +16,9 @@ import { ClientScenario } from '../client-catalog/entities/client-scenario.entit
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
 import { AppUser } from '../identity/entities/app-user.entity';
+import { UserInvitation } from '../identity/entities/user-invitation.entity';
+import { UserSecurityEvent } from '../identity/entities/user-security-event.entity';
+import { UserSession } from '../identity/entities/user-session.entity';
 import { TenantRole } from '../identity/entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../identity/entities/user-access.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
