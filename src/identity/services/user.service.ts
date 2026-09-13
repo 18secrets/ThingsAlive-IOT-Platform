@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AppUser } from '../entities/app-user.entity';
