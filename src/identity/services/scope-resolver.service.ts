@@ -3,6 +3,7 @@ import { DataSource, In } from 'typeorm';
 import { ResolvedIdentity, ScopeResolver } from '../../auth/scope-resolver';
 import { withTenantId } from '../../scope/tenant-session';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
+import { Tenant } from '../../tenancy/entities/tenant.entity';
 import { AppUser } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';

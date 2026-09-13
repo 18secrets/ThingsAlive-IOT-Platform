@@ -5,6 +5,7 @@ import { DataSource, EntityManager, IsNull, LessThan, Not } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
+import { Tenant } from '../../tenancy/entities/tenant.entity';
 import { AppUser } from '../entities/app-user.entity';
 import { InvitationPurpose, UserInvitation } from '../entities/user-invitation.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
