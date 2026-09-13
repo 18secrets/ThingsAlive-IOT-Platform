@@ -13,6 +13,7 @@ import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
+import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { PredictionModule } from './prediction/prediction.module';
 import { ActivationModule } from './activation/activation.module';
