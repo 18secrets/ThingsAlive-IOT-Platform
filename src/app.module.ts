@@ -13,6 +13,7 @@ import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
+import { EquipmentModule } from './equipment/equipment.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -66,6 +67,7 @@ export class AppModule {
               InventoryModule,
               IdentityModule,
               TenancyModule,
+              EquipmentModule,
             ]
           : []),
       ],
