@@ -17,6 +17,7 @@ export type Capability =
   | 'scenario.author'
   | 'alert.author'
   | 'action.work'
+  | 'action.assign'
   | 'catalog.read'
   | 'catalog.write'
   | 'client-catalog.read'
@@ -46,7 +47,12 @@ const GRANTS: Record<Capability, readonly string[]> = {
   'scenario.activate': ['super admin', 'admin'],
   'scenario.author': ['super admin', 'admin'],
   'alert.author': ['super admin', 'admin'],
+  // Doing the work: starting a job and closing it with what was done.
   'action.work': ['super admin', 'admin', 'operational', 'support'],
+  // Raising work, handing it to somebody, cancelling it. Separate from doing it
+  // because an operator who can reassign their own jobs can decide what they do not
+  // do, which is the one thing a maintenance schedule exists to prevent.
+  'action.assign': ['super admin', 'admin'],
   // Everyone inside a tenant may see the catalog. What they see is narrowed by the
   // entitlement join, not by the role — those are different questions and conflating
   // them is how a role ends up silently granting access to an unpurchased class.

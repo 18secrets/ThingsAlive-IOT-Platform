@@ -14,6 +14,7 @@ import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { WorkModule } from './work/work.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -68,6 +69,7 @@ export class AppModule {
               IdentityModule,
               TenancyModule,
               EquipmentModule,
+              WorkModule,
             ]
           : []),
       ],

@@ -30,7 +30,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     scopeShape: 'tenant',
     capabilities: [
       'user.manage', 'role.manage', 'equipment.write',
-      'scenario.activate', 'scenario.author', 'alert.author', 'action.work',
+      'scenario.activate', 'scenario.author', 'alert.author', 'action.work', 'action.assign',
       'catalog.read', 'client-catalog.read', 'client-catalog.write',
       'prediction.read', 'prediction.run',
       'device.read', 'device.claim',
@@ -44,7 +44,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       + 'derived from it; sees nothing at a site they are not assigned to.',
     scopeShape: 'plant',
     capabilities: [
-      'equipment.write', 'scenario.activate', 'alert.author', 'action.work',
+      'equipment.write', 'scenario.activate', 'alert.author', 'action.work', 'action.assign',
       'catalog.read', 'client-catalog.read',
       'prediction.read', 'prediction.run',
       'device.read', 'device.claim',
