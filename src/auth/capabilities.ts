@@ -101,8 +101,25 @@ const GRANTS: Record<Capability, readonly string[]> = {
  * customer hits it.
  */
 export function capabilitiesFor(scope: RequestScope): Record<Capability, boolean> {
-  const roles = new Set(scope.roles);
   const out = {} as Record<Capability, boolean>;
+
+  // A client user's capabilities come from their account's own role row, because a
+  // client can now define roles Things Alive has never heard of. The table below is
+  // still the authority for platform roles, which are ours and are not rows.
+  //
+  // The two cannot drift into disagreement, because they are never consulted for the
+  // same caller: a resolved role wins outright rather than being merged with the
+  // table. Merging would mean a client could not take a capability away, since the
+  // static grant would keep handing it back.
+  if (scope.capabilities) {
+    const held = new Set<string>(scope.capabilities);
+    for (const capability of Object.keys(GRANTS) as Capability[]) {
+      out[capability] = held.has(capability);
+    }
+    return out;
+  }
+
+  const roles = new Set(scope.roles);
   for (const [capability, granted] of Object.entries(GRANTS) as [Capability, string[]][]) {
     out[capability] = granted.some((r) => roles.has(r));
   }
