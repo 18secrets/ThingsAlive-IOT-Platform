@@ -19,6 +19,7 @@ import { Plant } from '../equipment/entities/plant.entity';
 import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placement-event.entity';
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
+import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { Tenant } from '../tenancy/entities/tenant.entity';
 import { AppUser } from '../identity/entities/app-user.entity';
 import { UserInvitation } from '../identity/entities/user-invitation.entity';
@@ -72,6 +73,7 @@ export const ENTITIES = [
   WorkOrder,
   WorkOrderCounter,
   WorkOrderEvent,
+  EquipmentShift,
 ];
 
 export interface DataSourceChoices {
