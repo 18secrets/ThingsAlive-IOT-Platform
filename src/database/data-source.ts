@@ -62,6 +62,7 @@ export const ENTITIES = [
   UserInvitation,
   UserSession,
   UserSecurityEvent,
+  Tenant,
 ];
 
 export interface DataSourceChoices {

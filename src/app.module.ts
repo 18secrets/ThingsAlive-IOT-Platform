@@ -65,6 +65,7 @@ export class AppModule {
               PredictionModule,
               InventoryModule,
               IdentityModule,
+              TenancyModule,
             ]
           : []),
       ],
