@@ -19,6 +19,7 @@ import { TelemetryService } from '../src/telemetry/telemetry.service';
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { PredictionWorkRaiser } from '../src/work/services/prediction-work-raiser.service';
 import { WorkOrder } from '../src/work/entities/work-order.entity';
+import { AlertService } from '../src/alert/services/alert.service';
 import { createAppDataSource, createTestDataSource, describeDb, TEST_DB } from './db';
 
 const IST = 'Asia/Kolkata';
@@ -43,6 +44,7 @@ describeDb('the shift runner', () => {
   let plants: PlantService;
   let equipment: EquipmentService;
   let baselines: BaselineService;
+  let alerts: AlertService;
 
   const NOW = new Date('2026-09-14T09:00:00.000Z');
   const boss: RequestScope = {
@@ -90,9 +92,10 @@ describeDb('the shift runner', () => {
     plants = new PlantService(ds);
     equipment = new EquipmentService(ds);
     baselines = new BaselineService(ds);
+    alerts = new AlertService(ds);
     runner = new ShiftRunner(
       shifts, reader, new TelemetryService(ds),
-      new PredictionService(ds, new PredictionWorkRaiser()),
+      new PredictionService(ds, new PredictionWorkRaiser()), alerts,
     );
   }, 40_000);
 
@@ -122,7 +125,7 @@ describeDb('the shift runner', () => {
   };
 
   beforeEach(async () => {
-    for (const t of ['work_order_event', 'work_order', 'work_order_counter',
+    for (const t of ['alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
       'prediction', 'prediction_baseline', 'telemetry_reading', 'equipment_shift',
       'equipment_scenario', 'client_scenario', 'sensor_map_projection',
       'device_projection', 'equipment_placement_event', 'equipment_profile', 'plant']) {
@@ -340,7 +343,7 @@ describeDb('the shift runner', () => {
   it('leaves every window owed when there is no connection at all', async () => {
     const offline = new ShiftRunner(
       shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
-      new PredictionService(ds),
+      new PredictionService(ds), alerts,
     );
     await shifts.create(boss, ref, morning);
 
@@ -358,7 +361,7 @@ describeDb('the shift runner', () => {
     const broken = new ShiftRunner(
       shifts, reader,
       { ingest: () => { throw new Error('ingest exploded'); } } as any,
-      new PredictionService(ds),
+      new PredictionService(ds), alerts,
     );
     const summary = await broken.run(NOW);
 
