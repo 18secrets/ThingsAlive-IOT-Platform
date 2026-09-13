@@ -4,6 +4,7 @@ import { EquipmentShift } from './entities/equipment-shift.entity';
 import { ShiftRunner } from './services/shift-runner.service';
 import { ShiftService } from './services/shift.service';
 import { ShiftController } from './shift.controller';
+import { AlertModule } from '../alert/alert.module';
 import { LegacyModule } from '../legacy/legacy.module';
 import { PredictionModule } from '../prediction/prediction.module';
 import { ProjectionModule } from '../projection/projection.module';
@@ -15,6 +16,7 @@ import { ProjectionModule } from '../projection/projection.module';
   imports: [
     TypeOrmModule.forFeature([EquipmentShift]),
     LegacyModule,
+    AlertModule,
     ProjectionModule,
     PredictionModule,
   ],

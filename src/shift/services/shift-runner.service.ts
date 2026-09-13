@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
@@ -14,6 +15,8 @@ export interface RunOutcome {
   readings?: number;
   predictions?: number;
   raised?: number;
+  /** Alert rules that fired for this window. */
+  alerts?: number;
   detail?: string;
 }
 
@@ -49,6 +52,7 @@ export class ShiftRunner {
     private readonly reader: LegacyTelemetryReader,
     private readonly telemetry: TelemetryService,
     private readonly predictions: PredictionService,
+    private readonly alerts: AlertService,
   ) {}
 
   async run(now = new Date()): Promise<RunSummary> {
@@ -145,18 +149,39 @@ export class ShiftRunner {
       });
 
       if (!pull.envelope) {
-        // A shift that produced no readings is a fact about the shift, not a failure
-        // to be retried forever: the machine was off, or unfitted, and coming back to
-        // the same empty window on every pass would stall everything behind it. The
-        // watermark moves, and the absence is what the next screen should show.
+        // Silence is still worth evaluating, and this is the one case where that
+        // matters most: a machine that was meant to be running and said nothing looks
+        // exactly like a machine that was switched off, unless somebody has asked to
+        // be told. A `no-telemetry` rule is that request, and it is the client's to
+        // make rather than ours to assume.
+        const silent = await this.evaluateAlerts(window, [], []);
+
+        // Otherwise a shift that produced no readings is a fact about the shift, not
+        // a failure to be retried forever: coming back to the same empty window on
+        // every pass would stall everything behind it. The watermark moves.
         await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
-        return this.outcome(window, 'nothing-to-score', pull.reason);
+        return { ...this.outcome(window, 'nothing-to-score', pull.reason), alerts: silent };
       }
 
       const ingested = await this.telemetry.ingest(pull.envelope);
       const scope = this.runnerScope(window.tenantId);
       const result = await this.predictions.scoreAsset(
         scope, { sourceSystem: window.sourceSystem, externalId: window.externalId }, window.end,
+      );
+
+      const alerts = await this.evaluateAlerts(
+        window,
+        pull.envelope.readings.map((r) => ({
+          signal: r.signal, value: r.value, unit: r.unit ?? null,
+          sourceTimestamp: r.sourceTimestamp,
+        })),
+        result.written.map((p) => ({
+          clientScenarioSlug: p.clientScenarioSlug,
+          severity: p.severity,
+          riskScore: p.riskScore,
+          predictionId: p.id,
+          confidence: p.confidence,
+        })),
       );
 
       // Last, and only now. Everything above either happened or threw.
@@ -167,6 +192,7 @@ export class ShiftRunner {
         readings: ingested.accepted,
         predictions: result.written.length,
         raised: result.raised.length,
+        alerts,
       };
     } catch (error) {
       // The watermark has not moved, so this window is still owed and will be taken
@@ -178,6 +204,41 @@ export class ShiftRunner {
         + `and is still owed: ${detail}`,
       );
       return this.outcome(window, 'failed', detail);
+    }
+  }
+
+  /**
+   * Ask the client's own rules whether this shift is worth telling anybody about.
+   *
+   * Never fatal. An alert is a message about work that has already been done
+   * correctly, and losing the scoring because a rule could not be evaluated would be
+   * the wrong trade — the prediction is the product.
+   */
+  private async evaluateAlerts(
+    window: OwedWindow,
+    readings: { signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+    predictions: {
+      clientScenarioSlug: string; severity: any; riskScore: number;
+      predictionId: string; confidence: string;
+    }[],
+  ): Promise<number> {
+    try {
+      const fired = await this.alerts.evaluateWindow({
+        tenantId: window.tenantId,
+        sourceSystem: window.sourceSystem,
+        externalId: window.externalId,
+        shiftLocalDate: window.localDate,
+        windowStart: window.start,
+        windowEnd: window.end,
+        readings,
+        predictions,
+      });
+      return fired.length;
+    } catch (error) {
+      this.logger.error(
+        `Scored ${window.externalId} but could not evaluate alerts: ${(error as Error).message}`,
+      );
+      return 0;
     }
   }
 

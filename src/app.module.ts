@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { WorkModule } from './work/work.module';
+import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { TenancyModule } from './tenancy/tenancy.module';
@@ -74,6 +75,7 @@ export class AppModule {
               WorkModule,
               ShiftModule,
               LegacyModule,
+              AlertModule,
             ]
           : []),
       ],
