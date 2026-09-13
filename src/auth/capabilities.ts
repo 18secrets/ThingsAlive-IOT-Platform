@@ -10,6 +10,8 @@ import { RequestScope } from './types/request-scope';
 export type Capability =
   | 'tenant.manage'
   | 'user.manage'
+  | 'role.manage'
+  | 'tenant.provision'
   | 'equipment.write'
   | 'scenario.activate'
   | 'scenario.author'
