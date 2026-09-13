@@ -6,6 +6,7 @@ import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { Weekday } from './services/shift-window';
 import { ShiftService } from './services/shift.service';
+import { ShiftRunService } from './services/shift-run.service';
 
 export class ShiftDto {
   @IsString() @IsNotEmpty() name: string;
@@ -33,7 +34,21 @@ export class ShiftPatchDto {
 @ApiTags('Shifts')
 @Controller('equipment/:sourceSystem/:externalId/shifts')
 export class ShiftController {
-  constructor(private readonly shifts: ShiftService) {}
+  constructor(
+    private readonly shifts: ShiftService,
+    private readonly runs: ShiftRunService,
+  ) {}
+
+  @Get('runs')
+  @Requires('prediction.read')
+  @ApiOperation({ summary: 'What the scorer did to this machine, and what it could not' })
+  runHistory(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+  ) {
+    return this.runs.forEquipment(scope, { sourceSystem, externalId });
+  }
 
   @Get()
   @Requires('catalog.read')

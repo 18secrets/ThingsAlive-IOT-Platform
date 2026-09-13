@@ -15,6 +15,9 @@ import { Severity } from '../src/common/severity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
 import { ShiftRunner } from '../src/shift/services/shift-runner.service';
 import { ShiftService } from '../src/shift/services/shift.service';
+import { ShiftRunService } from '../src/shift/services/shift-run.service';
+import { ShiftScheduler } from '../src/shift/services/shift-scheduler.service';
+import { tryTakePassLock } from '../src/shift/services/pass-lock';
 import { TelemetryService } from '../src/telemetry/telemetry.service';
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { PredictionWorkRaiser } from '../src/work/services/prediction-work-raiser.service';
@@ -94,7 +97,7 @@ describeDb('the shift runner', () => {
     baselines = new BaselineService(ds);
     alerts = new AlertService(ds);
     runner = new ShiftRunner(
-      shifts, reader, new TelemetryService(ds),
+      ds, shifts, reader, new TelemetryService(ds),
       new PredictionService(ds, new PredictionWorkRaiser()), alerts,
     );
   }, 40_000);
@@ -125,7 +128,7 @@ describeDb('the shift runner', () => {
   };
 
   beforeEach(async () => {
-    for (const t of ['alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
+    for (const t of ['shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
       'prediction', 'prediction_baseline', 'telemetry_reading', 'equipment_shift',
       'equipment_scenario', 'client_scenario', 'sensor_map_projection',
       'device_projection', 'equipment_placement_event', 'equipment_profile', 'plant']) {
@@ -228,6 +231,84 @@ describeDb('the shift runner', () => {
     // their database, a prediction was made, and somebody has a job waiting to be
     // handed out.
     expect(job).toMatchObject({ origin: 'prediction', status: 'created', assignedToUserId: null });
+  });
+
+  describe('running on its own', () => {
+    it('writes down what it did, including what it could not do', async () => {
+      await shifts.create(boss, ref, morning);
+      await runner.run(NOW);
+
+      const runs = await new ShiftRunService(ds)
+        .forEquipment(boss, { sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: ASSET });
+      // Every outcome, not only the failures. If only failures were kept, the absence
+      // of a row would mean either "it worked" or "nothing happened", and those are
+      // the two answers that most need telling apart.
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({
+        status: 'nothing-to-score', detail: 'no-readings',
+        localDate: '2026-09-14', shiftName: 'A',
+      });
+      expect(runs[0].durationMs).not.toBeNull();
+    });
+
+    it('records a scored window with what came of it', async () => {
+      await seedLegacyReadings(95);
+      await shifts.create(boss, ref, morning);
+      await runner.run(NOW);
+
+      const [run] = await new ShiftRunService(ds)
+        .forEquipment(boss, { sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: ASSET });
+      expect(run).toMatchObject({ status: 'scored', readings: 1, predictions: 1 });
+    });
+
+    it('will not let two passes run at once', async () => {
+      await seedLegacyReadings(95);
+      await shifts.create(boss, ref, morning);
+
+      // Somebody else is mid-pass. Two instances would both read the same watermark
+      // and score the same shift: not corrupting, because a prediction upserts, but
+      // twice the work and half the sense the logs make.
+      const held = await tryTakePassLock(ds);
+      expect(held).not.toBeNull();
+      expect(await runner.runExclusively(NOW)).toBeNull();
+
+      await held!.release();
+      // And the moment it is free, the pass happens. Nothing was lost by skipping.
+      expect(await runner.runExclusively(NOW)).toMatchObject({ scored: 1 });
+    });
+
+    it('does not schedule itself unless somebody switched it on', async () => {
+      const calls: Date[] = [];
+      const scheduler = new ShiftScheduler({
+        runExclusively: async (at: Date) => { calls.push(at); return null; },
+      } as any);
+
+      delete process.env.SHIFT_RUNNER_ENABLED;
+      scheduler.onModuleInit();
+      // A scheduled job that starts itself everywhere is one that runs during
+      // somebody's migration, in a test, and on a laptop pointed at production.
+      expect((scheduler as any).timer).toBeNull();
+      scheduler.onModuleDestroy();
+
+      // The tick itself still works when called, which is what the timer would do.
+      await scheduler.tick(NOW);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('drops a tick that arrives while the last one is still going', async () => {
+      let release: () => void = () => {};
+      const inFlight = new Promise<void>((resolve) => { release = resolve; });
+      const scheduler = new ShiftScheduler({
+        runExclusively: async () => { await inFlight; return null; },
+      } as any);
+
+      const first = scheduler.tick(NOW);
+      // Not queued behind it: the work this tick would do is the work already in
+      // progress, and the next tick finds whatever is left.
+      await scheduler.tick(NOW);
+      release();
+      await first;
+    });
   });
 
   describe('when a logger has been off the network', () => {
@@ -396,7 +477,7 @@ describeDb('the shift runner', () => {
 
   it('leaves every window owed when there is no connection at all', async () => {
     const offline = new ShiftRunner(
-      shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
+      ds, shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
       new PredictionService(ds), alerts,
     );
     await shifts.create(boss, ref, morning);
@@ -413,7 +494,7 @@ describeDb('the shift runner', () => {
     await shifts.create(boss, ref, morning);
 
     const broken = new ShiftRunner(
-      shifts, reader,
+      ds, shifts, reader,
       { ingest: () => { throw new Error('ingest exploded'); } } as any,
       new PredictionService(ds), alerts,
     );
