@@ -146,6 +146,14 @@ export class UserService {
         user.status = 'suspended';
         user.suspendedAt = now;
         user.suspendedReason = reason;
+        // Every live session dies in the same transaction. The scope resolver would
+        // refuse them on the next request anyway, but a refresh token left valid is a
+        // way back in the moment somebody is reinstated by mistake, and closing it
+        // here means suspension means the same thing everywhere.
+        await m.getRepository(UserSession).update(
+          { tenantId: scope.tenantId, userId, revokedAt: IsNull() },
+          { revokedAt: now, revokedReason: 'suspended' },
+        );
       } else {
         // Somebody who never set a password goes back to invited, not active: the
         // invitation is still what is outstanding.
