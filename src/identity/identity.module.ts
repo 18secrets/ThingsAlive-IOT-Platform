@@ -41,6 +41,6 @@ import { UserService } from './services/user.service';
     ScopeResolverService,
     { provide: SCOPE_RESOLVER, useExisting: ScopeResolverService },
   ],
-  exports: [UserService, RoleService, CredentialService, SCOPE_RESOLVER],
+  exports: [UserService, RoleService, CredentialService, PasswordService, SCOPE_RESOLVER],
 })
 export class IdentityModule {}
