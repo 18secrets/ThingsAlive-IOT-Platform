@@ -4,6 +4,7 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
+import { runningStatusFor } from './running-status';
 import { OwedWindow, ShiftService } from './shift.service';
 
 export interface RunOutcome {
@@ -11,7 +12,7 @@ export interface RunOutcome {
   tenantId: string;
   externalId: string;
   localDate: string;
-  status: 'scored' | 'nothing-to-score' | 'failed';
+  status: 'scored' | 'nothing-to-score' | 'not-running' | 'failed';
   readings?: number;
   predictions?: number;
   raised?: number;
@@ -24,6 +25,8 @@ export interface RunSummary {
   considered: number;
   scored: number;
   skipped: number;
+  /** Windows where the machine reported that it never ran. */
+  idle: number;
   failed: number;
   /** Shifts rewound because readings turned up for a window already scored. */
   rewound: number;
@@ -64,7 +67,7 @@ export class ShiftRunner {
 
     const owed = await this.shifts.owed(now);
     const summary: RunSummary = {
-      considered: owed.length, scored: 0, skipped: 0, failed: 0, rewound, outcomes: [],
+      considered: owed.length, scored: 0, skipped: 0, idle: 0, failed: 0, rewound, outcomes: [],
     };
     if (owed.length === 0) return summary;
 
@@ -85,6 +88,7 @@ export class ShiftRunner {
       summary.outcomes.push(outcome);
       if (outcome.status === 'scored') summary.scored += 1;
       else if (outcome.status === 'failed') summary.failed += 1;
+      else if (outcome.status === 'not-running') summary.idle += 1;
       else summary.skipped += 1;
     }
     return summary;
@@ -163,6 +167,25 @@ export class ShiftRunner {
         return { ...this.outcome(window, 'nothing-to-score', pull.reason), alerts: silent };
       }
 
+      const readings = pull.envelope.readings.map((r) => ({
+        signal: r.signal, value: r.value, unit: r.unit ?? null,
+        sourceTimestamp: r.sourceTimestamp,
+      }));
+
+      // The machine's own account of whether it ran. A shift where the logger reported
+      // all day and the engine never turned over is a shift's worth of readings that
+      // look like telemetry and describe nothing — cold, still, unloaded — and scoring
+      // them against a baseline built from a working machine produces a confident
+      // answer about a machine that was not there.
+      if (runningStatusFor(readings) === 'not-running') {
+        // Ingested anyway: the readings are true, they belong to the history, and the
+        // question of whether a baseline should be built from idle periods is a
+        // separate one (P1-123) that this must not quietly decide.
+        await this.telemetry.ingest(pull.envelope);
+        await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
+        return { ...this.outcome(window, 'not-running', 'engine-never-ran'), readings: readings.length };
+      }
+
       const ingested = await this.telemetry.ingest(pull.envelope);
       const scope = this.runnerScope(window.tenantId);
       const result = await this.predictions.scoreAsset(
@@ -171,10 +194,7 @@ export class ShiftRunner {
 
       const alerts = await this.evaluateAlerts(
         window,
-        pull.envelope.readings.map((r) => ({
-          signal: r.signal, value: r.value, unit: r.unit ?? null,
-          sourceTimestamp: r.sourceTimestamp,
-        })),
+        readings,
         result.written.map((p) => ({
           clientScenarioSlug: p.clientScenarioSlug,
           severity: p.severity,
