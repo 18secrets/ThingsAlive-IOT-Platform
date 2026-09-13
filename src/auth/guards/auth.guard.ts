@@ -24,6 +24,10 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    // Optional so the guard stands alone. Absent, the token is the whole story —
+    // which is what the contract and isolation suites rely on, and what a platform
+    // caller gets, since Things Alive staff hold no row in any customer's account.
+    @Optional() @Inject(SCOPE_RESOLVER) private readonly resolver?: ScopeResolver,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
