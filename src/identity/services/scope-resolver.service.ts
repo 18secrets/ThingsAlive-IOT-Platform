@@ -33,6 +33,16 @@ export class ScopeResolverService implements ScopeResolver {
       // in any customer's account and must not be invented one.
       if (!user) return null;
 
+      // The account before the person. Suspending a whole account is the commercial
+      // lever — non-payment, a contract ending — and it has to stop everybody at once
+      // without anybody having to edit a single user record.
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId } });
+      if (tenant && tenant.status === 'suspended') {
+        throw new UnauthorizedException(
+          'This organisation\'s account is suspended. Please contact Things Alive.',
+        );
+      }
+
       if (user.status === 'suspended') {
         throw new UnauthorizedException('This account has been suspended.');
       }

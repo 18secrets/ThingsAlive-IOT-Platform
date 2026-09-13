@@ -222,6 +222,15 @@ export class CredentialService {
         return refuse('Email or password is incorrect.');
       }
 
+      // Checked after the password, for the same reason the user's own status is:
+      // before it, this branch would answer "does anybody at this company use the
+      // platform" to anybody who asked.
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId: user.tenantId } });
+      if (tenant && tenant.status === 'suspended') {
+        await this.record(m, 'login.failed', { user, ctx, detail: 'tenant suspended' });
+        return refuse('This organisation\'s account is suspended. Please contact Things Alive.');
+      }
+
       // Checked after the password, on purpose. Before it, this branch would answer
       // "is there a suspended account at this address" to anybody who asked.
       if (user.status === 'suspended') {
