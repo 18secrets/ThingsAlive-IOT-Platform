@@ -3,9 +3,30 @@ import { Column, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 
 /** What a tenant pays for on this asset, which decides which tiers it may run. */
 export type ServiceTier = 'basic' | 'standard' | 'advanced' | 'full';
 
+/** Adopted from the existing platform's records, or created here by the customer. */
+export type EquipmentOrigin = 'mirrored' | 'client';
+
+export type EquipmentStatus = 'active' | 'retired';
+
+/** The source system stamped on equipment a customer creates in 2.0. */
+export const CLIENT_SOURCE_SYSTEM = 'ta-2.0';
+
 /**
- * What 2.0 knows about one piece of equipment that the existing platform does not
- * (task P1-06, reframed).
+ * The equipment register (tasks P1-06, P1-85).
+ *
+ * This started as a set of 2.0-owned annotations hanging off a read-only mirror. It
+ * is now the register itself: the client's own CEO or manager creates equipment here,
+ * names it, places it at a site and moves it between sites. The mirror is still
+ * mirrored and still read-only; what changed is which side is authoritative about
+ * the things a customer edits.
+ *
+ * Identity is unchanged, and that is what made the change cheap. The key was always
+ * `(source_system, external_id)` because two upstream systems could legitimately
+ * report the same machine — so equipment created in 2.0 is simply another source
+ * system, and every consumer built over the last twelve slices keeps working without
+ * knowing the difference.
+ *
+ * The original note on why this is not a column inside the mirror still applies:
  *
  * The original task said "alter equipment_master". That was written before 2.0 got
  * its own database, and it is no longer the right shape: `equipment_projection` is a
@@ -66,6 +87,48 @@ export class EquipmentProfile {
    */
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
   readiness: Record<string, unknown>;
+
+  /**
+   * Whether this row was adopted from the mirror or created here.
+   *
+   * Kept because the two behave differently on reconcile: an upstream change to a
+   * mirrored asset is news, and an upstream row that looks like a client-created one
+   * is a coincidence of identifiers rather than the same machine.
+   */
+  @Column({ type: 'text', default: 'client' })
+  origin: EquipmentOrigin;
+
+  @Column({ type: 'text', default: 'active' })
+  status: EquipmentStatus;
+
+  @Column({ type: 'text', nullable: true })
+  name: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  manufacturer: string | null;
+
+  @Column({ name: 'model_number', type: 'text', nullable: true })
+  modelNumber: string | null;
+
+  @Column({ name: 'serial_number', type: 'text', nullable: true })
+  serialNumber: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  /**
+   * Which site this machine is at, as 2.0 understands it.
+   *
+   * The mirror has its own answer and they can disagree; this one wins, because the
+   * customer's manager is the person who moves machines and this is where they say
+   * so. A site manager's view of their fleet is derived from this column, which is
+   * why changing it is recorded rather than simply applied.
+   */
+  @Column({ name: 'plant_id', type: 'uuid', nullable: true })
+  plantId: string | null;
+
+  @Column({ name: 'created_by', type: 'text', nullable: true })
+  createdBy: string | null;
 
   @Column({ name: 'updated_by', type: 'text', nullable: true })
   updatedBy: string | null;
