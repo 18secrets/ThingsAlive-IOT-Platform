@@ -1,7 +1,7 @@
 import {
   BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional,
 } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { DataSource, EntityManager, In, LessThan } from 'typeorm';
 import { can } from '../../auth/capabilities';
 import { SCOPE_RESOLVER, ScopeResolver } from '../../auth/scope-resolver';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -30,6 +30,8 @@ export interface ListFilter {
   assignedToUserId?: string;
   externalId?: string;
   mine?: boolean;
+  /** Past its due date and still unfinished. */
+  overdue?: boolean;
 }
 
 /**
@@ -160,10 +162,17 @@ export class WorkOrderService {
     });
   }
 
-  async list(scope: RequestScope, filter: ListFilter = {}): Promise<WorkOrder[]> {
+  async list(scope: RequestScope, filter: ListFilter = {}, now = new Date()): Promise<WorkOrder[]> {
     return withTenantSession(this.ds, scope, async (m) => {
       const where: Record<string, unknown> = { tenantId: scope.tenantId };
-      if (filter.status?.length) where.status = In(filter.status);
+      if (filter.overdue) {
+        // Overdue means late and still outstanding. A completed job that ran past its
+        // date is a fact about last week, not something anybody can act on today, and
+        // listing it alongside live work is how an overdue list stops being read.
+        where.dueAt = LessThan(now);
+        where.status = In(['created', 'in-progress']);
+      }
+      if (filter.status?.length && !filter.overdue) where.status = In(filter.status);
       if (filter.mine) where.assignedToUserId = scope.userId;
       else if (filter.assignedToUserId) where.assignedToUserId = filter.assignedToUserId;
       if (filter.externalId) where.externalId = filter.externalId;

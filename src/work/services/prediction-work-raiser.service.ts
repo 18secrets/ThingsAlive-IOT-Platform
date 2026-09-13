@@ -20,6 +20,17 @@ export const RAISE_AT: Severity = Severity.Critical;
 const UNRAISABLE_CONFIDENCE = 'none';
 
 /**
+ * How long an automatically raised job has before it is late.
+ *
+ * Things Alive: an issue found by manual inspection is resolved within 24 to 48 hours,
+ * and that is a target rather than an observation. The outer number is taken, because
+ * a due date is a promise and the useful promise is the one that is kept: setting it
+ * at 24 would mark half of a normal week's work overdue and teach everybody that the
+ * red rows mean nothing.
+ */
+export const AUTO_JOB_DUE_HOURS = 48;
+
+/**
  * Raising a job from a prediction, with a person still in the loop (task P1-87).
  *
  * Automatic, and deliberately stops one step short of deciding anything: the job is
@@ -89,7 +100,11 @@ export class PredictionWorkRaiser implements WorkRaiser {
       predictionId: trigger.predictionId,
       origin: 'prediction',
       raisedForScenario: trigger.clientScenarioSlug,
-      dueAt: null,
+      // A critical prediction with no date on it is a job nobody is late for. Counted
+      // from the moment the reading describes rather than from when the scorer ran, so
+      // a backfill scored three days late does not create a job that was already
+      // overdue when it appeared.
+      dueAt: new Date(trigger.occurredAt.getTime() + AUTO_JOB_DUE_HOURS * 3_600_000),
       startedAt: null,
       endedAt: null,
       resolution: null,

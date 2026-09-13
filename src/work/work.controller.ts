@@ -59,11 +59,13 @@ export class WorkOrderController {
     @Query('status') status?: string,
     @Query('equipment') equipment?: string,
     @Query('mine') mine?: string,
+    @Query('overdue') overdue?: string,
   ) {
     return this.orders.list(scope, {
       status: status ? status.split(',') : undefined,
       externalId: equipment,
       mine: mine === 'true',
+      overdue: overdue === 'true',
     });
   }
 
