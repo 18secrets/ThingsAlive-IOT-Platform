@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { SCOPE_RESOLVER, ScopeResolver } from '../scope-resolver';
 import { REQUEST_SCOPE_KEY, RequestScope } from '../types/request-scope';
 
 /**
