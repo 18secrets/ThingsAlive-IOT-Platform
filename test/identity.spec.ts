@@ -8,6 +8,7 @@ import { ROLE_TEMPLATES } from '../src/identity/role-templates';
 import { RoleService } from '../src/identity/services/role.service';
 import { ScopeResolverService } from '../src/identity/services/scope-resolver.service';
 import { UserService } from '../src/identity/services/user.service';
+import { Plant } from '../src/equipment/entities/plant.entity';
 import { EquipmentProjection } from '../src/projection/entities/equipment-projection.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
@@ -75,14 +76,26 @@ describeDb('identity', () => {
 
   beforeEach(async () => {
     for (const t of ['user_equipment_access', 'user_plant_access', 'app_user',
-      'tenant_role', 'equipment_projection']) {
+      'tenant_role', 'equipment_projection', 'plant']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     await roles.provisionDefaults('acme', 'u-master', NOW);
     await roles.provisionDefaults('globex', 'u-master', NOW);
 
-    // Four machines across two sites, so a plant-shaped scope has something to derive.
+    // Four machines across three sites, so a plant-shaped scope has something to
+    // derive. The sites are rows in the register and carry the upstream identifier
+    // they correspond to, which is what lets un-adopted machines still resolve.
     await runTenantSpanning(owner, 'test fixture', async (m) => {
+      const plants = m.getRepository(Plant);
+      for (const code of ['PLANT-A', 'PLANT-B', 'PLANT-C']) {
+        const saved = await plants.save({
+          tenantId: 'acme', code, name: code, address: null, siteArea: null,
+          capacity: null, projectType: null, operationalStatus: null, description: null,
+          status: 'active' as const, sourceSystem: SOURCE, externalId: code,
+          createdBy: 'u-boss', updatedBy: 'u-boss',
+        });
+        plantIds[code] = saved.id;
+      }
       const repo = m.getRepository(EquipmentProjection);
       for (const [externalId, plant] of [
         ['DG-1', 'PLANT-A'], ['DG-2', 'PLANT-A'], ['DG-3', 'PLANT-B'], ['DG-4', 'PLANT-C'],
@@ -95,6 +108,8 @@ describeDb('identity', () => {
       }
     });
   });
+
+  const plantIds: Record<string, string> = {};
 
   const activate = (id: string) =>
     runTenantSpanning(owner, 'test fixture', (m) =>
@@ -163,14 +178,14 @@ describeDb('identity', () => {
     it('invites with a role, because a user without one describes nobody', async () => {
       const user = await users.invite(boss, {
         email: ' Dana@Acme.TEST ', fullName: 'Dana', roleSlug: 'site-manager',
-        plants: [{ sourceSystem: SOURCE, plantExternalId: 'PLANT-A' }],
+        plants: [{ plantId: plantIds['PLANT-A'] }],
       }, NOW);
 
       // Lower-cased and trimmed once, so a stray capital never creates a twin.
       expect(user.email).toBe('dana@acme.test');
       expect(user.status).toBe('invited');
       expect(user.passwordHash).toBeNull();
-      expect(user.plants).toEqual([{ sourceSystem: SOURCE, plantExternalId: 'PLANT-A' }]);
+      expect(user.plants).toEqual([{ plantId: plantIds['PLANT-A'] }]);
     });
 
     it('refuses a role that does not exist here', async () => {
@@ -202,13 +217,13 @@ describeDb('identity', () => {
     it('keeps assignments through a role change', async () => {
       const user = await users.invite(boss, {
         email: 'sam@acme.test', fullName: 'Sam', roleSlug: 'site-manager',
-        plants: [{ sourceSystem: SOURCE, plantExternalId: 'PLANT-A' }],
+        plants: [{ plantId: plantIds['PLANT-A'] }],
       }, NOW);
 
       const promoted = await users.setRole(boss, user.id, 'ceo-manager');
       // The rows stop mattering, because a tenant-shaped role does not read them.
       // Deleting them would destroy the record of what this person used to run.
-      expect(promoted.plants).toEqual([{ sourceSystem: SOURCE, plantExternalId: 'PLANT-A' }]);
+      expect(promoted.plants).toEqual([{ plantId: plantIds['PLANT-A'] }]);
     });
 
     it('cannot reach a person in another account', async () => {
@@ -234,15 +249,13 @@ describeDb('identity', () => {
     it('derives a site manager\'s machines from their sites', async () => {
       const user = await users.invite(boss, {
         email: 'sm@acme.test', fullName: 'Site', roleSlug: 'site-manager',
-        plants: [
-          { sourceSystem: SOURCE, plantExternalId: 'PLANT-A' },
-          { sourceSystem: SOURCE, plantExternalId: 'PLANT-B' },
-        ],
+        plants: [{ plantId: plantIds['PLANT-A'] }, { plantId: plantIds['PLANT-B'] }],
       }, NOW);
       await activate(user.id);
 
       const resolved = await resolver.resolve('acme', user.id);
-      expect([...resolved!.plantIds!].sort()).toEqual(['PLANT-A', 'PLANT-B']);
+      expect([...resolved!.plantIds!].sort())
+        .toEqual([plantIds['PLANT-A'], plantIds['PLANT-B']].sort());
       // Derived, not stored. A machine moved into one of their sites is theirs from
       // that moment, with no list for anybody to remember to update.
       expect([...resolved!.equipmentIds!].sort()).toEqual(['DG-1', 'DG-2', 'DG-3']);
