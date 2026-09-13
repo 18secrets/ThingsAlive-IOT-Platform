@@ -58,6 +58,9 @@ export const ENTITIES = [
   AppUser,
   UserPlantAccess,
   UserEquipmentAccess,
+  UserInvitation,
+  UserSession,
+  UserSecurityEvent,
 ];
 
 export interface DataSourceChoices {

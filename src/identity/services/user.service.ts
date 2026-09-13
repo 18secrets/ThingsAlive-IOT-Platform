@@ -5,6 +5,7 @@ import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/
 import { AppUser } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
+import { UserSession } from '../entities/user-session.entity';
 
 export interface InviteInput {
   email: string;
