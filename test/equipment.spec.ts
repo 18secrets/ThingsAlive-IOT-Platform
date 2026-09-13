@@ -141,6 +141,17 @@ describeDb('equipment register', () => {
       expect(asset.origin).toBe('client');
     });
 
+    it('lets two accounts both call a machine DG-1', async () => {
+      await equipment.create(boss, { code: 'DG-1', name: 'Ours' });
+      await plants.create(other, { code: 'THEIRS', name: 'Theirs' });
+      // Client-created machines all share the source system ta-2.0 and carry a code
+      // the customer chose, so a platform-wide unique index would refuse the second
+      // customer to pick an obvious name — on their own data, for a reason invisible
+      // to them and to support.
+      await expect(equipment.create(other, { code: 'DG-1', name: 'Theirs' }))
+        .resolves.toMatchObject({ externalId: 'DG-1' });
+    });
+
     it('refuses a code that would be awkward to live with', async () => {
       await expect(equipment.create(boss, { code: 'DG 1', name: 'x' }))
         .rejects.toThrow(BadRequestException);

@@ -41,7 +41,9 @@ export const CLIENT_SOURCE_SYSTEM = 'ta-2.0';
  * Tenant-owned, and therefore covered by row-level security.
  */
 @Entity('equipment_profile')
-@Index('uq_equipment_profile_external', ['sourceSystem', 'externalId'], { unique: true })
+// Unique inside an account and nowhere else. Two customers both calling a machine
+// "DG-1" is ordinary, and was refused until the register made that obvious.
+@Index('uq_equipment_profile_external', ['tenantId', 'sourceSystem', 'externalId'], { unique: true })
 @Index('ix_equipment_profile_tenant', ['tenantId'])
 @Index('ix_equipment_profile_class', ['tenantId', 'equipmentClassSlug'])
 export class EquipmentProfile {
