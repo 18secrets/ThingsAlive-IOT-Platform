@@ -140,6 +140,11 @@ describeDb('prediction runtime', () => {
       // routine work.
       expect(job.priority).toBe('high');
       expect(job.raisedBy).toBe('system:prediction');
+      // 48 hours from the moment the shift's newest reading describes, not from when
+      // the scorer happened to run — a backfill scored three days late must not
+      // produce a job that was already overdue when it was created.
+      // The reading is at 2026-09-12T01:00Z, so the job is due 48 hours after that.
+      expect(job.dueAt!.toISOString()).toBe('2026-09-14T01:00:00.000Z');
     });
 
     it('raises nothing below critical', async () => {

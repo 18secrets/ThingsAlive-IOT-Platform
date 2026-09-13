@@ -328,6 +328,60 @@ describeDb('the shift runner', () => {
     expect(await runner.run(NOW)).toMatchObject({ considered: 0 });
   });
 
+  it('does not score a shift the machine never ran', async () => {
+    // engine_running_status is an ordinary sensor measurement arriving through the
+    // same pipe as everything else — which is why "equipment status comes from the
+    // backend" needs no second integration.
+    await runTenantSpanning(owner, 'test fixture', (m) =>
+      m.getRepository(SensorMapProjection).save({
+        tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90211',
+        checksum: 'c', imei: IMEI, signal: 'engine_running_status', sensorName: 'Running',
+        unit: null, payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+      }));
+    for (const [id, value] of [[MEASUREMENT_ID, 80], ['90211', 0]] as [string, number][]) {
+      await owner.query(
+        `INSERT INTO "device_sensor_measurement_logs"
+           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T04:00:00Z',$2)`,
+        [id, value]);
+    }
+    await shifts.create(boss, ref, morning);
+
+    const summary = await runner.run(NOW);
+    // A shift where the logger reported all day and the engine never turned over is
+    // readings that look like telemetry and describe nothing. Scoring them against a
+    // baseline built from a working machine is a confident answer about a machine
+    // that was not there.
+    expect(summary).toMatchObject({ idle: 1, scored: 0, failed: 0 });
+    expect(summary.outcomes[0]).toMatchObject({ status: 'not-running', detail: 'engine-never-ran' });
+    expect(await owner.getRepository('prediction').count()).toBe(0);
+    // Still ingested: the readings are true and belong to the history.
+    expect(summary.outcomes[0].readings).toBe(2);
+  });
+
+  it('scores a shift the machine ran for part of', async () => {
+    await runTenantSpanning(owner, 'test fixture', (m) =>
+      m.getRepository(SensorMapProjection).save({
+        tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90211',
+        checksum: 'c', imei: IMEI, signal: 'engine_running_status', sensorName: 'Running',
+        unit: null, payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+      }));
+    for (const [id, value, at] of [
+      [MEASUREMENT_ID, 80, '2026-09-14T04:00:00Z'],
+      ['90211', 0, '2026-09-14T02:00:00Z'],
+      ['90211', 1, '2026-09-14T04:00:00Z'],
+    ] as [string, number, string][]) {
+      await owner.query(
+        `INSERT INTO "device_sensor_measurement_logs"
+           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$3,$2)`,
+        [id, value, at]);
+    }
+    await shifts.create(boss, ref, morning);
+
+    // Twenty minutes of an eight-hour shift is still running, and those readings are
+    // worth scoring. Demanding a majority would quietly discard every short job.
+    expect(await runner.run(NOW)).toMatchObject({ scored: 1, idle: 0 });
+  });
+
   it('tells a commissioning gap apart from a synchronisation one', async () => {
     await owner.query(`DELETE FROM "sensor_map_projection"`);
     await shifts.create(boss, ref, morning);

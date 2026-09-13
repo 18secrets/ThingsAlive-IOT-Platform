@@ -287,6 +287,44 @@ describeDb('work orders', () => {
     });
   });
 
+  describe('being late', () => {
+    it('gives an automatic job 48 hours, and finds it when it is late', async () => {
+      // Things Alive: 24 to 48 hours is the target. The outer number, because a due
+      // date is a promise and the useful promise is the one that is kept — 24 would
+      // mark half a normal week overdue and teach everybody the red rows mean nothing.
+      await runTenantSpanning(owner, 'test fixture', (m) => m.query(
+        `INSERT INTO "work_order"
+           ("tenant_id","reference","source_system","external_id","title","status",
+            "priority","origin","raised_for_scenario","raised_by","due_at")
+         VALUES ('acme','WO-900010',$1,'DG-1','auto','created','high','prediction',
+                 'dg-overheat','system:prediction', now() - interval '1 hour')`,
+        [CLIENT_SOURCE_SYSTEM]));
+
+      expect((await orders.list(boss, { overdue: true })).map((o) => o.reference))
+        .toEqual(['WO-900010']);
+    });
+
+    it('leaves a job that is late but finished off the list', async () => {
+      await runTenantSpanning(owner, 'test fixture', (m) => m.query(
+        `INSERT INTO "work_order"
+           ("tenant_id","reference","source_system","external_id","title","status",
+            "priority","raised_by","due_at","resolution")
+         VALUES ('acme','WO-900011',$1,'DG-1','late but done','completed','normal',
+                 'u-boss', now() - interval '2 days', 'done')`,
+        [CLIENT_SOURCE_SYSTEM]));
+
+      // A completed job that ran past its date is a fact about last week, not
+      // something anybody can act on today. Listing it beside live work is how an
+      // overdue list stops being read.
+      expect(await orders.list(boss, { overdue: true })).toEqual([]);
+    });
+
+    it('does not call a job late before its date', async () => {
+      await orders.raise(boss, { ...ref, title: 'Plenty of time' });
+      expect(await orders.list(boss, { overdue: true })).toEqual([]);
+    });
+  });
+
   describe('isolation', () => {
     it('keeps one account\'s jobs out of another', async () => {
       const order = await orders.raise(boss, { ...ref, title: 'Ours' });
