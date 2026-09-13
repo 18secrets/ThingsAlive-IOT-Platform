@@ -114,7 +114,9 @@ export class ShiftRunner {
     }
 
     for (const window of owed) {
+      const startedAt = Date.now();
       const outcome = await this.one(window);
+      await this.record(window, outcome, Date.now() - startedAt);
       summary.outcomes.push(outcome);
       if (outcome.status === 'scored') summary.scored += 1;
       else if (outcome.status === 'failed') summary.failed += 1;
@@ -254,6 +256,48 @@ export class ShiftRunner {
         + `and is still owed: ${detail}`,
       );
       return this.outcome(window, 'failed', detail);
+    }
+  }
+
+  /**
+   * Write down what happened to this window, whatever happened.
+   *
+   * Every outcome, not only the failures. A window skipped because the machine never
+   * ran is the explanation somebody needs; if only failures were kept, the absence of
+   * a row would mean either "it worked" or "nothing happened", and those are the two
+   * answers that most need telling apart.
+   *
+   * Never fatal, and deliberately so: losing a scored prediction because its receipt
+   * could not be filed would be the wrong way round.
+   */
+  private async record(
+    window: OwedWindow, outcome: RunOutcome, durationMs: number,
+  ): Promise<void> {
+    try {
+      await withTenantId(this.ds, window.tenantId, (m) => {
+        const repo = m.getRepository(ShiftRun);
+        return repo.save(repo.create({
+          tenantId: window.tenantId,
+          shiftId: window.shiftId,
+          shiftName: window.shiftName,
+          sourceSystem: window.sourceSystem,
+          externalId: window.externalId,
+          localDate: window.localDate,
+          windowStart: window.start,
+          windowEnd: window.end,
+          status: outcome.status,
+          detail: outcome.detail ?? null,
+          readings: outcome.readings ?? 0,
+          predictions: outcome.predictions ?? 0,
+          jobsRaised: outcome.raised ?? 0,
+          alertsFired: outcome.alerts ?? 0,
+          durationMs,
+        }));
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not record the run for ${window.externalId}: ${(error as Error).message}`,
+      );
     }
   }
 

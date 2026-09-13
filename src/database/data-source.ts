@@ -22,6 +22,7 @@ import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
+import { ShiftRun } from '../shift/entities/shift-run.entity';
 import { Tenant } from '../tenancy/entities/tenant.entity';
 import { AppUser } from '../identity/entities/app-user.entity';
 import { UserInvitation } from '../identity/entities/user-invitation.entity';
@@ -76,6 +77,7 @@ export const ENTITIES = [
   WorkOrderCounter,
   WorkOrderEvent,
   EquipmentShift,
+  ShiftRun,
   AlertRule,
   AlertEvent,
 ];
