@@ -253,6 +253,40 @@ describeDb('work orders', () => {
     });
   });
 
+  describe('automatic raising', () => {
+    const insertAuto = (reference: string, status = 'created') =>
+      runTenantSpanning(owner, 'test fixture', (m) => m.query(
+        `INSERT INTO "work_order"
+           ("tenant_id","reference","source_system","external_id","title","status",
+            "priority","origin","raised_for_scenario","raised_by")
+         VALUES ('acme',$1,$2,'DG-1','auto',$3,'high','prediction','dg-overheat','system:prediction')`,
+        [reference, CLIENT_SOURCE_SYSTEM, status]));
+
+    it('lets the database refuse a second live automatic job, not only the service', async () => {
+      await insertAuto('WO-900001');
+      // Two scoring runs in flight would both read "nothing live" and both insert.
+      // The service check makes the common case explicable; this makes it correct.
+      await expect(insertAuto('WO-900002')).rejects.toThrow(/uq_work_order_live_auto/);
+    });
+
+    it('stops de-duplicating once the job is finished', async () => {
+      await insertAuto('WO-900001', 'cancelled');
+      // The fault coming back after somebody signed the last one off is a second
+      // visit. Suppressing it would turn the de-duplication into a mute.
+      await expect(insertAuto('WO-900002')).resolves.toBeTruthy();
+    });
+
+    it('will not let an automatic job exist without the scenario that caused it', async () => {
+      // Without it there is nothing to de-duplicate on, and the next run raises again.
+      await expect(runTenantSpanning(owner, 'test fixture', (m) => m.query(
+        `INSERT INTO "work_order"
+           ("tenant_id","reference","source_system","external_id","title","status",
+            "priority","origin","raised_by")
+         VALUES ('acme','WO-900003',$1,'DG-1','auto','created','high','prediction','system')`,
+        [CLIENT_SOURCE_SYSTEM]))).rejects.toThrow(/ck_work_order_auto_scenario/);
+    });
+  });
+
   describe('isolation', () => {
     it('keeps one account\'s jobs out of another', async () => {
       const order = await orders.raise(boss, { ...ref, title: 'Ours' });

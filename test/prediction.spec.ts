@@ -1,6 +1,8 @@
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { Severity } from '../src/common/severity';
+import { PredictionWorkRaiser } from '../src/work/services/prediction-work-raiser.service';
+import { WorkOrder } from '../src/work/entities/work-order.entity';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { EquipmentScenario } from '../src/activation/entities/equipment-scenario.entity';
 import { PredictionBaseline } from '../src/prediction/entities/prediction-baseline.entity';
@@ -79,7 +81,8 @@ describeDb('prediction runtime', () => {
   });
 
   beforeEach(async () => {
-    for (const t of ['prediction', 'prediction_baseline', 'telemetry_reading',
+    for (const t of ['work_order_event', 'work_order', 'work_order_counter',
+      'prediction', 'prediction_baseline', 'telemetry_reading',
       'equipment_scenario', 'device_projection', 'client_scenario']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
@@ -103,6 +106,102 @@ describeDb('prediction runtime', () => {
         sourceTimestamp: new Date(NOW.getTime() + minutesAfter * 60_000),
         receivedAt: NOW, source,
       }));
+
+  /**
+   * Raising a job from a prediction, with a person still in the loop (P1-104).
+   *
+   * The loop is the assignment: the scorer creates the job and leaves it unassigned,
+   * so it lands in a manager's list and a human says who goes.
+   */
+  describe('raising work automatically', () => {
+    let withRaiser: PredictionService;
+
+    beforeEach(async () => {
+      withRaiser = new PredictionService(ds, new PredictionWorkRaiser());
+      await baselines.refresh(acme, asset, 30, NOW);
+    });
+
+    const jobs = () => owner.getRepository(WorkOrder).find({ order: { reference: 'ASC' } });
+
+    it('creates an unassigned job for a critical prediction', async () => {
+      await addReading(90, 60);
+      const result = await withRaiser.scoreAsset(acme, asset, NOW);
+      expect(result.written[0].severity).toBe(Severity.Critical);
+      expect(result.raised).toHaveLength(1);
+
+      const [job] = await jobs();
+      expect(job.status).toBe('created');
+      expect(job.origin).toBe('prediction');
+      expect(job.predictionId).toBe(result.written[0].id);
+      // Unassigned on purpose. Auto-assignment would need a rule nobody has given,
+      // and guessing one leaves jobs with whoever the rule happened to pick.
+      expect(job.assignedToUserId).toBeNull();
+      // Not 'normal'. A critical prediction arriving next to routine work reads as
+      // routine work.
+      expect(job.priority).toBe('high');
+      expect(job.raisedBy).toBe('system:prediction');
+    });
+
+    it('raises nothing below critical', async () => {
+      // Two sigma: abnormal, not critical.
+      await addReading(84, 60);
+      const result = await withRaiser.scoreAsset(acme, asset, NOW);
+      expect(result.written[0].severity).not.toBe(Severity.Critical);
+      expect(result.raised).toEqual([]);
+      expect(await jobs()).toEqual([]);
+    });
+
+    it('does not raise a second job while the first is unfinished', async () => {
+      await addReading(90, 60);
+      await withRaiser.scoreAsset(acme, asset, NOW);
+      await addReading(95, 120);
+      const again = await withRaiser.scoreAsset(acme, asset, NOW);
+
+      // A failing machine predicts critical on every run, for days. One job per run
+      // is a queue ignored within the hour, which is worse than no queue because it
+      // looks like coverage.
+      expect(again.written[0].severity).toBe(Severity.Critical);
+      expect(again.raised).toEqual([]);
+      expect(await jobs()).toHaveLength(1);
+    });
+
+    it('raises again once the job has been dealt with', async () => {
+      await addReading(90, 60);
+      await withRaiser.scoreAsset(acme, asset, NOW);
+      await owner.query(
+        `UPDATE "work_order" SET "status" = 'completed', "resolution" = 'replaced thermostat'`);
+
+      await addReading(95, 120);
+      // The fault came back after somebody signed the last one off. That is a second
+      // visit, and suppressing it would be the de-duplication quietly becoming a mute.
+      expect((await withRaiser.scoreAsset(acme, asset, NOW)).raised).toHaveLength(1);
+      expect(await jobs()).toHaveLength(2);
+    });
+
+    it('raises a separate job for a different scenario on the same machine', async () => {
+      await runTenantSpanning(owner, 'test fixture', async (m) => {
+        await m.getRepository(ClientScenario).save(scenario('dg-coolant-spike', ['coolant_temp']));
+        await m.getRepository(EquipmentScenario).save(activate('dg-coolant-spike'));
+      });
+      await addReading(90, 60);
+
+      // "High vibration" and "oil temperature climbing" are two visits, not one, so
+      // the de-duplication is per scenario rather than per machine.
+      const result = await withRaiser.scoreAsset(acme, asset, NOW);
+      expect(result.raised).toHaveLength(2);
+      expect((await jobs()).map((j) => j.raisedForScenario).sort())
+        .toEqual(['dg-coolant-overheat', 'dg-coolant-spike']);
+    });
+
+    it('scores normally when nothing is there to raise work', async () => {
+      await addReading(90, 60);
+      // No raiser wired in: the prediction is still the product, and losing it
+      // because a job could not be raised would be the wrong trade.
+      const result = await predictions.scoreAsset(acme, asset, NOW);
+      expect(result.written).toHaveLength(1);
+      expect(result.raised).toEqual([]);
+    });
+  });
 
   describe('the partitioned store', () => {
     it('gives every partition the isolation policy, not just the parent', async () => {
@@ -319,7 +418,7 @@ describeDb('prediction runtime', () => {
       // And the other account scores nothing, because it can see neither the
       // activation nor the telemetry.
       const theirs = await predictions.scoreAsset(globex, asset, NOW);
-      expect(theirs).toEqual({ written: [], skipped: [] });
+      expect(theirs).toEqual({ written: [], skipped: [], raised: [] });
     });
   });
 });
