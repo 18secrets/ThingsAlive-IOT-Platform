@@ -1,10 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
 import { runningStatusFor } from './running-status';
+import { withTenantId } from '../../scope/tenant-session';
+import { ShiftRun } from '../entities/shift-run.entity';
+import { tryTakePassLock } from './pass-lock';
 import { OwedWindow, ShiftService } from './shift.service';
 
 export interface RunOutcome {
@@ -51,12 +55,38 @@ export class ShiftRunner {
   private readonly logger = new Logger(ShiftRunner.name);
 
   constructor(
+    private readonly ds: DataSource,
     private readonly shifts: ShiftService,
     private readonly reader: LegacyTelemetryReader,
     private readonly telemetry: TelemetryService,
     private readonly predictions: PredictionService,
     private readonly alerts: AlertService,
   ) {}
+
+  /**
+   * One pass, and only if nobody else is already making one.
+   *
+   * Two instances running the same pass would both read the same watermark and score
+   * the same shift. Nothing would be corrupted — a prediction upserts and a live
+   * automatic job is refused by a unique index — but it doubles the work and halves
+   * the sense the logs make at exactly the moment somebody is reading them to find out
+   * why a machine was not scored.
+   *
+   * A tick that arrives mid-pass is dropped rather than queued: the work it would do
+   * is the work already in progress, and the next tick finds whatever is left.
+   */
+  async runExclusively(now = new Date()): Promise<RunSummary | null> {
+    const lock = await tryTakePassLock(this.ds);
+    if (!lock) {
+      this.logger.debug('Another instance is mid-pass. Skipping this tick.');
+      return null;
+    }
+    try {
+      return await this.run(now);
+    } finally {
+      await lock.release();
+    }
+  }
 
   async run(now = new Date()): Promise<RunSummary> {
     // Sweep first, score second. A logger that has been off the network pushes its
