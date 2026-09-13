@@ -51,6 +51,10 @@ export const ENTITIES = [
   PredictionBaseline,
   DeviceInventory,
   DeviceInventoryEvent,
+  TenantRole,
+  AppUser,
+  UserPlantAccess,
+  UserEquipmentAccess,
 ];
 
 export interface DataSourceChoices {

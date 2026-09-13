@@ -63,6 +63,7 @@ export class AppModule {
               ActivationModule,
               PredictionModule,
               InventoryModule,
+              IdentityModule,
             ]
           : []),
       ],
