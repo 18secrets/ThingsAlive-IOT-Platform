@@ -59,6 +59,19 @@ export class AppUser {
   @Column({ name: 'external_source_system', type: 'text', nullable: true })
   externalSourceSystem: string | null;
 
+  /**
+   * Consecutive failures since the last success, and the lockout they earn.
+   *
+   * Counters on the row rather than a rate limiter in front of the route, because the
+   * thing being protected is one account rather than one caller: an attacker spreading
+   * attempts across addresses defeats a per-IP limit and not this.
+   */
+  @Column({ name: 'failed_attempts', type: 'int', default: 0 })
+  failedAttempts: number;
+
+  @Column({ name: 'locked_until', type: 'timestamptz', nullable: true })
+  lockedUntil: Date | null;
+
   @Column({ name: 'invited_by', type: 'text', nullable: true })
   invitedBy: string | null;
 
