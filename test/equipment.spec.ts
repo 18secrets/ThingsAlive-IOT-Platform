@@ -102,6 +102,26 @@ describeDb('equipment register', () => {
         .rejects.toThrow(/Reopen it before placing machines there/);
     });
 
+    it('will not re-point a site at a different upstream site', async () => {
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.query(`UPDATE "plant" SET "source_system" = $2, "external_id" = 'NORTH-UPSTREAM' WHERE "id" = $1`,
+          [north, SOURCE]));
+
+      await plants.update(boss, north, {
+        name: 'Renamed', sourceSystem: 'somewhere-else', externalId: 'SOUTH-UPSTREAM',
+      });
+
+      const site = (await plants.list(boss)).find((p) => p.id === north)!;
+      // The link decides which mirror machines a site manager reads through to while
+      // a fleet is half adopted, so changing it moves access the way moving a machine
+      // does — and unlike a move, nothing would record it. The patch type accepts the
+      // fields, so without this test a future edit could start honouring them
+      // silently.
+      expect(site.sourceSystem).toBe(SOURCE);
+      expect(site.externalId).toBe('NORTH-UPSTREAM');
+      expect(site.name).toBe('Renamed');
+    });
+
     it('cannot see or touch another account\'s sites', async () => {
       expect((await plants.list(other)).map((p) => p.code)).toEqual([]);
       await expect(plants.update(other, north, { name: 'Theirs' })).rejects.toThrow(NotFoundException);

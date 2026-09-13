@@ -88,6 +88,12 @@ export class PlantService {
         if (clash) throw new ConflictException(`A site with the code "${input.code}" already exists.`);
         plant.code = input.code;
       }
+      // sourceSystem and externalId are deliberately absent, even though the input
+      // type carries them. The link decides which mirror machines a site manager
+      // reads through to while a fleet is only half adopted, so re-pointing it moves
+      // access exactly the way moving a machine does — and unlike a move, nothing
+      // here would record it. If a mistyped link ever has to be corrected, that is a
+      // re-link action that writes its own history, not a field on this patch.
       for (const key of ['name', 'address', 'siteArea', 'capacity', 'projectType',
         'operationalStatus', 'description'] as const) {
         if (input[key] !== undefined) (plant as any)[key] = input[key] ?? null;
