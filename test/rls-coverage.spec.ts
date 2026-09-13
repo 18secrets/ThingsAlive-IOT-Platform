@@ -78,9 +78,60 @@ describeDb('row-level security coverage', () => {
     expect(weak.map((r) => r.relname)).toEqual([]);
   });
 
+  /**
+   * Unique indexes on a tenant-owned table that deliberately span every account.
+   *
+   * Most are the opposite of a mistake — one person has one login across the whole
+   * platform, a token hash must be unique everywhere, the device pool is Things
+   * Alive's. But a global uniqueness rule on a column customers choose the value of
+   * is a bug that only appears on the *second* customer: their perfectly ordinary
+   * code is refused because a stranger used it first, and nobody can explain why.
+   *
+   * That is exactly what happened to equipment. So the rule is not "always include
+   * the tenant" — it is that spanning accounts is a decision with a reason next to
+   * it, and a new index cannot acquire one by accident.
+   */
+  const GLOBAL_UNIQUE: Record<string, string> = {
+    uq_app_user_email: 'one person has one login across every account, by design',
+    uq_user_session_token: 'a token hash must be unique everywhere it could be presented',
+    uq_user_invitation_token: 'a token hash must be unique everywhere it could be presented',
+    uq_app_user_external: 'an upstream user account maps to exactly one person here',
+    uq_device_inventory_imei: 'the device pool is Things Alive stock, not a customer table',
+    uq_tenant_map_source: 'the table that decides which account an upstream client is',
+    uq_equipment_projection_external: 'mirrors one upstream system, whose ids are its own',
+    uq_device_projection_external: 'mirrors one upstream system, whose ids are its own',
+    uq_sensor_map_projection_external: 'mirrors one upstream system, whose ids are its own',
+    uq_telemetry_reading_dedupe: 'keyed by IMEI, which comes from the globally unique pool',
+  };
+
+  it('does not let one account\'s choice of code block another\'s', async () => {
+    const rows: { table: string; index: string; cols: string }[] = await ds.query(`
+      SELECT t.relname AS table, i.relname AS index,
+             array_to_string(array_agg(a.attname ORDER BY k.ord), ',') AS cols
+        FROM pg_index x
+        JOIN pg_class i ON i.oid = x.indexrelid
+        JOIN pg_class t ON t.oid = x.indrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace AND n.nspname = 'public'
+       CROSS JOIN LATERAL unnest(x.indkey) WITH ORDINALITY AS k(attnum, ord)
+        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+       WHERE x.indisunique
+         AND EXISTS (SELECT 1 FROM pg_attribute ta
+                      WHERE ta.attrelid = t.oid AND ta.attname = 'tenant_id' AND ta.attnum > 0)
+       GROUP BY 1, 2
+      HAVING NOT ('tenant_id' = ANY (array_agg(a.attname)))`);
+
+    // A uuid primary key cannot collide between accounts; everything else has to say
+    // why it spans them.
+    const unexplained = rows
+      .filter((r) => !(r.index.endsWith('_pkey') && /^id(,occurred_at)?$/.test(r.cols)))
+      .filter((r) => !GLOBAL_UNIQUE[r.index])
+      .map((r) => `${r.index} (${r.cols})`);
+    expect(unexplained).toEqual([]);
+  });
+
   it('names a reason for every exemption', () => {
     // Cheap, and it stops the list becoming a place to silence this test.
-    for (const [table, reason] of Object.entries(EXEMPT)) {
+    for (const [table, reason] of Object.entries({ ...EXEMPT, ...GLOBAL_UNIQUE })) {
       expect(reason.length).toBeGreaterThan(20);
       expect(table).not.toBe('');
     }
