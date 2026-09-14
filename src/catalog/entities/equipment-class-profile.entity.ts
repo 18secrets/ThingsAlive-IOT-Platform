@@ -69,6 +69,17 @@ export class EquipmentClassProfile {
   @Column({ name: 'default_thresholds', type: 'jsonb', default: () => `'{}'::jsonb` })
   defaultThresholds: Record<string, unknown>;
 
+  /**
+   * The default service interval for machines of this class, in engine hours.
+   *
+   * Nullable and unset on purpose. The number comes from someone who knows the
+   * machines, and a plausible-looking default invented here would become a confident
+   * wrong interval on every machine of the class at once — which is worse than no
+   * forecast, because a wrong one gets acted on. A machine can always override it.
+   */
+  @Column({ name: 'service_interval_hours', type: 'int', nullable: true })
+  serviceIntervalHours: number | null;
+
   @Column({ type: 'text', default: 'draft' })
   @Index('ix_equipment_class_profile_status')
   status: CatalogStatus;
