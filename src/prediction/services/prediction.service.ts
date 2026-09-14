@@ -2,7 +2,11 @@ import { Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
+import { Severity } from '../../common/severity';
 import { WORK_RAISER, WorkRaiser } from '../work-raiser';
+import {
+  influenceModelFrom, InfluenceOutcome, Sample, scoreInfluence,
+} from './influence';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
@@ -10,9 +14,15 @@ import { Prediction, PredictionSource } from '../entities/prediction.entity';
 import { PredictionBaseline } from '../entities/prediction-baseline.entity';
 import { DEFAULT_WINDOW_DAYS } from './baseline.service';
 import {
-  DEFAULT_CRITICAL_SIGMA, DEFAULT_MINIMUM_SAMPLES, DEFAULT_WARNING_SIGMA,
+  Confidence, DEFAULT_CRITICAL_SIGMA, DEFAULT_MINIMUM_SAMPLES, DEFAULT_WARNING_SIGMA,
   SignalObservation, scoreTier1,
 } from './tier1';
+
+/** How much of the recent past an influence model is scored over. A shift, give or take. */
+export const DEFAULT_INFLUENCE_WINDOW_HOURS = 12;
+
+/** So one fast logger cannot pull a million rows into memory for one score. */
+const INFLUENCE_SAMPLE_CAP = 20_000;
 
 export type SkipReason = 'no-device' | 'no-readings' | 'scenario-missing' | 'scenario-disabled';
 
@@ -154,6 +164,22 @@ export class PredictionService {
       at: r.source_timestamp,
     }));
 
+    // Physics before history. A scenario that carries an influence model is asking a
+    // better question than a baseline can — "is this machine where its load says it
+    // should be" rather than "is this unusual for this machine" — and it can be
+    // answered on the first shift instead of after thirty days of it.
+    const influence = await this.scoreByInfluence(m, scope, target, row, scenario, imeis, now);
+    if (influence) {
+      return this.write(m, scope, target, row, influence.occurredAt, {
+        severity: influence.severity,
+        riskScore: influence.riskScore,
+        abnormalCount: influence.outcome.severityLevel === 'none' ? 0 : 1,
+        highPriority: influence.outcome.severityLevel === 'critical',
+        confidence: influence.outcome.confidence,
+        signals: influence.signals,
+      }, windowDays, 'influence@1', influence.source, now);
+    }
+
     const baselines = await m.getRepository(PredictionBaseline).find({
       where: {
         tenantId: scope.tenantId,
@@ -183,6 +209,110 @@ export class PredictionService {
     // would let someone dismiss a real one as an artefact of a backfill.
     const source: PredictionSource = latest.every((r) => r.source !== 'live') ? 'replayed' : 'live';
 
+    return this.write(m, scope, target, row, occurredAt, {
+      severity: outcome.severity,
+      riskScore: outcome.riskScore,
+      abnormalCount: outcome.abnormalCount,
+      highPriority: outcome.highPriority,
+      confidence: outcome.confidence,
+      signals: outcome.signals,
+    }, windowDays, 'tier1@1', source, now);
+  }
+
+  /**
+   * Score against the scenario's influence model, if it has one.
+   *
+   * A separate query from the one the baseline path uses, and it has to be: that one
+   * takes the newest reading per signal, and a residual needs the whole window so a
+   * target can be paired with the influence that was true at the same moment.
+   *
+   * Returns null when there is no model, or when nothing in the window could be
+   * paired — and the caller then falls back to the baseline scorer rather than
+   * reporting nothing. Physics first, history second, silence last.
+   */
+  private async scoreByInfluence(
+    m: EntityManager, scope: RequestScope,
+    target: { sourceSystem: string; externalId: string },
+    row: EquipmentScenario, scenario: ClientScenario, imeis: string[], now: Date,
+  ): Promise<{
+    outcome: InfluenceOutcome; severity: Severity; riskScore: number;
+    signals: unknown[]; occurredAt: Date; source: PredictionSource;
+  } | null> {
+    const model = influenceModelFrom(scenario.parameters as any, row.parameterOverrides as any);
+    if (!model) return null;
+
+    const hours = this.numberParam(row, scenario, 'influence_window_hours', DEFAULT_INFLUENCE_WINDOW_HOURS);
+    const from = new Date(now.getTime() - hours * 3_600_000);
+    const wanted = [model.target, ...model.terms.map((t) => t.signal)];
+
+    const rows: { signal: string; value: string; source_timestamp: Date; source: string }[] =
+      await m.query(
+        `SELECT "signal", "value", "source_timestamp", "source"
+           FROM "telemetry_reading"
+          WHERE "tenant_id" = $1 AND "imei" = ANY($2::text[]) AND "signal" = ANY($3::text[])
+            AND "source_timestamp" > $4 AND "source_timestamp" <= $5
+          ORDER BY "source_timestamp" ASC
+          LIMIT ${INFLUENCE_SAMPLE_CAP}`,
+        [scope.tenantId, imeis, wanted, from, now],
+      );
+    if (rows.length === 0) return null;
+
+    const samples: Sample[] = rows.map((r) => ({
+      signal: r.signal,
+      value: Number(r.value),
+      at: new Date(r.source_timestamp).getTime(),
+    }));
+    const outcome = scoreInfluence(model, samples);
+    // Not scored means the window could not answer the question this model asks. The
+    // baseline scorer asks a different one and may still be able to.
+    if (!outcome.scored || !outcome.worst) return null;
+
+    const severity = outcome.severityLevel === 'critical'
+      ? Severity.Critical
+      : outcome.severityLevel === 'warning' ? Severity.High : Severity.None;
+
+    return {
+      outcome,
+      severity,
+      // Zero when the machine is on its curve — scored and nothing wrong, which is a
+      // different statement from unknown. Otherwise the residual as a fraction of the
+      // warning threshold, capped, so one very hot reading cannot read as 400%.
+      riskScore: outcome.severityLevel === 'none'
+        ? 0
+        : Math.round(Math.min(100, 50 + 50 * Math.min(1, outcome.exceedance ?? 0))),
+      signals: [{
+        signal: model.target,
+        state: outcome.severityLevel === 'none' ? 'normal' : outcome.severityLevel,
+        value: outcome.worst.actual,
+        expected: Math.round(outcome.worst.expected * 100) / 100,
+        residual: Math.round(outcome.worst.residual * 100) / 100,
+        influences: outcome.worst.influences,
+        at: new Date(outcome.worst.at).toISOString(),
+        samples: outcome.residuals.length,
+      }],
+      occurredAt: new Date(Math.max(...samples.map((s) => s.at))),
+      source: rows.every((r) => r.source !== 'live') ? 'replayed' : 'live',
+    };
+  }
+
+  /**
+   * Write the prediction, whichever scorer produced it.
+   *
+   * `modelRef` is the only thing that differs between them from here on, and it is the
+   * column that makes "which scorer said this" answerable. Two scorers disagreeing
+   * about the same asset is a question somebody will ask, and without this it has no
+   * answer.
+   */
+  private async write(
+    m: EntityManager, scope: RequestScope,
+    target: { sourceSystem: string; externalId: string },
+    row: EquipmentScenario, occurredAt: Date,
+    verdict: {
+      severity: Severity; riskScore: number; abnormalCount: number;
+      highPriority: boolean; confidence: Confidence; signals: unknown[];
+    },
+    windowDays: number, modelRef: string, source: PredictionSource, now: Date,
+  ): Promise<Prediction> {
     const [saved]: Prediction[] = await m.query(
       `INSERT INTO "prediction"
          ("tenant_id", "source_system", "external_id", "client_scenario_slug", "occurred_at",
@@ -212,9 +342,9 @@ export class PredictionService {
          "model_tier" AS "modelTier", "source", "computed_at" AS "computedAt"`,
       [
         scope.tenantId, target.sourceSystem, target.externalId, row.clientScenarioSlug, occurredAt,
-        outcome.severity, outcome.riskScore, outcome.abnormalCount, outcome.highPriority,
-        outcome.confidence, JSON.stringify(outcome.signals), windowDays,
-        'tier1@1', 1, source, now,
+        verdict.severity, verdict.riskScore, verdict.abnormalCount, verdict.highPriority,
+        verdict.confidence, JSON.stringify(verdict.signals), windowDays,
+        modelRef, 1, source, now,
       ],
     );
     return saved;
