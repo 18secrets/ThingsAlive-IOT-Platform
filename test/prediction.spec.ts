@@ -208,6 +208,108 @@ describeDb('prediction runtime', () => {
     });
   });
 
+  /**
+   * Scoring against physics rather than against the machine's own past (P4-02).
+   *
+   * The cold start is the reason this exists. A baseline needs thirty days and thirty
+   * samples before it will say anything, on a platform bought for predictions — and
+   * it answers a weaker question than anybody wants. Oil temperature climbing is not
+   * abnormal; oil temperature climbing while the load did not is.
+   */
+  describe('scoring on an influence model', () => {
+    const OIL_MODEL = {
+      target: 'oil_temperature',
+      intercept: 70,
+      terms: [{ signal: 'engine_load', coefficient: 0.4 }],
+      warnAbove: 8,
+      criticalAbove: 15,
+    };
+
+    const withModel = async (overrides: Record<string, unknown> = {}) => {
+      await runTenantSpanning(owner, 'test fixture', async (m) => {
+        await m.getRepository(ClientScenario).save(scenario('dg-oil-curve', ['oil_temperature'], {
+          parameters: [{
+            key: 'influence_model', label: 'Influence model', type: 'number',
+            default: { ...OIL_MODEL, ...overrides },
+          }] as any,
+        }));
+        await m.getRepository(EquipmentScenario).save(activate('dg-oil-curve'));
+        await m.getRepository(EquipmentScenario).delete({ clientScenarioSlug: 'dg-coolant-overheat' });
+      });
+    };
+
+    const pair = (load: number, oil: number, minutesAfter: number) =>
+      runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(TelemetryReading).save([
+          { tenantId: 'acme', imei: IMEI, signal: 'engine_load', value: load, unit: '%',
+            sourceTimestamp: new Date(NOW.getTime() + minutesAfter * 60_000),
+            receivedAt: NOW, source: 'live' as const },
+          { tenantId: 'acme', imei: IMEI, signal: 'oil_temperature', value: oil, unit: 'degC',
+            sourceTimestamp: new Date(NOW.getTime() + minutesAfter * 60_000),
+            receivedAt: NOW, source: 'live' as const },
+        ]));
+
+    it('scores a machine on its first shift, with no baseline at all', async () => {
+      await withModel();
+      await pair(21, 104, 60);
+
+      const result = await predictions.scoreAsset(acme, asset, new Date(NOW.getTime() + 120 * 60_000));
+
+      // No baseline was refreshed, and none was needed. 104 degrees where 78.4 was
+      // expected from a load of 21 percent: twenty-six degrees nothing accounts for.
+      const [p] = result.written;
+      expect(p.severity).toBe(Severity.Critical);
+      expect(p.confidence).toBe('full');
+      // The column that makes "which scorer said this" answerable.
+      expect(p.modelRef).toBe('influence@1');
+      expect(p.signals[0]).toMatchObject({ signal: 'oil_temperature', state: 'critical' });
+      expect(Math.round((p.signals[0] as any).residual)).toBe(26);
+    });
+
+    it('says nothing when the machine is hot because it is working', async () => {
+      await withModel();
+      await pair(90, 106, 60);
+
+      // A baseline scorer watching oil temperature alone would call 106 degrees
+      // abnormal. The load is what makes it ordinary, and that is the whole point.
+      const [p] = (await predictions.scoreAsset(acme, asset, new Date(NOW.getTime() + 120 * 60_000))).written;
+      expect(p.severity).toBe(Severity.None);
+      expect(p.riskScore).toBe(0);
+      expect(p.confidence).toBe('full');
+    });
+
+    it('falls back to the baseline scorer when the influences are missing', async () => {
+      await withModel();
+      // Oil temperature reported, load not. The model cannot answer; the baseline
+      // scorer asks a different question and may still be able to.
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(TelemetryReading).save({
+          tenantId: 'acme', imei: IMEI, signal: 'oil_temperature', value: 104, unit: 'degC',
+          sourceTimestamp: new Date(NOW.getTime() + 60 * 60_000),
+          receivedAt: NOW, source: 'live' as const,
+        }));
+
+      const [p] = (await predictions.scoreAsset(acme, asset, new Date(NOW.getTime() + 120 * 60_000))).written;
+      // Physics first, history second, silence last.
+      expect(p.modelRef).toBe('tier1@1');
+    });
+
+    it('lets one asset carry a different curve from the rest of the fleet', async () => {
+      await withModel();
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(EquipmentScenario).update(
+          { clientScenarioSlug: 'dg-oil-curve' },
+          { parameterOverrides: { influence_model: { ...OIL_MODEL, warnAbove: 40, criticalAbove: 60 } } },
+        ));
+      await pair(21, 104, 60);
+
+      // A generator in a hot yard, or one that has always run warm, without rewriting
+      // the scenario for everybody else.
+      const [p] = (await predictions.scoreAsset(acme, asset, new Date(NOW.getTime() + 120 * 60_000))).written;
+      expect(p.severity).toBe(Severity.None);
+    });
+  });
+
   describe('the partitioned store', () => {
     it('gives every partition the isolation policy, not just the parent', async () => {
       // A partition read directly answers to its own policies. One created by hand
