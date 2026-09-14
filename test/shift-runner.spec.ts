@@ -25,6 +25,7 @@ import { WorkOrder } from '../src/work/entities/work-order.entity';
 import { AlertService } from '../src/alert/services/alert.service';
 import { UtilizationService } from '../src/utilization/services/utilization.service';
 import { DeviceHealthService } from '../src/device-health/services/device-health.service';
+import { ChainService } from '../src/intelligence/services/chain.service';
 import { createAppDataSource, createTestDataSource, describeDb, TEST_DB } from './db';
 
 const IST = 'Asia/Kolkata';
@@ -101,7 +102,7 @@ describeDb('the shift runner', () => {
     runner = new ShiftRunner(
       ds, shifts, reader, new TelemetryService(ds),
       new PredictionService(ds, new PredictionWorkRaiser()), alerts,
-      new UtilizationService(ds), new DeviceHealthService(ds),
+      new UtilizationService(ds), new DeviceHealthService(ds), new ChainService(ds),
     );
   }, 40_000);
 
@@ -132,7 +133,7 @@ describeDb('the shift runner', () => {
   };
 
   beforeEach(async () => {
-    for (const t of ['device_link_health', 'utilization_shift', 'shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
+    for (const t of ['causal_chain', 'device_link_health', 'utilization_shift', 'shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
       'prediction', 'prediction_baseline', 'telemetry_reading', 'equipment_shift',
       'equipment_scenario', 'client_scenario', 'sensor_map_projection',
       'device_projection', 'equipment_placement_event', 'equipment_profile', 'plant']) {
@@ -679,6 +680,61 @@ describeDb('the shift runner', () => {
     });
   });
 
+  it('fires an alert on where a chain says the fault entered', async () => {
+    /*
+     * The loop the intelligence layer exists to close: physics, diagnosis, alert.
+     *
+     * The oil reads 18 degrees above what the load explains. A threshold rule on the
+     * raw number would have to be set high enough not to fire on a machine working
+     * hard, and would therefore miss this — the machine is at 60% load, so 78 degrees
+     * is unremarkable in absolute terms and badly wrong relative to its own curve.
+     */
+    await runTenantSpanning(owner, 'test fixture', async (m) => {
+      for (const [id, signal] of [['90301', 'engine_load'], ['90302', 'engine_oil_temperature']]) {
+        await m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: id,
+          checksum: 'c', imei: IMEI, signal, sensorName: signal, unit: null, payload: {},
+          sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        });
+      }
+      await m.query(
+        `INSERT INTO "causal_chain"
+           ("slug","version","equipment_class_slug","name","nodes","status","published_at")
+         VALUES ('dg-thermal', 1, 'dg', 'Thermal path', $1::jsonb, 'published', $2)`,
+        [JSON.stringify([{
+          signal: 'engine_oil_temperature',
+          label: 'Oil temperature under load',
+          intercept: 40,
+          drivers: [{ signal: 'engine_load', coefficient: 1 / 3, lagSeconds: 0 }],
+          warnAbove: 8, criticalAbove: 16,
+        }]), NOW]);
+    });
+    await equipment.update(boss, ref, { equipmentClassSlug: 'dg' });
+
+    // 60% load puts the oil at 60. It reads 78.
+    for (const [id, value] of [['90301', 60], ['90302', 78]] as [string, number][]) {
+      await owner.query(
+        `INSERT INTO "device_sensor_measurement_logs"
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,'2026-09-14T04:00:00Z',$2,'2026-09-14T04:00:00Z')`, [id, value]);
+    }
+
+    await alerts.createRule(boss, {
+      slug: 'chain-origin-warning', name: 'Something is off its curve',
+      trigger: 'chain-origin', params: { atLeast: 'warning' },
+    } as any);
+    await shifts.create(boss, ref, morning);
+
+    const summary = await runner.run(NOW);
+    expect(summary.outcomes[0].alerts).toBe(1);
+
+    const [event] = await owner.query(`SELECT * FROM "alert_event"`);
+    expect(event.summary).toMatch(/Oil temperature under load is \\+18/);
+    expect(event.evidence).toMatchObject({
+      chainSlug: 'dg-thermal', stage: 'engine_oil_temperature', severity: 'critical',
+    });
+  });
+
   it('tells a commissioning gap apart from a synchronisation one', async () => {
     await owner.query(`DELETE FROM "sensor_map_projection"`);
     await shifts.create(boss, ref, morning);
@@ -695,7 +751,7 @@ describeDb('the shift runner', () => {
     const offline = new ShiftRunner(
       ds, shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
       new PredictionService(ds), alerts, new UtilizationService(ds),
-      new DeviceHealthService(ds),
+      new DeviceHealthService(ds), new ChainService(ds),
     );
     await shifts.create(boss, ref, morning);
 
@@ -714,7 +770,7 @@ describeDb('the shift runner', () => {
       ds, shifts, reader,
       { ingest: () => { throw new Error('ingest exploded'); } } as any,
       new PredictionService(ds), alerts, new UtilizationService(ds),
-      new DeviceHealthService(ds),
+      new DeviceHealthService(ds), new ChainService(ds),
     );
     const summary = await broken.run(NOW);
 

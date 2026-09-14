@@ -110,6 +110,115 @@ describe('what an alert rule watches', () => {
   });
 });
 
+  describe('where a chain says the fault entered', () => {
+    /**
+     * The trigger that justifies the intelligence layer (task P4-01).
+     *
+     * A threshold on coolant temperature fires on a machine working hard, because a
+     * hard-working machine really is hot. This fires only when a stage is off the curve
+     * its own drivers predict — which a hard-working machine is not — and because the
+     * chain names the stage, the alert arrives pointing at a component.
+     */
+    const chain = (over: Record<string, unknown> = {}) => ({
+      slug: 'dg-thermal',
+      evaluated: true,
+      origin: {
+        signal: 'engine_oil_temperature',
+        label: 'Oil temperature under load',
+        severity: 'warning' as const,
+        residual: 12.5,
+        expected: 60,
+        actual: 72.5,
+        exceedance: 1.56,
+      },
+      explainedBy: [{ signal: 'engine_coolant_temperature', because: 'engine_oil_temperature' }],
+      ...over,
+    });
+
+    const fire = (params: Record<string, unknown>, chains: any[]) => evaluateRule({
+      trigger: 'chain-origin', params: params as any, readings: [], predictions: [], chains,
+    });
+
+    it('fires on the stage the chain blames, and says what is off its curve', () => {
+      const firing = fire({ atLeast: 'warning' }, [chain()]);
+      // Not "72.5 degrees", which is true of a healthy machine under load. The number
+      // that means something is the gap from what the drivers predict.
+      expect(firing!.summary).toMatch(/Oil temperature under load is \\+12\\.5/);
+      expect(firing!.summary).toMatch(/expected 60/);
+      expect(firing!.evidence).toMatchObject({
+        chainSlug: 'dg-thermal', stage: 'engine_oil_temperature', severity: 'warning',
+      });
+    });
+
+    it('says the downstream stage is consistent rather than a second fault', () => {
+      // The sentence that stops a second engineer being dispatched for the coolant.
+      expect(fire({ atLeast: 'warning' }, [chain()])!.summary)
+        .toMatch(/engine_coolant_temperature is consistent with that and not a separate fault/);
+    });
+
+    it('does not fire on a machine that is merely working hard', () => {
+      // The whole point. A chain with no origin means every stage is where its own
+      // drivers put it, however hot the raw numbers are.
+      expect(fire({ atLeast: 'warning' }, [chain({ origin: undefined })])).toBeNull();
+    });
+
+    it('does not fire on a chain nobody could evaluate', () => {
+      // Unevaluated has not said the machine is fine; it has said nothing, and firing
+      // on it would be an alert about our own plumbing.
+      expect(fire({ atLeast: 'warning' }, [{ slug: 'dg-thermal', evaluated: false }]))
+        .toBeNull();
+    });
+
+    it('does not fire when no chain ran at all', () => {
+      expect(evaluateRule({
+        trigger: 'chain-origin', params: { atLeast: 'warning' } as any,
+        readings: [], predictions: [],
+      })).toBeNull();
+    });
+
+    it('respects the severity floor', () => {
+      expect(fire({ atLeast: 'critical' }, [chain()])).toBeNull();
+      expect(fire({ atLeast: 'critical' }, [chain({
+        origin: { ...chain().origin, severity: 'critical' },
+      })])).toBeTruthy();
+    });
+
+    it('can watch one chain, and one stage within it', () => {
+      // Routing: a rule on the oil stage goes to the engine fitter, one on the coolant
+      // stage to whoever looks after radiators. Without it every chain fault lands in
+      // one queue and a human re-does the routing from the summary.
+      expect(fire({ atLeast: 'warning', chainSlug: 'other' }, [chain()])).toBeNull();
+      expect(fire(
+        { atLeast: 'warning', chainSlug: 'dg-thermal', stageSignal: 'engine_coolant_temperature' },
+        [chain()],
+      )).toBeNull();
+      expect(fire(
+        { atLeast: 'warning', chainSlug: 'dg-thermal', stageSignal: 'engine_oil_temperature' },
+        [chain()],
+      )).toBeTruthy();
+    });
+
+    it('reports the worst origin when several chains fault at once', () => {
+      const mild = chain({ slug: 'mild' });
+      const bad = chain({
+        slug: 'bad',
+        origin: { ...chain().origin, signal: 'engine_oil_pressure', label: undefined, severity: 'critical' },
+      });
+      expect(fire({ atLeast: 'warning' }, [mild, bad])!.evidence)
+        .toMatchObject({ chainSlug: 'bad' });
+    });
+
+    it('refuses a rule that names a stage without its chain', () => {
+      // Ambiguous the moment a second chain for the class has that stage too, and the
+      // rule would quietly widen rather than fail.
+      expect(validateParams('chain-origin', { atLeast: 'warning', stageSignal: 'x' } as any))
+        .toMatch(/needs the chain it belongs to/);
+      expect(validateParams('chain-origin', { atLeast: 'nope' } as any))
+        .toMatch(/"warning" or "critical"/);
+      expect(validateParams('chain-origin', { atLeast: 'warning' } as any)).toBeNull();
+    });
+  });
+
 describeDb('alerts', () => {
   let ds: DataSource;
   let owner: DataSource;
