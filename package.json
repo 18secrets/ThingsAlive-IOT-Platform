@@ -1,0 +1,62 @@
+{
+  "name": "ta-platform-2",
+  "version": "0.1.0",
+  "description": "Things Alive IoT Platform 2.0 — prediction scenarios service",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "lint": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts",
+    "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
+    "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
+    "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
+    "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "@nestjs/typeorm": "^11.0.3",
+    "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "ts-node": "^10.9.2",
+    "typeorm": "^0.3.31"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.0"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
+  }
+}

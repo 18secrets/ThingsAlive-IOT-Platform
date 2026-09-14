@@ -1,0 +1,125 @@
+# The checks Railway waits for.
+#
+# This file is not a second opinion about the code — it is the gate. The Railway
+# services have "Wait for CI" enabled, so a push sits in WAITING until every check
+# suite on that commit finishes, and a red one never deploys. That is the whole
+# automation: merge, tests run, staging updates itself, nobody types a command.
+#
+# It mirrors .gitlab-ci.yml deliberately rather than replacing it. GitLab remains the
+# place merge requests are reviewed; this runs where Railway can see the result.
+
+name: CI
+
+on:
+  push:
+    branches: [main, integration, production]
+    tags: ['v*']
+  pull_request:
+  # Railway's "Wait for CI" only looks at check suites on the commit, so every branch
+  # that a Railway service watches must be listed above or its deploys wait forever.
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Runs without node_modules. The point is to fail in seconds, before anything installs.
+  guards:
+    name: Secrets and escape hatches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No .env file, no inline credentials
+        run: |
+          # The existing platform learned this the expensive way: live database
+          # credentials, a JWT secret and a mailbox password sat in its history for
+          # months.
+          if git ls-files --error-unmatch .env .env.* 2>/dev/null | grep -v '\.env\.example$'; then
+            echo "A .env file is tracked. Remove it and rotate whatever was in it."
+            exit 1
+          fi
+          # A line may opt out with a trailing `scan-allow` comment when the literal is
+          # deliberately fake. The marker is greppable, so opt-outs stay reviewable.
+          SCAN="grep -rIn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.github --exclude=.gitlab-ci.yml"
+          if $SCAN -E '(postgres|postgresql|amqp|redis)://[^:]+:[^@[:space:]]+@' . | grep -v 'scan-allow'; then
+            echo "A connection string with an inline password is committed."
+            exit 1
+          fi
+          if $SCAN -E '\b(AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,})\b' . | grep -v 'scan-allow'; then
+            echo "Something shaped like an API key is committed."
+            exit 1
+          fi
+          echo "No tracked env files, connection strings or key-shaped literals."
+
+      - name: Tenant-isolation escape hatches stay singular
+        run: |
+          # An exemption that can be copied into a second file is not an exemption; it
+          # is the new default, and the copy is always made under deadline by someone
+          # who will not write the comment.
+          OFFENDERS=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude-dir=dist -E "set_config\(\s*'ta\.bypass'" . \
+            | grep -v '^\./src/scope/tenant-session\.ts:' || true)
+          if [ -n "$OFFENDERS" ]; then
+            echo "ta.bypass is set outside src/scope/tenant-session.ts:"
+            echo "$OFFENDERS"
+            echo "Use runTenantSpanning() — it logs, and it is the only thing CI allows."
+            exit 1
+          fi
+          ROLES=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude-dir=dist -E "SET (LOCAL )?ROLE" . \
+            | grep -v 'src/scope/tenant-session\.ts' \
+            | grep -v 'src/database/migrations/' || true)
+          if [ -n "$ROLES" ]; then
+            echo "SET ROLE outside the session helper and the migrations:"
+            echo "$ROLES"
+            exit 1
+          fi
+          echo "Tenant-isolation escape hatches are where they should be."
+
+  verify:
+    name: Types, build and tests
+    runs-on: ubuntu-latest
+    needs: guards
+
+    # A real Postgres, not an in-memory stand-in. What these tests prove — a unique
+    # index deciding a conflict, and a migration's down path — is Postgres behaviour,
+    # and an emulator that gets it subtly right proves nothing about production.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ta2_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      AUTH_JWT_SECRET: ci-test-secret
+      CORS_ORIGINS: http://localhost:3000
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: ta2_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same major version the Dockerfile builds with. Two versions is how a build
+      # that passes here fails in the image.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test

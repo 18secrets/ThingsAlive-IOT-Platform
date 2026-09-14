@@ -1,0 +1,848 @@
+[
+  {
+    "slug": "dg-fuel-pilferage",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Fuel pilferage",
+    "description": "Flags fuel leaving the tank that the hours run cannot account for: a drop while the engine is stopped, or a drop steeper than the set could physically burn.\n\nWhy this threshold: A 5% deviation from expected burn is the industry trigger for pilferage investigation, and DG fuel loss runs at 8-15% of backup power cost in Indian operations. The burn ceiling defaults to 29 L/h, the published rated consumption of a 125 kVA Kirloskar set - anything faster than the largest set in the band can burn is not combustion. Fourteen days of history are needed to know what this particular tank's normal refuelling sawtooth looks like; without that, every refuel reads as an event.",
+    "severity": "high",
+    "tier": 1,
+    "requiredSignals": [
+      "fuel_level",
+      "engine_on_time",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 14,
+    "parameters": [
+      {
+        "key": "dropPct",
+        "label": "Drop that counts",
+        "type": "number",
+        "default": 5,
+        "min": 1,
+        "max": 50,
+        "unit": "percent"
+      },
+      {
+        "key": "windowMinutes",
+        "label": "Over this window",
+        "type": "duration",
+        "default": 30,
+        "min": 5,
+        "max": 240,
+        "unit": "min"
+      },
+      {
+        "key": "engineStoppedOnly",
+        "label": "Only while stopped",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "maxBurnLitresPerHour",
+        "label": "Physical burn ceiling",
+        "type": "number",
+        "default": 29,
+        "min": 1,
+        "max": 500,
+        "unit": "L/h"
+      }
+    ]
+  },
+  {
+    "slug": "dg-coolant-overheat",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Coolant over-temperature",
+    "description": "Jacket water above the OEM warning point while the engine is running. Blocked radiator core, failed fan belt, low coolant, or an air path the site has built a wall across.\n\nWhy this threshold: 95 degC warning and 98 degC shutdown are the Kirloskar KG934 controller factory defaults, configurable across 70-200 degC. No history is required because this is an absolute limit set by the engine builder, not a learned baseline - waiting two weeks to alarm on an overheating engine would be absurd.",
+    "severity": "critical",
+    "tier": 1,
+    "requiredSignals": [
+      "coolant_temp",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "warnC",
+        "label": "Warning",
+        "type": "number",
+        "default": 95,
+        "min": 70,
+        "max": 200,
+        "unit": "degC"
+      },
+      {
+        "key": "shutdownC",
+        "label": "Shutdown",
+        "type": "number",
+        "default": 98,
+        "min": 70,
+        "max": 200,
+        "unit": "degC"
+      },
+      {
+        "key": "sustainedMinutes",
+        "label": "Sustained for",
+        "type": "duration",
+        "default": 2,
+        "min": 0,
+        "max": 60,
+        "unit": "min"
+      }
+    ]
+  },
+  {
+    "slug": "dg-lube-oil-pressure-loss",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Lubricating oil pressure loss",
+    "description": "Oil pressure below the OEM warning point at running speed. Bearing wear, diluted oil, a failing pump or a clogged suction screen.\n\nWhy this threshold: 1.5 bar warning and 1.0 bar shutdown are the KG934 factory defaults. The speed gate exists because oil pressure is legitimately low during cranking and run-down, and alarming there would train operators to ignore the alarm. UNIT RISK: the platform's OBD-CAN decoder divides the raw pressure word by 1000 and declares no unit. If that produces MPa, these numbers are wrong by a factor of ten and this scenario will never fire. Confirm before publishing.",
+    "severity": "critical",
+    "tier": 1,
+    "requiredSignals": [
+      "oil_pressure",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "warnBar",
+        "label": "Warning",
+        "type": "number",
+        "default": 1.5,
+        "min": 0.2,
+        "max": 3.1,
+        "unit": "bar"
+      },
+      {
+        "key": "tripBar",
+        "label": "Shutdown",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.2,
+        "max": 3.0,
+        "unit": "bar"
+      },
+      {
+        "key": "minRpm",
+        "label": "Only above this speed",
+        "type": "number",
+        "default": 800,
+        "min": 0,
+        "max": 1500,
+        "unit": "rpm"
+      }
+    ]
+  },
+  {
+    "slug": "dg-overspeed-excursion",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Overspeed and governor hunting",
+    "description": "Speed above rated, or a speed that will not settle. A governor or actuator fault, or load thrown off abruptly.\n\nWhy this threshold: 1600 warning and 1650 shutdown are the KG934 defaults against a 1500 rpm rated speed for a four-pole 50 Hz set. The hunting band catches the governor that oscillates without ever crossing the trip point, which is the failure that damages an alternator slowly rather than loudly.",
+    "severity": "high",
+    "tier": 1,
+    "requiredSignals": [
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "ratedRpm",
+        "label": "Rated speed",
+        "type": "number",
+        "default": 1500,
+        "min": 750,
+        "max": 3600,
+        "unit": "rpm"
+      },
+      {
+        "key": "warnRpm",
+        "label": "Warning",
+        "type": "number",
+        "default": 1600,
+        "min": 400,
+        "max": 4000,
+        "unit": "rpm"
+      },
+      {
+        "key": "tripRpm",
+        "label": "Shutdown",
+        "type": "number",
+        "default": 1650,
+        "min": 400,
+        "max": 4000,
+        "unit": "rpm"
+      },
+      {
+        "key": "huntBandRpm",
+        "label": "Hunting band",
+        "type": "number",
+        "default": 40,
+        "min": 5,
+        "max": 200,
+        "unit": "rpm"
+      }
+    ]
+  },
+  {
+    "slug": "dg-battery-health",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Starting battery degradation",
+    "description": "Cranking voltage dipping deeper each start, or a float voltage that no longer recovers. The set starts fine until the morning it does not.\n\nWhy this threshold: 10.0 V low warning and 13.1 V charge minimum are KG934 defaults for a 12 V system; double them for 24 V. Thirty days of history are needed because the signal here is a trend in crank dip, not any single reading - a cold morning produces a deep dip on a perfectly good battery.",
+    "severity": "medium",
+    "tier": 2,
+    "requiredSignals": [
+      "battery_voltage",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 30,
+    "parameters": [
+      {
+        "key": "systemVoltage",
+        "label": "System",
+        "type": "enum",
+        "default": "12",
+        "options": [
+          "12",
+          "24"
+        ],
+        "unit": "V"
+      },
+      {
+        "key": "lowWarnV",
+        "label": "Low warning",
+        "type": "number",
+        "default": 10.0,
+        "min": 5,
+        "max": 30,
+        "unit": "V"
+      },
+      {
+        "key": "floatMinV",
+        "label": "Healthy float minimum",
+        "type": "number",
+        "default": 13.1,
+        "min": 10,
+        "max": 30,
+        "unit": "V"
+      },
+      {
+        "key": "crankDipTrendPct",
+        "label": "Dip worsening by",
+        "type": "number",
+        "default": 15,
+        "min": 5,
+        "max": 50,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "dg-runtime-service-due",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Service interval reached",
+    "description": "Not a fault - a countdown. Running hours past the service point, where every other failure mode gets more likely.\n\nWhy this threshold: 250 running hours is common Indian practice for an oil change on a 50-125 kVA set, and should be confirmed per engine model. Engine_on_time is cumulative and monotonic, so a decrease means a controller reset or a swapped unit - worth treating as a data event rather than negative runtime.",
+    "severity": "low",
+    "tier": 1,
+    "requiredSignals": [
+      "engine_on_time"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "serviceIntervalHours",
+        "label": "Interval",
+        "type": "number",
+        "default": 250,
+        "min": 50,
+        "max": 2000,
+        "unit": "h"
+      },
+      {
+        "key": "warnAtPct",
+        "label": "Warn at",
+        "type": "number",
+        "default": 90,
+        "min": 50,
+        "max": 100,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "dg-failure-to-start",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Failure to start",
+    "description": "Crank attempts with no rise to firing speed. Battery, starter, fuel supply, or an air lock.\n\nWhy this threshold: A 10 second crank window is the KG934 default. Two failed attempts rather than one, because a single failed crank on a cold set is ordinary and alerting on it is how a customer learns to mute the channel.",
+    "severity": "high",
+    "tier": 1,
+    "requiredSignals": [
+      "engine_rpm",
+      "battery_voltage"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "crankSeconds",
+        "label": "Crank window",
+        "type": "duration",
+        "default": 10,
+        "min": 1,
+        "max": 30,
+        "unit": "s"
+      },
+      {
+        "key": "firingRpm",
+        "label": "Firing speed",
+        "type": "number",
+        "default": 400,
+        "min": 100,
+        "max": 1000,
+        "unit": "rpm"
+      },
+      {
+        "key": "attemptsBeforeAlert",
+        "label": "Attempts",
+        "type": "number",
+        "default": 2,
+        "min": 1,
+        "max": 5
+      }
+    ]
+  },
+  {
+    "slug": "dg-oil-temp-excursion",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Lube oil over-temperature",
+    "description": "Oil temperature high while coolant is normal, which points at the oil cooler rather than the radiator.\n\nWhy this threshold: The diagnostic value is in the pair, not the single reading: oil hot with coolant hot is general overheating, oil hot with coolant normal is the oil cooler. Seven days of history establish what this set runs at in this ambient, because an Indian summer afternoon and a January night are not the same baseline.",
+    "severity": "medium",
+    "tier": 1,
+    "requiredSignals": [
+      "oil_temp",
+      "coolant_temp",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 7,
+    "parameters": [
+      {
+        "key": "warnC",
+        "label": "Warning",
+        "type": "number",
+        "default": 110,
+        "min": 70,
+        "max": 160,
+        "unit": "degC"
+      },
+      {
+        "key": "coolantNormalC",
+        "label": "Coolant still below",
+        "type": "number",
+        "default": 92,
+        "min": 70,
+        "max": 110,
+        "unit": "degC"
+      }
+    ]
+  },
+  {
+    "slug": "dg-coolant-loss-trend",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Coolant loss",
+    "description": "Running temperature creeping upward week on week at the same speed. Catches the slow leak before it becomes the high-temperature shutdown on the hottest afternoon of the month.\n\nWhy this threshold: Three weeks is the shortest window in which a 1.5 degC per week drift separates from ambient swing. A shorter baseline in an Indian summer would flag every set in the fleet in May, which is the fastest way to have the whole scenario switched off.",
+    "severity": "high",
+    "tier": 2,
+    "requiredSignals": [
+      "coolant_temp",
+      "engine_rpm",
+      "engine_on_time"
+    ],
+    "minimumHistoryDays": 21,
+    "parameters": [
+      {
+        "key": "riseCPerWeek",
+        "label": "Rise per week",
+        "type": "number",
+        "default": 1.5,
+        "min": 0.2,
+        "max": 10,
+        "unit": "degC"
+      },
+      {
+        "key": "minSamplesPerWeek",
+        "label": "Minimum samples",
+        "type": "number",
+        "default": 50,
+        "min": 10,
+        "max": 1000
+      }
+    ]
+  },
+  {
+    "slug": "dg-wet-stacking",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Wet stacking from sustained low load",
+    "description": "Unburnt fuel and oil past the rings from running far below rated load. Black exhaust, wet slobber at the manifold joints, glazed bores.\n\nWhy this threshold: Caterpillar's guidance: diesel sets are designed for 50-85% of nameplate, slobber appears below 30% sustained, and the remedy is 30 minutes at a minimum of 30% load for every four hours of light running. Those four numbers are the whole scenario. It needs engine_load, which the current OBD-CAN frame does not carry - so it will report as blocked with the signal named, which is the correct answer rather than a silent absence.",
+    "severity": "medium",
+    "tier": 1,
+    "requiredSignals": [
+      "engine_load",
+      "engine_on_time"
+    ],
+    "minimumHistoryDays": 7,
+    "parameters": [
+      {
+        "key": "lowLoadPct",
+        "label": "Low load below",
+        "type": "number",
+        "default": 30,
+        "min": 10,
+        "max": 50,
+        "unit": "percent"
+      },
+      {
+        "key": "sustainedHours",
+        "label": "Sustained for",
+        "type": "duration",
+        "default": 4,
+        "min": 1,
+        "max": 48,
+        "unit": "h"
+      },
+      {
+        "key": "exerciseMinutes",
+        "label": "Exercise needed",
+        "type": "duration",
+        "default": 30,
+        "min": 10,
+        "max": 240,
+        "unit": "min"
+      },
+      {
+        "key": "exerciseLoadPct",
+        "label": "At load",
+        "type": "number",
+        "default": 30,
+        "min": 20,
+        "max": 100,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "dg-fuel-efficiency-drift",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Fuel efficiency drift",
+    "description": "Litres per kWh worsening against this set's own established baseline. Injectors, air filter, or a load profile that has changed underneath the customer.\n\nWhy this threshold: 0.23-0.28 L/kWh is the calibrated band for a healthy set, and the same figure underpins the pilferage maths. This needs output_kw, which nothing in the current frame provides - without it, litres per hour is all that can be computed, and litres per hour falls legitimately when the site's load falls. Reporting blocked is better than reporting a number that means something different from what it says.",
+    "severity": "medium",
+    "tier": 2,
+    "requiredSignals": [
+      "fuel_level",
+      "engine_on_time",
+      "output_kw"
+    ],
+    "minimumHistoryDays": 30,
+    "parameters": [
+      {
+        "key": "sfcMinLitresPerKwh",
+        "label": "Expected minimum",
+        "type": "number",
+        "default": 0.23,
+        "min": 0.15,
+        "max": 0.5,
+        "unit": "L/kWh"
+      },
+      {
+        "key": "sfcMaxLitresPerKwh",
+        "label": "Expected maximum",
+        "type": "number",
+        "default": 0.28,
+        "min": 0.15,
+        "max": 0.5,
+        "unit": "L/kWh"
+      },
+      {
+        "key": "driftPct",
+        "label": "Drift that matters",
+        "type": "number",
+        "default": 10,
+        "min": 2,
+        "max": 50,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "dg-alternator-bearing-wear",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "diesel-generator",
+    "name": "Alternator bearing wear",
+    "description": "Rising vibration at the alternator bearing, weeks before it is audible.\n\nWhy this threshold: ISO 10816-3 Group 2 rigid-foundation boundaries. Needs both a vibration sensor the fleet does not carry and a tier 3 model, so it will report two blockers at once - which is the point of listing blockers rather than returning a yes or no.",
+    "severity": "high",
+    "tier": 3,
+    "requiredSignals": [
+      "vibration_velocity",
+      "engine_rpm"
+    ],
+    "minimumHistoryDays": 60,
+    "parameters": [
+      {
+        "key": "zoneBCmmS",
+        "label": "Unsatisfactory above",
+        "type": "number",
+        "default": 2.8,
+        "min": 0.5,
+        "max": 20,
+        "unit": "mm/s"
+      },
+      {
+        "key": "zoneCDmmS",
+        "label": "Unacceptable above",
+        "type": "number",
+        "default": 4.5,
+        "min": 0.5,
+        "max": 20,
+        "unit": "mm/s"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-spindle-bearing-wear",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Spindle bearing wear",
+    "description": "Broadband vibration at the spindle nose rising through the ISO severity zones. Surface finish degrades and chatter appears at speeds that used to be clean.\n\nWhy this threshold: ISO 10816-3 Group 2 (15-300 kW) rigid-foundation boundaries: 1.4 good, 2.8 satisfactory, 4.5 unsatisfactory. On a flexible foundation the same zones sit at 2.3, 4.5 and 7.1, which is why the foundation is a parameter and not an assumption. Sixty days, because vibration analysis buys 4-8 weeks of warning only if there is a baseline to compare against.",
+    "severity": "high",
+    "tier": 3,
+    "requiredSignals": [
+      "spindle_vibration_velocity",
+      "spindle_speed"
+    ],
+    "minimumHistoryDays": 60,
+    "parameters": [
+      {
+        "key": "zoneBCmmS",
+        "label": "Unsatisfactory above",
+        "type": "number",
+        "default": 2.8,
+        "min": 0.5,
+        "max": 20,
+        "unit": "mm/s"
+      },
+      {
+        "key": "zoneCDmmS",
+        "label": "Unacceptable above",
+        "type": "number",
+        "default": 4.5,
+        "min": 0.5,
+        "max": 20,
+        "unit": "mm/s"
+      },
+      {
+        "key": "rigidFoundation",
+        "label": "Rigid foundation",
+        "type": "boolean",
+        "default": true
+      }
+    ]
+  },
+  {
+    "slug": "cnc-spindle-thermal-drift",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Spindle thermal growth",
+    "description": "First parts of a shift measuring differently from the last, as the bearings warm and the spindle grows along its axis.\n\nWhy this threshold: Converted from the 120 degF and 140 degF figures in condition-monitoring practice. Spindle bearings reach about 45 degC in normal service, so the warning point has to sit just above routine running or it fires every morning.",
+    "severity": "medium",
+    "tier": 2,
+    "requiredSignals": [
+      "spindle_temp",
+      "spindle_speed"
+    ],
+    "minimumHistoryDays": 30,
+    "parameters": [
+      {
+        "key": "warnC",
+        "label": "Warning",
+        "type": "number",
+        "default": 48.9,
+        "min": 30,
+        "max": 120,
+        "unit": "degC"
+      },
+      {
+        "key": "criticalC",
+        "label": "Critical",
+        "type": "number",
+        "default": 60.0,
+        "min": 30,
+        "max": 120,
+        "unit": "degC"
+      },
+      {
+        "key": "riseRateCPerHour",
+        "label": "Rise rate",
+        "type": "number",
+        "default": 8,
+        "min": 1,
+        "max": 50,
+        "unit": "degC/h"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-spindle-overload",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Spindle overload",
+    "description": "Load meter climbing for the same programme and material: a dull tool, a wrong feed, or something already wrong in the spindle.\n\nWhy this threshold: 15% and 25% above the established normal draw. Against a baseline rather than an absolute, because the same machine cutting aluminium and cutting EN8 has two different normals and a fixed percentage would be wrong for both.",
+    "severity": "medium",
+    "tier": 1,
+    "requiredSignals": [
+      "spindle_load_pct",
+      "spindle_speed"
+    ],
+    "minimumHistoryDays": 14,
+    "parameters": [
+      {
+        "key": "warnPctOverBaseline",
+        "label": "Warning over baseline",
+        "type": "number",
+        "default": 15,
+        "min": 5,
+        "max": 100,
+        "unit": "percent"
+      },
+      {
+        "key": "criticalPctOverBaseline",
+        "label": "Critical over baseline",
+        "type": "number",
+        "default": 25,
+        "min": 5,
+        "max": 100,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-tool-breakage",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Tool breakage or excessive wear",
+    "description": "Load collapsing mid-cut when a tool breaks, and climbing steadily as one wears. Both are the same trace read at different speeds.\n\nWhy this threshold: A break is a step change inside a second; wear is a ramp over hours. The window is what separates them, and it is short enough that the sampling rate matters - at one sample per minute this scenario cannot work, which is a data-collection requirement rather than a tuning question.",
+    "severity": "critical",
+    "tier": 1,
+    "requiredSignals": [
+      "spindle_load_pct",
+      "spindle_speed"
+    ],
+    "minimumHistoryDays": 7,
+    "parameters": [
+      {
+        "key": "collapsePct",
+        "label": "Collapse below baseline",
+        "type": "number",
+        "default": 40,
+        "min": 10,
+        "max": 90,
+        "unit": "percent"
+      },
+      {
+        "key": "collapseWindowMs",
+        "label": "Within",
+        "type": "duration",
+        "default": 500,
+        "min": 50,
+        "max": 5000,
+        "unit": "ms"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-coolant-degradation",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Cutting fluid degradation",
+    "description": "Concentration drifting lean or pH falling. Rust on finished parts and dermatitis complaints both arrive after this is measurable.\n\nWhy this threshold: 5-10% concentration and pH 8.0-9.5 are the designed operating ranges for metalworking fluid; below 4% there is not enough fluid to protect anything, and above 10% it foams. No history needed - these are absolute chemistry limits, not a learned baseline.",
+    "severity": "medium",
+    "tier": 1,
+    "requiredSignals": [
+      "coolant_concentration_pct",
+      "coolant_ph"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "concentrationMinPct",
+        "label": "Minimum",
+        "type": "number",
+        "default": 5,
+        "min": 1,
+        "max": 20,
+        "unit": "percent"
+      },
+      {
+        "key": "concentrationMaxPct",
+        "label": "Maximum",
+        "type": "number",
+        "default": 10,
+        "min": 1,
+        "max": 20,
+        "unit": "percent"
+      },
+      {
+        "key": "concentrationCriticalPct",
+        "label": "Critical low",
+        "type": "number",
+        "default": 4,
+        "min": 1,
+        "max": 10,
+        "unit": "percent"
+      },
+      {
+        "key": "phMin",
+        "label": "pH minimum",
+        "type": "number",
+        "default": 8.0,
+        "min": 6,
+        "max": 10
+      },
+      {
+        "key": "phMax",
+        "label": "pH maximum",
+        "type": "number",
+        "default": 9.5,
+        "min": 6,
+        "max": 11
+      }
+    ]
+  },
+  {
+    "slug": "cnc-axis-backlash",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Ball screw and guideway wear",
+    "description": "Following error and servo current both rising for the same move, worst on direction reversal.\n\nWhy this threshold: The pair is the diagnosis. Following error alone moves with feed rate and cutting load; following error plus servo current rising together for an identical move is friction that was not there last month.",
+    "severity": "high",
+    "tier": 2,
+    "requiredSignals": [
+      "axis_following_error",
+      "axis_servo_current"
+    ],
+    "minimumHistoryDays": 30,
+    "parameters": [
+      {
+        "key": "followingErrorUm",
+        "label": "Following error",
+        "type": "number",
+        "default": 20,
+        "min": 1,
+        "max": 500,
+        "unit": "um"
+      },
+      {
+        "key": "currentRisePct",
+        "label": "Current rise",
+        "type": "number",
+        "default": 20,
+        "min": 5,
+        "max": 100,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-hydraulic-pressure-loss",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Hydraulic pressure loss",
+    "description": "Chuck grip or tool clamp weakening - the failure people find out about by losing a part out of the chuck.\n\nWhy this threshold: The absolute minimum is machine-specific and 25 bar is a placeholder for domain review, which is precisely the kind of number that has to come from someone holding the machine's manual rather than from a search.",
+    "severity": "high",
+    "tier": 1,
+    "requiredSignals": [
+      "hydraulic_pressure"
+    ],
+    "minimumHistoryDays": 0,
+    "parameters": [
+      {
+        "key": "minBar",
+        "label": "Minimum",
+        "type": "number",
+        "default": 25,
+        "min": 5,
+        "max": 200,
+        "unit": "bar"
+      },
+      {
+        "key": "dropPctFromSet",
+        "label": "Drop from setpoint",
+        "type": "number",
+        "default": 15,
+        "min": 5,
+        "max": 50,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "slug": "cnc-utilisation-anomaly",
+    "version": 1,
+    "status": "draft",
+    "equipmentClassSlug": "cnc-machining-centre",
+    "name": "Utilisation anomaly",
+    "description": "Power drawn without the machine being in cut. Idling, extended setup, or a machine left running over a shift change.\n\nWhy this threshold: The only CNC scenario here a retrofit CT clamp gets close to, because power_kw does not need the control. It still needs machine_state to tell idling from cutting, and without that the number is only a number.",
+    "severity": "low",
+    "tier": 2,
+    "requiredSignals": [
+      "power_kw",
+      "machine_state"
+    ],
+    "minimumHistoryDays": 30,
+    "parameters": [
+      {
+        "key": "idlePowerKw",
+        "label": "Idle draw",
+        "type": "number",
+        "default": 3,
+        "min": 0.5,
+        "max": 50,
+        "unit": "kW"
+      },
+      {
+        "key": "idleHoursPerShift",
+        "label": "Idle hours per shift",
+        "type": "number",
+        "default": 2,
+        "min": 0.5,
+        "max": 12,
+        "unit": "h"
+      }
+    ]
+  }
+]

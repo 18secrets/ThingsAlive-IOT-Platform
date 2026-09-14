@@ -1,0 +1,139 @@
+# Every merge request runs this. Nothing merges on an author's assurance that it works.
+#
+# Stages are ordered by how fast they fail: a type error should not wait for the
+# test suite, and the secret scan should not wait for anything.
+
+stages: [guard, verify]
+
+default:
+  image: node:22-alpine
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [.npm/]
+  before_script:
+    # `npm install`, not `npm ci`, only because package-lock.json is not in the repo
+    # yet — it could not be pushed through the tooling that created this branch.
+    # First task for whoever clones this: run `npm install`, commit the lockfile, and
+    # change this line to `npm ci --cache .npm --prefer-offline`. Until then the build
+    # is not reproducible: two pipelines a week apart can resolve different versions.
+    - npm install --cache .npm --prefer-offline --no-audit --no-fund
+
+variables:
+  NODE_ENV: test
+  AUTH_JWT_SECRET: ci-test-secret
+  CORS_ORIGINS: http://localhost:3000
+  POSTGRES_DB: ta2_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST_AUTH_METHOD: trust
+
+# Runs without node_modules — the point is to fail in seconds, before anything installs.
+secrets:
+  stage: guard
+  image: alpine:3.20
+  before_script: []
+  script:
+    - |
+      # A .env file must never enter this repository. The existing platform learned
+      # this the expensive way: live database credentials, a JWT secret and a mailbox
+      # password sat in its history for months.
+      if git ls-files --error-unmatch .env .env.* 2>/dev/null | grep -v '\.env\.example$'; then
+        echo "A .env file is tracked. Remove it and rotate whatever was in it."
+        exit 1
+      fi
+      # Cheap shape checks for credentials pasted into source. A line may opt out with
+      # a trailing `scan-allow` comment when the literal is deliberately fake — the
+      # fixture in error-envelope.spec.ts needs a realistic connection string to prove
+      # one never reaches a caller. The marker is greppable, so opt-outs stay reviewable.
+      SCAN="grep -rIn --exclude-dir=node_modules --exclude-dir=.git --exclude=.gitlab-ci.yml"
+      if $SCAN -E '(postgres|postgresql|amqp|redis)://[^:]+:[^@[:space:]]+@' . | grep -v 'scan-allow'; then
+        echo "A connection string with an inline password is committed."
+        exit 1
+      fi
+      if $SCAN -E '\b(AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,})\b' . | grep -v 'scan-allow'; then
+        echo "Something shaped like an API key is committed."
+        exit 1
+      fi
+      echo "No tracked env files, connection strings or key-shaped literals."
+
+# The tenant-isolation escape hatch must stay singular. An exemption that can be
+# copied into a second file is not an exemption; it is the new default, and the
+# copy is always made under deadline by someone who will not write the comment.
+escape-hatch:
+  stage: guard
+  image: alpine:3.20
+  before_script: []
+  script:
+    - |
+      # Setting it, not mentioning it: the migration defines the policy that reads
+      # this value, and the README explains it. Neither grants anything.
+      # Restricted to TypeScript. Only code can set these, and a guard that also
+      # reads prose makes documenting the rule break the build — which is how a rule
+      # ends up undocumented.
+      OFFENDERS=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist \
+        -E "set_config\(\s*'ta\.bypass'" . \
+        | grep -v '^\./src/scope/tenant-session\.ts:' || true)
+      if [ -n "$OFFENDERS" ]; then
+        echo "ta.bypass is set outside src/scope/tenant-session.ts:"
+        echo "$OFFENDERS"
+        echo "Use runTenantSpanning() — it logs, and it is the only thing CI allows."
+        exit 1
+      fi
+      # SET ROLE is how a scoped session stops being a superuser. Anywhere else it is
+      # how code stops being scoped.
+      ROLES=$(grep -rIn --include='*.ts' --exclude-dir=node_modules --exclude-dir=.git \
+        --exclude-dir=dist -E "SET (LOCAL )?ROLE" . \
+        | grep -v 'src/scope/tenant-session\.ts' \
+        | grep -v 'src/database/migrations/' || true)
+      if [ -n "$ROLES" ]; then
+        echo "SET ROLE outside the session helper and the migrations:"
+        echo "$ROLES"
+        exit 1
+      fi
+      echo "Tenant-isolation escape hatches are where they should be."
+
+types:
+  stage: guard
+  script: [npm run lint]
+
+build:
+  stage: verify
+  script: [npm run build]
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 day
+
+# ---------------------------------------------------------------------------
+# Deploy — not from here.
+#
+# Railway connects to GitHub only, so this repository push-mirrors to a GitHub remote
+# and Railway watches that. The checks Railway waits for therefore have to run where
+# Railway can see them, which is .github/workflows/ci.yml — the same guards and the
+# same `npm test` as above, duplicated on purpose rather than moved, so that a merge
+# request reviewed here is still checked here.
+#
+# Releases are branch moves, not commands:
+#
+#   merge to main   → GitHub checks pass → Railway deploys staging
+#   tag v*          → promote.yml moves the `production` branch → Railway deploys prod
+#
+# Nothing in this file holds a Railway credential, and nothing in it deploys. If you
+# are looking for the deploy job that used to be here, it is that tag.
+# ---------------------------------------------------------------------------
+
+test:
+  stage: verify
+  # A real Postgres, not an in-memory stand-in. What these tests prove — a unique
+  # index deciding a conflict, and a migration's down path — is Postgres behaviour,
+  # and an emulator that gets it subtly right proves nothing about production.
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USERNAME: postgres
+    DB_PASSWORD: postgres
+    DB_DATABASE: ta2_test
+  script: [npm test]

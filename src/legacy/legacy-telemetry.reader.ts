@@ -1,0 +1,351 @@
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { TELEMETRY_READING_V1 } from '../projection/contracts/contracts';
+import { DeviceProjection } from '../projection/entities/device-projection.entity';
+import { SensorMapProjection } from '../projection/entities/sensor-map-projection.entity';
+import { runTenantSpanning } from '../scope/tenant-session';
+import { TelemetryBatchEnvelope } from '../projection/contracts/contracts';
+import { LEGACY_DATA_SOURCE } from './legacy-source';
+import { CheckState, probe } from '../health/readiness';
+
+export interface PullRequest {
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  /** Exclusive. Readings at exactly this instant belong to the previous window. */
+  from: Date;
+  /** Inclusive. */
+  to: Date;
+}
+
+export interface LateArrivalRequest {
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  /** The newest arrival already accounted for. Null means nothing has been. */
+  since: Date | null;
+  /** Now. Readings arriving during the sweep belong to the next one. */
+  upTo: Date;
+}
+
+export interface LateArrival {
+  /** The oldest logger timestamp among the readings that arrived late. */
+  earliestReading: Date;
+  /** The newest arrival time seen, to be recorded so this does not repeat forever. */
+  seenThrough: Date;
+  count: number;
+}
+
+export interface ArrivalStatsRequest {
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  /** Exclusive, matching the pull window exactly. */
+  from: Date;
+  /** Inclusive. */
+  to: Date;
+}
+
+/** Arrival timing per device, for the window asked about. */
+export interface DeviceArrival {
+  imei: string;
+  count: number;
+  medianLagSeconds: number;
+  maxLagSeconds: number;
+}
+
+export interface PullResult {
+  envelope: TelemetryBatchEnvelope | null;
+  /** Why nothing came back, when nothing did. */
+  reason?: 'no-connection' | 'no-devices' | 'no-sensors' | 'no-readings';
+}
+
+/** A cap, so one machine with a fast logger cannot exhaust memory on a single pull. */
+export const MAX_READINGS_PER_PULL = 50_000;
+
+/**
+ * Telemetry for one shift window, read from the existing platform (task P1-110).
+ *
+ * One query against one of their tables. The chain from a reading to a canonical signal
+ * runs `device_sensor_measurement_logs` → `device_sensor_measurements` →
+ * `device_sensors` → `devices`, and this deliberately walks none of it: the mapping
+ * already exists here as `sensor_map_projection`, whose `external_id` *is* the
+ * measurement id. So the join happens locally against a mirror we already keep in step,
+ * and the read from their database is a primary-key lookup over a time range.
+ *
+ * That matters for more than tidiness. Joining four of their tables would make this
+ * break the next time they alter one, in a scheduled job, quietly. Selecting three
+ * columns from one table is the smallest grant they can give us and the smallest
+ * surface for them to break.
+ *
+ * A sensor remapped upstream and not yet synced would attribute readings to the wrong
+ * signal — which is why the projection carries that warning, and why the reader trusts
+ * the projection rather than re-deriving the mapping from the readings.
+ */
+@Injectable()
+export class LegacyTelemetryReader {
+  private readonly logger = new Logger(LegacyTelemetryReader.name);
+
+  constructor(
+    private readonly ds: DataSource,
+    @Optional() @Inject(LEGACY_DATA_SOURCE) private readonly legacy?: DataSource | null,
+  ) {}
+
+  get connected(): boolean {
+    return !!this.legacy?.isInitialized;
+  }
+
+  /**
+   * Whether the existing platform is actually answering, for the readiness endpoint
+   * (task D-04).
+   *
+   * It lives here rather than in the health controller because the connection is this
+   * module's to hold: a second place injecting it is how "2.0 only reads" stops being
+   * a guarantee and becomes a convention, and there is a test that fails on the diff.
+   * `connected` says a handle was opened; this says the other end replied.
+   */
+  async probeConnection(): Promise<CheckState> {
+    return probe(this.legacy);
+  }
+
+  async pull(request: PullRequest): Promise<PullResult> {
+    if (!this.legacy?.isInitialized) return { envelope: null, reason: 'no-connection' };
+
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) {
+      // Two different nothings, kept apart. No device fitted is a commissioning gap;
+      // no sensor mapped is a synchronisation gap. Collapsing them into "no data"
+      // is how a fleet sits unscored with nobody able to say which of the two it is.
+      return { envelope: null, reason: await this.hasDevices(request) ? 'no-sensors' : 'no-devices' };
+    }
+
+    const rows: { measurement_id: string; ts: Date; value: string }[] = await this.legacy.query(
+      `SELECT "device_sensor_measurement_id"::text AS measurement_id,
+              "timestamp" AS ts,
+              "value"::text AS value
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[])
+          AND "timestamp" > $2
+          AND "timestamp" <= $3
+        ORDER BY "timestamp" ASC
+        LIMIT ${MAX_READINGS_PER_PULL}`,
+      [[...map.keys()], request.from, request.to],
+    );
+    if (rows.length === 0) return { envelope: null, reason: 'no-readings' };
+
+    if (rows.length === MAX_READINGS_PER_PULL) {
+      // Said out loud rather than silently truncated. A window clipped at the cap has
+      // been scored on part of itself, and a prediction built from the first half of a
+      // shift is not wrong in a way anybody can see.
+      this.logger.warn(
+        `Window for ${request.externalId} hit the ${MAX_READINGS_PER_PULL}-reading cap. `
+        + 'The score for this shift is built from part of it.',
+      );
+    }
+
+    const readings = rows.flatMap((row) => {
+      const sensor = map.get(row.measurement_id);
+      if (!sensor) return [];
+      return [{
+        imei: sensor.imei,
+        signal: sensor.signal,
+        value: Number(row.value),
+        unit: sensor.unit ?? undefined,
+        sourceTimestamp: new Date(row.ts).toISOString(),
+      }];
+    }).filter((r) => Number.isFinite(r.value));
+
+    if (readings.length === 0) return { envelope: null, reason: 'no-readings' };
+
+    return {
+      envelope: {
+        contract: TELEMETRY_READING_V1,
+        sourceSystem: request.sourceSystem,
+        // Read from a store rather than received off a wire, and still live: these are
+        // the real readings for the window that just closed. 'replayed' is for a
+        // deliberate re-run of history, and labelling these that way would let a real
+        // prediction be dismissed as an artefact of a backfill.
+        source: 'live',
+        readings,
+      },
+    };
+  }
+
+  /**
+   * Readings that turned up after the window they belong to had been scored.
+   *
+   * The loggers buffer up to two days off the network and push when they return, so
+   * this is the ordinary case rather than the exotic one. Their table carries both
+   * clocks — `timestamp` is the logger's, `created_at` is when the row reached them —
+   * and the difference between the two is the whole mechanism: ask for rows that
+   * arrived after we last looked, and report the oldest *reading* among them.
+   *
+   * Aggregated rather than returned row by row. The answer this needs is "how far back
+   * do we have to go", and a two-day backfill on a busy machine is a great many rows
+   * to carry across the network to compute one minimum.
+   */
+  async lateArrivals(request: LateArrivalRequest): Promise<LateArrival | null> {
+    if (!this.legacy?.isInitialized) return null;
+
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) return null;
+
+    const [row] = await this.legacy.query(
+      `SELECT min("timestamp") AS earliest,
+              max("created_at") AS seen_through,
+              count(*)::int AS count
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[])
+          AND "created_at" > $2
+          AND "created_at" <= $3`,
+      [[...map.keys()], request.since ?? new Date(0), request.upTo],
+    );
+    if (!row?.count) return null;
+
+    return {
+      earliestReading: new Date(row.earliest),
+      seenThrough: new Date(row.seen_through),
+      count: Number(row.count),
+    };
+  }
+
+  /**
+   * How long this machine's readings took to reach the existing platform (task P4-08).
+   *
+   * Their table carries both clocks — `timestamp` is the logger's and `created_at` is
+   * when the row reached them — and the gap between the two is store-and-forward lag.
+   * Nothing has measured it until now, and it is the number that separates the two
+   * faults a thin window can mean: a logger holding a backlog that is coming, and a
+   * link that dropped readings which are gone.
+   *
+   * Aggregated upstream for the same reason `lateArrivals` is: the answer is a handful
+   * of numbers per device, and computing it here would mean carrying every row of a
+   * busy machine's shift across the network to take a median of it.
+   *
+   * The grouping is by measurement id rather than by device, because the upstream
+   * table does not know about devices — the measurement-to-IMEI mapping is ours, and
+   * joining their tables to get it is exactly what this reader exists not to do. So
+   * the fold into devices happens locally, which means a device's median here is a
+   * median of its sensors' medians rather than of its readings. That is close enough
+   * for "is this logger hours behind" and it keeps the upstream query to one table.
+   */
+  async arrivalStats(request: ArrivalStatsRequest): Promise<DeviceArrival[]> {
+    if (!this.legacy?.isInitialized) return [];
+
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) return [];
+
+    const rows: {
+      measurement_id: string; count: string; median_lag: string; max_lag: string;
+    }[] = await this.legacy.query(
+      `SELECT "device_sensor_measurement_id"::text AS measurement_id,
+              count(*)::text AS count,
+              percentile_cont(0.5) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM ("created_at" - "timestamp"))
+              )::text AS median_lag,
+              max(EXTRACT(EPOCH FROM ("created_at" - "timestamp")))::text AS max_lag
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[])
+          AND "timestamp" > $2
+          AND "timestamp" <= $3
+        GROUP BY "device_sensor_measurement_id"`,
+      [[...map.keys()], request.from, request.to],
+    );
+
+    const byImei = new Map<string, { count: number; medians: number[]; max: number }>();
+    for (const row of rows) {
+      const sensor = map.get(row.measurement_id);
+      if (!sensor) continue;
+      const entry = byImei.get(sensor.imei) ?? { count: 0, medians: [], max: 0 };
+      entry.count += Number(row.count);
+      // A clock skewed the wrong way gives a negative lag, which is not a reading
+      // arriving before it was taken — it is two clocks disagreeing, and averaging it
+      // in would make a lagging device look prompt.
+      const median = Math.max(0, Number(row.median_lag));
+      if (Number.isFinite(median)) entry.medians.push(median);
+      const max = Number(row.max_lag);
+      if (Number.isFinite(max)) entry.max = Math.max(entry.max, Math.max(0, max));
+      byImei.set(sensor.imei, entry);
+    }
+
+    return [...byImei].map(([imei, e]) => {
+      const sorted = e.medians.sort((a, b) => a - b);
+      const median = sorted.length === 0 ? 0
+        : sorted.length % 2 ? sorted[(sorted.length - 1) / 2]
+        : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+      return {
+        imei,
+        count: e.count,
+        medianLagSeconds: Math.round(median * 10) / 10,
+        maxLagSeconds: Math.round(e.max * 10) / 10,
+      };
+    });
+  }
+
+  /**
+   * Which signals each of this machine's loggers is mapped to report (task P4-08).
+   *
+   * The device list has to come from the mapping rather than from the readings, and
+   * that is the whole reason this exists: a logger that reported nothing does not
+   * appear in a window's readings at all, so a health check built from them would
+   * quietly omit every device that was off the air — which is the one it was built to
+   * find. The mapping also gives the denominator for "reporting 3 of 12 signals".
+   */
+  async expectedSignalsFor(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+  ): Promise<Map<string, string[]>> {
+    const map = await this.sensorMapFor(request);
+    const byImei = new Map<string, Set<string>>();
+    for (const sensor of map.values()) {
+      const set = byImei.get(sensor.imei) ?? new Set<string>();
+      set.add(sensor.signal);
+      byImei.set(sensor.imei, set);
+    }
+    return new Map([...byImei].map(([imei, set]) => [imei, [...set].sort()]));
+  }
+
+  /**
+   * Which upstream measurement ids belong to this machine, and what each one means.
+   *
+   * Tenant-spanning because it is a read of the mirror on behalf of a runner with no
+   * request behind it; the tenant is pinned in the query rather than taken from a
+   * session, so it cannot widen.
+   */
+  private async sensorMapFor(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+  ): Promise<Map<string, { imei: string; signal: string; unit: string | null }>> {
+    return runTenantSpanning(this.ds, `telemetry pull for ${request.externalId}`, async (m) => {
+      const devices = await m.getRepository(DeviceProjection).find({
+        where: {
+          tenantId: request.tenantId,
+          sourceSystem: request.sourceSystem,
+          equipmentExternalId: request.externalId,
+        },
+      });
+      const imeis = [...new Set(devices.map((d) => d.imei))];
+      if (imeis.length === 0) return new Map();
+
+      const sensors = await m.getRepository(SensorMapProjection).find({
+        where: imeis.map((imei) => ({
+          tenantId: request.tenantId, sourceSystem: request.sourceSystem, imei,
+        })),
+      });
+      return new Map(sensors.map((s) => [s.externalId, {
+        imei: s.imei, signal: s.signal, unit: s.unit,
+      }]));
+    });
+  }
+
+  private async hasDevices(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+  ): Promise<boolean> {
+    return runTenantSpanning(this.ds, `telemetry pull for ${request.externalId}`, async (m) =>
+      (await m.getRepository(DeviceProjection).count({
+        where: {
+          tenantId: request.tenantId,
+          sourceSystem: request.sourceSystem,
+          equipmentExternalId: request.externalId,
+        },
+      })) > 0);
+  }
+}

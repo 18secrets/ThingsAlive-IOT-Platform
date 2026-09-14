@@ -1,93 +1,283 @@
-# Things Alive IOT Platform 2.0
+# Things Alive IoT Platform 2.0
 
+Prediction scenarios, catalog, actions and integrations — a new service alongside the
+existing platform, with its own database. It issues no credentials of its own: it
+verifies the token the existing platform issues and reads the tenant from it.
 
+## Run
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/things-alive-2.0/things-alive-iot-platform-2.0.git
-git branch -M main
-git push -uf origin main
+```bash
+npm install
+cp .env.example .env      # fill in AUTH_JWT_SECRET; never commit the result
+npm run start:dev         # http://localhost:8080/api/v1/health
+npm test                  # 37 without a database; 102 with one
+npm run lint              # tsc --noEmit
 ```
 
-## Integrate with your tools
+### Database tests
 
-* [Set up project integrations](https://gitlab.com/things-alive-2.0/things-alive-iot-platform-2.0/-/settings/integrations)
+The migration and projection suites need a real Postgres and are **skipped with a
+warning** when `DB_HOST` is unset — a green run without it is not a complete one.
 
-## Collaborate with your team
+```bash
+docker run --rm -d -p 5433:5432 -e POSTGRES_HOST_AUTH_METHOD=trust \\
+  --name ta2-pg postgres:16-alpine
+createdb -h localhost -p 5433 -U postgres ta2_test
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+DB_HOST=localhost DB_PORT=5433 DB_DATABASE=ta2_test npm test
+```
 
-## Test and Deploy
+pg-mem and sqlite would run faster and prove less: what these tests check is a unique
+index deciding a conflict and a migration's down path, and both are Postgres
+behaviour. CI runs them against `postgres:16-alpine`.
 
-Use the built-in continuous integration in GitLab.
+### The two database roles
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Migrations run as `DB_USERNAME`, which must own the schema. Everything else runs as
+`ta_app` — an unprivileged, NOLOGIN role the RLS migration creates, which the
+connection pool switches into at startup. Run the migrations before starting the
+service on a fresh database, or it will refuse to connect: the role will not exist
+yet.
 
-***
+That refusal is the design. A superuser bypasses row-level security unconditionally,
+`FORCE` included, and a managed Postgres hands out a superuser by default — so a
+service that quietly fell back to its login user would pass every test, look healthy,
+and enforce nothing.
 
-# Editing this README
+### Seeding the catalog
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+npm run seed:catalog              # loads as draft — invisible to tenants
+npm run seed:catalog -- --publish # test and demo databases only
+npm run seed:demo                 # 9 assets spanning every possible answer
+```
 
-## Suggestions for a good README
+The DG and CNC profiles in `src/database/seeds/catalog/` are drafted from OEM
+documentation — Kirloskar KG934 controller defaults, Caterpillar's underloading
+guidance, ISO 10816-3, metalworking fluid practice. They ship as `draft` because a
+drafted threshold and a reviewed one look identical in a JSON file, and the status
+column is the only thing that tells them apart. `docs/catalog-research-notes.md` has
+the sources and the open questions.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+The seeder refuses to load a scenario requiring a signal its class does not declare.
+A typo produces a scenario permanently blocked with `missing-signals:
+['coolent_temp']` — telling a customer to fit a sensor that is already fitted — and
+the recommendation engine cannot tell a misspelling from an absent sensor.
 
-## Name
-Choose a self-explaining name for your project.
+### Seeding the projections
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```bash
+DB_HOST=localhost DB_PORT=5433 DB_DATABASE=ta2_test \\
+  npx ts-node src/database/seeds/seed-projection.ts [snapshot.json]
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+The seed pushes a file through exactly the contract and service the real producer
+will use, so the eventual integration is a producer swap rather than a rewrite.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Swagger: `/api-docs`. All routes live under `/api/v1`.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## What is deliberate here
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+**Versioned from the first commit.** `/api/v1` costs nothing now and cannot be added
+cheaply once callers exist — the existing platform serves its routes bare and adding a
+prefix there would break every client.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+**Authenticated by default.** The guard is global. `@Public('reason')` marks *one route*
+and takes a reason; it cannot be applied to a controller class. The existing platform has
+fifteen class-level `@Public()` decorators, which is how tenant records ended up answering
+unauthenticated callers.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+**A token with no tenant claim is rejected**, never treated as "all tenants". That failure
+mode turns a bug into a cross-customer data leak.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+**One severity vocabulary** (`src/common/severity.ts`). Foreign values are mapped at the
+boundary and an unknown value throws rather than defaulting — a silently downgraded
+severity is a missed alert.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+**CORS from configuration with no permissive fallback**, and the service refuses to start
+in production without its secrets.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+**Errors share one envelope**: `{ error: { code, message, details } }`, with internal
+messages logged and never returned.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+**The projection is read-only and it drifts.** Every row carries `source_updated_at`,
+`synced_at` and a checksum so staleness is visible rather than silent — a prediction
+scored against a four-hour-old sensor mapping is wrong in a way that looks like a
+model problem. A `full` snapshot also reconciles, marking rows the source no longer
+reports; a `delta` never does, because treating a partial sync as the whole population
+would mark an entire fleet missing.
 
-## License
-For open source projects, say how it is licensed.
+**A row with no resolvable tenant is refused, not defaulted.** It lands in
+`projection_rejection` where somebody can see it. An untenanted row is a row every
+tenant can read.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+**Tenant isolation is two layers, and the second is tested by going around the
+first.** `ScopedRepository` takes a `RequestScope` as the first argument of every
+method and removes `tenantId` from the `where` type, so an unscoped query is a
+compile error rather than something a reviewer has to catch. Postgres then applies
+the same rule again: every scoped session sets `ta.tenant_id` and drops to `ta_app`
+for the length of the transaction, and the policy on each tenant-owned table matches
+against that setting. Code that reaches a table without a session reads zero rows —
+not everybody's. `test/scope.spec.ts` issues exactly that query to prove it.
+
+**Crossing tenants is possible, deliberate and recorded.** `acrossTenants()` requires
+a platform role and a reason, and writes to `platform_access_log` *before* it reads.
+If the audit write fails, the read fails — a log that silently stops writing is worse
+than no log, because it still reassures. Write auditing alone would miss the access
+that matters here: a support engineer opening a customer's data changes nothing and
+otherwise leaves no trace.
+
+**One escape hatch, and CI keeps it singular.** `runTenantSpanning()` is the only
+thing that sets `ta.bypass`, for the two paths that are legitimately tenant-spanning:
+the sync and ingest producers, which write rows for many tenants at once, and the
+audited support read. A pipeline job fails if that setting appears anywhere else. An
+exemption that can be copied is not an exemption; it is the new default.
+
+**Response fields are filtered on the server, per role** (`@VisibleTo`). Filtering in
+the browser is a rendering choice, not a boundary — the response is still one
+devtools panel away. There is no implicit exemption for platform roles: if support
+should see a field, its role is named like anyone else's.
+
+**The catalog is platform-owned; the entitlement join is what narrows it.** One row
+describes a class of machine for every customer that owns one, so there is no tenant
+column and row-level security has nothing to match on — `CatalogService` is the single
+place a tenant-context read may happen, and every method takes a scope for the same
+reason `ScopedRepository` does. Copying the catalog per tenant would mean an OEM
+threshold correction had to be applied in fifty places, and the fiftieth would be
+missed.
+
+**An unentitled class is a 404, never a 403.** A 403 confirms the class exists, which
+is commercial information: it tells a customer what Things Alive sells, and by
+enumeration, roughly to whom.
+
+**Published catalog definitions are immutable.** A change publishes a new version and
+activations pin the version they ran against. Editing a live definition would move the
+thresholds under every alert already running on it — the incident looks like a model
+regression, and the evidence of what changed is gone, because it was overwritten.
+
+**2.0 does not write into the projection.** The class binding, tier and readiness live
+in `equipment_profile`, keyed on the same external identity. A 2.0 column inside the
+mirror would leave the next full reconcile unable to tell upstream drift from a local
+edit, so it would either clobber the tenant's data or refuse to repair real drift.
+
+**Recommendations come from recorded metadata, never inference**, and a blocker is a
+reason code with specifics rather than a sentence: `{ code: 'missing-signals',
+signals: ['coolant_temp'] }` tells an operator which sensor to fit, where "not enough
+data" tells them nothing. An estimated ready date is offered only when time alone will
+clear the blockage — a date printed next to a missing sensor is a promise nobody is
+keeping.
+
+**Telemetry dedupes on `(imei, signal, source_timestamp)`, enforced by a unique index
+rather than a check-then-insert** — two workers on the same queue would both pass a
+check. Duplicates are counted no-ops. A duplicate silently corrupts a rolling
+baseline, and a corrupted baseline silently corrupts every z-score built on it.
+
+**Two clocks, both UTC**: `source_timestamp` from the logger, `received_at` from the
+platform. They diverge routinely, because loggers drift and reconnect with backlogs.
+
+### The prediction runtime
+
+A baseline is what normal looks like for one signal on one asset over one window. The
+scorer compares the latest reading against it and reports a z-score, a band and a
+composite risk. Three things about that are worth knowing before reading the code.
+
+**A prediction is keyed to the logger's clock, not the server's.** `occurred_at` is the
+source timestamp of the newest reading behind the score. That is what makes re-scoring
+idempotent, and what stops a replay of last year's telemetry writing a year of
+predictions dated today.
+
+**`confidence` is not severity.** A machine whose sensors all went quiet scores `none`
+on every signal, exactly like a healthy one. `confidence` is the field that separates
+"nothing is wrong" from "we could not tell", and a screen that ignores it will show a
+blind asset in the healthy column.
+
+**A signal that never varies is unscored, not normal.** A standard deviation of zero
+makes a z-score undefined, and it usually means a sensor stuck on one number — which
+is precisely the fault worth catching. It is reported with a reason rather than
+quietly passed.
+
+`prediction` is range-partitioned by month from the first migration. Partitions are
+created by `ta_ensure_prediction_partition(date)` rather than by hand, because a
+partition created without its row-level security policy works perfectly and is
+readable by every tenant. The default partition is a safety net that is meant to stay
+empty, and a test asserts it: once it holds a row for a month, the partition for that
+month can no longer be created.
+
+### Utilization and duty cycle
+
+Every shift the runner touches produces a `utilization_shift` row — productive, idle,
+running-unclassified, off and unknown seconds that sum exactly to the window. Two
+things about it are worth knowing before reading the code.
+
+**`unknown` is a bucket, not a rounding error.** Telemetry is sampled and duty cycle is
+continuous, so turning samples into hours means deciding how long one sample may speak
+for. The obvious answer — until the next one — lets a logger that reported `running`
+and then dropped off the network contribute six hours of productive time from a single
+sample, indistinguishable on a screen from six hours that were worked. So a sample
+speaks for a bounded interval derived from how often that machine actually reports
+(median gap × 3, clamped to 1–15 minutes), and the rest is `unknown`. Every rate is
+computed over observed time, with `coverage` reported beside it, so a thin row reads as
+a connectivity problem rather than as an idle machine.
+
+**A row is written on every path out of a window, including the ones that score
+nothing.** The shifts that produce no prediction are the idle ones, the offline ones
+and the ones nobody was watching. A report assembled only from the shifts that scored
+would be a report about the machines that were working — survivorship bias with a chart
+on top.
+
+Rolled up, rates are recomputed from summed seconds rather than averaged across shifts:
+a four-hour Saturday worked flat out and a twelve-hour Monday spent idling are not two
+numbers to average. `plant_id` and `equipment_class_slug` are copied onto the row rather
+than joined at read time, because machines move between sites and a join would
+retroactively move last quarter's hours to wherever the machine is standing today.
+
+## Layout
+
+```
+src/
+  audit/         platform access log — who from Things Alive read which tenant's data
+  catalog/       equipment classes, scenarios, signal aliases, entitlements, recommendations
+  auth/          guard, request scope, @Public and @CurrentScope
+  common/        severity vocabulary, pagination contract, error envelope, @VisibleTo
+  config/        boot-time environment validation
+  database/      data source, migrations, the stand-in seed producer
+  equipment/     equipment_profile — what 2.0 knows that the mirror must not hold
+  health/        /health (liveness) and /ready (readiness — what the platform probes)
+  me/            /me and /me/permissions — capability list the UI guards read
+  projection/    read-only mirrors of equipment, devices and sensor mapping + contracts
+  scope/         ScopedRepository, the tenant session, the one tenant-spanning hatch
+  prediction/    baselines, the Tier 1 scorer, and the partitioned prediction store
+  telemetry/     readings, deduped at the database
+  utilization/   duty cycle per shift — productive, idle, off, and what nobody saw
+test/
+  auth-matrix    enumerates every registered route and asserts it refuses anonymous callers
+  severity       mapping is total, and refuses to guess
+  error-envelope shape of every failure, including that a 500 leaks nothing
+  migration      up, down, and up again — a down path that drops less than it created
+  projection     idempotent sync, tenant refusal, reconcile, and replay integrity
+  scope          both isolation layers, including a query that deliberately skips the first
+  field-policy   what each role's raw JSON does and does not contain
+  capabilities   the guard and /me/permissions cannot disagree, for every role
+  catalog        the entitlement join, version selection, alias resolution
+  recommendation every bucket and every blocker code, on seeded assets
+  rls-coverage   derived from entity metadata: no tenant-owned table without a policy
+  activation     every edge of the transition table, and three writes that are one
+  tier1          the scorer as a pure function — bands, confidence, the 3-signal flag
+  prediction     partition routing, baseline idempotency, and re-scoring the same window
+  duty-cycle     attribution from sampled status, and what a gap is allowed to become
+  utilization    upsert on re-measure, rollups weighted by hours, operator narrowing
+```
+
+The auth matrix test enumerates routes from the running router, so a new controller is
+covered the moment it is added — nobody has to remember to extend the file.
+
+## Not here yet
+
+No broker subscription, so nothing scores on its own. `/ready` still reports
+`not_configured` for the broker, deliberately: a readiness probe that claims health
+it cannot verify is worse than one that admits the gap. Scoring runs when something
+asks for it — `POST /predictions/:sourceSystem/:externalId/score` — and will run on
+arriving telemetry once P0-16 gives us a broker to subscribe to.
+
+Nothing drains the outbox either. `domain_event` rows accumulate as `pending`, which
+is the right failure mode for an outbox and not a permanent one.

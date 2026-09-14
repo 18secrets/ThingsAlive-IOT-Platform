@@ -1,0 +1,436 @@
+[
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "coolant_temp_c",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": "OBD-CAN decoder field. Wire value is deci-Kelvin: (raw x 0.1) - 273.14."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "oil_temp_c",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": "OBD-CAN decoder field, same deci-Kelvin encoding."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "fuel_temp_c",
+    "canonical": "fuel_temp",
+    "unit": "degC",
+    "note": "OBD-CAN decoder field."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "oil_pressure_scaled",
+    "canonical": "oil_pressure",
+    "unit": "bar",
+    "note": "OBD-CAN decoder field, raw/1000. UNIT UNCONFIRMED - if this is MPa rather than bar every oil pressure threshold is out by ten."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "battery_voltage_v",
+    "canonical": "battery_voltage",
+    "unit": "V",
+    "note": "OBD-CAN decoder field, raw x 0.0625. That is the J1939 1/16 V per bit encoding, so the scaling is right."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "engine_rpm",
+    "canonical": "engine_rpm",
+    "unit": "rpm",
+    "note": "OBD-CAN decoder field, raw x 0.5."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "engine_on_time",
+    "canonical": "engine_on_time",
+    "unit": "s",
+    "note": "OBD-CAN decoder field. Cumulative seconds, monotonic."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "fuel_level_pct",
+    "canonical": "fuel_level",
+    "unit": "percent",
+    "note": "Fuel stream field name, seen in live-tracking dispatch."
+  },
+  {
+    "sourceSystem": "iot-platform-1",
+    "alias": "speed_kmph",
+    "canonical": "ground_speed",
+    "unit": "km/h",
+    "note": "GPS stream field name."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_coolant_temperature",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": "Present in the existing AI assistant's sensor alias map."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_coolant",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_temperature",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "coolant",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_oil_temperature",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": "Present in the existing alias map."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_oil_temp",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_oil_temp_degc",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": "The exact spelling the existing platform's evaluator test uses. Its normalizer strips the unit suffix with a regex; this table does it with a row."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "oil_temperature",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "oil_temp",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_oil",
+    "canonical": "oil_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "fuel",
+    "canonical": "fuel_level",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "fuel level",
+    "canonical": "fuel_level",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "tank",
+    "canonical": "fuel_level",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "throttle_position",
+    "canonical": "throttle_position",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "throttle",
+    "canonical": "throttle_position",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_load",
+    "canonical": "engine_load",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "load",
+    "canonical": "engine_load",
+    "unit": "percent",
+    "note": "Deliberately mapped, and deliberately risky: 'load' means engine load on a genset and spindle load on a machining centre. Kept here because the existing platform already accepts it, and flagged so the ambiguity is visible rather than discovered."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "gsm_signal_strength",
+    "canonical": "gsm_signal_strength",
+    "unit": "dBm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "gsm_signal",
+    "canonical": "gsm_signal_strength",
+    "unit": "dBm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "signal_strength",
+    "canonical": "gsm_signal_strength",
+    "unit": "dBm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "ect",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": "SAE J1979 shorthand for engine coolant temperature."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_coolant_temp",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "water_temp",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "jacket_water_temp",
+    "canonical": "coolant_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "lube_oil_pressure",
+    "canonical": "oil_pressure",
+    "unit": "bar",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "oil_press",
+    "canonical": "oil_pressure",
+    "unit": "bar",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "lop",
+    "canonical": "oil_pressure",
+    "unit": "bar",
+    "note": "Common Indian genset panel abbreviation for lube oil pressure."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "batt_volt",
+    "canonical": "battery_voltage",
+    "unit": "V",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "battery_volt",
+    "canonical": "battery_voltage",
+    "unit": "V",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "dc_voltage",
+    "canonical": "battery_voltage",
+    "unit": "V",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "rpm",
+    "canonical": "engine_rpm",
+    "unit": "rpm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "engine_speed",
+    "canonical": "engine_rpm",
+    "unit": "rpm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "run_hours",
+    "canonical": "engine_on_time",
+    "unit": "h",
+    "note": "Hours rather than seconds. The consumer must convert; the alias records identity, not scale."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "running_hours",
+    "canonical": "engine_on_time",
+    "unit": "h",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "hour_meter",
+    "canonical": "engine_on_time",
+    "unit": "h",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "kw",
+    "canonical": "output_kw",
+    "unit": "kW",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "output_power",
+    "canonical": "output_kw",
+    "unit": "kW",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "genset_load",
+    "canonical": "engine_load",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindle_load",
+    "canonical": "spindle_load_pct",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindleload",
+    "canonical": "spindle_load_pct",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindle_speed",
+    "canonical": "spindle_speed",
+    "unit": "rpm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindle_rpm",
+    "canonical": "spindle_speed",
+    "unit": "rpm",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindle_vibration",
+    "canonical": "spindle_vibration_velocity",
+    "unit": "mm/s",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "vib_velocity",
+    "canonical": "spindle_vibration_velocity",
+    "unit": "mm/s",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "spindle_temperature",
+    "canonical": "spindle_temp",
+    "unit": "degC",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "coolant_conc",
+    "canonical": "coolant_concentration_pct",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "coolant_concentration",
+    "canonical": "coolant_concentration_pct",
+    "unit": "percent",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "brix",
+    "canonical": "coolant_concentration_pct",
+    "unit": "percent",
+    "note": "Refractometer reading. Brix is not concentration until multiplied by the fluid's refractive factor, so this alias records identity and the factor belongs in the scenario parameters."
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "ph",
+    "canonical": "coolant_ph",
+    "unit": "pH",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "hyd_pressure",
+    "canonical": "hydraulic_pressure",
+    "unit": "bar",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "following_error",
+    "canonical": "axis_following_error",
+    "unit": "um",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "servo_current",
+    "canonical": "axis_servo_current",
+    "unit": "A",
+    "note": null
+  },
+  {
+    "sourceSystem": "*",
+    "alias": "power",
+    "canonical": "power_kw",
+    "unit": "kW",
+    "note": null
+  }
+]

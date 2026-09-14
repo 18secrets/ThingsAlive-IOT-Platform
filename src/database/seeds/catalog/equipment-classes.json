@@ -1,0 +1,439 @@
+[
+  {
+    "slug": "diesel-generator",
+    "version": 1,
+    "status": "draft",
+    "name": "Diesel generator set",
+    "description": "Stationary and skid-mounted diesel gensets, 15-500 kVA, four-pole at 1500 rpm for 50 Hz. Thresholds are drawn from Kirloskar KG934 controller defaults and Kirloskar Electric published specifications, and are a starting point for domain review rather than a finished profile. Sets sold in India after the CPCB IV+ notification carry aftertreatment the older fleet does not, which changes the low-load story and should be reflected in a second version of this class.",
+    "category": "power",
+    "expectedSignals": [
+      {
+        "signal": "engine_rpm",
+        "unit": "rpm",
+        "required": true,
+        "description": "Engine speed. The decoder reports raw x 0.5; rated speed for a 50 Hz four-pole set is 1500 rpm."
+      },
+      {
+        "signal": "engine_on_time",
+        "unit": "s",
+        "required": true,
+        "description": "Cumulative running seconds from the controller. Monotonic, so a decrease means a controller reset or a swapped unit, not negative runtime."
+      },
+      {
+        "signal": "coolant_temp",
+        "unit": "degC",
+        "required": true,
+        "description": "Jacket water temperature. Decoder yields (raw x 0.1) - 273.14, i.e. deci-Kelvin on the wire."
+      },
+      {
+        "signal": "oil_temp",
+        "unit": "degC",
+        "required": true,
+        "description": "Lubricating oil temperature, same deci-Kelvin encoding as coolant."
+      },
+      {
+        "signal": "oil_pressure",
+        "unit": "bar",
+        "required": true,
+        "description": "Lubricating oil pressure. UNIT UNCONFIRMED: the decoder divides the raw word by 1000 and declares no unit. If that yields MPa rather than bar, every threshold here is out by a factor of ten. See the research memo."
+      },
+      {
+        "signal": "fuel_level",
+        "unit": "percent",
+        "required": true,
+        "description": "Tank level from the capacitive or ultrasonic sender, as a percentage of usable volume."
+      },
+      {
+        "signal": "battery_voltage",
+        "unit": "V",
+        "required": true,
+        "description": "Starting battery voltage. Decoder yields raw x 0.0625, which is the J1939 1/16 V per bit encoding."
+      },
+      {
+        "signal": "fuel_temp",
+        "unit": "degC",
+        "required": false,
+        "description": "Fuel temperature at the rail. Useful for density correction on level-based consumption maths."
+      },
+      {
+        "signal": "engine_load",
+        "unit": "percent",
+        "required": false,
+        "description": "Percentage of nameplate power being drawn. NOT PRESENT in the current OBD-CAN frame, and several scenarios below need it — they will report as blocked until the frame carries it or a CT clamp provides it."
+      },
+      {
+        "signal": "output_kw",
+        "unit": "kW",
+        "required": false,
+        "description": "Real power delivered. Absent from the current frame. Without it, fuel consumption cannot be compared against specific fuel consumption in litres per kWh."
+      },
+      {
+        "signal": "vibration_velocity",
+        "unit": "mm/s",
+        "required": false,
+        "description": "Broadband RMS velocity at the alternator or engine bearing. Requires a sensor the current fleet does not carry."
+      }
+    ],
+    "failureModes": [
+      {
+        "code": "FUEL-PILFERAGE",
+        "name": "Fuel pilferage",
+        "symptom": "Tank level falls while the engine is stopped, or falls faster than the hours run can account for. Often around refuelling, or as a steady shortfall the site attributes to 'old engine'.",
+        "signals": [
+          "fuel_level",
+          "engine_on_time",
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "COOLANT-LOSS",
+        "name": "Coolant loss",
+        "symptom": "Running temperature creeps upward week on week at the same load. Eventually a high-temperature shutdown, usually on the hottest afternoon of the month.",
+        "signals": [
+          "coolant_temp",
+          "engine_rpm",
+          "engine_on_time"
+        ]
+      },
+      {
+        "code": "OVERHEAT",
+        "name": "Overheating",
+        "symptom": "Jacket water above the OEM warning point: blocked radiator core, failed fan belt, low coolant, or a site that has grown a wall across the air path.",
+        "signals": [
+          "coolant_temp",
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "OIL-PRESSURE-LOSS",
+        "name": "Lubricating oil pressure loss",
+        "symptom": "Oil pressure falling at unchanged speed and temperature. Bearing wear, a diluted or over-thinned oil, a failing pump, or a clogged suction screen.",
+        "signals": [
+          "oil_pressure",
+          "engine_rpm",
+          "oil_temp"
+        ]
+      },
+      {
+        "code": "OIL-TEMP-HIGH",
+        "name": "Lube oil over-temperature",
+        "symptom": "Oil temperature high while coolant is normal, which points at the oil cooler rather than the radiator.",
+        "signals": [
+          "oil_temp",
+          "coolant_temp",
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "BATTERY-DEGRADATION",
+        "name": "Starting battery degradation",
+        "symptom": "Deeper voltage dip on each crank, and a float voltage that no longer recovers. The set starts fine until the morning it does not.",
+        "signals": [
+          "battery_voltage",
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "WET-STACKING",
+        "name": "Wet stacking from sustained low load",
+        "symptom": "Unburnt fuel and oil past the rings: black exhaust, wet slobber at the manifold joints, glazed bores. Caused by running far below rated load for long periods.",
+        "signals": [
+          "engine_load",
+          "engine_on_time",
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "OVERSPEED",
+        "name": "Overspeed or governor hunting",
+        "symptom": "Speed excursions above rated, or a speed that will not settle. A governor or actuator fault, or load being thrown off abruptly.",
+        "signals": [
+          "engine_rpm"
+        ]
+      },
+      {
+        "code": "START-FAILURE",
+        "name": "Failure to start",
+        "symptom": "Crank attempts with no rise to firing speed. Battery, starter, fuel supply or an air lock.",
+        "signals": [
+          "engine_rpm",
+          "battery_voltage"
+        ]
+      },
+      {
+        "code": "SERVICE-OVERDUE",
+        "name": "Service interval exceeded",
+        "symptom": "Not a fault, a countdown. Running hours past the service point, where every other failure mode gets more likely.",
+        "signals": [
+          "engine_on_time"
+        ]
+      }
+    ],
+    "defaultThresholds": {
+      "_source": "Kirloskar KG934V1 genset controller user manual, factory defaults. Ranges are the configurable span the controller allows.",
+      "ratedSpeedRpm": 1500,
+      "oilPressureWarnBar": 1.5,
+      "oilPressureShutdownBar": 1.0,
+      "oilPressureConfigurableBar": [
+        0.2,
+        3.1
+      ],
+      "coolantWarnC": 95,
+      "coolantShutdownC": 98,
+      "coolantConfigurableC": [
+        70,
+        200
+      ],
+      "overspeedWarnRpm": 1600,
+      "overspeedShutdownRpm": 1650,
+      "battery12v": {
+        "lowWarnV": 10.0,
+        "highWarnV": 15.0,
+        "maxV": 18.0,
+        "chargeMinV": 13.1
+      },
+      "battery24v": {
+        "lowWarnV": 20.0,
+        "highWarnV": 30.0,
+        "maxV": 36.0,
+        "chargeMinV": 26.2,
+        "_note": "Doubled from the controller's 12 V defaults. Confirm against the sets actually deployed."
+      },
+      "generatorVoltageTripV": [
+        180,
+        275
+      ],
+      "generatorFrequencyTripHz": [
+        44,
+        56
+      ],
+      "crankSeconds": 10,
+      "warmUpSeconds": 10,
+      "coolDownSeconds": 60,
+      "minimumLoadPct": 30,
+      "designLoadBandPct": [
+        50,
+        85
+      ],
+      "_loadSource": "Caterpillar, 'The Impact of Generator Set Underloading'. Diesel sets are designed for 50-85% of nameplate; slobber appears below 30% sustained.",
+      "specificFuelConsumptionLitresPerKwh": [
+        0.23,
+        0.28
+      ],
+      "publishedSfcLitresPerHour": {
+        "50kVA": 12.4,
+        "63kVA": 15.3,
+        "75kVA": 15.3,
+        "82.5kVA": 20.0,
+        "100kVA": 23.9,
+        "125kVA": 29.0
+      },
+      "_sfcSource": "Kirloskar Electric Bliss 50-125 kVA technical leaflet, at rated load.",
+      "oilSumpLitres": {
+        "50-63kVA": 9,
+        "75-125kVA": 14
+      },
+      "coolantLitres": {
+        "50-63kVA": 3,
+        "75-125kVA": 26
+      },
+      "serviceIntervalHours": 250,
+      "_serviceNote": "250 h is the common Indian practice for a first oil change on this size band. Not from the leaflet — confirm per engine."
+    }
+  },
+  {
+    "slug": "cnc-machining-centre",
+    "version": 1,
+    "status": "draft",
+    "name": "CNC machining centre",
+    "description": "Vertical and horizontal machining centres and CNC turning centres of the kind built by Jyoti CNC, Ace Micromatic, Bharat Fritz Werner, LMW and Macpower, typically on FANUC or Siemens controls. IMPORTANT: none of the signals this class needs are carried by the current fleet, whose loggers emit genset OBD-CAN, fuel level and GPS. Every scenario below will report as blocked until a control interface or retrofit sensors exist, which is the honest answer and the reason the recommendation engine reports blockers by name.",
+    "category": "machining",
+    "expectedSignals": [
+      {
+        "signal": "spindle_load_pct",
+        "unit": "percent",
+        "required": true,
+        "description": "Spindle load meter reading. Available over FANUC FOCAS or Siemens OPC UA on a machine whose control is networked; not derivable from anything the current fleet carries."
+      },
+      {
+        "signal": "spindle_speed",
+        "unit": "rpm",
+        "required": true,
+        "description": "Commanded or actual spindle speed. Every load and vibration threshold is speed-dependent, so a load figure without it is uninterpretable."
+      },
+      {
+        "signal": "spindle_vibration_velocity",
+        "unit": "mm/s",
+        "required": false,
+        "description": "Broadband RMS velocity at the spindle nose or front bearing housing, per ISO 10816-3. Needs an accelerometer fitted to the machine."
+      },
+      {
+        "signal": "spindle_temp",
+        "unit": "degC",
+        "required": false,
+        "description": "Front bearing housing temperature. Bearings normally reach about 45 degC in service, so an absolute threshold has to sit above that."
+      },
+      {
+        "signal": "axis_following_error",
+        "unit": "um",
+        "required": false,
+        "description": "Commanded minus actual position per axis. The cleanest early signal for ball screw and guideway wear."
+      },
+      {
+        "signal": "axis_servo_current",
+        "unit": "A",
+        "required": false,
+        "description": "Per-axis servo current. Rising current for the same move is friction that was not there last month."
+      },
+      {
+        "signal": "coolant_concentration_pct",
+        "unit": "percent",
+        "required": false,
+        "description": "Cutting fluid concentration by refractometer. Manual today in most Indian shops; an inline sensor or a logged shop-floor reading both work."
+      },
+      {
+        "signal": "coolant_ph",
+        "unit": "pH",
+        "required": false,
+        "description": "Cutting fluid pH. Falls before the fluid visibly goes off, which is the point of measuring it."
+      },
+      {
+        "signal": "hydraulic_pressure",
+        "unit": "bar",
+        "required": false,
+        "description": "Chuck, counterbalance and tool-clamp hydraulic pressure."
+      },
+      {
+        "signal": "machine_state",
+        "unit": null,
+        "required": false,
+        "description": "Idle, cutting, alarm, setup. Without it, a power or load figure cannot be attributed to work rather than warm-up."
+      },
+      {
+        "signal": "power_kw",
+        "unit": "kW",
+        "required": false,
+        "description": "Whole-machine electrical draw. The one signal here a retrofit CT clamp can provide without touching the control."
+      },
+      {
+        "signal": "alarm_code",
+        "unit": null,
+        "required": false,
+        "description": "Native control alarm number. Worth capturing verbatim: the control already knows things no external sensor will infer."
+      }
+    ],
+    "failureModes": [
+      {
+        "code": "SPINDLE-BEARING-WEAR",
+        "name": "Spindle bearing wear",
+        "symptom": "Surface finish degrades and chatter appears at speeds that used to be clean. Vibration rises for weeks before anyone can hear it.",
+        "signals": [
+          "spindle_vibration_velocity",
+          "spindle_speed",
+          "spindle_temp"
+        ]
+      },
+      {
+        "code": "SPINDLE-THERMAL-DRIFT",
+        "name": "Spindle thermal growth",
+        "symptom": "First parts of a shift measure differently from the last. Growth along the spindle axis as the bearings warm.",
+        "signals": [
+          "spindle_temp",
+          "spindle_speed"
+        ]
+      },
+      {
+        "code": "SPINDLE-OVERLOAD",
+        "name": "Spindle overload",
+        "symptom": "Load meter climbing for the same programme and material: a dull tool, a wrong feed, or something already wrong in the spindle.",
+        "signals": [
+          "spindle_load_pct",
+          "spindle_speed"
+        ]
+      },
+      {
+        "code": "TOOL-BREAKAGE",
+        "name": "Tool breakage or excessive wear",
+        "symptom": "Load collapses mid-cut when a tool breaks, and climbs steadily as one wears. Both are visible in the same trace.",
+        "signals": [
+          "spindle_load_pct",
+          "spindle_speed"
+        ]
+      },
+      {
+        "code": "BALLSCREW-BACKLASH",
+        "name": "Ball screw or guideway wear",
+        "symptom": "Circularity and positioning drift, worst on direction reversal. Following error and servo current both rise for the same move.",
+        "signals": [
+          "axis_following_error",
+          "axis_servo_current"
+        ]
+      },
+      {
+        "code": "COOLANT-DEGRADATION",
+        "name": "Cutting fluid degradation",
+        "symptom": "Rancid smell on Monday morning, rust on finished parts, dermatitis complaints. Concentration drifts lean and pH falls before any of that shows.",
+        "signals": [
+          "coolant_concentration_pct",
+          "coolant_ph"
+        ]
+      },
+      {
+        "code": "HYDRAULIC-PRESSURE-LOSS",
+        "name": "Hydraulic pressure loss",
+        "symptom": "Chuck grip or tool clamp weakening. The failure people find out about by losing a part out of the chuck.",
+        "signals": [
+          "hydraulic_pressure"
+        ]
+      },
+      {
+        "code": "WAY-LUBE-STARVATION",
+        "name": "Way lubrication starvation",
+        "symptom": "Slideway scoring and rising axis current. Usually an empty reservoir or a blocked metering unit, and usually cheap right up until it is not.",
+        "signals": [
+          "axis_servo_current",
+          "axis_following_error"
+        ]
+      }
+    ],
+    "defaultThresholds": {
+      "_vibrationSource": "ISO 10816-3, Group 2 machines (15-300 kW) on a rigid foundation. Zone boundaries are RMS velocity in mm/s.",
+      "vibrationZoneABmmS": 1.4,
+      "vibrationZoneBCmmS": 2.8,
+      "vibrationZoneCDmmS": 4.5,
+      "vibrationFlexibleFoundationmmS": {
+        "AB": 2.3,
+        "BC": 4.5,
+        "CD": 7.1
+      },
+      "spindleTempWarnC": 48.9,
+      "spindleTempCriticalC": 60.0,
+      "_spindleTempNote": "Converted from the 120 degF / 140 degF figures in common condition-monitoring guidance. Bearings reach about 45 degC normally, so the warning point sits just above routine running.",
+      "loadWarnPctOverBaseline": 15,
+      "loadCriticalPctOverBaseline": 25,
+      "coolantConcentrationPct": [
+        5,
+        10
+      ],
+      "coolantConcentrationCriticalLowPct": 4,
+      "coolantConcentrationFoamingPct": 10,
+      "coolantPh": [
+        8.0,
+        9.5
+      ],
+      "chlorideCorrosionPpm": 300,
+      "waterHardnessCorrosionGpg": 25,
+      "_coolantSource": "Castrol metalworking fluids troubleshooting white paper.",
+      "detectionLeadTimeWeeks": {
+        "vibration": [
+          4,
+          8
+        ],
+        "temperature": [
+          2,
+          4
+        ]
+      }
+    }
+  }
+]
