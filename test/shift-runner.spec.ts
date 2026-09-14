@@ -23,6 +23,7 @@ import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { PredictionWorkRaiser } from '../src/work/services/prediction-work-raiser.service';
 import { WorkOrder } from '../src/work/entities/work-order.entity';
 import { AlertService } from '../src/alert/services/alert.service';
+import { UtilizationService } from '../src/utilization/services/utilization.service';
 import { createAppDataSource, createTestDataSource, describeDb, TEST_DB } from './db';
 
 const IST = 'Asia/Kolkata';
@@ -99,6 +100,7 @@ describeDb('the shift runner', () => {
     runner = new ShiftRunner(
       ds, shifts, reader, new TelemetryService(ds),
       new PredictionService(ds, new PredictionWorkRaiser()), alerts,
+      new UtilizationService(ds),
     );
   }, 40_000);
 
@@ -128,7 +130,7 @@ describeDb('the shift runner', () => {
   };
 
   beforeEach(async () => {
-    for (const t of ['shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
+    for (const t of ['utilization_shift', 'shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
       'prediction', 'prediction_baseline', 'telemetry_reading', 'equipment_shift',
       'equipment_scenario', 'client_scenario', 'sensor_map_projection',
       'device_projection', 'equipment_placement_event', 'equipment_profile', 'plant']) {
@@ -463,6 +465,120 @@ describeDb('the shift runner', () => {
     expect(await runner.run(NOW)).toMatchObject({ scored: 1, idle: 0 });
   });
 
+  describe('duty cycle', () => {
+    /**
+     * Utilization is measured on every path out of a window (task P4-05).
+     *
+     * That is the whole point of these three tests. The shifts that produce no
+     * prediction are the idle ones, the offline ones and the ones nobody was
+     * watching — so a duty-cycle report assembled only from the shifts that scored
+     * would be a report about the machines that were working, which is the one
+     * question it is meant to answer.
+     */
+    const dutyRows = () => owner.query(
+      `SELECT * FROM "utilization_shift" ORDER BY "window_start"`,
+    );
+
+    it('measures a scored window', async () => {
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90211',
+          checksum: 'c', imei: IMEI, signal: 'engine_running_status', sensorName: 'Running',
+          unit: null, payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        }));
+      await seedLegacyReadings(95);
+      for (const at of ['2026-09-14T04:00:00Z', '2026-09-14T04:02:00Z']) {
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+          [at]);
+      }
+      await shifts.create(boss, ref, morning);
+
+      expect(await runner.run(NOW)).toMatchObject({ scored: 1 });
+      const [row] = await dutyRows();
+      expect(row.external_id).toBe(ASSET);
+      expect(Number(row.engine_on_seconds)).toBeGreaterThan(0);
+      // Two samples two minutes apart cannot describe an eight-hour shift, and the
+      // row says so rather than crediting the machine with the other seven hours.
+      expect(Number(row.unknown_seconds)).toBeGreaterThan(7 * 3600);
+      expect(Number(row.coverage)).toBeLessThan(0.05);
+    });
+
+    it('measures the shift the machine slept through', async () => {
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90211',
+          checksum: 'c', imei: IMEI, signal: 'engine_running_status', sensorName: 'Running',
+          unit: null, payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        }));
+      for (const at of ['2026-09-14T02:00:00Z', '2026-09-14T02:01:00Z']) {
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,0)`,
+          [at]);
+      }
+      await shifts.create(boss, ref, morning);
+
+      expect(await runner.run(NOW)).toMatchObject({ idle: 1, scored: 0 });
+      // No prediction, and a row anyway: an idle machine is exactly what the
+      // customer is paying this report to show them.
+      const [row] = await dutyRows();
+      expect(Number(row.off_seconds)).toBeGreaterThan(0);
+      expect(Number(row.engine_on_seconds)).toBe(0);
+    });
+
+    it('measures the shift nobody could see, as unknown rather than as off', async () => {
+      await shifts.create(boss, ref, morning);
+
+      expect(await runner.run(NOW)).toMatchObject({ skipped: 1 });
+      const [row] = await dutyRows();
+      // The distinction the whole table exists for. Recording this as eight hours
+      // off would turn a connectivity problem into an accusation about an operator.
+      expect(Number(row.unknown_seconds)).toBe(8 * 3600);
+      expect(Number(row.off_seconds)).toBe(0);
+      expect(Number(row.coverage)).toBe(0);
+      expect(row.utilization_rate).toBeNull();
+    });
+
+    it('replaces the measurement when late readings rewind the window', async () => {
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90211',
+          checksum: 'c', imei: IMEI, signal: 'engine_running_status', sensorName: 'Running',
+          unit: null, payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        }));
+      // The thin first pass: two minutes of the shift reported.
+      for (const at of ['2026-09-14T01:00:00Z', '2026-09-14T01:01:00Z']) {
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+          [at]);
+      }
+      await shifts.create(boss, ref, morning);
+      await runner.run(NOW);
+      const [thin] = await dutyRows();
+      expect(Number(thin.coverage)).toBeLessThan(0.02);
+
+      // Then the logger reconnects and pushes the rest of its buffer.
+      for (let i = 0; i < 400; i += 1) {
+        const at = new Date(Date.parse('2026-09-14T01:02:00Z') + i * 60_000).toISOString();
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+          [at]);
+      }
+      await runner.run(new Date(NOW.getTime() + 60_000));
+
+      const rows = await dutyRows();
+      // One row, replaced. Two would put two contradictory accounts of the same
+      // morning into the same report and leave the reader to pick.
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(thin.id);
+      expect(Number(rows[0].coverage)).toBeGreaterThan(Number(thin.coverage));
+    });
+  });
+
   it('tells a commissioning gap apart from a synchronisation one', async () => {
     await owner.query(`DELETE FROM "sensor_map_projection"`);
     await shifts.create(boss, ref, morning);
@@ -478,7 +594,7 @@ describeDb('the shift runner', () => {
   it('leaves every window owed when there is no connection at all', async () => {
     const offline = new ShiftRunner(
       ds, shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
-      new PredictionService(ds), alerts,
+      new PredictionService(ds), alerts, new UtilizationService(ds),
     );
     await shifts.create(boss, ref, morning);
 
@@ -496,7 +612,7 @@ describeDb('the shift runner', () => {
     const broken = new ShiftRunner(
       ds, shifts, reader,
       { ingest: () => { throw new Error('ingest exploded'); } } as any,
-      new PredictionService(ds), alerts,
+      new PredictionService(ds), alerts, new UtilizationService(ds),
     );
     const summary = await broken.run(NOW);
 
