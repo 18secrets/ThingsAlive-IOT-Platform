@@ -125,7 +125,8 @@ describeDb('the shift runner', () => {
     for (const r of rows) {
       await owner.query(
         `INSERT INTO "device_sensor_measurement_logs"
-           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$2,$3)`, r);
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,$2,$3,$2)`, r);
     }
   };
 
@@ -221,7 +222,8 @@ describeDb('the shift runner', () => {
     // One reading inside 00:30-08:30 UTC on the 14th, far outside the baseline.
     await owner.query(
       `INSERT INTO "device_sensor_measurement_logs"
-         ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T07:00:00Z',140)`,
+         ("device_sensor_measurement_id","timestamp","value","created_at")
+       VALUES ($1,'2026-09-14T07:00:00Z',140,'2026-09-14T07:00:00Z')`,
       [MEASUREMENT_ID]);
     await shifts.create(boss, ref, morning);
 
@@ -324,7 +326,8 @@ describeDb('the shift runner', () => {
       // A thin shift: one reading was online at the time, so the window scores.
       await owner.query(
         `INSERT INTO "device_sensor_measurement_logs"
-           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T01:00:00Z',80)`,
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,'2026-09-14T01:00:00Z',80,'2026-09-14T01:00:00Z')`,
         [MEASUREMENT_ID]);
       await shifts.create(boss, ref, morning);
 
@@ -337,7 +340,8 @@ describeDb('the shift runner', () => {
       for (const at of ['2026-09-14T02:00:00Z', '2026-09-14T03:00:00Z', '2026-09-14T04:00:00Z']) {
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$2,81)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ($1,$2,81,$2)`,
           [MEASUREMENT_ID, at]);
       }
 
@@ -369,7 +373,8 @@ describeDb('the shift runner', () => {
     it('settles, rather than sweeping itself for ever', async () => {
       await owner.query(
         `INSERT INTO "device_sensor_measurement_logs"
-           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T01:00:00Z',80)`,
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,'2026-09-14T01:00:00Z',80,'2026-09-14T01:00:00Z')`,
         [MEASUREMENT_ID]);
       await shifts.create(boss, ref, morning);
 
@@ -387,7 +392,8 @@ describeDb('the shift runner', () => {
       for (let i = 0; i < 5; i += 1) {
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$2,80)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ($1,$2,80,$2)`,
           [MEASUREMENT_ID, new Date(NOW.getTime() - i * 6 * 3_600_000).toISOString()]);
       }
       await shifts.create(boss, ref, morning);
@@ -424,7 +430,8 @@ describeDb('the shift runner', () => {
     for (const [id, value] of [[MEASUREMENT_ID, 80], ['90211', 0]] as [string, number][]) {
       await owner.query(
         `INSERT INTO "device_sensor_measurement_logs"
-           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,'2026-09-14T04:00:00Z',$2)`,
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,'2026-09-14T04:00:00Z',$2,'2026-09-14T04:00:00Z')`,
         [id, value]);
     }
     await shifts.create(boss, ref, morning);
@@ -455,7 +462,8 @@ describeDb('the shift runner', () => {
     ] as [string, number, string][]) {
       await owner.query(
         `INSERT INTO "device_sensor_measurement_logs"
-           ("device_sensor_measurement_id","timestamp","value") VALUES ($1,$3,$2)`,
+           ("device_sensor_measurement_id","timestamp","value","created_at")
+         VALUES ($1,$3,$2,$3)`,
         [id, value, at]);
     }
     await shifts.create(boss, ref, morning);
@@ -490,7 +498,8 @@ describeDb('the shift runner', () => {
       for (const at of ['2026-09-14T04:00:00Z', '2026-09-14T04:02:00Z']) {
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ('90211',$1,1,$1)`,
           [at]);
       }
       await shifts.create(boss, ref, morning);
@@ -515,7 +524,8 @@ describeDb('the shift runner', () => {
       for (const at of ['2026-09-14T02:00:00Z', '2026-09-14T02:01:00Z']) {
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,0)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ('90211',$1,0,$1)`,
           [at]);
       }
       await shifts.create(boss, ref, morning);
@@ -552,7 +562,8 @@ describeDb('the shift runner', () => {
       for (const at of ['2026-09-14T01:00:00Z', '2026-09-14T01:01:00Z']) {
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ('90211',$1,1,$1)`,
           [at]);
       }
       await shifts.create(boss, ref, morning);
@@ -565,7 +576,8 @@ describeDb('the shift runner', () => {
         const at = new Date(Date.parse('2026-09-14T01:02:00Z') + i * 60_000).toISOString();
         await owner.query(
           `INSERT INTO "device_sensor_measurement_logs"
-             ("device_sensor_measurement_id","timestamp","value") VALUES ('90211',$1,1)`,
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ('90211',$1,1,$1)`,
           [at]);
       }
       await runner.run(new Date(NOW.getTime() + 60_000));
