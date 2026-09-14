@@ -1,4 +1,5 @@
 import { Severity, SEVERITY_ORDER } from '../../common/severity';
+import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
 
 /**
  * What an alert watches for (task P1-119).
@@ -14,8 +15,11 @@ import { Severity, SEVERITY_ORDER } from '../../common/severity';
  *  - `no-telemetry` — a shift ran and the machine said nothing. Silence is the one
  *    condition a predictive platform cannot predict its way out of, and it is
  *    indistinguishable from "everything is fine" unless somebody asks for it.
+ *  - `fuel-loss` — fuel left a machine that was switched off and did not move. First
+ *    in Things Alive's own build order, and the one case here that needs no model, no
+ *    baseline and no history at all: a tank, a key and a GPS fix.
  */
-export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry';
+export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry' | 'fuel-loss';
 
 export interface PredictionSeverityParams {
   /** Fires at this severity or above. */
@@ -36,7 +40,8 @@ export interface NoTelemetryParams {
   reserved?: never;
 }
 
-export type AlertParams = PredictionSeverityParams | SignalThresholdParams | NoTelemetryParams;
+export type AlertParams = PredictionSeverityParams | SignalThresholdParams
+  | NoTelemetryParams | FuelLossParams;
 
 export interface WindowReading {
   signal: string;
@@ -144,6 +149,16 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       };
     }
 
+    case 'fuel-loss': {
+      const finding = detectFuelLoss(input.readings, input.params as FuelLossParams);
+      if (!finding) return null;
+      return {
+        summary: `${finding.droppedBy} of fuel gone in ${finding.overMinutes} minutes, `
+          + 'with the engine off and the machine stationary.',
+        evidence: { ...finding },
+      };
+    }
+
     case 'no-telemetry': {
       if (input.readings.length > 0) return null;
       return {
@@ -171,6 +186,7 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     }
     return null;
   }
+  if (trigger === 'fuel-loss') return validateFuelLoss(params as FuelLossParams);
   if (trigger === 'signal-threshold') {
     const p = params as SignalThresholdParams;
     if (!p?.signal?.trim()) return 'A threshold rule needs a signal.';

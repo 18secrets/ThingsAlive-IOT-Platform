@@ -9,7 +9,7 @@ import { AlertAppliesTo } from './entities/alert-rule.entity';
 import { AlertParams, AlertTrigger } from './services/alert-rules';
 import { AlertService } from './services/alert.service';
 
-const TRIGGERS = ['prediction-severity', 'signal-threshold', 'no-telemetry'];
+const TRIGGERS = ['prediction-severity', 'signal-threshold', 'no-telemetry', 'fuel-loss'];
 const APPLIES = ['account', 'plant', 'equipment'];
 
 export class RuleDto {
