@@ -301,13 +301,19 @@ export class ServiceForecastService {
     tenantId: string,
   ): Promise<Map<string, { value: number; at: Date }>> {
     const rows = await m.query(
-      `SELECT DISTINCT ON (s."external_id")
-              s."external_id", r."value", r."source_timestamp"
+      // Machine to device to reading. This joined `sensor_map_projection.external_id`
+      // as though it were the equipment code; it is the upstream *measurement* id, so
+      // the join matched nothing in real data. The fixture that tested it encoded the
+      // same mistake, which is why it passed. The device projection is the table that
+      // knows which loggers are fitted to which machine.
+      `SELECT DISTINCT ON (d."equipment_external_id")
+              d."equipment_external_id" AS external_id, r."value", r."source_timestamp"
          FROM "telemetry_reading" r
-         JOIN "sensor_map_projection" s
-           ON s."imei" = r."imei" AND s."signal" = r."signal" AND s."tenant_id" = r."tenant_id"
+         JOIN "device_projection" d
+           ON d."imei" = r."imei" AND d."tenant_id" = r."tenant_id"
         WHERE r."tenant_id" = $1 AND r."signal" = $2
-        ORDER BY s."external_id", r."source_timestamp" DESC`,
+          AND d."equipment_external_id" IS NOT NULL
+        ORDER BY d."equipment_external_id", r."source_timestamp" DESC`,
       [tenantId, SIGNALS.engineRuntime],
     );
     return new Map(rows.map((r) => [
