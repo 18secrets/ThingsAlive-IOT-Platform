@@ -137,3 +137,65 @@ describe('deployment configuration', () => {
     expect(used.size).toBeGreaterThan(5);
   });
 });
+
+/**
+ * The automated release path, checked for the two ways it fails silently (task D-06).
+ *
+ * Railway deploys a service when the branch it watches moves, and its "Wait for CI"
+ * setting holds that deploy until the check suites on the commit finish. Both halves
+ * are invisible when they go wrong. A branch Railway watches that this workflow does
+ * not run on produces no error anywhere: the deployment simply sits in WAITING for
+ * checks that will never arrive, and the only symptom is that releases stopped. A tag
+ * promoted to a branch nobody watches is the same silence from the other end.
+ *
+ * So the branch names are asserted in one place and both workflows are held to them.
+ */
+describe('the release path', () => {
+  const ci = read('.github/workflows/ci.yml');
+  const promote = read('.github/workflows/promote.yml');
+  const dockerfile = read('Dockerfile');
+
+  /** Staging follows main; production follows the branch the tag promotes to. */
+  const STAGING_BRANCH = 'main';
+  const PRODUCTION_BRANCH = 'production';
+
+  it('runs the checks on every branch a Railway service watches', () => {
+    const trigger = ci.match(/on:\s*\n\s*push:\s*\n\s*branches:\s*\[([^\]]*)\]/);
+    expect(trigger).not.toBeNull();
+    const branches = (trigger as RegExpMatchArray)[1].split(',').map((b) => b.trim());
+    for (const branch of [STAGING_BRANCH, PRODUCTION_BRANCH]) {
+      expect(branches).toContain(branch);
+    }
+  });
+
+  it('promotes tags to the branch production actually follows', () => {
+    // If these two disagree, tagging appears to work and releases nothing.
+    expect(promote).toContain(`refs/heads/${PRODUCTION_BRANCH}`);
+    expect(promote).toMatch(/on:\s*\n\s*push:\s*\n\s*tags:/);
+  });
+
+  it('refuses to promote a commit that was never merged', () => {
+    // Otherwise a tag on a feature branch releases unmerged code, and the tag is
+    // exactly what makes it look deliberate.
+    expect(promote).toContain('merge-base --is-ancestor');
+    expect(promote).toContain(`origin/${STAGING_BRANCH}`);
+  });
+
+  it('tests on the same Node major the image is built with', () => {
+    // A build that passes on one major and ships on another is a failure that first
+    // appears in the release, where it is most expensive to read.
+    const image = dockerfile.match(/FROM node:(\d+)/);
+    const workflow = ci.match(/node-version:\s*'?(\d+)'?/);
+    expect(image).not.toBeNull();
+    expect(workflow).not.toBeNull();
+    expect((workflow as RegExpMatchArray)[1]).toBe((image as RegExpMatchArray)[1]);
+  });
+
+  it('runs the same commands a developer runs', () => {
+    // The checks are the gate. A gate that runs something other than `npm test` is a
+    // gate on a different question than the one anybody answered locally.
+    for (const script of ['npm run lint', 'npm run build', 'npm test']) {
+      expect(ci).toContain(script);
+    }
+  });
+});

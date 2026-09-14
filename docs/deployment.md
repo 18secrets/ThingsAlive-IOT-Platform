@@ -1,7 +1,31 @@
 # Deploying Platform 2.0
 
-Two services, one database, one Railway project per environment. This is the order to
-do it in and the reasoning behind the parts that are not obvious.
+Two services, one database, one Railway project per environment. Releases are
+automatic; the only thing anyone types is `git tag`.
+
+## How a commit becomes a release
+
+Railway connects to GitHub only. GitLab stays the source of truth — merge requests are
+reviewed here — and push-mirrors every commit to a GitHub remote that Railway watches.
+The mirror is invisible once it is set up; it costs nothing and uses no CI minutes.
+
+```
+merge to main ──▶ GitHub checks (.github/workflows/ci.yml) ──▶ Railway deploys STAGING
+tag v1.2.0    ──▶ promote.yml moves `production` ──▶ checks ──▶ Railway deploys PRODUCTION
+```
+
+Both Railway services have **Wait for CI** enabled, so a push sits in `WAITING` until
+every check suite on that commit finishes, and a red one never deploys. That setting is
+what makes the automation safe rather than merely fast.
+
+Two consequences worth knowing before something confuses you:
+
+- **Every branch a Railway service watches must appear in `ci.yml`'s push triggers.**
+  If it does not, the deployment waits for checks that never arrive and the only symptom
+  is that releases silently stopped. `test/deployment.spec.ts` asserts this.
+- **Tags do not deploy; branches do.** `promote.yml` turns a `v*` tag into a move of the
+  `production` branch, and refuses to promote a commit that is not an ancestor of `main`
+  — otherwise a tag on a feature branch releases unmerged code and looks deliberate.
 
 ## The shape
 
@@ -40,14 +64,24 @@ whole tenancy guarantee — see `src/scope/tenant-session.ts`.
 
 ## First deploy, in order
 
-1. **Provision.** One Railway project per environment. Add Postgres from the template.
-2. **Create the `ta_app` role's owner.** Nothing to do: the RLS migration creates the
-   role. But `DB_USERNAME` must own the schema, or the migration cannot grant on it.
-3. **Set the variables** (below). Database URL comes from Railway's own reference
+Once. After this, releases need none of it.
+
+1. **Mirror GitLab to GitHub.** Create an empty private GitHub repository. In GitLab:
+   Settings → Repository → Mirroring repositories, URL `https://github.com/ORG/REPO.git`,
+   your GitHub username and a fine-grained personal access token with `Contents: write`.
+   Mirroring is on the Free tier and consumes no CI minutes.
+2. **Provision.** One Railway project per environment. Add Postgres from the template.
+3. **Create `api` and `scheduler`**, both from the GitHub repository. `scheduler` uses
+   `railway.scheduler.json` as its config path and exactly one replica. `DB_USERNAME`
+   must own the schema, or the migration cannot grant on it; the RLS migration creates
+   the `ta_app` role itself.
+4. **Set the trigger branch and turn on Wait for CI** on both services: `main` in the
+   staging project, `production` in the production project.
+5. **Set the variables** (below). Database values come from Railway's own reference
    between services; secrets come from your vault, never from the repository.
-4. **Deploy `api` first.** Its pre-deploy command builds the schema the scheduler needs.
-5. **Deploy `scheduler`** with `SHIFT_RUNNER_ENABLED=true`.
-6. **Watch `/api/v1/ready`.** It asks each dependency rather than describing them, and
+6. **Push to `main`.** Nothing else. The checks run, `api` deploys and its pre-deploy
+   command applies the migrations before traffic moves, then `scheduler` deploys.
+7. **Watch `/api/v1/ready`.** It asks each dependency rather than describing them, and
    Railway holds the old deployment until it answers 200 — so a service that boots but
    cannot reach Postgres never takes traffic. Two answers are both 200 and they mean
    different things:
@@ -61,6 +95,7 @@ whole tenancy guarantee — see `src/scope/tenant-session.ts`.
 
    `status: "not_ready"` is 503 and only the platform's own database can cause it. The
    body carries the per-dependency checks in every case, so the failing one is named.
+8. **Release to production** with `git tag v1.0.0 && git push origin v1.0.0`.
 
 ## Variables
 
@@ -93,21 +128,23 @@ and write down how long it took.
 
 ## Environments
 
-| Environment | Deploys from | Data | Who can push |
+| Environment | Deploys when | Data | Trigger |
 |---|---|---|---|
-| staging | the `integration` branch, automatically | a restored, anonymised production-shaped dump | CI only |
-| production | the default branch, **manually** | live tenant data, daily backups | CI only, with an approval step |
+| staging | `main` moves and the checks pass | a restored, anonymised production-shaped dump | every merge |
+| production | the `production` branch moves and the checks pass | live tenant data, daily backups | `git tag v*` |
 
-Production is `when: manual` in `.gitlab-ci.yml`. That is the human in the loop, and it
-is the only thing between a green pipeline and a release.
+Merging to `main` is a decision about the code. Releasing to tenants with live data is a
+second decision, and the tag is the smallest possible way to make it deliberately — one
+command, nothing to click, no dashboard. `promote.yml` is the only thing that ever moves
+the `production` branch, and it refuses a commit that is not already on `main`.
 
 ## What is not done yet
 
 - **`package-lock.json` is not in the repository** (`P0-17`). The Dockerfile uses
   `npm ci`, which requires it — so the image cannot build until it is committed. This
   is one `git add` from a machine with the repo checked out.
-- **Railway is not connected to this workspace**, so the project, services and
-  variables have to be created by hand the first time. The CLI commands in
-  `.gitlab-ci.yml` take over after that.
+- **Railway is not connected to this workspace**, so the mirror, the project, the
+  services and the variables have to be created by hand the first time. After that
+  nothing is manual: the release path above runs itself.
 - **No smoke suite runs after a deploy.** The readiness probe proves the process can
   reach its database; it does not prove a tenant can sign in and read a prediction.

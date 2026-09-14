@@ -3,7 +3,7 @@
 # Stages are ordered by how fast they fail: a type error should not wait for the
 # test suite, and the secret scan should not wait for anything.
 
-stages: [guard, verify, deploy]
+stages: [guard, verify]
 
 default:
   image: node:22-alpine
@@ -105,56 +105,22 @@ build:
     expire_in: 1 day
 
 # ---------------------------------------------------------------------------
-# Deploy
+# Deploy — not from here.
 #
-# Three rules run through this section, and each exists because of a way deploys go
-# wrong rather than because of a convention.
+# Railway connects to GitHub only, so this repository push-mirrors to a GitHub remote
+# and Railway watches that. The checks Railway waits for therefore have to run where
+# Railway can see them, which is .github/workflows/ci.yml — the same guards and the
+# same `npm test` as above, duplicated on purpose rather than moved, so that a merge
+# request reviewed here is still checked here.
 #
-#  - Production deploys only from a protected branch, only after staging is green, and
-#    only when a human presses the button. `when: manual` is the human.
-#  - Migrations are NOT run from here. They run as Railway's pre-deploy command on the
-#    api service, once, before the new version takes traffic. Running them from CI
-#    would mean the schema moved while the old code was still serving.
-#  - Nothing here reads a secret from the repository. RAILWAY_TOKEN is a masked,
-#    protected CI variable, and it is the only credential this stage has.
+# Releases are branch moves, not commands:
+#
+#   merge to main   → GitHub checks pass → Railway deploys staging
+#   tag v*          → promote.yml moves the `production` branch → Railway deploys prod
+#
+# Nothing in this file holds a Railway credential, and nothing in it deploys. If you
+# are looking for the deploy job that used to be here, it is that tag.
 # ---------------------------------------------------------------------------
-
-.railway:
-  image: node:22-alpine
-  stage: deploy
-  before_script:
-    - npm install -g @railway/cli
-  variables:
-    # Set per environment in GitLab CI/CD settings. A missing one fails the job rather
-    # than deploying to whatever project the token happens to default to.
-    RAILWAY_PROJECT_ID: ""
-
-deploy:staging:
-  extends: .railway
-  environment:
-    name: staging
-  rules:
-    - if: $CI_COMMIT_BRANCH == "integration"
-  script:
-    - |
-      test -n "$RAILWAY_TOKEN" || { echo "RAILWAY_TOKEN is not set."; exit 1; }
-      railway up --service api --environment staging --detach
-      railway up --service scheduler --environment staging --detach
-
-deploy:production:
-  extends: .railway
-  environment:
-    name: production
-  rules:
-    # Protected branch only, and never automatically.
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
-      allow_failure: false
-  script:
-    - |
-      test -n "$RAILWAY_TOKEN" || { echo "RAILWAY_TOKEN is not set."; exit 1; }
-      railway up --service api --environment production --detach
-      railway up --service scheduler --environment production --detach
 
 test:
   stage: verify

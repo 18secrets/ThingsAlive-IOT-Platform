@@ -1,0 +1,49 @@
+# Tagging a version is the release.
+#
+# Railway deploys a service when its watched branch moves, and it watches branches
+# rather than tags. So the production service watches `production`, and this workflow
+# is the only thing that ever moves that branch: tag a commit `v1.4.0` and the commit
+# is promoted, Railway sees the branch move, waits for the checks on that commit, and
+# releases.
+#
+# The point is not ceremony. Merging to main is a decision about the code; releasing to
+# tenants with live data is a second decision, and a tag is the smallest possible way
+# to make it deliberately — one command, no dashboard, nothing to click.
+
+name: Promote to production
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Move the production branch to the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to promote a commit that is not on main
+        run: |
+          # A tag on a feature branch would otherwise release code that was never
+          # merged, and the tag makes it look intentional.
+          git fetch origin main --depth=0 || git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "$GITHUB_SHA is not an ancestor of main. Tag a merged commit."
+            exit 1
+          fi
+          echo "Tagged commit is on main."
+
+      - name: Promote
+        run: |
+          git push origin "$GITHUB_SHA:refs/heads/production"
+          echo "production now points at $GITHUB_SHA ($GITHUB_REF_NAME)."
