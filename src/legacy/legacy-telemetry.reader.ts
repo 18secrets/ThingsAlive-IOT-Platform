@@ -35,6 +35,24 @@ export interface LateArrival {
   count: number;
 }
 
+export interface ArrivalStatsRequest {
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  /** Exclusive, matching the pull window exactly. */
+  from: Date;
+  /** Inclusive. */
+  to: Date;
+}
+
+/** Arrival timing per device, for the window asked about. */
+export interface DeviceArrival {
+  imei: string;
+  count: number;
+  medianLagSeconds: number;
+  maxLagSeconds: number;
+}
+
 export interface PullResult {
   envelope: TelemetryBatchEnvelope | null;
   /** Why nothing came back, when nothing did. */
@@ -175,6 +193,101 @@ export class LegacyTelemetryReader {
       seenThrough: new Date(row.seen_through),
       count: Number(row.count),
     };
+  }
+
+  /**
+   * How long this machine's readings took to reach the existing platform (task P4-08).
+   *
+   * Their table carries both clocks — `timestamp` is the logger's and `created_at` is
+   * when the row reached them — and the gap between the two is store-and-forward lag.
+   * Nothing has measured it until now, and it is the number that separates the two
+   * faults a thin window can mean: a logger holding a backlog that is coming, and a
+   * link that dropped readings which are gone.
+   *
+   * Aggregated upstream for the same reason `lateArrivals` is: the answer is a handful
+   * of numbers per device, and computing it here would mean carrying every row of a
+   * busy machine's shift across the network to take a median of it.
+   *
+   * The grouping is by measurement id rather than by device, because the upstream
+   * table does not know about devices — the measurement-to-IMEI mapping is ours, and
+   * joining their tables to get it is exactly what this reader exists not to do. So
+   * the fold into devices happens locally, which means a device's median here is a
+   * median of its sensors' medians rather than of its readings. That is close enough
+   * for "is this logger hours behind" and it keeps the upstream query to one table.
+   */
+  async arrivalStats(request: ArrivalStatsRequest): Promise<DeviceArrival[]> {
+    if (!this.legacy?.isInitialized) return [];
+
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) return [];
+
+    const rows: {
+      measurement_id: string; count: string; median_lag: string; max_lag: string;
+    }[] = await this.legacy.query(
+      `SELECT "device_sensor_measurement_id"::text AS measurement_id,
+              count(*)::text AS count,
+              percentile_cont(0.5) WITHIN GROUP (
+                ORDER BY EXTRACT(EPOCH FROM ("created_at" - "timestamp"))
+              )::text AS median_lag,
+              max(EXTRACT(EPOCH FROM ("created_at" - "timestamp")))::text AS max_lag
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[])
+          AND "timestamp" > $2
+          AND "timestamp" <= $3
+        GROUP BY "device_sensor_measurement_id"`,
+      [[...map.keys()], request.from, request.to],
+    );
+
+    const byImei = new Map<string, { count: number; medians: number[]; max: number }>();
+    for (const row of rows) {
+      const sensor = map.get(row.measurement_id);
+      if (!sensor) continue;
+      const entry = byImei.get(sensor.imei) ?? { count: 0, medians: [], max: 0 };
+      entry.count += Number(row.count);
+      // A clock skewed the wrong way gives a negative lag, which is not a reading
+      // arriving before it was taken — it is two clocks disagreeing, and averaging it
+      // in would make a lagging device look prompt.
+      const median = Math.max(0, Number(row.median_lag));
+      if (Number.isFinite(median)) entry.medians.push(median);
+      const max = Number(row.max_lag);
+      if (Number.isFinite(max)) entry.max = Math.max(entry.max, Math.max(0, max));
+      byImei.set(sensor.imei, entry);
+    }
+
+    return [...byImei].map(([imei, e]) => {
+      const sorted = e.medians.sort((a, b) => a - b);
+      const median = sorted.length === 0 ? 0
+        : sorted.length % 2 ? sorted[(sorted.length - 1) / 2]
+        : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+      return {
+        imei,
+        count: e.count,
+        medianLagSeconds: Math.round(median * 10) / 10,
+        maxLagSeconds: Math.round(e.max * 10) / 10,
+      };
+    });
+  }
+
+  /**
+   * Which signals each of this machine's loggers is mapped to report (task P4-08).
+   *
+   * The device list has to come from the mapping rather than from the readings, and
+   * that is the whole reason this exists: a logger that reported nothing does not
+   * appear in a window's readings at all, so a health check built from them would
+   * quietly omit every device that was off the air — which is the one it was built to
+   * find. The mapping also gives the denominator for "reporting 3 of 12 signals".
+   */
+  async expectedSignalsFor(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+  ): Promise<Map<string, string[]>> {
+    const map = await this.sensorMapFor(request);
+    const byImei = new Map<string, Set<string>>();
+    for (const sensor of map.values()) {
+      const set = byImei.get(sensor.imei) ?? new Set<string>();
+      set.add(sensor.signal);
+      byImei.set(sensor.imei, set);
+    }
+    return new Map([...byImei].map(([imei, set]) => [imei, [...set].sort()]));
   }
 
   /**
