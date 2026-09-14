@@ -47,9 +47,20 @@ whole tenancy guarantee — see `src/scope/tenant-session.ts`.
    between services; secrets come from your vault, never from the repository.
 4. **Deploy `api` first.** Its pre-deploy command builds the schema the scheduler needs.
 5. **Deploy `scheduler`** with `SHIFT_RUNNER_ENABLED=true`.
-6. **Watch `/api/v1/ready`.** It checks the database. Railway holds the old deployment
-   until it answers, so a service that boots but cannot reach Postgres never takes
-   traffic.
+6. **Watch `/api/v1/ready`.** It asks each dependency rather than describing them, and
+   Railway holds the old deployment until it answers 200 — so a service that boots but
+   cannot reach Postgres never takes traffic. Two answers are both 200 and they mean
+   different things:
+
+   - `status: "ok"` — everything answered.
+   - `status: "degraded"` — the platform database answered and the legacy connection
+     did not, or is not configured yet. The release proceeds deliberately: gating our
+     deploys on the existing platform's database would let their maintenance window
+     block our releases, and scoring already waits — the shift windows stay owed and
+     are taken when a route comes back.
+
+   `status: "not_ready"` is 503 and only the platform's own database can cause it. The
+   body carries the per-dependency checks in every case, so the failing one is named.
 
 ## Variables
 

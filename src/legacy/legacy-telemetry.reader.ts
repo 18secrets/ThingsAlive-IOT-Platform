@@ -6,6 +6,7 @@ import { SensorMapProjection } from '../projection/entities/sensor-map-projectio
 import { runTenantSpanning } from '../scope/tenant-session';
 import { TelemetryBatchEnvelope } from '../projection/contracts/contracts';
 import { LEGACY_DATA_SOURCE } from './legacy-source';
+import { CheckState, probe } from '../health/readiness';
 
 export interface PullRequest {
   tenantId: string;
@@ -92,6 +93,19 @@ export class LegacyTelemetryReader {
 
   get connected(): boolean {
     return !!this.legacy?.isInitialized;
+  }
+
+  /**
+   * Whether the existing platform is actually answering, for the readiness endpoint
+   * (task D-04).
+   *
+   * It lives here rather than in the health controller because the connection is this
+   * module's to hold: a second place injecting it is how "2.0 only reads" stops being
+   * a guarantee and becomes a convention, and there is a test that fails on the diff.
+   * `connected` says a handle was opened; this says the other end replied.
+   */
+  async probeConnection(): Promise<CheckState> {
+    return probe(this.legacy);
   }
 
   async pull(request: PullRequest): Promise<PullResult> {
