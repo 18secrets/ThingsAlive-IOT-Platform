@@ -27,6 +27,7 @@ export type Capability =
   | 'device.claim'
   | 'prediction.read'
   | 'prediction.run'
+  | 'utilization.read'
   | 'entitlement.grant'
   | 'platform.admin';
 
@@ -94,6 +95,10 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // stored outcome, and an outcome that changes without an explanation is worse than
   // a stale one.
   'prediction.run': ['super admin', 'admin'],
+  // How the fleet spent its time. Every role inside the tenant, plus platform
+  // support: it is a report about the customer's own machines, and the narrowing
+  // that matters — which machines — is done by the assignment list rather than here.
+  'utilization.read': ['super admin', 'admin', 'operational', 'support', 'platform-support'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
 };

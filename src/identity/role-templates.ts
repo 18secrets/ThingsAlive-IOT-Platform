@@ -32,7 +32,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'user.manage', 'role.manage', 'equipment.write',
       'scenario.activate', 'scenario.author', 'alert.author', 'action.work', 'action.assign',
       'catalog.read', 'client-catalog.read', 'client-catalog.write',
-      'prediction.read', 'prediction.run',
+      'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
     ],
   },
@@ -46,7 +46,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     capabilities: [
       'equipment.write', 'scenario.activate', 'alert.author', 'action.work', 'action.assign',
       'catalog.read', 'client-catalog.read',
-      'prediction.read', 'prediction.run',
+      'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
     ],
   },
@@ -59,7 +59,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     scopeShape: 'equipment',
     capabilities: [
       'action.work', 'catalog.read', 'client-catalog.read',
-      'prediction.read', 'device.read',
+      'prediction.read', 'utilization.read', 'device.read',
     ],
   },
 ];

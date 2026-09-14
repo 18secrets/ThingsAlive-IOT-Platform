@@ -18,6 +18,7 @@ import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
+import { UtilizationModule } from './utilization/utilization.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -74,6 +75,7 @@ export class AppModule {
               EquipmentModule,
               WorkModule,
               ShiftModule,
+              UtilizationModule,
               LegacyModule,
               AlertModule,
             ]

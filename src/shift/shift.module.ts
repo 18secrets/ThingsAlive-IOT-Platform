@@ -11,6 +11,7 @@ import { AlertModule } from '../alert/alert.module';
 import { LegacyModule } from '../legacy/legacy.module';
 import { PredictionModule } from '../prediction/prediction.module';
 import { ProjectionModule } from '../projection/projection.module';
+import { UtilizationModule } from '../utilization/utilization.module';
 
 @Module({
   // The runner needs all three: somewhere to read from, somewhere to put it, and
@@ -22,6 +23,9 @@ import { ProjectionModule } from '../projection/projection.module';
     AlertModule,
     ProjectionModule,
     PredictionModule,
+    // Duty cycle is measured from the same window the scorer reads, on every path
+    // out of it — including the ones that produce no prediction.
+    UtilizationModule,
   ],
   controllers: [ShiftController],
   providers: [ShiftService, ShiftRunner, ShiftScheduler, ShiftRunService],
