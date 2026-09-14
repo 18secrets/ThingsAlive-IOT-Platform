@@ -8,6 +8,7 @@ import { AlertAppliesTo, AlertRule } from '../entities/alert-rule.entity';
 import { AlertEvent } from '../entities/alert-event.entity';
 import {
   AlertParams, AlertTrigger, evaluateRule, validateParams, WindowPrediction, WindowReading,
+  WindowChain,
 } from './alert-rules';
 
 export interface RuleInput {
@@ -32,6 +33,14 @@ export interface WindowContext {
   windowEnd: Date;
   readings: WindowReading[];
   predictions: WindowPrediction[];
+  /**
+   * What the physical chains said about this window.
+   *
+   * Optional, and a chain rule simply does not fire without it. That is the right
+   * failure: a rule about where a fault entered has nothing to say when nobody ran the
+   * chain, and firing on the absence would be an alert about our own plumbing.
+   */
+  chains?: WindowChain[];
 }
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
@@ -225,6 +234,7 @@ export class AlertService {
           params: rule.params,
           readings: context.readings,
           predictions: context.predictions,
+          chains: context.chains,
         });
         if (!firing) continue;
 

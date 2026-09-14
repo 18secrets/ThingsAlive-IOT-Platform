@@ -5,6 +5,8 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
+import { ChainService } from '../../intelligence/services/chain.service';
+import { WindowChain } from '../../alert/services/alert-rules';
 import { DeviceHealthService } from '../../device-health/services/device-health.service';
 import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
@@ -67,6 +69,7 @@ export class ShiftRunner {
     private readonly alerts: AlertService,
     private readonly utilization: UtilizationService,
     private readonly deviceHealth: DeviceHealthService,
+    private readonly chains: ChainService,
   ) {}
 
   /**
@@ -246,6 +249,10 @@ export class ShiftRunner {
         scope, { sourceSystem: window.sourceSystem, externalId: window.externalId }, window.end,
       );
 
+      // The physical chains, run on the readings already in hand. A chain rule needs
+      // this to have anything to say; every other rule is unaffected by its absence.
+      const chains = await this.diagnoseChains(window, readings);
+
       const alerts = await this.evaluateAlerts(
         window,
         readings,
@@ -256,6 +263,7 @@ export class ShiftRunner {
           predictionId: p.id,
           confidence: p.confidence,
         })),
+        chains,
       );
 
       await this.recordUtilization(window, readings);
@@ -419,6 +427,55 @@ export class ShiftRunner {
   }
 
   /**
+   * What the machine's physical chains say about this window (task P4-01).
+   *
+   * Run on the readings the pull already produced rather than re-read from the
+   * database: the runner has them, and a second read would be the same rows fetched
+   * again a moment later.
+   *
+   * Never fatal, and an empty result is the honest answer for the ordinary cases — a
+   * machine with no equipment class, or a class nobody has written a chain for yet.
+   * A chain rule then does not fire, which is correct: it is a rule about where a
+   * fault entered, and nobody looked.
+   */
+  private async diagnoseChains(
+    window: OwedWindow,
+    readings: { signal: string; value: number; sourceTimestamp: string }[],
+  ): Promise<WindowChain[]> {
+    try {
+      const samples = readings.map((r) => ({
+        signal: r.signal, value: r.value, at: new Date(r.sourceTimestamp).getTime(),
+      })).filter((s) => Number.isFinite(s.at));
+
+      const diagnoses = await this.chains.diagnoseFromSamples(
+        window.tenantId,
+        { sourceSystem: window.sourceSystem, externalId: window.externalId },
+        samples,
+      );
+      return diagnoses.map((d) => ({
+        slug: d.slug,
+        evaluated: d.evaluated,
+        origin: d.origin && {
+          signal: d.origin.signal,
+          label: d.origin.label,
+          severity: d.origin.severity,
+          residual: d.origin.residual,
+          expected: d.origin.expected,
+          actual: d.origin.actual,
+          exceedance: d.origin.exceedance,
+        },
+        explainedBy: d.explainedBy,
+      }));
+    } catch (error) {
+      this.logger.error(
+        `Could not run chains for ${window.externalId} on ${window.localDate}: `
+        + `${(error as Error).message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
    * Ask the client's own rules whether this shift is worth telling anybody about.
    *
    * Never fatal. An alert is a message about work that has already been done
@@ -432,6 +489,7 @@ export class ShiftRunner {
       clientScenarioSlug: string; severity: any; riskScore: number;
       predictionId: string; confidence: string;
     }[],
+    chains: WindowChain[] = [],
   ): Promise<number> {
     try {
       const fired = await this.alerts.evaluateWindow({
@@ -443,6 +501,7 @@ export class ShiftRunner {
         windowEnd: window.end,
         readings,
         predictions,
+        chains,
       });
       return fired.length;
     } catch (error) {

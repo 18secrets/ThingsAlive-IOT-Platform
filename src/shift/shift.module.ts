@@ -13,6 +13,7 @@ import { PredictionModule } from '../prediction/prediction.module';
 import { ProjectionModule } from '../projection/projection.module';
 import { UtilizationModule } from '../utilization/utilization.module';
 import { DeviceHealthModule } from '../device-health/device-health.module';
+import { IntelligenceModule } from '../intelligence/intelligence.module';
 
 @Module({
   // The runner needs all three: somewhere to read from, somewhere to put it, and
@@ -29,6 +30,9 @@ import { DeviceHealthModule } from '../device-health/device-health.module';
     UtilizationModule,
     // The same window again, asked why it was thin rather than how thin.
     DeviceHealthModule,
+    // The chains, so an alert can fire on where a fault entered rather than on a
+    // raw number that a hard-working machine crosses honestly.
+    IntelligenceModule,
   ],
   controllers: [ShiftController],
   providers: [ShiftService, ShiftRunner, ShiftScheduler, ShiftRunService],

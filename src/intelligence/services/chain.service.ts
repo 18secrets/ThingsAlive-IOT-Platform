@@ -3,7 +3,7 @@ import { DataSource } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { Sample } from '../../prediction/services/influence';
-import { withTenantSession } from '../../scope/tenant-session';
+import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
 import { CausalChainDefinition } from '../entities/causal-chain.entity';
 import {
@@ -162,6 +162,34 @@ export class ChainService {
     }
 
     const samples = await this.samplesFor(scope, ref, now);
+    const { chains, skipped } = this.run(definitions, samples);
+    return { ...base, chains, skipped };
+  }
+
+  /**
+   * The same diagnosis, from samples the caller already has (task P4-01).
+   *
+   * For the shift runner, which has just pulled the window's readings and would
+   * otherwise make this read them a second time out of the database. It takes a tenant
+   * rather than a request scope because there is no request behind a scheduled pass,
+   * and the equipment is looked up under that tenant's own session either way.
+   */
+  async diagnoseFromSamples(
+    tenantId: string, ref: AssetRef, samples: Sample[],
+  ): Promise<ChainDiagnosis[]> {
+    const asset = await withTenantId(this.ds, tenantId, (m) =>
+      m.getRepository(EquipmentProfile).findOne({ where: { tenantId, ...ref } }));
+    if (!asset?.equipmentClassSlug) return [];
+
+    const definitions = await this.publishedFor(asset.equipmentClassSlug);
+    if (!definitions.length) return [];
+    return this.run(definitions, samples).chains;
+  }
+
+  /** Evaluate each definition, keeping a cyclic one out of the results and loud. */
+  private run(
+    definitions: CausalChainDefinition[], samples: Sample[],
+  ): { chains: ChainDiagnosis[]; skipped: { slug: string; reason: string }[] } {
     const chains: ChainDiagnosis[] = [];
     const skipped: { slug: string; reason: string }[] = [];
 
@@ -180,7 +208,7 @@ export class ChainService {
     // Something actually wrong first, then the chains that could not be evaluated,
     // then the quiet ones. The order a screen reads in.
     chains.sort((a, b) => rank(a) - rank(b));
-    return { ...base, chains, skipped };
+    return { chains, skipped };
   }
 
   /**
