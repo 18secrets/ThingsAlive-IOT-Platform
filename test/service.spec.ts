@@ -83,16 +83,23 @@ describeDb('service forecast', () => {
     return meter;
   };
 
-  /** Put the machine's newest meter reading into telemetry, where the forecast reads it. */
+  /**
+   * Put the machine's newest meter reading into telemetry, where the forecast reads it.
+   *
+   * The device projection is what ties a reading to a machine: equipment code to IMEI.
+   * This fixture used to put the machine code into `sensor_map_projection.external_id`,
+   * which is the upstream *measurement* id — so it passed against a query making the
+   * same mistake and would have matched nothing in production.
+   */
   const setMeter = async (externalId: string, imei: string, value: number, unit: string) => {
     await runTenantSpanning(owner, 'test fixture', async (m) => {
       await m.query(
-        `INSERT INTO "sensor_map_projection"
-           ("tenant_id","source_system","external_id","checksum","imei","signal","sensor_name",
-            "unit","payload","source_updated_at","synced_at","status")
-         VALUES ('acme',$1,$2,'c',$3,$4,'Runtime',$5,'{}'::jsonb,$6,$6,'live')
+        `INSERT INTO "device_projection"
+           ("tenant_id","source_system","external_id","checksum","imei","equipment_external_id",
+            "payload","source_updated_at","synced_at","status")
+         VALUES ('acme',$1,$2,'c',$2,$3,'{}'::jsonb,$4,$4,'live')
          ON CONFLICT DO NOTHING`,
-        [CLIENT_SOURCE_SYSTEM, externalId, imei, SIGNALS.engineRuntime, unit, NOW]);
+        [CLIENT_SOURCE_SYSTEM, imei, externalId, NOW]);
       await m.query(
         `INSERT INTO "telemetry_reading"
            ("tenant_id","imei","signal","value","unit","source_timestamp","received_at","source")
@@ -117,8 +124,8 @@ describeDb('service forecast', () => {
 
   beforeEach(async () => {
     for (const t of ['equipment_service_record', 'utilization_shift', 'telemetry_reading',
-      'sensor_map_projection', 'equipment_placement_event', 'equipment_profile', 'plant',
-      'equipment_class_profile']) {
+      'sensor_map_projection', 'device_projection', 'equipment_placement_event',
+      'equipment_profile', 'plant', 'equipment_class_profile']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     const north = (await plants.create(boss, { code: 'NORTH', name: 'Northern yard' })).id;
