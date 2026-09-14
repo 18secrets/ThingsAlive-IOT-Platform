@@ -11,6 +11,9 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts",
+    "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
+    "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
     "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts"
   },
