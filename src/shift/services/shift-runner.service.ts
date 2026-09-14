@@ -5,6 +5,8 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
+import { DeviceHealthService } from '../../device-health/services/device-health.service';
+import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
 import { UtilizationService } from '../../utilization/services/utilization.service';
 import { runningStatusFor } from './running-status';
@@ -64,6 +66,7 @@ export class ShiftRunner {
     private readonly predictions: PredictionService,
     private readonly alerts: AlertService,
     private readonly utilization: UtilizationService,
+    private readonly deviceHealth: DeviceHealthService,
   ) {}
 
   /**
@@ -201,6 +204,7 @@ export class ShiftRunner {
         // online — survivorship bias with a chart on top, where the machines nobody
         // can see are exactly the ones missing from the report about them.
         await this.recordUtilization(window, []);
+        await this.recordLinkHealth(window, []);
 
         // Otherwise a shift that produced no readings is a fact about the shift, not
         // a failure to be retried forever: coming back to the same empty window on
@@ -209,8 +213,11 @@ export class ShiftRunner {
         return { ...this.outcome(window, 'nothing-to-score', pull.reason), alerts: silent };
       }
 
+      // The IMEI rides along: duty cycle and the alert rules do not care which logger
+      // a reading came from, but the link check is per device and cannot be assembled
+      // without it.
       const readings = pull.envelope.readings.map((r) => ({
-        signal: r.signal, value: r.value, unit: r.unit ?? null,
+        imei: r.imei, signal: r.signal, value: r.value, unit: r.unit ?? null,
         sourceTimestamp: r.sourceTimestamp,
       }));
 
@@ -228,6 +235,7 @@ export class ShiftRunner {
         // to show. Skipping it here would leave a hole that reads as a gap in the data
         // rather than as a machine that was paid for and not used.
         await this.recordUtilization(window, readings);
+        await this.recordLinkHealth(window, readings);
         await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
         return { ...this.outcome(window, 'not-running', 'engine-never-ran'), readings: readings.length };
       }
@@ -251,6 +259,7 @@ export class ShiftRunner {
       );
 
       await this.recordUtilization(window, readings);
+      await this.recordLinkHealth(window, readings);
 
       // Last, and only now. Everything above either happened or threw.
       await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
@@ -348,6 +357,62 @@ export class ShiftRunner {
     } catch (error) {
       this.logger.error(
         `Could not record utilization for ${window.externalId} on ${window.localDate}: `
+        + `${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Ask why the window was thin, per logger, on every path out of it (task P4-08).
+   *
+   * The device list comes from the sensor map rather than from the readings, and that
+   * is the point: a logger that reported nothing contributes no readings, so building
+   * the list from them would omit exactly the devices worth finding. A machine whose
+   * whole window was silent produces a `dark` row per fitted logger rather than no rows
+   * at all.
+   *
+   * Never fatal, like the alert and duty-cycle passes. A diagnosis that could not be
+   * written is worth less than the prediction it would have explained.
+   */
+  private async recordLinkHealth(
+    window: OwedWindow,
+    readings: { imei?: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+  ): Promise<void> {
+    try {
+      const expected = await this.reader.expectedSignalsFor(window);
+      if (expected.size === 0) return;
+
+      const arrivals = new Map(
+        (await this.reader.arrivalStats({
+          tenantId: window.tenantId,
+          sourceSystem: window.sourceSystem,
+          externalId: window.externalId,
+          from: window.start,
+          to: window.end,
+        })).map((a) => [a.imei, a]),
+      );
+
+      for (const [imei, expectedSignals] of expected) {
+        const mine = readings.filter((r) => r.imei === imei);
+        const health = assessLink({
+          windowStart: window.start,
+          windowEnd: window.end,
+          readings: mine,
+          expectedSignals,
+          arrival: arrivals.get(imei) ?? null,
+        });
+        await this.deviceHealth.record({
+          tenantId: window.tenantId,
+          imei,
+          sourceSystem: window.sourceSystem,
+          externalId: window.externalId,
+          localDate: window.localDate,
+          health,
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        `Could not assess link health for ${window.externalId} on ${window.localDate}: `
         + `${(error as Error).message}`,
       );
     }

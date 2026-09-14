@@ -12,6 +12,7 @@ import { LegacyModule } from '../legacy/legacy.module';
 import { PredictionModule } from '../prediction/prediction.module';
 import { ProjectionModule } from '../projection/projection.module';
 import { UtilizationModule } from '../utilization/utilization.module';
+import { DeviceHealthModule } from '../device-health/device-health.module';
 
 @Module({
   // The runner needs all three: somewhere to read from, somewhere to put it, and
@@ -26,6 +27,8 @@ import { UtilizationModule } from '../utilization/utilization.module';
     // Duty cycle is measured from the same window the scorer reads, on every path
     // out of it — including the ones that produce no prediction.
     UtilizationModule,
+    // The same window again, asked why it was thin rather than how thin.
+    DeviceHealthModule,
   ],
   controllers: [ShiftController],
   providers: [ShiftService, ShiftRunner, ShiftScheduler, ShiftRunService],
