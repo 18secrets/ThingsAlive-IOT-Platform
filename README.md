@@ -203,6 +203,34 @@ readable by every tenant. The default partition is a safety net that is meant to
 empty, and a test asserts it: once it holds a row for a month, the partition for that
 month can no longer be created.
 
+### Utilization and duty cycle
+
+Every shift the runner touches produces a `utilization_shift` row — productive, idle,
+running-unclassified, off and unknown seconds that sum exactly to the window. Two
+things about it are worth knowing before reading the code.
+
+**`unknown` is a bucket, not a rounding error.** Telemetry is sampled and duty cycle is
+continuous, so turning samples into hours means deciding how long one sample may speak
+for. The obvious answer — until the next one — lets a logger that reported `running`
+and then dropped off the network contribute six hours of productive time from a single
+sample, indistinguishable on a screen from six hours that were worked. So a sample
+speaks for a bounded interval derived from how often that machine actually reports
+(median gap × 3, clamped to 1–15 minutes), and the rest is `unknown`. Every rate is
+computed over observed time, with `coverage` reported beside it, so a thin row reads as
+a connectivity problem rather than as an idle machine.
+
+**A row is written on every path out of a window, including the ones that score
+nothing.** The shifts that produce no prediction are the idle ones, the offline ones
+and the ones nobody was watching. A report assembled only from the shifts that scored
+would be a report about the machines that were working — survivorship bias with a chart
+on top.
+
+Rolled up, rates are recomputed from summed seconds rather than averaged across shifts:
+a four-hour Saturday worked flat out and a twelve-hour Monday spent idling are not two
+numbers to average. `plant_id` and `equipment_class_slug` are copied onto the row rather
+than joined at read time, because machines move between sites and a join would
+retroactively move last quarter's hours to wherever the machine is standing today.
+
 ## Layout
 
 ```
@@ -220,6 +248,7 @@ src/
   scope/         ScopedRepository, the tenant session, the one tenant-spanning hatch
   prediction/    baselines, the Tier 1 scorer, and the partitioned prediction store
   telemetry/     readings, deduped at the database
+  utilization/   duty cycle per shift — productive, idle, off, and what nobody saw
 test/
   auth-matrix    enumerates every registered route and asserts it refuses anonymous callers
   severity       mapping is total, and refuses to guess
@@ -235,6 +264,8 @@ test/
   activation     every edge of the transition table, and three writes that are one
   tier1          the scorer as a pure function — bands, confidence, the 3-signal flag
   prediction     partition routing, baseline idempotency, and re-scoring the same window
+  duty-cycle     attribution from sampled status, and what a gap is allowed to become
+  utilization    upsert on re-measure, rollups weighted by hours, operator narrowing
 ```
 
 The auth matrix test enumerates routes from the running router, so a new controller is
