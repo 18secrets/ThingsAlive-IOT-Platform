@@ -143,7 +143,7 @@ describe('what an alert rule watches', () => {
       const firing = fire({ atLeast: 'warning' }, [chain()]);
       // Not "72.5 degrees", which is true of a healthy machine under load. The number
       // that means something is the gap from what the drivers predict.
-      expect(firing!.summary).toMatch(/Oil temperature under load is \\+12\\.5/);
+      expect(firing!.summary).toMatch(/Oil temperature under load is \+12\.5/);
       expect(firing!.summary).toMatch(/expected 60/);
       expect(firing!.evidence).toMatchObject({
         chainSlug: 'dg-thermal', stage: 'engine_oil_temperature', severity: 'warning',

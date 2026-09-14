@@ -729,7 +729,7 @@ describeDb('the shift runner', () => {
     expect(summary.outcomes[0].alerts).toBe(1);
 
     const [event] = await owner.query(`SELECT * FROM "alert_event"`);
-    expect(event.summary).toMatch(/Oil temperature under load is \\+18/);
+    expect(event.summary).toMatch(/Oil temperature under load is \+18/);
     expect(event.evidence).toMatchObject({
       chainSlug: 'dg-thermal', stage: 'engine_oil_temperature', severity: 'critical',
     });
