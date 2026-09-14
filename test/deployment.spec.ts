@@ -17,6 +17,13 @@ const readJson = (name: string) => JSON.parse(read(name));
  * the only symptom is that deploys stop working. A pre-deploy command naming a script
  * that was renamed fails the deploy with a line nobody reads until the third attempt.
  *
+ * Railway no longer reads these files — Config-as-Code was deprecated and services
+ * created after 2026-08-28 cannot opt in, so the values are applied by hand in the
+ * dashboard (docs/deployment.md lists them). That makes the files a specification
+ * rather than a mechanism, and it makes this spec more useful, not less: a rename here
+ * still fails the build, and the failure is now the reminder that a dashboard setting
+ * has to change with it.
+ *
  * All of it is decidable without deploying anything, which is the point of checking it
  * here rather than finding out at the release.
  */

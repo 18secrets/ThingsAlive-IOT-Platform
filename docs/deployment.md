@@ -44,10 +44,34 @@ so a second instance is harmless rather than dangerous — but it would double t
 and halve the sense the logs make at exactly the moment somebody is reading them to
 find out why a machine was not scored.
 
+## The config files, and why the dashboard is authoritative
+
+`railway.json` and `railway.scheduler.json` describe what each service must be. They are
+no longer *read* by Railway: Config-as-Code was deprecated on 2026-08-28, and a service
+created after that date cannot opt in — existing users keep working until 2026-12-01.
+
+They stay in the repository anyway, as the specification. Every value below is asserted
+against the application by `test/deployment.spec.ts` — the healthcheck path against the
+live router, the pre-deploy command against `package.json`'s scripts — so the file is
+still what catches a rename. What changed is only who applies it: you do, once, in the
+dashboard.
+
+**Set these by hand on each service** (Settings → Deploy, and Settings → Scale):
+
+| Setting | `api` | `scheduler` |
+|---|---|---|
+| Healthcheck Path | `/api/v1/ready` | `/api/v1/ready` |
+| Pre-deploy step | `npm run migration:run` | **empty** |
+| Replicas | 1+ | **exactly 1** |
+| Restart policy | On Failure, bounded | On Failure, bounded |
+
+If Railway's Infrastructure-as-Code replacement is adopted later, these files are the
+content to port; nothing about them was wrong, only how they were delivered.
+
 ## Migrations
 
-`railway.json` sets `preDeployCommand: npm run migration:run` on the **api service
-only**. Railway runs it once, before the new version takes traffic.
+The **api service only** carries the pre-deploy step `npm run migration:run`. Railway
+runs it once, before the new version takes traffic.
 
 Three things follow from that, and each is a failure avoided:
 
@@ -55,8 +79,10 @@ Three things follow from that, and each is a failure avoided:
   the same schema.
 - **Not from CI.** CI runs before the deploy, so the schema would move while the old
   code was still serving it.
-- **Not on both services.** The scheduler has no `preDeployCommand`; if it did, the two
-  would race and the loser would find the schema already moved.
+- **Not on both services.** The scheduler's pre-deploy step is empty; if it were not,
+  the two would race and the loser would find the schema already moved. Since this is
+  now a dashboard setting rather than a committed file, it is the one piece of the
+  deployment no test can guard — check it whenever a service is recreated.
 
 Migrations run as `DB_USERNAME`, which must own the schema. Requests run as `ta_app`,
 which is unprivileged and cannot bypass row-level security. That separation is the
@@ -71,10 +97,10 @@ Once. After this, releases need none of it.
    your GitHub username and a fine-grained personal access token with `Contents: write`.
    Mirroring is on the Free tier and consumes no CI minutes.
 2. **Provision.** One Railway project per environment. Add Postgres from the template.
-3. **Create `api` and `scheduler`**, both from the GitHub repository. `scheduler` uses
-   `railway.scheduler.json` as its config path and exactly one replica. `DB_USERNAME`
-   must own the schema, or the migration cannot grant on it; the RLS migration creates
-   the `ta_app` role itself.
+3. **Create `api` and `scheduler`**, both from the GitHub repository, then apply the
+   dashboard settings in the table above — the pre-deploy step on `api` and nowhere
+   else, one replica on `scheduler`. `DB_USERNAME` must own the schema, or the migration
+   cannot grant on it; the RLS migration creates the `ta_app` role itself.
 4. **Set the trigger branch and turn on Wait for CI** on both services: `main` in the
    staging project, `production` in the production project.
 5. **Set the variables** (below). Database values come from Railway's own reference
