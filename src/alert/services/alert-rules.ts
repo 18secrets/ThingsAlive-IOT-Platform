@@ -19,7 +19,8 @@ import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
  *    in Things Alive's own build order, and the one case here that needs no model, no
  *    baseline and no history at all: a tank, a key and a GPS fix.
  */
-export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry' | 'fuel-loss';
+export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry'
+  | 'fuel-loss' | 'chain-origin';
 
 export interface PredictionSeverityParams {
   /** Fires at this severity or above. */
@@ -40,8 +41,33 @@ export interface NoTelemetryParams {
   reserved?: never;
 }
 
+/**
+ * Fire on where a physical chain says a fault entered (task P4-01).
+ *
+ * The difference from `signal-threshold` is the whole reason this exists. A threshold
+ * on coolant temperature fires on a machine working hard, because a hard-working
+ * machine really is hot; this fires only when a stage is off the curve its own drivers
+ * predict, which a hard-working machine is not. And because the chain names the stage,
+ * the alert arrives pointing at a component rather than at a number.
+ */
+export interface ChainOriginParams {
+  /** Fires at this severity or above on the origin stage. */
+  atLeast: 'warning' | 'critical';
+  /** Restrict to one chain, or watch every chain bound to the machine's class. */
+  chainSlug?: string | null;
+  /**
+   * Restrict to a fault entering at one particular stage.
+   *
+   * The reason somebody would: a rule that says "tell me when the *oil* is the origin"
+   * routes to the engine fitter, and one for the coolant stage routes to whoever looks
+   * after radiators. Without it every chain fault lands in one queue and the routing
+   * has to be done again by a human reading the summary.
+   */
+  stageSignal?: string | null;
+}
+
 export type AlertParams = PredictionSeverityParams | SignalThresholdParams
-  | NoTelemetryParams | FuelLossParams;
+  | NoTelemetryParams | FuelLossParams | ChainOriginParams;
 
 export interface WindowReading {
   signal: string;
@@ -58,11 +84,30 @@ export interface WindowPrediction {
   confidence: string;
 }
 
+/** What a chain said about this window, reduced to what a rule needs. */
+export interface WindowChain {
+  slug: string;
+  evaluated: boolean;
+  origin?: {
+    signal: string;
+    label?: string;
+    severity?: 'none' | 'warning' | 'critical';
+    residual?: number;
+    expected?: number;
+    actual?: number;
+    exceedance?: number;
+  };
+  /** Downstream stages the origin accounts for, so the alert can say so itself. */
+  explainedBy?: { signal: string; because: string }[];
+}
+
 export interface EvaluationInput {
   trigger: AlertTrigger;
   params: AlertParams;
   readings: WindowReading[];
   predictions: WindowPrediction[];
+  /** Absent on the paths that do not run chains; a chain rule then simply does not fire. */
+  chains?: WindowChain[];
 }
 
 export interface Firing {
@@ -159,6 +204,55 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       };
     }
 
+    case 'chain-origin': {
+      const params = input.params as ChainOriginParams;
+      const candidates = (input.chains ?? [])
+        .filter((c) => c.evaluated && c.origin?.severity)
+        .filter((c) => !params.chainSlug || c.slug === params.chainSlug)
+        .filter((c) => !params.stageSignal || c.origin!.signal === params.stageSignal);
+
+      const wanted = params.atLeast === 'critical'
+        ? ['critical'] : ['warning', 'critical'];
+      // Worst first, and within that the furthest past its threshold: one alert per
+      // rule per window, so it should be about the worst thing that happened.
+      const worst = candidates
+        .filter((c) => wanted.includes(c.origin!.severity!))
+        .sort((a, b) => {
+          const bySeverity = Number(b.origin!.severity === 'critical')
+            - Number(a.origin!.severity === 'critical');
+          return bySeverity !== 0 ? bySeverity
+            : (b.origin!.exceedance ?? 0) - (a.origin!.exceedance ?? 0);
+        })[0];
+      if (!worst) return null;
+
+      const origin = worst.origin!;
+      const name = origin.label ?? origin.signal;
+      const gap = origin.residual === undefined ? null
+        : `${origin.residual > 0 ? '+' : ''}${origin.residual}`;
+      // The summary says what is off its curve and by how much, not what the raw
+      // number is. "104 degrees" is true of a healthy machine under load; "18 above
+      // what the load explains" is not true of anything healthy.
+      const explained = worst.explainedBy?.map((e) => e.signal) ?? [];
+      return {
+        summary: `${name} is ${gap ?? 'off'} against what its drivers predict`
+          + `${origin.expected !== undefined ? ` (expected ${origin.expected})` : ''}.`
+          + (explained.length
+            ? ` ${explained.join(', ')} ${explained.length === 1 ? 'is' : 'are'} `
+              + 'consistent with that and not a separate fault.'
+            : ''),
+        evidence: {
+          chainSlug: worst.slug,
+          stage: origin.signal,
+          severity: origin.severity,
+          actual: origin.actual,
+          expected: origin.expected,
+          residual: origin.residual,
+          exceedance: origin.exceedance,
+          explains: explained,
+        },
+      };
+    }
+
     case 'no-telemetry': {
       if (input.readings.length > 0) return null;
       return {
@@ -187,6 +281,19 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     return null;
   }
   if (trigger === 'fuel-loss') return validateFuelLoss(params as FuelLossParams);
+  if (trigger === 'chain-origin') {
+    const p = params as ChainOriginParams;
+    if (p?.atLeast !== 'warning' && p?.atLeast !== 'critical') {
+      return 'A chain rule needs "atLeast" to be "warning" or "critical".';
+    }
+    // A stage named without its chain is ambiguous the moment a second chain for the
+    // class also has that stage, and the rule would quietly widen rather than fail.
+    if (p.stageSignal && !p.chainSlug) {
+      return 'Naming a stage needs the chain it belongs to, or the rule would follow'
+        + ' that stage into every chain that has one.';
+    }
+    return null;
+  }
   if (trigger === 'signal-threshold') {
     const p = params as SignalThresholdParams;
     if (!p?.signal?.trim()) return 'A threshold rule needs a signal.';
