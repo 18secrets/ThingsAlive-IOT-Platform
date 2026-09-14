@@ -26,6 +26,7 @@ import { ShiftRun } from '../shift/entities/shift-run.entity';
 import { UtilizationShift } from '../utilization/entities/utilization-shift.entity';
 import { EquipmentServiceRecord } from '../service/entities/equipment-service-record.entity';
 import { DeviceLinkHealth } from '../device-health/entities/device-link-health.entity';
+import { CausalChainDefinition } from '../intelligence/entities/causal-chain.entity';
 import { Tenant } from '../tenancy/entities/tenant.entity';
 import { AppUser } from '../identity/entities/app-user.entity';
 import { UserInvitation } from '../identity/entities/user-invitation.entity';
@@ -84,6 +85,7 @@ export const ENTITIES = [
   UtilizationShift,
   EquipmentServiceRecord,
   DeviceLinkHealth,
+  CausalChainDefinition,
   AlertRule,
   AlertEvent,
 ];

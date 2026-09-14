@@ -21,6 +21,7 @@ import { ShiftModule } from './shift/shift.module';
 import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -80,6 +81,7 @@ export class AppModule {
               UtilizationModule,
               ServiceModule,
               DeviceHealthModule,
+              IntelligenceModule,
               LegacyModule,
               AlertModule,
             ]
