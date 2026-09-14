@@ -5,6 +5,8 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
+import { computeDutyCycle } from '../../utilization/services/duty-cycle';
+import { UtilizationService } from '../../utilization/services/utilization.service';
 import { runningStatusFor } from './running-status';
 import { withTenantId } from '../../scope/tenant-session';
 import { ShiftRun } from '../entities/shift-run.entity';
@@ -61,6 +63,7 @@ export class ShiftRunner {
     private readonly telemetry: TelemetryService,
     private readonly predictions: PredictionService,
     private readonly alerts: AlertService,
+    private readonly utilization: UtilizationService,
   ) {}
 
   /**
@@ -192,6 +195,13 @@ export class ShiftRunner {
         // make rather than ours to assume.
         const silent = await this.evaluateAlerts(window, [], []);
 
+        // A shift with no telemetry is still a row in the utilization report, and it
+        // is the most important one in it. Recording only the shifts that reported
+        // would mean the fleet average is computed over the machines that were
+        // online — survivorship bias with a chart on top, where the machines nobody
+        // can see are exactly the ones missing from the report about them.
+        await this.recordUtilization(window, []);
+
         // Otherwise a shift that produced no readings is a fact about the shift, not
         // a failure to be retried forever: coming back to the same empty window on
         // every pass would stall everything behind it. The watermark moves.
@@ -214,6 +224,10 @@ export class ShiftRunner {
         // question of whether a baseline should be built from idle periods is a
         // separate one (P1-123) that this must not quietly decide.
         await this.telemetry.ingest(pull.envelope);
+        // The shift the machine slept through is the one the utilization report exists
+        // to show. Skipping it here would leave a hole that reads as a gap in the data
+        // rather than as a machine that was paid for and not used.
+        await this.recordUtilization(window, readings);
         await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
         return { ...this.outcome(window, 'not-running', 'engine-never-ran'), readings: readings.length };
       }
@@ -235,6 +249,8 @@ export class ShiftRunner {
           confidence: p.confidence,
         })),
       );
+
+      await this.recordUtilization(window, readings);
 
       // Last, and only now. Everything above either happened or threw.
       await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
@@ -297,6 +313,42 @@ export class ShiftRunner {
     } catch (error) {
       this.logger.error(
         `Could not record the run for ${window.externalId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Measure what the machine did with the window, on every path out of it (task P4-05).
+   *
+   * Three callers — scored, never-ran and nothing-to-score — and that is the point.
+   * Utilization is the one product of a shift that is worth having even when there is
+   * nothing to score: the shifts that produce no prediction are the idle ones, the
+   * offline ones and the ones nobody was watching, and a report assembled only from
+   * the shifts that scored would be a report about the machines that were working.
+   *
+   * Never fatal, for the same reason the alert pass is not. The prediction is the
+   * product; losing it because a duty-cycle row could not be written would be the
+   * wrong way round, and the window can be measured again when late telemetry rewinds
+   * it — the row is upserted rather than appended.
+   */
+  private async recordUtilization(
+    window: OwedWindow,
+    readings: { signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+  ): Promise<void> {
+    try {
+      await this.utilization.record({
+        tenantId: window.tenantId,
+        shiftId: window.shiftId,
+        shiftName: window.shiftName,
+        sourceSystem: window.sourceSystem,
+        externalId: window.externalId,
+        localDate: window.localDate,
+        duty: computeDutyCycle(readings, window.start, window.end),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not record utilization for ${window.externalId} on ${window.localDate}: `
+        + `${(error as Error).message}`,
       );
     }
   }
