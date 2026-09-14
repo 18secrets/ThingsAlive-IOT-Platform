@@ -24,6 +24,7 @@ import { PredictionWorkRaiser } from '../src/work/services/prediction-work-raise
 import { WorkOrder } from '../src/work/entities/work-order.entity';
 import { AlertService } from '../src/alert/services/alert.service';
 import { UtilizationService } from '../src/utilization/services/utilization.service';
+import { DeviceHealthService } from '../src/device-health/services/device-health.service';
 import { createAppDataSource, createTestDataSource, describeDb, TEST_DB } from './db';
 
 const IST = 'Asia/Kolkata';
@@ -100,7 +101,7 @@ describeDb('the shift runner', () => {
     runner = new ShiftRunner(
       ds, shifts, reader, new TelemetryService(ds),
       new PredictionService(ds, new PredictionWorkRaiser()), alerts,
-      new UtilizationService(ds),
+      new UtilizationService(ds), new DeviceHealthService(ds),
     );
   }, 40_000);
 
@@ -131,7 +132,7 @@ describeDb('the shift runner', () => {
   };
 
   beforeEach(async () => {
-    for (const t of ['utilization_shift', 'shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
+    for (const t of ['device_link_health', 'utilization_shift', 'shift_run', 'alert_event', 'alert_rule', 'work_order_event', 'work_order', 'work_order_counter',
       'prediction', 'prediction_baseline', 'telemetry_reading', 'equipment_shift',
       'equipment_scenario', 'client_scenario', 'sensor_map_projection',
       'device_projection', 'equipment_placement_event', 'equipment_profile', 'plant']) {
@@ -591,6 +592,93 @@ describeDb('the shift runner', () => {
     });
   });
 
+  describe('link health', () => {
+    /**
+     * Why the window was thin, per logger (task P4-08).
+     *
+     * The test that justifies the design is the second one. A logger that reported
+     * nothing contributes no readings, so a health check assembled from the window's
+     * readings would omit exactly the device worth finding. The device list comes from
+     * the sensor map instead, and a silent machine produces a `dark` row rather than
+     * no row at all.
+     */
+    const linkRows = () => owner.query(
+      `SELECT * FROM "device_link_health" ORDER BY "imei"`,
+    );
+
+    it('assesses a reporting logger', async () => {
+      await seedLegacyReadings(95);
+      await shifts.create(boss, ref, morning);
+
+      expect(await runner.run(NOW)).toMatchObject({ scored: 1 });
+      const [row] = await linkRows();
+      expect(row.imei).toBe(IMEI);
+      expect(row.external_id).toBe(ASSET);
+      expect(row.samples).toBeGreaterThan(0);
+      // One mapped signal, one reported: the device is not partial.
+      expect(row.missing_signals).toEqual([]);
+    });
+
+    it('records a dark logger, which contributes no readings to look at', async () => {
+      // The window is empty, so there is nothing in it to build a device list from.
+      // Taking the list from the sensor map is what makes this row exist.
+      await shifts.create(boss, ref, morning);
+
+      expect(await runner.run(NOW)).toMatchObject({ skipped: 1 });
+      const [row] = await linkRows();
+      expect(row.state).toBe('dark');
+      expect(row.imei).toBe(IMEI);
+      expect(Number(row.longest_gap_seconds)).toBe(8 * 3600);
+    });
+
+    it('separates a logger with dead sensors from one with a bad link', async () => {
+      // Two signals mapped for this device and only one reporting. The radio is fine;
+      // sending a network engineer would waste the day.
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90212',
+          checksum: 'c', imei: IMEI, signal: 'engine_coolant_temperature',
+          sensorName: 'Coolant', unit: 'degC', payload: {},
+          sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        }));
+      await runTenantSpanning(owner, 'test fixture', (m) =>
+        m.getRepository(SensorMapProjection).save({
+          tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: '90213',
+          checksum: 'c', imei: IMEI, signal: 'fuel_level', sensorName: 'Fuel',
+          unit: 'L', payload: {}, sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
+        }));
+      await seedLegacyReadings(95);
+      await shifts.create(boss, ref, morning);
+
+      await runner.run(NOW);
+      const [row] = await linkRows();
+      expect(row.state).toBe('partial');
+      expect(row.missing_signals).toContain('engine_coolant_temperature');
+      expect(row.missing_signals).toContain('fuel_level');
+    });
+
+    it('replaces the verdict when late readings rewind the window', async () => {
+      await seedLegacyReadings();
+      await shifts.create(boss, ref, morning);
+      await runner.run(NOW);
+      const [first] = await linkRows();
+
+      for (let i = 0; i < 300; i += 1) {
+        const at = new Date(Date.parse('2026-09-14T01:00:00Z') + i * 60_000).toISOString();
+        await owner.query(
+          `INSERT INTO "device_sensor_measurement_logs"
+             ("device_sensor_measurement_id","timestamp","value","created_at")
+           VALUES ($1,$2,80,$2)`, [MEASUREMENT_ID, at]);
+      }
+      await runner.run(new Date(NOW.getTime() + 60_000));
+
+      const rows = await linkRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(first.id);
+      expect(rows[0].samples).toBeGreaterThan(first.samples);
+    });
+  });
+
   it('tells a commissioning gap apart from a synchronisation one', async () => {
     await owner.query(`DELETE FROM "sensor_map_projection"`);
     await shifts.create(boss, ref, morning);
@@ -607,6 +695,7 @@ describeDb('the shift runner', () => {
     const offline = new ShiftRunner(
       ds, shifts, new LegacyTelemetryReader(ds, null), new TelemetryService(ds),
       new PredictionService(ds), alerts, new UtilizationService(ds),
+      new DeviceHealthService(ds),
     );
     await shifts.create(boss, ref, morning);
 
@@ -625,6 +714,7 @@ describeDb('the shift runner', () => {
       ds, shifts, reader,
       { ingest: () => { throw new Error('ingest exploded'); } } as any,
       new PredictionService(ds), alerts, new UtilizationService(ds),
+      new DeviceHealthService(ds),
     );
     const summary = await broken.run(NOW);
 
