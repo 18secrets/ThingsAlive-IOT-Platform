@@ -57,6 +57,13 @@ export class IntelligenceController {
     return this.chains.publishedFor(equipmentClassSlug);
   }
 
+  @Get('authoring/chains')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every chain version, draft and published — Things Alive only' })
+  authoringChains(@Query('equipmentClassSlug') equipmentClassSlug?: string) {
+    return this.chains.allFor(equipmentClassSlug);
+  }
+
   @Post('chains/:slug')
   @Requires('catalog.write')
   @ApiOperation({ summary: 'Write a chain down as a draft, validated before it is stored' })
