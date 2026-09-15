@@ -1,6 +1,10 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -29,6 +33,7 @@ export class RegisterBatchDto {
   // Five hundred is a delivery, not a migration. A larger import belongs in a job
   // with progress and a resume point, not in one request that times out at 80%.
   @ArrayMaxSize(500)
+  @ValidateNested({ each: true }) @Type(() => RegisterDeviceDto)
   devices: RegisterDeviceDto[];
 }
 
