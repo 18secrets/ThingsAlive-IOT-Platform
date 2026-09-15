@@ -1,0 +1,10 @@
+# The API image is the API. The console is built and served separately, so shipping its
+# source and its dependency tree inside the backend image only makes the image bigger
+# and the attack surface wider.
+web/
+node_modules/
+dist/
+.git/
+.github/
+docs/
+*.log
