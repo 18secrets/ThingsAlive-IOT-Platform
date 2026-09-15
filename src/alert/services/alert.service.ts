@@ -6,6 +6,10 @@ import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AlertAppliesTo, AlertRule } from '../entities/alert-rule.entity';
 import { AlertEvent } from '../entities/alert-event.entity';
+import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
+import {
+  alertRuleContentChecksum, describeProvenance, Provenance,
+} from '../../client-catalog/services/provenance';
 import {
   AlertParams, AlertTrigger, evaluateRule, validateParams, WindowPrediction, WindowReading,
   WindowChain,
@@ -58,11 +62,51 @@ export class AlertService {
 
   constructor(private readonly ds: DataSource) {}
 
-  async listRules(scope: RequestScope): Promise<AlertRule[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+  /**
+   * The account's rules, each saying where it came from (task P1-128).
+   *
+   * Three states a screen has to tell apart, and only one of them is visible in the
+   * row itself. A rule with no `templateSlug` is the client's own. A rule whose content
+   * still hashes to what was copied is the shipped one, untouched. A rule that hashes
+   * differently has been edited — and that is the state worth naming, because it is the
+   * one where "what did Things Alive ship?" and "what is running?" have different
+   * answers, which is exactly the question support is asked.
+   *
+   * The comparison happens here rather than in the browser because the checksum is
+   * computed by the same function that wrote it at copy time. A second implementation
+   * in the console would drift, and the failure would be silent: every copy would look
+   * edited, or none would.
+   */
+  async listRules(
+    scope: RequestScope,
+  ): Promise<(AlertRule & { provenance: Provenance })[]> {
+    const rules = await withTenantSession(this.ds, scope, (m) =>
       m.getRepository(AlertRule).find({
         where: { tenantId: scope.tenantId }, order: { name: 'ASC' },
       }));
+
+    // One query for every template these rules came from, rather than one per rule.
+    // An account with forty rules is ordinary and forty round trips for a listing is
+    // how a screen that felt fine in testing becomes the slow one in production.
+    const slugs = [...new Set(rules.map((r) => r.templateSlug).filter((s): s is string => !!s))];
+    const latest = new Map<string, number>();
+    if (slugs.length) {
+      const templates = await this.ds.getRepository(AlertRuleTemplate).find({
+        where: { slug: In(slugs), status: 'published' },
+        select: { slug: true, version: true },
+      });
+      for (const t of templates) {
+        latest.set(t.slug, Math.max(latest.get(t.slug) ?? 0, t.version));
+      }
+    }
+
+    return rules.map((rule) => Object.assign(rule, {
+      provenance: describeProvenance(
+        rule,
+        alertRuleContentChecksum(rule),
+        rule.templateSlug ? latest.get(rule.templateSlug) ?? null : null,
+      ),
+    }));
   }
 
   async createRule(scope: RequestScope, input: RuleInput): Promise<AlertRule> {

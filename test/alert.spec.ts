@@ -8,6 +8,7 @@ import { CLIENT_SOURCE_SYSTEM } from '../src/equipment/equipment-profile.entity'
 import { EquipmentService } from '../src/equipment/services/equipment.service';
 import { PlantService } from '../src/equipment/services/plant.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { alertRuleContentChecksum } from '../src/client-catalog/services/provenance';
 
 const reading = (signal: string, value: number, at = '2026-09-14T07:00:00.000Z') =>
   ({ signal, value, unit: 'degC', sourceTimestamp: at });
@@ -268,8 +269,8 @@ describeDb('alerts', () => {
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
   beforeEach(async () => {
-    for (const t of ['alert_event', 'alert_rule', 'equipment_placement_event',
-      'equipment_profile', 'plant']) {
+    for (const t of ['alert_event', 'alert_rule', 'alert_rule_template',
+      'equipment_placement_event', 'equipment_profile', 'plant']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     north = (await plants.create(boss, { code: 'NORTH', name: 'Northern yard' })).id;
@@ -346,6 +347,95 @@ describeDb('alerts', () => {
       await alerts.createRule(boss, classRule());
 
       expect(await alerts.evaluateWindow(window())).toHaveLength(0);
+    });
+  });
+
+  /**
+   * Where a rule came from (task P1-128).
+   *
+   * Three states a screen must tell apart, and the one that matters is "edited": it is
+   * the case where "what did Things Alive ship?" and "what is running?" have different
+   * answers, which is the question support is actually asked.
+   */
+  describe('a rule says where it came from', () => {
+    const copied = async (over: Record<string, unknown> = {}) => {
+      await owner.query(
+        `INSERT INTO "alert_rule_template"
+           ("slug","version","equipment_class_slug","name","trigger","params","severity",
+            "enabled_on_copy","status","published_at")
+         VALUES ('dg-hot',1,'diesel-generator','Coolant hot','signal-threshold',
+                 $1,'high',true,'published',now())`,
+        [JSON.stringify({ signal: 'coolant_temp', max: 103 })],
+      );
+      // The copy as copy-on-grant writes it, checksum and all.
+      const rule = await alerts.createRule(boss, rule_({
+        slug: 'dg-hot', name: 'Coolant hot',
+        trigger: 'signal-threshold', params: { signal: 'coolant_temp', max: 103 },
+        appliesTo: 'equipment-class', equipmentClassSlug: 'diesel-generator',
+        ...over,
+      }));
+      await owner.query(
+        `UPDATE "alert_rule" SET "template_slug" = 'dg-hot', "template_version" = 1,
+           "template_checksum" = $2, "copied_at" = now() WHERE "id" = $1`,
+        [rule.id, alertRuleContentChecksum({ ...rule, ...over } as any)],
+      );
+      return rule;
+    };
+    const rule_ = (o: Record<string, unknown>) => ({ ...rule(), ...o });
+
+    it('reads an untouched copy as unchanged', async () => {
+      await copied();
+      const [r] = await alerts.listRules(boss);
+      expect(r.provenance.templateSlug).toBe('dg-hot');
+      expect(r.provenance.unchangedSinceCopy).toBe(true);
+      expect(r.provenance.newerTemplateAvailable).toBe(false);
+    });
+
+    it('notices an edit the client made, without being told', async () => {
+      const r0 = await copied();
+      await alerts.updateRule(boss, r0.id, { params: { signal: 'coolant_temp', max: 108 } });
+
+      const [r] = await alerts.listRules(boss);
+      expect(r.provenance.templateSlug).toBe('dg-hot');
+      expect(r.provenance.unchangedSinceCopy).toBe(false);
+    });
+
+    it('counts switching a rule off as an edit', async () => {
+      // The most common thing anybody does to a shipped rule. A copy that still called
+      // itself unchanged after being silenced would be lying about the only thing that
+      // mattered.
+      const r0 = await copied();
+      await alerts.setEnabled(boss, r0.id, false);
+
+      const [r] = await alerts.listRules(boss);
+      expect(r.provenance.unchangedSinceCopy).toBe(false);
+    });
+
+    it('claims no template for a rule the client wrote themselves', async () => {
+      await alerts.createRule(boss, rule());
+
+      const [r] = await alerts.listRules(boss);
+      expect(r.provenance.templateSlug).toBeNull();
+      // Not "unchanged": that would be a claim about a template it never came from.
+      expect(r.provenance.unchangedSinceCopy).toBe(false);
+    });
+
+    it('offers a newer template version without applying it', async () => {
+      await copied();
+      await owner.query(
+        `INSERT INTO "alert_rule_template"
+           ("slug","version","equipment_class_slug","name","trigger","params","severity",
+            "enabled_on_copy","status","published_at")
+         VALUES ('dg-hot',2,'diesel-generator','Coolant hot','signal-threshold',
+                 $1,'high',true,'published',now())`,
+        [JSON.stringify({ signal: 'coolant_temp', max: 99 })],
+      );
+
+      const [r] = await alerts.listRules(boss);
+      expect(r.provenance.newerTemplateAvailable).toBe(true);
+      expect(r.provenance.newerTemplateVersion).toBe(2);
+      // Offered, not applied. Adopting is the client's decision.
+      expect(r.params).toEqual({ signal: 'coolant_temp', max: 103 });
     });
   });
 
