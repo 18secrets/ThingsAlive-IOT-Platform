@@ -142,9 +142,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: web/package.json
 
-      - run: npm ci --no-audit --no-fund
+      # `npm install`, not `npm ci`, until web/package-lock.json is committed — `npm ci`
+      # fails outright without one. The versions in package.json are pinned exactly so
+      # this is deterministic for the direct dependencies in the meantime.
+      - run: npm install --no-audit --no-fund
       # `npm run build` is `tsc -b && vite build`: the types are checked and the bundle
       # is actually produced, because a project that type-checks and fails to bundle is
       # still a broken deploy.
