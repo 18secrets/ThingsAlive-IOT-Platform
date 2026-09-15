@@ -305,6 +305,50 @@ describeDb('alerts', () => {
     });
   });
 
+  /**
+   * Rules scoped to a kind of machine (task P1-128).
+   *
+   * This is what a copied alert template lands as, and the narrowing is the whole
+   * reason the scope exists: a rule authored about generators must not fire on the air
+   * compressors. An account whose first week is full of alerts about machines the rule
+   * was never about learns that our alerts are noise, and that lesson does not unlearn.
+   */
+  describe('a rule scoped to a kind of machine', () => {
+    const classRule = (overrides: Record<string, unknown> = {}) => rule({
+      appliesTo: 'equipment-class', equipmentClassSlug: 'diesel-generator', ...overrides,
+    });
+
+    it('refuses a class-scoped rule that names no class', async () => {
+      await expect(alerts.createRule(boss, rule({ appliesTo: 'equipment-class' })))
+        .rejects.toThrow(/scoped to a kind of machine needs the class/);
+    });
+
+    it('fires on a machine of that class', async () => {
+      await equipment.update(boss, { sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: ASSET },
+        { equipmentClassSlug: 'diesel-generator' });
+      await alerts.createRule(boss, classRule());
+
+      expect(await alerts.evaluateWindow(window())).toHaveLength(1);
+    });
+
+    it('stays quiet on a machine of another class', async () => {
+      await equipment.update(boss, { sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: ASSET },
+        { equipmentClassSlug: 'air-compressor' });
+      await alerts.createRule(boss, classRule());
+
+      expect(await alerts.evaluateWindow(window())).toHaveLength(0);
+    });
+
+    it('stays quiet on a machine with no class at all', async () => {
+      // An unclassified machine has nothing the rule was written about. Treating the
+      // missing class as a match would fire generator rules on anything unlabelled,
+      // which is exactly the case an account accumulates most of.
+      await alerts.createRule(boss, classRule());
+
+      expect(await alerts.evaluateWindow(window())).toHaveLength(0);
+    });
+  });
+
   describe('firing', () => {
     it('raises an alert with the evidence that caused it', async () => {
       await alerts.createRule(boss, rule());

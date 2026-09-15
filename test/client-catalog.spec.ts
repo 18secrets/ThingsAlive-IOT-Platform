@@ -7,6 +7,7 @@ import { RequestScope } from '../src/auth/types/request-scope';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
+import { AlertRuleTemplate } from '../src/catalog/entities/alert-rule-template.entity';
 import { CatalogAuthoringService } from '../src/catalog/services/catalog-authoring.service';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { ClientCatalogService } from '../src/client-catalog/services/client-catalog.service';
@@ -54,6 +55,7 @@ describeDb('client-owned catalog', () => {
       ds.getRepository(EquipmentClassProfile),
       ds.getRepository(ScenarioDefinition),
       ds.getRepository(SignalAlias),
+      ds.getRepository(AlertRuleTemplate),
     );
     copies = new CopyOnGrantService(ds);
     client = new ClientCatalogService(ds, copies);
@@ -63,6 +65,7 @@ describeDb('client-owned catalog', () => {
 
   beforeEach(async () => {
     for (const t of ['client_scenario', 'client_equipment_class', 'platform_access_log',
+      'alert_rule', 'alert_rule_template',
       'scenario_definition', 'equipment_class_profile']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
@@ -231,6 +234,193 @@ describeDb('client-owned catalog', () => {
       expect(provenance.unchangedSinceCopy).toBe(true);
       expect(provenance.newerTemplateAvailable).toBe(false);
     });
+  });
+
+  /**
+   * Alert rules as catalog content (task P1-128).
+   *
+   * The point of the whole change: a new account should not have to already know that
+   * a diesel generator's coolant matters at 103 °C, well before the 110 °C alarm the
+   * manufacturer stamped on it. That knowledge is the product.
+   */
+  describe('alert rules ship with the class', () => {
+    const publishedTemplate = async (over: Record<string, unknown> = {}) => {
+      await authoring.createAlertTemplate(master, 'dg-coolant-hot', {
+        equipmentClassSlug: 'diesel-generator',
+        name: 'Coolant running hot',
+        trigger: 'signal-threshold',
+        params: { signal: 'coolant_temp', max: 103 } as any,
+        severity: 'high' as any,
+        ...over,
+      });
+      return authoring.publishAlertTemplate(master, 'dg-coolant-hot');
+    };
+
+    const rulesIn = (tenantId: string) =>
+      owner.query(`SELECT * FROM "alert_rule" WHERE "tenant_id" = $1 ORDER BY "slug"`, [tenantId]);
+
+    it('copies published alert templates into the account on grant', async () => {
+      await publishedTemplate();
+      const result = await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      expect(result.alertRulesCopied).toBe(1);
+      const [rule] = await rulesIn('globex');
+      expect(rule.slug).toBe('dg-coolant-hot');
+      expect(rule.params).toEqual({ signal: 'coolant_temp', max: 103 });
+      expect(rule.template_slug).toBe('dg-coolant-hot');
+      expect(rule.template_version).toBe(1);
+      expect(rule.copied_at).not.toBeNull();
+    });
+
+    it('scopes the copy to the class rather than the whole account', async () => {
+      // The reason this matters: a rule authored about generators, landing scoped to
+      // the account, would fire on the air compressors too — on machines it was never
+      // about, in a new customer's first week.
+      await publishedTemplate();
+      await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      const [rule] = await rulesIn('globex');
+      expect(rule.applies_to).toBe('equipment-class');
+      expect(rule.equipment_class_slug).toBe('diesel-generator');
+      expect(rule.plant_id).toBeNull();
+      expect(rule.external_id).toBeNull();
+    });
+
+    it('honours a template that ships switched off', async () => {
+      // Some rules are noisy until somebody has looked at the fleet, and shipping
+      // those enabled teaches a customer that our alerts are noise.
+      await publishedTemplate({ enabledOnCopy: false });
+      await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      const [rule] = await rulesIn('globex');
+      expect(rule.enabled).toBe(false);
+    });
+
+    it('does not copy a template that is still a draft', async () => {
+      await authoring.createAlertTemplate(master, 'dg-unfinished', {
+        equipmentClassSlug: 'diesel-generator',
+        name: 'Half-written',
+        trigger: 'no-telemetry',
+        params: {} as any,
+      });
+      const result = await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      expect(result.alertRulesCopied).toBe(0);
+      expect(await rulesIn('globex')).toEqual([]);
+    });
+
+    it('leaves a rule the account already has exactly alone', async () => {
+      // Re-granting must not reach into an account and restore a rule the client
+      // edited or switched off. That would be Things Alive editing their alerting
+      // through the side door, which is the whole thing the copy model prevents.
+      await publishedTemplate();
+      await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+      await owner.query(
+        `UPDATE "alert_rule" SET "enabled" = false, "params" = $1 WHERE "tenant_id" = 'globex'`,
+        [JSON.stringify({ signal: 'coolant_temp', max: 108 })],
+      );
+      await owner.query(`DELETE FROM "client_equipment_class" WHERE "tenant_id" = 'globex'`);
+
+      const again = await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      expect(again.alertRulesCopied).toBe(0);
+      const [rule] = await rulesIn('globex');
+      expect(rule.enabled).toBe(false);
+      expect(rule.params).toEqual({ signal: 'coolant_temp', max: 108 });
+    });
+
+    it('keeps one account\\'s copies out of another', async () => {
+      await publishedTemplate();
+      await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      expect(await rulesIn('acme')).toEqual([]);
+      expect(await rulesIn('globex')).toHaveLength(1);
+    });
+
+    it('refuses a template watching a signal the class does not declare', async () => {
+      // It would copy into every account and never fire, and the reason would be
+      // invisible from inside the account, because the class is ours.
+      await expect(authoring.createAlertTemplate(master, 'dg-nonsense', {
+        equipmentClassSlug: 'diesel-generator',
+        name: 'Watches nothing',
+        trigger: 'signal-threshold',
+        params: { signal: 'turbine_rpm', max: 40 } as any,
+      })).rejects.toThrow(/turbine_rpm/);
+    });
+
+    it('forks a new draft rather than editing a published template', async () => {
+      await publishedTemplate();
+      await authoring.editAlertTemplate(master, 'dg-coolant-hot', {
+        params: { signal: 'coolant_temp', max: 99 } as any,
+      });
+
+      const versions = await owner.query(
+        `SELECT "version", "status" FROM "alert_rule_template"
+         WHERE "slug" = 'dg-coolant-hot' ORDER BY "version"`,
+      );
+      expect(versions).toEqual([
+        { version: 1, status: 'published' },
+        { version: 2, status: 'draft' },
+      ]);
+    });
+
+    it('copies the version that was published, not the draft beside it', async () => {
+      await publishedTemplate();
+      await authoring.editAlertTemplate(master, 'dg-coolant-hot', {
+        params: { signal: 'coolant_temp', max: 99 } as any,
+      });
+      await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
+
+      const [rule] = await rulesIn('globex');
+      expect(rule.template_version).toBe(1);
+      expect(rule.params).toEqual({ signal: 'coolant_temp', max: 103 });
+    });
+  });
+
+  /**
+   * The authoring reads (task P1-133). Separate from the entitlement-narrowed reads
+   * on purpose: those return published rows only and must keep doing so.
+   */
+  describe('the authoring console can see drafts', () => {
+    it('lists every version and status, which the client-facing read does not', async () => {
+      await authoring.createClass(master, 'air-compressor', {
+        name: 'Air compressor',
+        expectedSignals: [{ signal: 'discharge_pressure', unit: 'bar', required: true }],
+      });
+
+      const all = await authoring.allClasses();
+      const bySlug = new Map(all.map((c) => [c.slug, c.status]));
+      expect(bySlug.get('diesel-generator')).toBe('published');
+      expect(bySlug.get('air-compressor')).toBe('draft');
+
+      // The client-facing read is unchanged: a draft is not a thing a tenant can see,
+      // because a tenant that could see it could activate something unfinished.
+      expect((await client.classes(acmeSuper)).map((c) => c.slug)).toEqual(['diesel-generator']);
+    });
+
+    it('narrows alert templates to one class when asked', async () => {
+      await publishedFor('diesel-generator', 'dg-a');
+      await authoring.createClass(master, 'air-compressor', {
+        name: 'Air compressor',
+        expectedSignals: [{ signal: 'discharge_pressure', unit: 'bar', required: true }],
+      });
+      await publishedFor('air-compressor', 'ac-a');
+
+      expect((await authoring.allAlertTemplates('diesel-generator')).map((t) => t.slug))
+        .toEqual(['dg-a']);
+      expect((await authoring.allAlertTemplates()).map((t) => t.slug).sort())
+        .toEqual(['ac-a', 'dg-a']);
+    });
+
+    const publishedFor = async (classSlug: string, slug: string) => {
+      await authoring.createAlertTemplate(master, slug, {
+        equipmentClassSlug: classSlug,
+        name: slug,
+        trigger: 'no-telemetry',
+        params: {} as any,
+      });
+      return authoring.publishAlertTemplate(master, slug);
+    };
   });
 
   describe('template authoring', () => {
