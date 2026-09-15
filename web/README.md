@@ -48,10 +48,16 @@ host look identical from the client, which is why the sign-in screen says so.
 | --- | --- | --- |
 | Sign in | both | built |
 | Accounts | Things Alive | built — list, provision, suspend, reinstate |
-| Catalog | Things Alive | planned |
-| Entitlements | Things Alive | planned |
-| Device pool | Things Alive | planned |
-| Client screens | client | planned |
+| Entitlements | Things Alive | built — grant matrix, grant and revoke |
+| Device pool | Things Alive | built — register, assign, release, retire, history |
+| Catalog | Things Alive | planned — blocked on alert-rule templates (P1-128) and a route that lists drafts |
+| Signal aliases | Things Alive | planned |
+| Client screens | client | planned — structurally buildable, but empty until `LEGACY_DB_*` is configured |
 
 A planned screen renders as itself and names the route it will read. Nothing is mocked:
 a mock that looks finished is how a demo promises something the platform cannot do.
+
+The `route` field on each nav entry is not decoration. It caught its own first mistake:
+Overview was written as `GET /predictions`, and there is no fleet-wide predictions
+route — predictions are per machine. Overview is built from the routes that are
+fleet-shaped, and the roll-up is tracked as backend work rather than assumed.

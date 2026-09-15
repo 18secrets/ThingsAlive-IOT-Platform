@@ -5,9 +5,13 @@ import { Shell } from './shell/Shell';
 import { navFor } from './shell/nav';
 import { Planned } from './screens/Planned';
 import { Accounts } from './screens/things-alive/Accounts';
+import { Entitlements } from './screens/things-alive/Entitlements';
+import { DevicePool } from './screens/things-alive/DevicePool';
 
 const BUILT: Record<string, () => React.ReactElement> = {
   '/accounts': Accounts,
+  '/entitlements': Entitlements,
+  '/device-pool': DevicePool,
 };
 
 function Console() {

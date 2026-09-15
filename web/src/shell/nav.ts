@@ -18,6 +18,7 @@ export const THINGS_ALIVE: NavItem[] = [
   { path: '/catalog', label: 'Catalog', needs: 'catalog.write', route: 'GET /catalog/equipment-classes' },
   { path: '/entitlements', label: 'Entitlements', needs: 'entitlement.grant', route: 'GET /catalog/entitlements' },
   { path: '/device-pool', label: 'Device pool', needs: 'device.manage', route: 'GET /inventory/pool' },
+  { path: '/signal-aliases', label: 'Signal aliases', needs: 'catalog.write', route: 'POST /catalog/signal-aliases' },
 ];
 
 /**
@@ -25,12 +26,17 @@ export const THINGS_ALIVE: NavItem[] = [
  * out about them.
  */
 export const CLIENT: NavItem[] = [
-  { path: '/overview', label: 'Overview', needs: 'prediction.read', route: 'GET /predictions' },
-  { path: '/equipment', label: 'Equipment', needs: 'equipment.write', route: 'GET /equipment' },
+  // Predictions are per machine — `GET /predictions/:sourceSystem/:externalId` — and
+  // there is no fleet-wide roll-up route. Writing 'GET /predictions' here was wrong and
+  // is exactly what this column exists to catch: Overview is built from the routes that
+  // are fleet-shaped, and a roll-up is tracked as backend work rather than assumed.
+  { path: '/overview', label: 'Overview', needs: 'prediction.read', route: 'GET /alerts + GET /utilization/summary' },
+  { path: '/equipment', label: 'Equipment', needs: 'equipment.write', route: 'GET /equipment, GET /equipment/plants' },
   { path: '/alerts', label: 'Alerts', needs: 'alert.author', route: 'GET /alerts' },
   { path: '/activations', label: 'Activations', needs: 'scenario.activate', route: 'GET /activations' },
-  { path: '/devices', label: 'Devices', needs: 'device.read', route: 'GET /inventory/mine' },
-  { path: '/people', label: 'People', needs: 'user.manage', route: 'GET /identity/users' },
+  { path: '/devices', label: 'Devices', needs: 'device.read', route: 'GET /inventory/mine, GET /device-health' },
+  { path: '/people', label: 'People', needs: 'user.manage', route: 'GET /identity/users, GET /identity/roles' },
+  { path: '/work', label: 'Work orders', needs: 'action.work', route: 'GET /work-orders' },
 ];
 
 /**

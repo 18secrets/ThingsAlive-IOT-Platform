@@ -41,6 +41,79 @@ export type Account = {
   updatedAt: string;
 };
 
+export type CatalogStatus = 'draft' | 'published' | 'retired';
+
+export type ExpectedSignal = { signal: string; unit: string | null; required: boolean; description?: string };
+
+export type EquipmentClass = {
+  id: string;
+  slug: string;
+  version: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  expectedSignals: ExpectedSignal[];
+  failureModes: { code: string; name: string; symptom: string; signals: string[] }[];
+  /** OEM limits. Stripped by the field policy for roles that may not see them. */
+  defaultThresholds?: Record<string, unknown>;
+  serviceIntervalHours: number | null;
+  status: CatalogStatus;
+  publishedAt: string | null;
+  updatedAt: string;
+};
+
+export type Entitlement = {
+  id: string;
+  tenantId: string;
+  equipmentClassSlug: string;
+  grantedBy: string;
+  grantedAt: string;
+  /** A revoked grant keeps its row. Revoked is not deleted, and the copies survive it. */
+  revokedAt: string | null;
+  revokedBy: string | null;
+  note: string | null;
+};
+
+export type InventoryState = 'in-stock' | 'assigned' | 'retired';
+
+export type PooledDevice = {
+  id: string;
+  imei: string;
+  state: InventoryState;
+  /** Null while a device is in stock — and that null is what hides it from every tenant. */
+  tenantId: string | null;
+  model: string | null;
+  batchRef: string | null;
+  receivedAt: string | null;
+  assignedAt: string | null;
+  assignedBy: string | null;
+  /** Set by the customer when they fit it to a machine, not by Things Alive. */
+  equipmentExternalId: string | null;
+  claimedAt: string | null;
+  claimedBy: string | null;
+  notes: string | null;
+};
+
+export type AssignOutcome =
+  | 'assigned' | 'already-in-this-account' | 'held-elsewhere' | 'retired' | 'unknown'
+  | 'released' | 'retired-now' | 'returned' | 'not-assigned';
+
+export type BatchResult = { imei: string; outcome: AssignOutcome };
+
+export type DeviceEvent = {
+  id: string;
+  imei: string;
+  action: string;
+  fromState: InventoryState | null;
+  toState: InventoryState;
+  tenantId: string | null;
+  equipmentExternalId: string | null;
+  reason: string | null;
+  actorUserId: string;
+  actorRoles: string[];
+  at: string;
+};
+
 export type Provisioned = {
   tenant: Account;
   roles: string[];
