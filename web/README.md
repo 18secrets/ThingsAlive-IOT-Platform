@@ -54,7 +54,8 @@ host look identical from the client, which is why the sign-in screen says so.
 | Signal aliases | Things Alive | planned |
 | Equipment | client | built — sites, machines, move, placement history |
 | Devices | client | built — the account's loggers, fit and take off |
-| Overview, Alerts, Activations | client | planned — will render correctly and show nothing until `LEGACY_DB_*` is configured |
+| Alerts | client | built — rules marked from template / edited / yours; events stay empty until scoring runs |
+| Overview, Activations | client | planned — will render correctly and show nothing until `LEGACY_DB_*` is configured |
 | People, Work orders | client | planned |
 
 A planned screen renders as itself and names the route it will read. Nothing is mocked:

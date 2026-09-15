@@ -100,6 +100,70 @@ export type AssignOutcome =
 
 export type BatchResult = { imei: string; outcome: AssignOutcome };
 
+export type AlertAppliesTo = 'account' | 'plant' | 'equipment' | 'equipment-class';
+
+/**
+ * Where a rule came from, computed by the API.
+ *
+ * `templateSlug === null` is a rule the client wrote. `unchangedSinceCopy` is only
+ * meaningful when there is a template — for a client's own rule it is false, because
+ * "unchanged" would be a claim about a template it never came from.
+ */
+export type Provenance = {
+  templateSlug: string | null;
+  templateVersion: number | null;
+  unchangedSinceCopy: boolean;
+  newerTemplateAvailable: boolean;
+  newerTemplateVersion: number | null;
+  copiedAt: string | null;
+};
+
+export type AlertRule = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  trigger: AlertTrigger;
+  params: Record<string, unknown>;
+  appliesTo: AlertAppliesTo;
+  plantId: string | null;
+  sourceSystem: string | null;
+  externalId: string | null;
+  equipmentClassSlug: string | null;
+  severity: Severity;
+  enabled: boolean;
+  provenance: Provenance;
+};
+
+export type AlertState = 'open' | 'acknowledged' | 'resolved';
+
+export type AlertEvent = {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  sourceSystem: string;
+  externalId: string;
+  severity: Severity;
+  summary: string;
+  evidence: Record<string, unknown>;
+  shiftLocalDate: string | null;
+  windowStart: string | null;
+  windowEnd: string | null;
+  state: AlertState;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+  firedAt: string;
+};
+
+/** How a rule's origin reads on screen. Three states, not two. */
+export function originOf(p: Provenance): 'yours' | 'from template' | 'edited' {
+  if (!p.templateSlug) return 'yours';
+  return p.unchangedSinceCopy ? 'from template' : 'edited';
+}
+
 export type PlantStatus = 'active' | 'retired';
 
 export type Plant = {

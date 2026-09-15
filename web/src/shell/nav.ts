@@ -36,7 +36,7 @@ export const CLIENT: NavItem[] = [
   // additionally get the controls. A support engineer gets the same screen without the
   // buttons rather than a different screen, or a wall of disabled ones.
   { path: '/equipment', label: 'Equipment', needs: 'catalog.read', route: 'GET /equipment, GET /equipment/plants' },
-  { path: '/alerts', label: 'Alerts', needs: 'alert.author', route: 'GET /alerts' },
+  { path: '/alerts', label: 'Alerts', needs: 'prediction.read', route: 'GET /alerts, GET /alerts/rules' },
   { path: '/activations', label: 'Activations', needs: 'scenario.activate', route: 'GET /activations' },
   { path: '/devices', label: 'Devices', needs: 'device.read', route: 'GET /inventory/mine, GET /device-health' },
   { path: '/people', label: 'People', needs: 'user.manage', route: 'GET /identity/users, GET /identity/roles' },

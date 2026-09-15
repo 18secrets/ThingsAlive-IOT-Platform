@@ -10,6 +10,7 @@ import { DevicePool } from './screens/things-alive/DevicePool';
 import { Catalog } from './screens/things-alive/Catalog';
 import { Equipment } from './screens/client/Equipment';
 import { Devices } from './screens/client/Devices';
+import { Alerts } from './screens/client/Alerts';
 
 const BUILT: Record<string, () => React.ReactElement> = {
   '/accounts': Accounts,
@@ -18,6 +19,7 @@ const BUILT: Record<string, () => React.ReactElement> = {
   '/catalog': Catalog,
   '/equipment': Equipment,
   '/devices': Devices,
+  '/alerts': Alerts,
 };
 
 function Console() {
