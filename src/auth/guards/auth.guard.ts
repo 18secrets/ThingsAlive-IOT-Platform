@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { SCOPE_RESOLVER, ScopeResolver } from '../scope-resolver';
+import { PLATFORM_ROLE_SET as PLATFORM_ROLES } from '../platform-roles';
 import { REQUEST_SCOPE_KEY, RequestScope } from '../types/request-scope';
 
 /**
@@ -90,8 +91,6 @@ export class AuthGuard implements CanActivate {
     return true;
   }
 }
-
-const PLATFORM_ROLES = new Set(['master-admin', 'platform-support', 'catalog-author']);
 
 function bearerFrom(header?: string): string | null {
   if (!header) return null;
