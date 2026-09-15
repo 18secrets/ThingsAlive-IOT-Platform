@@ -123,3 +123,29 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+
+  # The console lives in the same repository as the API it calls, so a contract that
+  # breaks in one commit fails in one pipeline. It does not depend on `verify`: a type
+  # error in the console should surface beside a backend failure, not behind it.
+  console:
+    name: Console types and build
+    runs-on: ubuntu-latest
+    needs: guards
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      # `npm run build` is `tsc -b && vite build`: the types are checked and the bundle
+      # is actually produced, because a project that type-checks and fails to bundle is
+      # still a broken deploy.
+      - run: npm run build
