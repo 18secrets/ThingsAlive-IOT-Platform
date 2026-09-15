@@ -15,7 +15,7 @@ export type NavItem = {
  */
 export const THINGS_ALIVE: NavItem[] = [
   { path: '/accounts', label: 'Accounts', needs: 'tenant.provision', route: 'GET /accounts' },
-  { path: '/catalog', label: 'Catalog', needs: 'catalog.write', route: 'GET /catalog/equipment-classes' },
+  { path: '/catalog', label: 'Catalog', needs: 'catalog.write', route: 'GET /catalog/authoring/equipment-classes' },
   { path: '/entitlements', label: 'Entitlements', needs: 'entitlement.grant', route: 'GET /catalog/entitlements' },
   { path: '/device-pool', label: 'Device pool', needs: 'device.manage', route: 'GET /inventory/pool' },
   { path: '/signal-aliases', label: 'Signal aliases', needs: 'catalog.write', route: 'POST /catalog/signal-aliases' },

@@ -7,11 +7,13 @@ import { Planned } from './screens/Planned';
 import { Accounts } from './screens/things-alive/Accounts';
 import { Entitlements } from './screens/things-alive/Entitlements';
 import { DevicePool } from './screens/things-alive/DevicePool';
+import { Catalog } from './screens/things-alive/Catalog';
 
 const BUILT: Record<string, () => React.ReactElement> = {
   '/accounts': Accounts,
   '/entitlements': Entitlements,
   '/device-pool': DevicePool,
+  '/catalog': Catalog,
 };
 
 function Console() {

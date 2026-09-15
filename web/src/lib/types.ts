@@ -100,6 +100,101 @@ export type AssignOutcome =
 
 export type BatchResult = { imei: string; outcome: AssignOutcome };
 
+export type Severity = 'low' | 'medium' | 'high' | 'critical';
+
+export type AlertTrigger =
+  | 'prediction-severity' | 'signal-threshold' | 'no-telemetry' | 'fuel-loss' | 'chain-origin';
+
+export type ScenarioParameter = {
+  key: string; label: string; type: 'number' | 'duration' | 'boolean' | 'enum';
+  default: unknown; min?: number; max?: number; options?: string[]; unit?: string;
+};
+
+export type Scenario = {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  name: string;
+  description: string | null;
+  severity: Severity;
+  tier: number;
+  requiredSignals: string[];
+  minimumHistoryDays: number;
+  parameters: ScenarioParameter[];
+  status: CatalogStatus;
+  publishedAt: string | null;
+};
+
+export type AlertTemplate = {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  name: string;
+  description: string | null;
+  trigger: AlertTrigger;
+  params: Record<string, unknown>;
+  severity: Severity;
+  /** Whether the copy arrives switched on, or waiting for somebody to look first. */
+  enabledOnCopy: boolean;
+  status: CatalogStatus;
+  publishedAt: string | null;
+};
+
+export type ChainNode = {
+  signal: string;
+  label?: string;
+  intercept: number;
+  drivers: { signal: string; coefficient: number }[];
+  warnAbove: number;
+  criticalAbove: number;
+  direction?: 'above' | 'below';
+};
+
+export type CausalChain = {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  scenarioSlug: string | null;
+  name: string;
+  description: string | null;
+  outcome: string | null;
+  nodes: ChainNode[];
+  alignmentSeconds: number | null;
+  provenance: string | null;
+  status: CatalogStatus;
+  publishedAt: string | null;
+};
+
+/**
+ * The latest row per slug, which is what an authoring list wants to show.
+ *
+ * The API returns every version because the authoring screen is the one place that
+ * needs them. Collapsing here rather than there keeps the route honest: a screen that
+ * wanted the full history could still have it.
+ */
+export function latestPerSlug<T extends { slug: string; version: number }>(rows: T[]): T[] {
+  const newest = new Map<string, T>();
+  for (const row of rows) {
+    const seen = newest.get(row.slug);
+    if (!seen || row.version > seen.version) newest.set(row.slug, row);
+  }
+  return [...newest.values()].sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * A slug has a draft when any of its versions is one. Worth its own function because
+ * "is this published" and "is there unpublished work on it" are different questions and
+ * both are true at once for most of a class's life.
+ */
+export function draftOf<T extends { slug: string; status: CatalogStatus }>(
+  rows: T[], slug: string,
+): T | undefined {
+  return rows.find((r) => r.slug === slug && r.status === 'draft');
+}
+
 export type DeviceEvent = {
   id: string;
   imei: string;

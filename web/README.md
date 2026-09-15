@@ -50,7 +50,7 @@ host look identical from the client, which is why the sign-in screen says so.
 | Accounts | Things Alive | built — list, provision, suspend, reinstate |
 | Entitlements | Things Alive | built — grant matrix, grant and revoke |
 | Device pool | Things Alive | built — register, assign, release, retire, history |
-| Catalog | Things Alive | planned — blocked on alert-rule templates (P1-128) and a route that lists drafts |
+| Catalog | Things Alive | built — classes, scenarios, alert templates, causal chains, draft and publish |
 | Signal aliases | Things Alive | planned |
 | Client screens | client | planned — structurally buildable, but empty until `LEGACY_DB_*` is configured |
 
