@@ -123,6 +123,44 @@ Once. After this, releases need none of it.
    body carries the per-dependency checks in every case, so the failing one is named.
 8. **Release to production** with `git tag v1.0.0 && git push origin v1.0.0`.
 
+## The first credential
+
+A freshly deployed platform has no users, and it cannot be given one over HTTP:
+creating an account needs `tenant.provision`, which is granted to `master-admin`, which
+the auth guard reads from a **token** rather than from a row — Things Alive staff hold
+no record in any customer's account. So nothing in the running system can mint the first
+one. That is what `token:platform` is for.
+
+Run it from the service's own shell, where `AUTH_JWT_SECRET` is already what the service
+verifies against:
+
+```
+npm run token:platform -- --role master-admin --subject you@things-alive.io
+```
+
+It prints what the token grants and when it stops, then the token. Paste that into
+`/api-docs` → **Authorize**, and the platform routes open up.
+
+Three refusals are deliberate, and each is a mistake that otherwise fails silently:
+
+- **A role the guard does not recognise.** `admin` is a real role *inside a tenant*; as a
+  platform token it verifies, carries a role, resolves no capabilities, and answers 403
+  everywhere — which reads as a permissions bug rather than a wrong word.
+- **A placeholder secret.** `ci-test-secret` appears in both CI files. A token minted
+  against it works perfectly and is forgeable by anyone who can read the repository.
+- **A lifetime beyond seven days.** A platform token cannot be revoked — there is no row
+  to suspend and no session to end. Expiry is the only thing that ever takes it away.
+
+### Walking the platform from nothing
+
+1. Mint a `master-admin` token, authorize in `/api-docs`.
+2. `POST /api/v1/accounts` — creates the account, its roles and its first super admin in
+   one transaction, and returns that person's **invitation token**.
+3. `POST /api/v1/auth/accept-invitation` with that token and a password — the super admin
+   now has a real credential and is signed in.
+4. From there everything is ordinary tenant work: plants, the equipment register, granting
+   catalog entitlements, activating a scenario.
+
 ## Variables
 
 Everything in `.env.example` is real and read somewhere; a test asserts that the file
