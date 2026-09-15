@@ -5,6 +5,9 @@ import { ProvisionDto } from '../src/tenancy/tenancy.controller';
 import { AccessDto, InviteDto } from '../src/identity/identity.controller';
 import { RegisterBatchDto } from '../src/inventory/inventory.controller';
 import { ProjectDto } from '../src/intelligence/intelligence.controller';
+import {
+  CreateTemplateClassDto, CreateTemplateScenarioDto,
+} from '../src/catalog/catalog.controller';
 
 const SRC = join(__dirname, '..', 'src');
 
@@ -33,6 +36,13 @@ const pipe = new ValidationPipe({
 
 const through = (metatype: any, value: unknown) =>
   pipe.transform(value, { type: 'body', metatype, data: '' });
+
+const controllerFiles = (dir: string = SRC): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) return controllerFiles(full);
+    return e.name.endsWith('.controller.ts') ? [full] : [];
+  });
 
 describe('the request validation boundary (P1-127)', () => {
   describe('a well-formed body is accepted', () => {
@@ -72,6 +82,33 @@ describe('the request validation boundary (P1-127)', () => {
         inputs: [{ signal: 'load_percent', value: 60 }],
       })).resolves.toBeDefined();
     });
+
+    // The second instance of the same bug, found while drawing the Catalog screen:
+    // both create routes read the slug with a keyed @Body beside a DTO that did not
+    // declare it, so every correct call was refused. These are the first two routes
+    // the Things Alive console calls after signing in.
+    it('creates a template class from a body carrying its slug', async () => {
+      await expect(through(CreateTemplateClassDto, {
+        slug: 'diesel-generator',
+        name: 'Diesel generator',
+        category: 'power',
+        expectedSignals: [{ signal: 'coolant_temp_c', unit: 'C' }],
+      })).resolves.toMatchObject({ slug: 'diesel-generator' });
+    });
+
+    it('creates a template scenario from a body carrying its slug', async () => {
+      await expect(through(CreateTemplateScenarioDto, {
+        slug: 'coolant-overheat',
+        equipmentClassSlug: 'diesel-generator',
+        name: 'Coolant running hot for the load',
+        severity: 'warning',
+        requiredSignals: ['coolant_temp_c', 'load_percent'],
+      })).resolves.toMatchObject({ slug: 'coolant-overheat' });
+    });
+
+    it('refuses a template class with no slug', async () => {
+      await expect(through(CreateTemplateClassDto, { name: 'Nameless' })).rejects.toThrow();
+    });
   });
 
   describe('a malformed nested item is rejected', () => {
@@ -102,16 +139,8 @@ describe('the request validation boundary (P1-127)', () => {
    * failure is invisible in every test that does not cross the HTTP boundary.
    */
   it('every DTO property typed as another DTO declares @ValidateNested', () => {
-    const controllers = (function walk(dir: string): string[] {
-      return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-        const full = join(dir, e.name);
-        if (e.isDirectory()) return walk(full);
-        return e.name.endsWith('.controller.ts') ? [full] : [];
-      });
-    })(SRC);
-
     const offenders: string[] = [];
-    for (const file of controllers) {
+    for (const file of controllerFiles()) {
       const lines = readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, i) => {
         // A property whose declared type is a Dto class, or an array of one.
@@ -125,6 +154,43 @@ describe('the request validation boundary (P1-127)', () => {
     }
     // Naming them matters more than the count: each one is a route that either
     // refuses every request or accepts anything inside the nested object.
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * The same failure in a different shape, and the reason it is a rule rather than a
+   * fix: `@Body('slug') slug: string` beside `@Body() dto: SomeDto` reads one key out
+   * of a body the pipe is simultaneously validating against a DTO that does not
+   * declare it. The pipe strips the key as unknown and refuses the request — the
+   * route cannot be called at all, and no test that invokes the service ever sees it.
+   *
+   * A method takes the whole body or named keys out of it, never both. When a route
+   * genuinely needs a key, the DTO declares it and the handler reads it off the DTO,
+   * which also puts the key under validation instead of beside it.
+   */
+  it('no handler mixes a keyed @Body with a whole-body @Body', () => {
+    const offenders: string[] = [];
+    for (const file of controllerFiles()) {
+      const text = readFileSync(file, 'utf8');
+      // A method declaration at class-body indentation, then its parameter list read
+      // by balancing parentheses — decorators like `@Body('slug')` contain their own,
+      // so a non-greedy `[^)]*` match silently finds nothing and the guard passes
+      // while the bug is right there. It was written that way once already.
+      for (const m of text.matchAll(/\n  (?:async )?\w+\(/g)) {
+        const open = (m.index ?? 0) + m[0].length - 1;
+        let depth = 0;
+        let close = open;
+        for (; close < text.length; close += 1) {
+          if (text[close] === '(') depth += 1;
+          else if (text[close] === ')') { depth -= 1; if (depth === 0) break; }
+        }
+        const params = text.slice(open + 1, close);
+        if (/@Body\('/.test(params) && /@Body\(\)/.test(params)) {
+          const line = text.slice(0, m.index ?? 0).split('\n').length + 1;
+          offenders.push(`${relative(SRC, file)}:${line}  ${params.replace(/\s+/g, ' ').trim()}`);
+        }
+      }
+    }
     expect(offenders).toEqual([]);
   });
 });
