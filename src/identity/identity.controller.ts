@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayMaxSize, IsArray, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -22,13 +25,17 @@ export class InviteDto {
   @IsString() @IsNotEmpty() fullName: string;
   @IsString() @IsNotEmpty() roleSlug: string;
   @IsOptional() @IsString() phone?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(500) plants?: PlantRefDto[];
-  @IsOptional() @IsArray() @ArrayMaxSize(2000) equipment?: EquipmentRefDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(500)
+  @ValidateNested({ each: true }) @Type(() => PlantRefDto) plants?: PlantRefDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(2000)
+  @ValidateNested({ each: true }) @Type(() => EquipmentRefDto) equipment?: EquipmentRefDto[];
 }
 
 export class AccessDto {
-  @IsOptional() @IsArray() @ArrayMaxSize(500) plants?: PlantRefDto[];
-  @IsOptional() @IsArray() @ArrayMaxSize(2000) equipment?: EquipmentRefDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(500)
+  @ValidateNested({ each: true }) @Type(() => PlantRefDto) plants?: PlantRefDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(2000)
+  @ValidateNested({ each: true }) @Type(() => EquipmentRefDto) equipment?: EquipmentRefDto[];
 }
 
 export class RoleDto {

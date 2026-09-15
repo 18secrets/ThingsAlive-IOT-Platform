@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  ArrayMaxSize, IsArray, IsEmail, IsNotEmpty, IsOptional, IsString, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -21,8 +24,14 @@ export class ProvisionDto {
   @IsString() @IsNotEmpty() name: string;
   @IsOptional() @IsString() plan?: string;
   @IsOptional() @IsString() region?: string;
-  superAdmin: SuperAdminDto;
-  @IsOptional() @IsArray() @ArrayMaxSize(50) externalClients?: ExternalClientDto[];
+  // Without @ValidateNested the property carries no validation metadata at all, and a
+  // whitelisting pipe does not ignore such a property — it strips it, then refuses the
+  // request for containing it. This route was unusable in production for exactly that
+  // reason while every test passed, because the tests call the service directly.
+  @ValidateNested() @Type(() => SuperAdminDto) superAdmin: SuperAdminDto;
+  @IsOptional() @IsArray() @ArrayMaxSize(50)
+  @ValidateNested({ each: true }) @Type(() => ExternalClientDto)
+  externalClients?: ExternalClientDto[];
 }
 
 export class SuspendTenantDto {
