@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -45,6 +45,20 @@ export class CreateTemplateClassDto extends TemplateClassDto {
 }
 
 export class CreateTemplateScenarioDto extends TemplateScenarioDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
+export class AlertTemplateDto {
+  @IsOptional() @IsString() equipmentClassSlug?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() trigger?: any;
+  @IsOptional() params?: any;
+  @IsOptional() @IsString() severity?: any;
+  @IsOptional() @IsBoolean() enabledOnCopy?: boolean;
+}
+
+export class CreateAlertTemplateDto extends AlertTemplateDto {
   @IsString() @IsNotEmpty() slug: string;
 }
 
@@ -225,6 +239,87 @@ export class CatalogController {
     @Param('alias') alias: string,
   ) {
     return this.authoring.deleteAlias(scope, sourceSystem, alias);
+  }
+
+  // ---- What the authoring console reads (task P1-133) ---------------------------
+  //
+  // `GET /catalog/equipment-classes` returns published classes only, and correctly: a
+  // tenant that could see a draft could activate something Things Alive has not
+  // finished writing. But the authoring screen is the one place drafts must be
+  // visible, and until now nothing could list them — a draft could be created and
+  // then never found again except by knowing its slug.
+  //
+  // A separate route rather than a flag on the existing one. A `?includeDrafts=true`
+  // that a client could also send is one forgotten capability check away from being
+  // the leak the published-only rule exists to prevent.
+
+  @Get('authoring/equipment-classes')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every class version, draft and published — Things Alive only' })
+  authoringClasses() {
+    return this.authoring.allClasses();
+  }
+
+  @Get('authoring/scenarios')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every scenario version, draft and published' })
+  authoringScenarios(@Query('equipmentClassSlug') classSlug?: string) {
+    return this.authoring.allScenarios(classSlug);
+  }
+
+  @Get('authoring/alert-templates')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every alert-rule template version, draft and published' })
+  authoringAlertTemplates(@Query('equipmentClassSlug') classSlug?: string) {
+    return this.authoring.allAlertTemplates(classSlug);
+  }
+
+  @Get('authoring/signal-aliases')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every signal alias' })
+  authoringAliases() {
+    return this.authoring.allAliases();
+  }
+
+  // ---- Alert rule templates (task P1-128) ---------------------------------------
+  //
+  // What Things Alive knows is worth being told about, for a kind of machine. Granting
+  // the class copies these into the account as the client's own rules, which they then
+  // edit and Things Alive cannot.
+
+  @Post('alert-templates')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Create an alert-rule template as a draft' })
+  createAlertTemplate(
+    @CurrentScope() scope: RequestScope,
+    @Body() dto: CreateAlertTemplateDto,
+  ) {
+    return this.authoring.createAlertTemplate(scope, dto.slug, dto);
+  }
+
+  @Patch('alert-templates/:slug')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Edit the draft, forking one from the published version if needed' })
+  editAlertTemplate(
+    @CurrentScope() scope: RequestScope,
+    @Param('slug') slug: string,
+    @Body() dto: AlertTemplateDto,
+  ) {
+    return this.authoring.editAlertTemplate(scope, slug, dto);
+  }
+
+  @Post('alert-templates/:slug/publish')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Publish it. Accounts granted the class from now on get a copy' })
+  publishAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.publishAlertTemplate(scope, slug);
+  }
+
+  @Post('alert-templates/:slug/retire')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Stop shipping it. Copies already in accounts keep running' })
+  retireAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.retireAlertTemplate(scope, slug);
   }
 
   @Post('entitlements/:id/revoke')
