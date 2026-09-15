@@ -24,7 +24,7 @@ function Console() {
   }
   if (s.status === 'anonymous') return <SignIn />;
 
-  const items = navFor(s.can);
+  const items = navFor(s.can, s.me.isPlatformRole);
   // Where a caller lands is decided by what they may do. A platform role opens on
   // Accounts; an account's own user opens on their fleet. Nobody is sent to a screen
   // the API would refuse them.

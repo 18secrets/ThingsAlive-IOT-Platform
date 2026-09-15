@@ -31,7 +31,11 @@ export const CLIENT: NavItem[] = [
   // is exactly what this column exists to catch: Overview is built from the routes that
   // are fleet-shaped, and a roll-up is tracked as backend work rather than assumed.
   { path: '/overview', label: 'Overview', needs: 'prediction.read', route: 'GET /alerts + GET /utilization/summary' },
-  { path: '/equipment', label: 'Equipment', needs: 'equipment.write', route: 'GET /equipment, GET /equipment/plants' },
+  // Keyed to the capability the screen's own read needs, not the one its buttons need.
+  // Everybody in an account may see the register; the roles that hold `equipment.write`
+  // additionally get the controls. A support engineer gets the same screen without the
+  // buttons rather than a different screen, or a wall of disabled ones.
+  { path: '/equipment', label: 'Equipment', needs: 'catalog.read', route: 'GET /equipment, GET /equipment/plants' },
   { path: '/alerts', label: 'Alerts', needs: 'alert.author', route: 'GET /alerts' },
   { path: '/activations', label: 'Activations', needs: 'scenario.activate', route: 'GET /activations' },
   { path: '/devices', label: 'Devices', needs: 'device.read', route: 'GET /inventory/mine, GET /device-health' },
@@ -47,6 +51,17 @@ export const CLIENT: NavItem[] = [
  * worth having. The two lists are concatenated rather than switched between, so a
  * token that somehow held both would show both rather than silently picking one.
  */
-export function navFor(can: Record<Capability, boolean>): NavItem[] {
-  return [...THINGS_ALIVE, ...CLIENT].filter((item) => can[item.needs]);
+export function navFor(
+  can: Record<Capability, boolean>,
+  isPlatformRole: boolean,
+): NavItem[] {
+  // A platform role holds no row in any customer account and resolves to no tenant, so
+  // every screen below reads tenant-owned data it has no scope for. The capability map
+  // does grant a few of them — `catalog.read` and `device.read` name platform roles —
+  // but a capability is permission to do a thing, not the existence of data to do it
+  // to, and a rail entry that opens onto a guaranteed empty screen is a worse lie than
+  // a missing one. Support looking into one customer's account is its own screen, with
+  // the account named and the access audited.
+  const reachable = isPlatformRole ? THINGS_ALIVE : [...THINGS_ALIVE, ...CLIENT];
+  return reachable.filter((item) => can[item.needs]);
 }

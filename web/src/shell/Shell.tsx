@@ -13,7 +13,7 @@ import { CLIENT, THINGS_ALIVE, navFor } from './nav';
 export function Shell() {
   const { me, can } = useAuthed();
   const { signOut } = useSession();
-  const items = navFor(can);
+  const items = navFor(can, me.isPlatformRole);
   const platform = me.isPlatformRole;
 
   const group = (label: string, source: typeof THINGS_ALIVE) => {
@@ -54,7 +54,7 @@ export function Shell() {
         </div>
 
         {group('Platform', THINGS_ALIVE)}
-        {group(platform ? 'Cross-account' : 'Fleet', CLIENT)}
+        {group('Fleet', CLIENT)}
 
         <div className="mt-auto border-t border-slate-100 px-3 pt-4">
           <p className="truncate text-xs font-medium text-slate-700">{me.userId}</p>
