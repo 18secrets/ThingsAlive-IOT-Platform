@@ -9,6 +9,7 @@ import { PlatformAccessLog } from '../audit/platform-access-log.entity';
 import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../catalog/entities/signal-alias.entity';
+import { AlertRuleTemplate } from '../catalog/entities/alert-rule-template.entity';
 import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-entitlement.entity';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
@@ -56,6 +57,7 @@ export const ENTITIES = [
   EquipmentClassProfile,
   ScenarioDefinition,
   SignalAlias,
+  AlertRuleTemplate,
   ClientCatalogEntitlement,
   EquipmentProfile,
   ClientEquipmentClass,

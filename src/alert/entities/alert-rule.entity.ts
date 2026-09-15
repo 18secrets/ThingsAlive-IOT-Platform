@@ -2,8 +2,17 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 import { Severity } from '../../common/severity';
 import { AlertParams, AlertTrigger } from '../services/alert-rules';
 
-/** What a rule watches: everything in the account, one site, or one machine. */
-export type AlertAppliesTo = 'account' | 'plant' | 'equipment';
+/**
+ * What a rule watches: everything in the account, one site, one machine, or every
+ * machine of one class.
+ *
+ * `equipment-class` arrived with alert templates (task P1-128). A template is authored
+ * against a kind of machine and knows no plant and no serial number, so a copied rule
+ * has to be able to say "generators" — otherwise a rule written about generators lands
+ * in the account watching the air compressors too, fires on machines it was never
+ * about, and teaches a new customer in their first week that our alerts are noise.
+ */
+export type AlertAppliesTo = 'account' | 'plant' | 'equipment' | 'equipment-class';
 
 /**
  * A rule the client wrote, saying what they want to be told about (task P1-119).
@@ -67,6 +76,10 @@ export class AlertRule {
   @Column({ name: 'external_id', type: 'text', nullable: true })
   externalId: string | null;
 
+  /** Set when `appliesTo` is `equipment-class`. The client's own copy of the class. */
+  @Column({ name: 'equipment_class_slug', type: 'text', nullable: true })
+  equipmentClassSlug: string | null;
+
   /** How loud this is when it fires. The client's judgement, not the scorer's. */
   @Column({ type: 'text', default: 'high' })
   severity: Severity;
@@ -80,6 +93,26 @@ export class AlertRule {
    */
   @Column({ type: 'boolean', default: true })
   enabled: boolean;
+
+  /**
+   * Where this rule came from, or nothing at all.
+   *
+   * A rule with no `templateSlug` is one the client wrote themselves, and that is not a
+   * missing value — it is the answer. It is what lets a screen show "from template",
+   * "edited" and "yours" as three different things rather than one list in which the
+   * customer cannot tell which of their rules Things Alive will have opinions about.
+   */
+  @Column({ name: 'template_slug', type: 'text', nullable: true })
+  templateSlug: string | null;
+
+  @Column({ name: 'template_version', type: 'int', nullable: true })
+  templateVersion: number | null;
+
+  @Column({ name: 'template_checksum', type: 'text', nullable: true })
+  templateChecksum: string | null;
+
+  @Column({ name: 'copied_at', type: 'timestamptz', nullable: true })
+  copiedAt: Date | null;
 
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;

@@ -6,6 +6,7 @@ import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from './entities/scenario-definition.entity';
 import { SignalAlias } from './entities/signal-alias.entity';
+import { AlertRuleTemplate } from './entities/alert-rule-template.entity';
 import { ClientCatalogModule } from '../client-catalog/client-catalog.module';
 import { CatalogAuthoringService } from './services/catalog-authoring.service';
 import { CatalogService } from './services/catalog.service';
@@ -24,7 +25,7 @@ import { RecommendationService } from './services/recommendation.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      EquipmentClassProfile, ScenarioDefinition, SignalAlias,
+      EquipmentClassProfile, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
       ClientCatalogEntitlement, EquipmentProfile,
     ]),
     ClientCatalogModule,

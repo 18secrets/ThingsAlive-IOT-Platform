@@ -3,6 +3,8 @@ import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-pr
 import { ScenarioDefinition } from '../../catalog/entities/scenario-definition.entity';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
+import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
+import { AlertRule } from '../../alert/entities/alert-rule.entity';
 
 /**
  * What a copy is hashed on: the fields the client can change.
@@ -38,6 +40,30 @@ export function scenarioContentChecksum(
     requiredSignals: s.requiredSignals,
     minimumHistoryDays: s.minimumHistoryDays,
     parameters: s.parameters,
+  });
+}
+
+/**
+ * What an alert rule is hashed on (task P1-128).
+ *
+ * The fields a client would change to make a shipped rule theirs: what it watches, how
+ * hard, how loudly, and whether it is on at all. `enabled` is in the hash deliberately
+ * — switching a rule off is the most common edit anybody makes to one, and a copy that
+ * still called itself unchanged after being silenced would be lying about the only
+ * thing that mattered.
+ */
+export function alertRuleContentChecksum(
+  r: Pick<AlertRule, 'name' | 'description' | 'trigger' | 'params' | 'severity' | 'enabled'>
+    | Pick<AlertRuleTemplate, 'name' | 'description' | 'trigger' | 'params' | 'severity'>
+      & { enabled: boolean },
+): string {
+  return checksumOf({
+    name: r.name,
+    description: r.description,
+    trigger: r.trigger,
+    params: r.params,
+    severity: r.severity,
+    enabled: r.enabled,
   });
 }
 

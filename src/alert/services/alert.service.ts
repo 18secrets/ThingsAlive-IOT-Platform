@@ -21,6 +21,7 @@ export interface RuleInput {
   plantId?: string | null;
   sourceSystem?: string | null;
   externalId?: string | null;
+  equipmentClassSlug?: string | null;
   severity?: Severity;
 }
 
@@ -82,6 +83,7 @@ export class AlertService {
         plantId: input.plantId ?? null,
         sourceSystem: input.sourceSystem ?? null,
         externalId: input.externalId ?? null,
+        equipmentClassSlug: input.equipmentClassSlug ?? null,
         severity: input.severity ?? Severity.High,
         enabled: true,
         createdBy: scope.userId,
@@ -106,6 +108,8 @@ export class AlertService {
         plantId: input.plantId !== undefined ? input.plantId : rule.plantId,
         sourceSystem: input.sourceSystem !== undefined ? input.sourceSystem : rule.sourceSystem,
         externalId: input.externalId !== undefined ? input.externalId : rule.externalId,
+        equipmentClassSlug: input.equipmentClassSlug !== undefined
+          ? input.equipmentClassSlug : rule.equipmentClassSlug,
         severity: input.severity ?? rule.severity,
       };
       await this.validate(scope, merged);
@@ -273,21 +277,34 @@ export class AlertService {
   private async applicableTo(
     m: EntityManager, context: WindowContext, rules: AlertRule[],
   ): Promise<AlertRule[]> {
-    const needsPlant = rules.some((r) => r.appliesTo === 'plant');
-    const plantId = needsPlant
-      ? (await m.getRepository(EquipmentProfile).findOne({
+    // One read for both, because a rule scoped to a site and one scoped to a class
+    // both need the machine's own row, and asking twice for the same row in a loop
+    // that runs once per shift per machine is how a scorer gets slow quietly.
+    const needsProfile = rules.some(
+      (r) => r.appliesTo === 'plant' || r.appliesTo === 'equipment-class',
+    );
+    const profile = needsProfile
+      ? await m.getRepository(EquipmentProfile).findOne({
           where: {
             tenantId: context.tenantId,
             sourceSystem: context.sourceSystem,
             externalId: context.externalId,
           },
-          select: { plantId: true },
-        }))?.plantId ?? null
+          select: { plantId: true, equipmentClassSlug: true },
+        })
       : null;
+    const plantId = profile?.plantId ?? null;
+    const classSlug = profile?.equipmentClassSlug ?? null;
 
     return rules.filter((rule) => {
       if (rule.appliesTo === 'account') return true;
       if (rule.appliesTo === 'plant') return !!plantId && rule.plantId === plantId;
+      // A machine with no class matches no class-scoped rule. Not an oversight: an
+      // unclassified machine has nothing the rule was written about, and treating the
+      // missing class as a match would fire generator rules on anything unlabelled.
+      if (rule.appliesTo === 'equipment-class') {
+        return !!classSlug && rule.equipmentClassSlug === classSlug;
+      }
       return rule.sourceSystem === context.sourceSystem && rule.externalId === context.externalId;
     });
   }
@@ -309,6 +326,9 @@ export class AlertService {
     }
     if (appliesTo === 'equipment' && !(input.sourceSystem && input.externalId)) {
       throw new BadRequestException('A rule scoped to a machine needs the machine.');
+    }
+    if (appliesTo === 'equipment-class' && !input.equipmentClassSlug) {
+      throw new BadRequestException('A rule scoped to a kind of machine needs the class.');
     }
     if (appliesTo === 'equipment') {
       // Checked here rather than left to fire against nothing: a rule pointing at a
