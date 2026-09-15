@@ -100,6 +100,84 @@ export type AssignOutcome =
 
 export type BatchResult = { imei: string; outcome: AssignOutcome };
 
+export type ActivationState = 'proposed' | 'active' | 'paused' | 'deactivated';
+
+/**
+ * Why a scenario is not available, as a code and its specifics rather than a sentence.
+ *
+ * "Not enough data" on a screen gives an operator nothing to do. `missing-signals` with
+ * the list of signals tells somebody which sensor to fit.
+ */
+export type Blocker =
+  | { code: 'unclassified' }
+  | { code: 'class-not-in-account' }
+  | { code: 'scenario-disabled' }
+  | { code: 'no-device' }
+  | { code: 'missing-signals'; signals: string[] }
+  | { code: 'insufficient-history'; haveDays: number; needDays: number }
+  | { code: 'tier-too-low'; have: string; needs: number };
+
+export type ResolvedParameter = {
+  key: string;
+  value: unknown;
+  /** Which layer supplied it, so a screen can show what was tuned and where. */
+  source: 'scenario-default' | 'asset-override';
+};
+
+export type Activation = {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  clientScenarioSlug: string;
+  state: ActivationState;
+  parameterOverrides: Record<string, unknown>;
+  /** What was wrong when somebody turned it on anyway. Recorded, not prevented. */
+  blockersAtActivation: Blocker[];
+  activatedBy: string | null;
+  activatedAt: string | null;
+  stateChangedBy: string | null;
+  stateChangedAt: string | null;
+  stateReason: string | null;
+  lastEvaluatedAt: string | null;
+  resolvedParameters: ResolvedParameter[];
+};
+
+export type Bucket = 'availableNow' | 'availableLater' | 'notApplicable';
+
+export type Recommendation = {
+  scenarioSlug: string;
+  scenarioVersion: number;
+  name: string;
+  severity: string;
+  tier: number;
+  bucket: Bucket;
+  blockedBy: Blocker[];
+  /** Only when the wait is time rather than a missing part. */
+  estimatedReadyDate: string | null;
+};
+
+/** A blocker as something somebody can act on, not a status. */
+export function explainBlocker(b: Blocker): string {
+  switch (b.code) {
+    case 'unclassified':
+      return 'the machine has no equipment class — classify it on Equipment';
+    case 'class-not-in-account':
+      return 'your account has not been granted that equipment class';
+    case 'scenario-disabled':
+      return 'this scenario is switched off in your catalog';
+    case 'no-device':
+      return 'no logger is fitted to this machine';
+    case 'missing-signals':
+      return `no readings for ${b.signals.join(', ')} — check the sensor map or fit the sensor`;
+    case 'insufficient-history':
+      return `needs ${b.needDays} days of history and has ${b.haveDays}`;
+    case 'tier-too-low':
+      return `this machine is on the ${b.have} tier and the scenario needs tier ${b.needs}`;
+    default:
+      return 'blocked';
+  }
+}
+
 export type AlertAppliesTo = 'account' | 'plant' | 'equipment' | 'equipment-class';
 
 /**

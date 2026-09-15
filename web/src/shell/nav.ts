@@ -37,7 +37,7 @@ export const CLIENT: NavItem[] = [
   // buttons rather than a different screen, or a wall of disabled ones.
   { path: '/equipment', label: 'Equipment', needs: 'catalog.read', route: 'GET /equipment, GET /equipment/plants' },
   { path: '/alerts', label: 'Alerts', needs: 'prediction.read', route: 'GET /alerts, GET /alerts/rules' },
-  { path: '/activations', label: 'Activations', needs: 'scenario.activate', route: 'GET /activations' },
+  { path: '/activations', label: 'Activations', needs: 'client-catalog.read', route: 'GET /activations, GET /catalog/equipment/:ref/recommendations' },
   { path: '/devices', label: 'Devices', needs: 'device.read', route: 'GET /inventory/mine, GET /device-health' },
   { path: '/people', label: 'People', needs: 'user.manage', route: 'GET /identity/users, GET /identity/roles' },
   { path: '/work', label: 'Work orders', needs: 'action.work', route: 'GET /work-orders' },

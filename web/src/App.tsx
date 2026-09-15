@@ -11,6 +11,7 @@ import { Catalog } from './screens/things-alive/Catalog';
 import { Equipment } from './screens/client/Equipment';
 import { Devices } from './screens/client/Devices';
 import { Alerts } from './screens/client/Alerts';
+import { Activations } from './screens/client/Activations';
 
 const BUILT: Record<string, () => React.ReactElement> = {
   '/accounts': Accounts,
@@ -20,6 +21,7 @@ const BUILT: Record<string, () => React.ReactElement> = {
   '/equipment': Equipment,
   '/devices': Devices,
   '/alerts': Alerts,
+  '/activations': Activations,
 };
 
 function Console() {
