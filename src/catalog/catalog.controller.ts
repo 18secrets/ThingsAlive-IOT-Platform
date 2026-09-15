@@ -30,6 +30,24 @@ export class TemplateScenarioDto {
   @IsOptional() parameters?: any[];
 }
 
+/**
+ * Creating a template sends its slug in the body; editing one names it in the path.
+ *
+ * The create routes used to read that slug with a second `@Body('slug')` parameter
+ * beside a DTO that never declared it — and a pipe set to whitelist +
+ * forbidNonWhitelisted strips an undeclared property and then refuses the request for
+ * carrying it. Both routes answered 400 to every correct call. Declaring the property
+ * is what makes the body legal; reading it off the DTO is what stops the two halves
+ * from drifting apart again.
+ */
+export class CreateTemplateClassDto extends TemplateClassDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
+export class CreateTemplateScenarioDto extends TemplateScenarioDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
 export class AliasDto {
   @IsString() @IsNotEmpty() sourceSystem: string;
   @IsString() @IsNotEmpty() alias: string;
@@ -135,10 +153,9 @@ export class CatalogController {
   @ApiOperation({ summary: 'Create a template class as a draft' })
   createClass(
     @CurrentScope() scope: RequestScope,
-    @Body('slug') slug: string,
-    @Body() dto: TemplateClassDto,
+    @Body() dto: CreateTemplateClassDto,
   ) {
-    return this.authoring.createClass(scope, slug, dto);
+    return this.authoring.createClass(scope, dto.slug, dto);
   }
 
   @Patch('equipment-classes/:slug')
@@ -170,10 +187,9 @@ export class CatalogController {
   @Requires('catalog.write')
   createScenario(
     @CurrentScope() scope: RequestScope,
-    @Body('slug') slug: string,
-    @Body() dto: TemplateScenarioDto,
+    @Body() dto: CreateTemplateScenarioDto,
   ) {
-    return this.authoring.createScenario(scope, slug, dto);
+    return this.authoring.createScenario(scope, dto.slug, dto);
   }
 
   @Patch('scenarios/:slug')
