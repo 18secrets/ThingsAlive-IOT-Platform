@@ -52,10 +52,20 @@ host look identical from the client, which is why the sign-in screen says so.
 | Device pool | Things Alive | built — register, assign, release, retire, history |
 | Catalog | Things Alive | built — classes, scenarios, alert templates, causal chains, draft and publish |
 | Signal aliases | Things Alive | planned |
-| Client screens | client | planned — structurally buildable, but empty until `LEGACY_DB_*` is configured |
+| Equipment | client | built — sites, machines, move, placement history |
+| Devices | client | built — the account's loggers, fit and take off |
+| Overview, Alerts, Activations | client | planned — will render correctly and show nothing until `LEGACY_DB_*` is configured |
+| People, Work orders | client | planned |
 
 A planned screen renders as itself and names the route it will read. Nothing is mocked:
 a mock that looks finished is how a demo promises something the platform cannot do.
+
+Client screens are hidden from a platform role rather than shown empty. A platform role
+holds no row in any customer account and resolves to no tenant, so those screens read
+data it has no scope for — and the capability map does grant a few of them, because a
+capability is permission to do a thing rather than the existence of data to do it to.
+Support looking into one customer's account is its own screen, with the account named
+and the access audited.
 
 The `route` field on each nav entry is not decoration. It caught its own first mistake:
 Overview was written as `GET /predictions`, and there is no fleet-wide predictions

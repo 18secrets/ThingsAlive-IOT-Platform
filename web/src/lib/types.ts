@@ -100,6 +100,57 @@ export type AssignOutcome =
 
 export type BatchResult = { imei: string; outcome: AssignOutcome };
 
+export type PlantStatus = 'active' | 'retired';
+
+export type Plant = {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  address: string | null;
+  siteArea: string | null;
+  capacity: string | null;
+  projectType: string | null;
+  operationalStatus: string | null;
+  description: string | null;
+  status: PlantStatus;
+  sourceSystem: string | null;
+  externalId: string | null;
+};
+
+export type ServiceTier = 'basic' | 'standard' | 'advanced' | 'full';
+
+export type Equipment = {
+  id: string;
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  equipmentClassSlug: string | null;
+  classVersion: number | null;
+  tier: ServiceTier;
+  commissionedAt: string | null;
+  serviceIntervalHours: number | null;
+  /** Derived and cached. The recommendation service recomputes it on request. */
+  readiness: Record<string, unknown>;
+  origin: string;
+  status: string;
+  name: string | null;
+  manufacturer: string | null;
+  modelNumber: string | null;
+  serialNumber: string | null;
+  description: string | null;
+  plantId: string | null;
+};
+
+export type Placement = {
+  id: string;
+  plantId: string | null;
+  fromPlantId: string | null;
+  reason: string | null;
+  movedBy: string | null;
+  at: string;
+};
+
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 
 export type AlertTrigger =

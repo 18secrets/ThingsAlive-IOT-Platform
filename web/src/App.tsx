@@ -8,12 +8,16 @@ import { Accounts } from './screens/things-alive/Accounts';
 import { Entitlements } from './screens/things-alive/Entitlements';
 import { DevicePool } from './screens/things-alive/DevicePool';
 import { Catalog } from './screens/things-alive/Catalog';
+import { Equipment } from './screens/client/Equipment';
+import { Devices } from './screens/client/Devices';
 
 const BUILT: Record<string, () => React.ReactElement> = {
   '/accounts': Accounts,
   '/entitlements': Entitlements,
   '/device-pool': DevicePool,
   '/catalog': Catalog,
+  '/equipment': Equipment,
+  '/devices': Devices,
 };
 
 function Console() {
