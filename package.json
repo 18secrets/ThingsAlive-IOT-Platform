@@ -16,7 +16,8 @@
     "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "token:platform": "node dist/platform/mint-token.js",
     "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
-    "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts"
+    "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts",
+    "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

@@ -48,6 +48,7 @@ import { AIOnboarding } from './components/onboarding/AIOnboarding';
 import { OnboardingList } from './components/onboarding/OnboardingList';
 import { EquipmentDetailsView } from './components/onboarding/EquipmentDetailsView';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen';
 import { ChangePasswordScreen } from './components/auth/ChangePasswordScreen';
 import { MasterAdminDashboard } from './components/dashboard/MasterAdminDashboard';
 import { DashboardView } from './components/views/OtherViews';
@@ -57,19 +58,16 @@ import { WorkflowEditor } from './components/alerts/WorkflowEditor';
 import { WorkflowSpec } from './utils/workflowParser';
 import { SettingsView } from './components/settings/SettingsView';
 import { UsersHub } from './components/users/UsersHub';
+import {
+  apiSignIn, apiResume, apiSignOut, hasStoredSession, ApiError, SignedInUser,
+  apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount,
+  apiResendInvitation, Account, ResendInvitationResult,
+} from './lib/api';
 
 const SESSION_KEY = 'ta_session';
-const CLIENTS_KEY = 'ta_clients';
-const CLIENTS_SEED_VERSION_KEY = 'ta_clients_seed_version';
 const MASTER_ADMIN_PASSWORD_KEY = 'ta_master_admin_password';
 const CLIENT_USERS_KEY = 'ta_client_users';
 const ROLES_KEY = 'ta_roles';
-
-// Bump this whenever INITIAL_CLIENTS is intentionally replaced (a client
-// list reset, not just a runtime add/edit). A mismatch here means the
-// browser's cached client list predates that reset, so it's discarded in
-// favor of the fresh seed instead of silently persisting stale data forever.
-const CLIENTS_SEED_VERSION = 2;
 
 // Session lives in sessionStorage (per-tab) rather than localStorage
 // (shared across tabs), so opening multiple tabs lets each one be logged
@@ -80,41 +78,6 @@ function loadSession(): AuthUser | null {
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
-  }
-}
-
-// Backfills contact fields on client records that were saved to localStorage
-// before Contact Person Name / Phone / Email existed on ClientAccount, so
-// older browsers don't show blank cards.
-function withContactDefaults(client: ClientAccount, index: number): ClientAccount {
-  const dummyContacts = [
-    { contactPersonName: 'Amit Kulkarni', phone: '+91 98200 11223', email: 'amit.kulkarni@clientcompany.com' },
-    { contactPersonName: 'Sneha Rao', phone: '+91 90040 55667', email: 'sneha.rao@clientcompany.com' },
-    { contactPersonName: 'Vikram Malhotra', phone: '+91 99110 33445', email: 'vikram.malhotra@clientcompany.com' },
-  ];
-  const fallback = dummyContacts[index % dummyContacts.length];
-  return {
-    ...client,
-    contactPersonName: client.contactPersonName || fallback.contactPersonName,
-    phone: client.phone || fallback.phone,
-    email: client.email || fallback.email,
-  };
-}
-
-function loadClients(): ClientAccount[] {
-  try {
-    const storedVersion = localStorage.getItem(CLIENTS_SEED_VERSION_KEY);
-    if (storedVersion !== String(CLIENTS_SEED_VERSION)) {
-      // The seed client list has been intentionally reset since this browser
-      // last saved clients (or this is a first-ever load) — start fresh
-      // rather than resurrecting an outdated cached list.
-      return INITIAL_CLIENTS;
-    }
-    const raw = localStorage.getItem(CLIENTS_KEY);
-    const parsed: ClientAccount[] = raw ? JSON.parse(raw) : INITIAL_CLIENTS;
-    return parsed.map(withContactDefaults);
-  } catch {
-    return INITIAL_CLIENTS;
   }
 }
 
@@ -177,16 +140,83 @@ function loadRoles(clients: ClientAccount[]): RoleDefinition[] {
   }
 }
 
+// The backend mints every platform-staff token (master-admin, platform-support,
+// catalog-author) with this fixed tenant claim — it isn't a real account, just a
+// value the guard needs present (src/platform/platform-token.ts). It's the one
+// signal a sign-in response carries for "this was a platform_user, not an
+// app_user" — see PlatformCredentialService's own comment on the same constant.
+const PLATFORM_TENANT_ID = 'things-alive';
+
+// Builds the app's existing AuthUser shape from a real sign-in/refresh
+// response. Real tenant accounts aren't in the mock role/tab system yet, so
+// every signed-in one gets the full client tab set for now — narrowing this
+// to the account's actual capabilities is its own piece of integration work
+// (the Roles & Permissions screen), not something to guess at here.
+function authUserFromApi(user: SignedInUser): AuthUser {
+  if (user.tenantId === PLATFORM_TENANT_ID) {
+    return { role: 'master-admin', username: user.email };
+  }
+  return {
+    role: 'client',
+    username: user.email,
+    clientId: user.tenantId,
+    // The API has no tenant display name on a non-platform token — see
+    // src/me/me.controller.ts — so the tenant id is what's shown until a
+    // real screen exposes one.
+    clientName: user.tenantId,
+    userId: user.id,
+    roleId: user.roleSlug,
+    allowedTabs: CLIENT_ASSIGNABLE_TABS,
+    isSuperAdmin: user.roleSlug === 'ceo-manager',
+  };
+}
+
+// A real account, as the existing ClientAccount-shaped UI displays it.
+// Contact info is the account's ceo-manager, not a separate "contact person" —
+// the API has no such concept, only the super admin it actually created. There
+// is still no username or password: a real login is by email, and the client
+// sets their own password by accepting the invitation, never handed one here.
+function accountToClient(a: Account): ClientAccount {
+  return {
+    id: a.tenantId,
+    clientName: a.name,
+    contactPersonName: a.superAdmin?.fullName,
+    phone: a.superAdmin?.phone ?? undefined,
+    email: a.superAdmin?.email,
+    // 'invited' is the real first-login signal (app_user.status) — the super
+    // admin exists but has never accepted their invitation, so no password
+    // has ever been set. This is what the card's badge reads.
+    mustChangePassword: a.superAdmin?.status === 'invited',
+    status: a.status === 'active' ? 'Active' : 'Inactive',
+    createdAt: new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+  };
+}
+
 export default function App() {
-  // Auth state — no backend yet, so sessions and client accounts persist to
-  // localStorage rather than a server.
+  // Auth state — every sign-in is real now, see lib/api.ts. Accounts (the
+  // Clients admin screen) are real too, fetched below. Everything past that
+  // (plants, devices, equipment, ...) still reads and writes mock data.
   const [authUser, setAuthUser] = useState<AuthUser | null>(loadSession);
-  const [clients, setClients] = useState<ClientAccount[]>(loadClients);
-  const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(() => loadClientUsers(loadClients()));
-  const [roles, setRoles] = useState<RoleDefinition[]>(() => loadRoles(loadClients()));
+  // True only while resuming a real session on a cold load. Both roles are
+  // real sign-ins now (see authUserFromApi), so the only signal that matters
+  // is whether a refresh token actually survived the reload.
+  const [restoringSession, setRestoringSession] = useState(() => hasStoredSession());
+  // Populated from GET /accounts once a Master Admin session exists — see the
+  // effect below. Empty for a client session; a tenant has no reason to list
+  // every other tenant, and the API would refuse it anyway.
+  const [clients, setClients] = useState<ClientAccount[]>([]);
+  const [accountsError, setAccountsError] = useState<string | undefined>(undefined);
+  const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(() => loadClientUsers([]));
+  const [roles, setRoles] = useState<RoleDefinition[]>(() => loadRoles([]));
   const [masterAdminPassword, setMasterAdminPassword] = useState<string>(loadMasterAdminPassword);
   const [authError, setAuthError] = useState<string | undefined>(undefined);
   const [pendingPasswordChange, setPendingPasswordChange] = useState<ClientUserItem | null>(null);
+  // Shows AcceptInvitationScreen instead of the login form. A `?invite=` link
+  // opens straight into it with the token pre-filled; the login screen also
+  // links here for someone who was just handed the token directly.
+  const [acceptingInvitation, setAcceptingInvitation] = useState(
+    () => new URLSearchParams(window.location.search).has('invite'),
+  );
   // Master Admin's optional drill-down into one client's Users/Roles screens.
   const [manageAccessClientId, setManageAccessClientId] = useState<string | null>(null);
 
@@ -221,7 +251,30 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Persist session (per-tab) & client accounts (shared, stand-in for a backend)
+  // Resume a real session on a cold load. The cached AuthUser in
+  // sessionStorage is what lets the shell render immediately without a
+  // flash of the login screen, but it's just what was true at last write —
+  // only the API can say whether the refresh token behind it still works.
+  useEffect(() => {
+    if (!restoringSession) return;
+    let live = true;
+    (async () => {
+      const user = await apiResume();
+      if (!live) return;
+      if (user) {
+        setAuthUser(authUserFromApi(user));
+      } else {
+        // The refresh token is gone or dead — the cached session was a lie.
+        setAuthUser(null);
+      }
+      setRestoringSession(false);
+    })();
+    return () => { live = false; };
+    // Runs once, on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist session (per-tab)
   useEffect(() => {
     if (authUser) {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
@@ -230,10 +283,36 @@ export default function App() {
     }
   }, [authUser]);
 
+  // Real accounts, fetched fresh on every Master Admin sign-in and again
+  // after every create/edit/suspend/reinstate — nothing here is cached
+  // locally, unlike the mock data below it. GET /accounts is the only source
+  // of truth, so a mutation is followed by re-reading it rather than trusted
+  // to have produced the right local state on its own.
+  const refreshAccounts = async () => {
+    try {
+      const accounts = await apiListAccounts();
+      setClients(accounts.map(accountToClient));
+      setAccountsError(undefined);
+    } catch (err) {
+      setAccountsError(err instanceof ApiError ? err.message : 'Could not load accounts.');
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
-    localStorage.setItem(CLIENTS_SEED_VERSION_KEY, String(CLIENTS_SEED_VERSION));
-  }, [clients]);
+    if (authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const accounts = await apiListAccounts();
+        if (!live) return;
+        setClients(accounts.map(accountToClient));
+        setAccountsError(undefined);
+      } catch (err) {
+        if (live) setAccountsError(err instanceof ApiError ? err.message : 'Could not load accounts.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser]);
 
   useEffect(() => {
     localStorage.setItem(MASTER_ADMIN_PASSWORD_KEY, masterAdminPassword);
@@ -263,37 +342,21 @@ export default function App() {
     setCurrentTab('dashboard');
   };
 
-  const handleLoginAttempt = (username: string, password: string) => {
-    if (username === MASTER_ADMIN_CREDENTIALS.username && password === masterAdminPassword) {
+  const handleLoginAttempt = async (identifier: string, password: string) => {
+    // One real call for everyone now — the backend's own /auth/sign-in decides
+    // whether this is a Things Alive staff credential (platform_user) or a
+    // tenant account (app_user) and returns the same shape either way. The
+    // mock clientUsers lookup and the hardcoded Master Admin check that used
+    // to live here are both gone: a user created on the still-mock
+    // Clients/Accounts screen doesn't exist in the database, so it can no
+    // longer sign in until that screen is wired up too.
+    try {
+      const user = await apiSignIn(identifier, password);
       setAuthError(undefined);
-      setAuthUser({ role: 'master-admin', username });
+      setAuthUser(authUserFromApi(user));
       setCurrentTab('dashboard');
-      return;
-    }
-
-    const user = clientUsers.find(
-      (u) => u.username.toLowerCase() === username.toLowerCase() && u.password === password
-    );
-
-    if (!user) {
-      setAuthError('Invalid username or password.');
-      return;
-    }
-    if (!user.active) {
-      setAuthError('This user account has been deactivated.');
-      return;
-    }
-    const client = clients.find((c) => c.id === user.clientId);
-    if (!client || client.status !== 'Active') {
-      setAuthError('This client account has been deactivated.');
-      return;
-    }
-
-    setAuthError(undefined);
-    if (user.mustChangePassword) {
-      setPendingPasswordChange(user);
-    } else {
-      logInAsClientUser(user, client);
+    } catch (err) {
+      setAuthError(err instanceof ApiError ? err.message : 'Sign-in failed.');
     }
   };
 
@@ -307,6 +370,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    // Best-effort and fire-and-forget: the local session below is cleared
+    // either way, so a dead or unreachable server can't trap someone signed in.
+    if (authUser) void apiSignOut();
     setAuthUser(null);
     setPendingPasswordChange(null);
     setAuthError(undefined);
@@ -340,52 +406,65 @@ export default function App() {
     return null;
   };
 
-  const handleAddClient = (newClient: ClientAccount) => {
-    setClients((prev) => [newClient, ...prev]);
-    const roleId = `role-superadmin-${newClient.id}`;
-    setRoles((prev) => [
-      ...prev,
-      { id: roleId, clientId: newClient.id, name: 'Super Admin', allowedTabs: CLIENT_ASSIGNABLE_TABS, isSuperAdminRole: true, createdAt: newClient.createdAt },
-    ]);
-    setClientUsers((prev) => [
-      ...prev,
-      {
-        id: `cu-${newClient.id}`,
-        clientId: newClient.id,
-        name: newClient.contactPersonName,
-        username: newClient.username,
-        password: newClient.password,
-        roleId,
-        active: true,
-        mustChangePassword: true,
-        createdAt: newClient.createdAt,
-      },
-    ]);
+  // POST /accounts, for real — creates the tenant and its super admin in one
+  // transaction and returns an invitation token. There is no password to
+  // invent here: the modal shows that token so it can be handed to the
+  // client, who sets their own via POST /auth/accept-invitation.
+  const handleCreateAccount = async (
+    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string },
+  ) => {
+    const result = await apiCreateAccount({
+      tenantId: input.tenantId,
+      name: input.name,
+      superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
+    });
+    // Re-read from the server rather than trust the create response to be
+    // the whole picture — the same reason the edit and suspend/reinstate
+    // handlers below do it too.
+    await refreshAccounts();
+    return result;
   };
 
-  const handleUpdateClient = (updatedClient: ClientAccount) => {
-    setClients((prev) => prev.map((c) => (c.id === updatedClient.id ? updatedClient : c)));
-    // Keep the Super Admin's login in sync — Edit Client can change the
-    // username, and that's the same username used to sign in.
-    setClientUsers((prev) => prev.map((u) => {
-      if (u.clientId !== updatedClient.id) return u;
-      const role = roles.find((r) => r.id === u.roleId);
-      return role?.isSuperAdminRole ? { ...u, username: updatedClient.username } : u;
-    }));
+  // PATCH /accounts/:id — renames the account and/or corrects its super
+  // admin's own contact details. Cannot move the tenantId or hand the role to
+  // a different person; see ProvisioningService.update's own comment on why.
+  const handleUpdateAccount = async (
+    tenantId: string,
+    input: { name: string; email: string; fullName: string; phone?: string },
+  ) => {
+    const updated = await apiUpdateAccount(tenantId, {
+      name: input.name,
+      superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
+    });
+    await refreshAccounts();
+    return updated;
   };
 
-  const handleToggleClientStatus = (id: string) => {
-    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, status: c.status === 'Active' ? 'Inactive' : 'Active' } : c)));
+  // Suspend/reinstate are real too (POST /accounts/:id/suspend|reinstate).
+  // Suspending needs a reason — the API requires one and audits it — so a
+  // browser prompt stands in for a proper dialog until this screen gets one.
+  const handleToggleClientStatus = async (id: string) => {
+    const current = clients.find((c) => c.id === id);
+    if (!current) return;
+    try {
+      if (current.status === 'Active') {
+        const reason = window.prompt(`Why is ${current.clientName} being suspended?`);
+        if (!reason) return;
+        await apiSuspendAccount(id, reason);
+      } else {
+        await apiReinstateAccount(id);
+      }
+      await refreshAccounts();
+    } catch (err) {
+      setAccountsError(err instanceof ApiError ? err.message : 'That action failed.');
+    }
   };
 
-  const handleResetClientPassword = (id: string) => {
-    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, mustChangePassword: true } : c)));
-    setClientUsers((prev) => prev.map((u) => {
-      if (u.clientId !== id) return u;
-      const role = roles.find((r) => r.id === u.roleId);
-      return role?.isSuperAdminRole ? { ...u, mustChangePassword: true } : u;
-    }));
-  };
+  // Only works while the super admin has never accepted the first one — see
+  // ProvisioningService.resendInvitation. This is a fresh token, not the
+  // original one; the old one stops working the moment this succeeds.
+  const handleResendInvitation = (tenantId: string): Promise<ResendInvitationResult> =>
+    apiResendInvitation(tenantId);
 
   const handleAddClientUser = (user: ClientUserItem) => setClientUsers((prev) => [user, ...prev]);
   const handleUpdateClientUser = (user: ClientUserItem) => setClientUsers((prev) => prev.map((u) => (u.id === user.id ? user : u)));
@@ -564,6 +643,13 @@ export default function App() {
   }
 
   // Auth gate — nothing below renders until someone is logged in
+  if (restoringSession) {
+    return (
+      <div className="grid min-h-screen w-full place-items-center bg-[#F4F7FB] text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+        Restoring your session…
+      </div>
+    );
+  }
   if (pendingPasswordChange) {
     const pendingClientName = clients.find((c) => c.id === pendingPasswordChange.clientId)?.clientName || 'there';
     return (
@@ -574,8 +660,27 @@ export default function App() {
       />
     );
   }
+  if (!authUser && acceptingInvitation) {
+    return (
+      <AcceptInvitationScreen
+        initialToken={new URLSearchParams(window.location.search).get('invite') ?? undefined}
+        onAccepted={(user) => {
+          setAuthUser(authUserFromApi(user));
+          setAcceptingInvitation(false);
+          setCurrentTab('dashboard');
+        }}
+        onBack={() => setAcceptingInvitation(false)}
+      />
+    );
+  }
   if (!authUser) {
-    return <LoginScreen onLogin={handleLoginAttempt} error={authError} />;
+    return (
+      <LoginScreen
+        onLogin={handleLoginAttempt}
+        error={authError}
+        onWantAcceptInvitation={() => setAcceptingInvitation(true)}
+      />
+    );
   }
 
   // Which client's Plants/Devices/Equipment/Users/Roles are in scope: the
@@ -682,16 +787,11 @@ export default function App() {
                     activeSubTab={adminSubTab}
                     onChangeSubTab={setAdminSubTab}
                     clients={modalClients}
-                    onAddClient={handleAddClient}
-                    onUpdateClient={handleUpdateClient}
+                    accountsError={accountsError}
+                    onCreateAccount={handleCreateAccount}
+                    onUpdateAccount={handleUpdateAccount}
+                    onResendInvitation={handleResendInvitation}
                     onToggleClientStatus={handleToggleClientStatus}
-                    onResetClientPassword={handleResetClientPassword}
-                    clientUsers={clientUsers}
-                    roles={roles}
-                    onManageClientAccess={(clientId) => {
-                      setManageAccessClientId(clientId);
-                      setCurrentTab('client-users');
-                    }}
                     restrictToClientAdmin={authUser.role === 'client'}
                   />
                 )}

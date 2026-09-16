@@ -8,7 +8,8 @@ import {
   Cpu,
   Briefcase
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, EquipmentItem, DeviceItem, ClientAccount, ClientUserItem, RoleDefinition } from '../../types';
+import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, EquipmentItem, DeviceItem, ClientAccount } from '../../types';
+import { Account, CreateAccountResult, ResendInvitationResult } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
 import { CategoryView } from './CategoryView';
@@ -43,13 +44,16 @@ interface AdminManagementProps {
   activeSubTab: AdminSubTab;
   onChangeSubTab: (tab: AdminSubTab) => void;
   clients: ClientAccount[];
-  onAddClient: (client: ClientAccount) => void;
-  onUpdateClient: (client: ClientAccount) => void;
+  accountsError?: string;
+  onCreateAccount: (
+    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string },
+  ) => Promise<CreateAccountResult>;
+  onUpdateAccount: (
+    tenantId: string,
+    input: { name: string; email: string; fullName: string; phone?: string },
+  ) => Promise<Account>;
+  onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
-  onResetClientPassword: (id: string) => void;
-  clientUsers: ClientUserItem[];
-  roles: RoleDefinition[];
-  onManageClientAccess: (clientId: string) => void;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
 }
@@ -82,13 +86,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   activeSubTab,
   onChangeSubTab,
   clients,
-  onAddClient,
-  onUpdateClient,
+  accountsError,
+  onCreateAccount,
+  onUpdateAccount,
+  onResendInvitation,
   onToggleClientStatus,
-  onResetClientPassword,
-  clientUsers,
-  roles,
-  onManageClientAccess,
   restrictToClientAdmin,
 }) => {
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -203,13 +205,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         {!restrictToClientAdmin && activeSubTab === 'clients' && (
           <ClientManagement
             clients={clients}
-            clientUsers={clientUsers}
-            roles={roles}
-            onAddClient={onAddClient}
-            onUpdateClient={onUpdateClient}
+            error={accountsError}
+            onCreateAccount={onCreateAccount}
+            onUpdateAccount={onUpdateAccount}
+            onResendInvitation={onResendInvitation}
             onToggleStatus={onToggleClientStatus}
-            onResetPassword={onResetClientPassword}
-            onManageAccess={onManageClientAccess}
           />
         )}
       </div>

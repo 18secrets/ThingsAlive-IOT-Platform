@@ -17,15 +17,20 @@ export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = ['dashboard', 'ai-onboard
 
 export type UserRole = 'master-admin' | 'client';
 
+// `id` is the account's real tenantId once it comes from the API — there is no
+// separate internal id, unlike the mock's `cl-${Date.now()}` scheme. Everything
+// below `status` is optional because a real account carries none of it: the API
+// has no username, no stored password (a person accepts an invitation instead)
+// and no phone at all. Present only for whatever this app still creates locally.
 export interface ClientAccount {
   id: string;
   clientName: string;
-  contactPersonName: string;
-  phone: string;
-  email: string;
-  username: string;
-  password: string;
-  mustChangePassword: boolean;
+  contactPersonName?: string;
+  phone?: string;
+  email?: string;
+  username?: string;
+  password?: string;
+  mustChangePassword?: boolean;
   status: 'Active' | 'Inactive';
   createdAt: string;
 }

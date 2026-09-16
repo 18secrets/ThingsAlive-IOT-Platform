@@ -35,6 +35,8 @@ import { UserSecurityEvent } from '../identity/entities/user-security-event.enti
 import { UserSession } from '../identity/entities/user-session.entity';
 import { TenantRole } from '../identity/entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../identity/entities/user-access.entity';
+import { PlatformUser } from '../identity/entities/platform-user.entity';
+import { PlatformSession } from '../identity/entities/platform-session.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
 import { Prediction } from '../prediction/entities/prediction.entity';
@@ -90,6 +92,8 @@ export const ENTITIES = [
   CausalChainDefinition,
   AlertRule,
   AlertEvent,
+  PlatformUser,
+  PlatformSession,
 ];
 
 export interface DataSourceChoices {
