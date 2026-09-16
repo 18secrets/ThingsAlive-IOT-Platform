@@ -2,6 +2,9 @@ node_modules/
 dist/
 *.log
 
+# Local scratch Postgres instance used for running the service outside Docker.
+.devdata/
+
 # Environment — never commit a real value. See .env.example.
 .env
 .env.*
