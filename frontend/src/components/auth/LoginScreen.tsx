@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Network, AlertCircle, Info, MailCheck } from 'lucide-react';
 import { PasswordField } from '../common/PasswordField';
+import { useAuth } from '../../lib/AuthProvider';
+import { ApiError } from '../../lib/api';
 
-interface LoginScreenProps {
-  // Master Admin still resolves locally (see App.tsx); anything else is a
-  // real call to the API, hence the Promise — the form needs to know when
-  // it's still in flight and what came back.
-  onLogin: (identifier: string, password: string) => Promise<void>;
-  error?: string;
-  onWantAcceptInvitation: () => void;
-}
-
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, error, onWantAcceptInvitation }) => {
+export const LoginScreen: React.FC = () => {
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showHints, setShowHints] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +21,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, error, onWant
     // stray leading/trailing space or newline that silently breaks the
     // exact-match comparison otherwise.
     setBusy(true);
+    setError(undefined);
     try {
-      await onLogin(identifier.trim(), password.trim());
+      await signIn(identifier.trim(), password.trim());
+      // GuestOnly would also redirect once `authUser` updates, but that only
+      // happens on the next render; navigating here means the URL changes in
+      // the same tick as the sign-in, not one render later.
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Sign-in failed.');
     } finally {
       setBusy(false);
     }
@@ -96,7 +100,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, error, onWant
 
         <button
           type="button"
-          onClick={onWantAcceptInvitation}
+          onClick={() => navigate('/accept-invitation')}
           className="mt-4 w-full flex items-center justify-center gap-1.5 text-xs text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 cursor-pointer"
         >
           <MailCheck className="w-3.5 h-3.5" />

@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Network, KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
-import { apiAcceptInvitation, ApiError, SignedInUser } from '../../lib/api';
+import { ApiError } from '../../lib/api';
+import { useAuth } from '../../lib/AuthProvider';
 import { PasswordField } from '../common/PasswordField';
 
-interface AcceptInvitationScreenProps {
-  initialToken?: string;
-  onAccepted: (user: SignedInUser) => void;
-  onBack: () => void;
-}
+export const AcceptInvitationScreen: React.FC = () => {
+  const { acceptInvitation } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialToken = searchParams.get('invite') ?? undefined;
 
-export const AcceptInvitationScreen: React.FC<AcceptInvitationScreenProps> = ({
-  initialToken, onAccepted, onBack,
-}) => {
   const [token, setToken] = useState(initialToken ?? '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,8 +32,8 @@ export const AcceptInvitationScreen: React.FC<AcceptInvitationScreenProps> = ({
     setBusy(true);
     setError(undefined);
     try {
-      const user = await apiAcceptInvitation(trimmedToken, trimmedNew);
-      onAccepted(user);
+      await acceptInvitation(trimmedToken, trimmedNew);
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not accept the invitation.');
     } finally {
@@ -118,7 +117,7 @@ export const AcceptInvitationScreen: React.FC<AcceptInvitationScreenProps> = ({
 
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => navigate('/sign-in')}
           className="mt-4 w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
