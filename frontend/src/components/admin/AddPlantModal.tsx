@@ -1,51 +1,72 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
-import { PlantItem, ClientAccount } from '../../types';
+import { ApiError, Plant, PlantInput } from '../../lib/api';
 
 interface AddPlantModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (plant: PlantItem) => void;
-  existingPlant?: PlantItem | null;
-  clients: ClientAccount[];
+  onCreate: (input: PlantInput) => Promise<Plant>;
+  onUpdate: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
+  existingPlant?: Plant | null;
 }
 
+const slugify = (name: string) =>
+  name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+
 export const AddPlantModal: React.FC<AddPlantModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-  existingPlant,
-  clients,
+  isOpen, onClose, onCreate, onUpdate, existingPlant,
 }) => {
-  const [name, setName] = useState(existingPlant?.name || '');
-  const [location, setLocation] = useState(existingPlant?.location || '');
-  const [code, setCode] = useState(existingPlant?.code || '');
-  const [clientId, setClientId] = useState(existingPlant?.clientId || (clients.length === 1 ? clients[0].id : ''));
-  const [statusActive, setStatusActive] = useState(existingPlant?.active ?? true);
-  const clientLocked = clients.length === 1;
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [address, setAddress] = useState('');
+  const [siteArea, setSiteArea] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const isEditing = !!existingPlant;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(existingPlant?.name ?? '');
+    setCode(existingPlant?.code ?? '');
+    setCodeTouched(isEditing);
+    setAddress(existingPlant?.address ?? '');
+    setSiteArea(existingPlant?.siteArea ?? '');
+    setError(undefined);
+  }, [isOpen, existingPlant, isEditing]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!codeTouched) setCode(slugify(value));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedClient = clients.find((c) => c.id === clientId);
-    if (!name.trim() || !selectedClient) return;
+    const finalName = name.trim();
+    const finalCode = code.trim();
+    if (!finalName || !finalCode) return;
 
-    const newPlant: PlantItem = {
-      id: existingPlant?.id || `PLANT-${Date.now().toString().slice(-4)}`,
-      name: name.trim(),
-      location: location.trim() || 'Industrial Complex',
-      code: existingPlant
-        ? (code.trim() || existingPlant.code)
-        : (code.trim() || name.slice(0, 3).toUpperCase()) + `-${Math.floor(10 + Math.random() * 90)}`,
-      equipmentCount: existingPlant?.equipmentCount || 0,
-      active: statusActive,
-      clientId: selectedClient.id,
-      clientName: selectedClient.clientName,
-    };
-
-    onSave(newPlant);
-    onClose();
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (existingPlant) {
+        await onUpdate(existingPlant.id, {
+          name: finalName, code: finalCode, address: address.trim() || undefined, siteArea: siteArea.trim() || undefined,
+        });
+      } else {
+        await onCreate({
+          name: finalName, code: finalCode, address: address.trim() || undefined, siteArea: siteArea.trim() || undefined,
+        });
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'register'} the site.`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -55,16 +76,15 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
     >
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
 
-        {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {existingPlant ? 'Edit Plant / Depot' : 'Register New Plant / Depot'}
+                {isEditing ? 'Edit Plant / Depot' : 'Register New Plant / Depot'}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
-                Regional production facility, maintenance depot, or assembly site
+                Regional production facility, maintenance depot, or assembly site — in your own account.
               </p>
             </div>
           </div>
@@ -77,28 +97,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body Form */}
         <form onSubmit={handleSubmit} className="px-7 py-6 space-y-5">
-
-          {/* Client */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Client <span className="text-rose-500">*</span>
-            </label>
-            <select
-              required
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              disabled={clientLocked}
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white appearance-none focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all pr-9 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-            >
-              <option value="" disabled>Select a client</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.clientName}</option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Plant Name <span className="text-rose-500">*</span>
@@ -108,7 +107,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
               required
               autoFocus
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g. Hyderabad Central Works"
               className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
             />
@@ -117,12 +116,12 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Location <span className="text-slate-400 font-normal">(City, State)</span>
+                Address <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <input
                 type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
                 placeholder="e.g. Hyderabad, Telangana"
                 className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
@@ -130,46 +129,41 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Plant Code
+                Plant Code <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => { setCode(e.target.value); setCodeTouched(true); }}
                 placeholder="e.g. HYD-WKS"
                 className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono"
               />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Letters, digits, dots, hyphens or underscores — unique within your account.
+              </p>
             </div>
           </div>
 
-          {/* Status toggle */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/30">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs">
-                <Check className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Plant Status</div>
-                <div className="text-[11px] text-slate-400">Enable this plant immediately for equipment and device assignment</div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setStatusActive(!statusActive)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
-                statusActive ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  statusActive ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Site Area <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={siteArea}
+              onChange={(e) => setSiteArea(e.target.value)}
+              placeholder="e.g. 12 acres"
+              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
+            />
           </div>
 
-          {/* Modal Footer Buttons */}
+          {error && (
+            <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
@@ -185,14 +179,14 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
+                disabled={busy}
+                className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{existingPlant ? 'Save Plant' : 'Register Plant'}</span>
+                <span>{busy ? 'Saving…' : (isEditing ? 'Save Plant' : 'Register Plant')}</span>
               </button>
             </div>
           </div>
-
         </form>
 
       </div>

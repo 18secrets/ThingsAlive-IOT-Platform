@@ -2,14 +2,13 @@ import React, { useState, useMemo } from 'react';
 import {
   Search,
   Plus,
-  Wrench,
   AlertCircle,
   Edit2,
   Trash2,
   MapPin,
-  Briefcase
 } from 'lucide-react';
-import { IndustryTypeItem, PlantItem, ClientAccount } from '../../types';
+import { IndustryTypeItem } from '../../types';
+import { ApiError, Plant, PlantInput } from '../../lib/api';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
 import { AddPlantModal } from './AddPlantModal';
 
@@ -147,35 +146,28 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
 };
 
 interface PlantViewProps {
-  items: PlantItem[];
-  onAddPlant?: (plant: PlantItem) => void;
-  onUpdatePlant?: (plant: PlantItem) => void;
-  onDeletePlant?: (id: string) => void;
-  clients: ClientAccount[];
+  plants: Plant[];
+  error?: string;
+  onCreatePlant: (input: PlantInput) => Promise<Plant>;
+  onUpdatePlant: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
+  onToggleStatus: (id: string, currentStatus: Plant['status']) => void;
 }
 
 export const PlantView: React.FC<PlantViewProps> = ({
-  items,
-  onAddPlant,
-  onUpdatePlant,
-  onDeletePlant,
-  clients,
+  plants, error, onCreatePlant, onUpdatePlant, onToggleStatus,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingPlant, setEditingPlant] = useState<PlantItem | null>(null);
+  const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
 
   const filteredItems = useMemo(() => {
-    return items.filter((p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.location.toLowerCase().includes(searchTerm.toLowerCase())
+    const term = searchTerm.toLowerCase();
+    return plants.filter((p) =>
+      p.name.toLowerCase().includes(term) ||
+      p.code.toLowerCase().includes(term) ||
+      (p.address?.toLowerCase().includes(term) ?? false)
     );
-  }, [items, searchTerm]);
-
-  const handleToggleActive = (plant: PlantItem) => {
-    onUpdatePlant?.({ ...plant, active: !plant.active });
-  };
+  }, [plants, searchTerm]);
 
   return (
     <div id="plant-management-view" className="space-y-6">
@@ -188,25 +180,30 @@ export const PlantView: React.FC<PlantViewProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search Plant Names, Codes, or Locations..."
+            placeholder="Search Plant Names, Codes, or Addresses..."
             className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
           />
         </div>
 
-        {onAddPlant && (
-          <button
-            id="add-plant-btn"
-            onClick={() => {
-              setEditingPlant(null);
-              setIsModalOpen(true);
-            }}
-            className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Plant</span>
-          </button>
-        )}
+        <button
+          id="add-plant-btn"
+          onClick={() => {
+            setEditingPlant(null);
+            setIsModalOpen(true);
+          }}
+          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Plant</span>
+        </button>
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Plant Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -223,15 +220,15 @@ export const PlantView: React.FC<PlantViewProps> = ({
 
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => handleToggleActive(plant)}
+                    onClick={() => onToggleStatus(plant.id, plant.status)}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
-                      plant.active ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
+                      plant.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
-                    title={plant.active ? 'Active' : 'Inactive'}
+                    title={plant.status === 'active' ? 'Retire this site' : 'Reopen this site'}
                   >
                     <span
                       className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                        plant.active ? 'translate-x-4.5' : 'translate-x-1'
+                        plant.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'
                       }`}
                     />
                   </button>
@@ -246,40 +243,23 @@ export const PlantView: React.FC<PlantViewProps> = ({
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
-
-                  <button
-                    onClick={() => onDeletePlant?.(plant.id)}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer"
-                    title="Delete Plant"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               </div>
 
               <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
                 {plant.name}
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-rose-500" />
-                {plant.location}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
-                <Wrench className="w-3 h-3 text-sky-600" />
-                <span>{plant.equipmentCount} Equipment</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
-                <Briefcase className="w-3 h-3 text-sky-600" />
-                <span>{plant.clientName || 'Unassigned'}</span>
-              </div>
+              {plant.address && (
+                <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-rose-500" />
+                  {plant.address}
+                </p>
+              )}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
-              <span className={`font-semibold text-xs ${plant.active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                {plant.active ? '• Active' : '• Disabled'}
+              <span className={`font-semibold text-xs ${plant.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                {plant.status === 'active' ? '• Active' : '• Retired'}
               </span>
             </div>
           </div>
@@ -293,21 +273,17 @@ export const PlantView: React.FC<PlantViewProps> = ({
         )}
       </div>
 
+      {/* No delete here — the API only ever retires a site, since anything
+          that once stood there (work orders, alerts) still needs it to exist. */}
       <AddPlantModal
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setEditingPlant(null);
         }}
-        onSave={(saved) => {
-          if (editingPlant) {
-            onUpdatePlant?.(saved);
-          } else {
-            onAddPlant?.(saved);
-          }
-        }}
+        onCreate={onCreatePlant}
+        onUpdate={onUpdatePlant}
         existingPlant={editingPlant}
-        clients={clients}
       />
     </div>
   );

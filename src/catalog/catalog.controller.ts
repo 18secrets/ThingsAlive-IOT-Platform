@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray, IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -10,13 +13,35 @@ import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
 import { RecommendationService } from './services/recommendation.service';
 
+export class ExpectedSignalDto {
+  @IsString() @IsNotEmpty() signal: string;
+  @IsOptional() @IsString() unit: string | null = null;
+  @IsBoolean() required: boolean;
+  @IsOptional() @IsString() description?: string;
+}
+
+export class FailureModeDto {
+  @IsString() @IsNotEmpty() code: string;
+  @IsString() @IsNotEmpty() name: string;
+  @IsString() @IsNotEmpty() symptom: string;
+  @IsArray() @IsString({ each: true }) signals: string[];
+}
+
 export class TemplateClassDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
-  @IsOptional() expectedSignals?: any[];
-  @IsOptional() failureModes?: any[];
-  @IsOptional() defaultThresholds?: Record<string, unknown>;
+  // Bare `any[]` here used to reach the service as a corrupted `[[]]` — with
+  // no @Type() telling class-transformer what an array element is, its
+  // implicit-conversion pass (see main.ts's ValidationPipe) reduces every
+  // object item to an empty array instead of leaving it alone. The same
+  // class of bug this file already fixed once for a keyed slug; nested
+  // arrays need their own @ValidateNested, not just the property itself.
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExpectedSignalDto)
+  expectedSignals?: ExpectedSignalDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FailureModeDto)
+  failureModes?: FailureModeDto[];
+  @IsOptional() @IsObject() defaultThresholds?: Record<string, unknown>;
 }
 
 export class TemplateScenarioDto {

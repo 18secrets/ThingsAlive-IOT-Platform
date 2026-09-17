@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString,
+  ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString, IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -17,6 +17,9 @@ export class RegisterDeviceDto {
 
   @IsOptional() @IsString()
   model?: string;
+
+  @IsOptional() @IsUUID()
+  toolMappingId?: string;
 
   @IsOptional() @IsString()
   batchRef?: string;
@@ -101,6 +104,7 @@ export class InventoryController {
     return this.inventory.register(scope, body.devices.map((d) => ({
       imei: d.imei,
       model: d.model ?? null,
+      toolMappingId: d.toolMappingId ?? null,
       batchRef: d.batchRef ?? null,
       receivedAt: d.receivedAt ? new Date(d.receivedAt) : null,
       notes: d.notes ?? null,

@@ -58,7 +58,9 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
     if (tab === 'admin') {
-      navigate(`/admin/${authUser.role === 'client' ? 'plant' : 'industry'}`);
+      // 'industry' is hidden from Master Admin's tab bar for now — see
+      // AdminIndexRedirect's own comment in App.tsx, which this must match.
+      navigate(`/admin/${authUser.role === 'client' ? 'plant' : 'clients'}`);
     } else {
       navigate(`/${tab}`);
     }

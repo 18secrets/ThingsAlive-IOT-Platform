@@ -9,12 +9,18 @@ import {
   Briefcase
 } from 'lucide-react';
 import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, EquipmentItem, DeviceItem, ClientAccount } from '../../types';
-import { Account, CreateAccountResult, ResendInvitationResult } from '../../lib/api';
+import {
+  Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
+  Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
+  EquipmentTemplate, EquipmentTemplateInput,
+} from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
 import { CategoryView } from './CategoryView';
+import { EquipmentTemplateView } from './EquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
 import { DeviceManagement } from '../devices/DeviceManagement';
+import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
 import { ClientManagement } from '../clients/ClientManagement';
 
@@ -24,17 +30,48 @@ interface AdminManagementProps {
   categories: CategoryItem[];
   industryTypes: IndustryTypeItem[];
   plants: PlantItem[];
-  onAddSensor: (sensor: SensorItem) => void;
-  onAddToolMapping: (mapping: ToolMappingItem) => void;
-  onAddCategory: (category: CategoryItem) => void;
-  onUpdateCategory: (category: CategoryItem) => void;
-  onDeleteCategory: (id: string) => void;
+  /** The real reference sensors/categories/tool mappings — Master Admin only.
+   *  Separate from the mock `sensors`/`toolMappings` above, which still feed
+   *  Equipment's still-mock pickers. */
+  sensorCategories: SensorCategory[];
+  realSensors: Sensor[];
+  sensorsError?: string;
+  onCreateSensor: (input: SensorInput) => Promise<Sensor>;
+  onUpdateSensor: (id: string, input: SensorInput) => Promise<Sensor>;
+  onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
+  realToolMappings: ToolMapping[];
+  toolMappingsError?: string;
+  onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
+  onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  /** The real device pool (GET /inventory/pool) — Master Admin only. Separate
+   *  from the mock `devices` below, which still feeds Equipment's picker and
+   *  the client's own still-mock Devices tab. */
+  devicePool: PooledDevice[];
+  devicePoolError?: string;
+  onNavigateToRegisterDevice: () => void;
+  onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
+  /** The real catalog — platform-owned template classes, Master Admin only. */
+  equipmentClasses: EquipmentClass[];
+  equipmentClassesError?: string;
+  onCreateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
+  onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
+  onPublishEquipmentClass: (slug: string) => Promise<void>;
+  onRetireEquipmentClass: (slug: string) => Promise<void>;
+  /** Common onboarding fields, Master Admin only — deliberately separate from
+   *  the prediction catalog above; see EquipmentTemplate's own comment. */
+  equipmentTemplates: EquipmentTemplate[];
+  equipmentTemplatesError?: string;
+  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
   onAddIndustryType?: (industryType: IndustryTypeItem) => void;
   onUpdateIndustryType?: (industryType: IndustryTypeItem) => void;
   onDeleteIndustryType?: (id: string) => void;
-  onAddPlant?: (plant: PlantItem) => void;
-  onUpdatePlant?: (plant: PlantItem) => void;
-  onDeletePlant?: (id: string) => void;
+  /** The signed-in client's own sites, real (GET /equipment/plants) — client role only. */
+  realPlants: Plant[];
+  plantsError?: string;
+  onCreatePlant: (input: PlantInput) => Promise<Plant>;
+  onUpdatePlant: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
+  onTogglePlantStatus: (id: string, currentStatus: Plant['status']) => void;
   devices: DeviceItem[];
   onNavigateToDeviceSetup: () => void;
   onNavigateToAISetup?: () => void;
@@ -66,17 +103,38 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   categories,
   industryTypes,
   plants,
-  onAddSensor,
-  onAddToolMapping,
-  onAddCategory,
-  onUpdateCategory,
-  onDeleteCategory,
+  sensorCategories,
+  realSensors,
+  sensorsError,
+  onCreateSensor,
+  onUpdateSensor,
+  onCreateSensorCategory,
+  realToolMappings,
+  toolMappingsError,
+  onCreateToolMapping,
+  onUpdateToolMapping,
+  devicePool,
+  devicePoolError,
+  onNavigateToRegisterDevice,
+  onAssignDevice,
+  equipmentClasses,
+  equipmentClassesError,
+  onCreateEquipmentClass,
+  onUpdateEquipmentClass,
+  onPublishEquipmentClass,
+  onRetireEquipmentClass,
+  equipmentTemplates,
+  equipmentTemplatesError,
+  onCreateEquipmentTemplate,
+  onUpdateEquipmentTemplate,
   onAddIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
-  onAddPlant,
+  realPlants,
+  plantsError,
+  onCreatePlant,
   onUpdatePlant,
-  onDeletePlant,
+  onTogglePlantStatus,
   devices,
   onNavigateToDeviceSetup,
   onNavigateToAISetup,
@@ -97,16 +155,21 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'industry', label: 'Industry Type', icon: BarChart3 },
     { id: 'clients', label: 'Clients', icon: Briefcase },
     { id: 'plant', label: 'Plant', icon: Building2 },
-    { id: 'category', label: 'Category', icon: LayoutGrid },
+    { id: 'category', label: 'Equipment Classes', icon: LayoutGrid },
     { id: 'sensor', label: 'Sensor', icon: Disc },
     { id: 'tool-mapping', label: 'Tool Mapping', icon: Wrench },
     { id: 'devices', label: 'Devices', icon: Cpu },
     { id: 'equipment', label: 'Equipment', icon: Wrench },
+    { id: 'equipment-template', label: 'Equipment Templates', icon: LayoutGrid },
   ];
 
+  // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
+  // same reason "Manage Access" doesn't exist for them either, see
+  // ClientManagement), and no Equipment Classes, Equipment, or Industry Type tab
+  // (the last hidden for now, by request).
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
-    : allSubTabs;
+    : allSubTabs.filter((tab) => !['plant', 'category', 'equipment', 'industry'].includes(tab.id));
 
   return (
     <div id="admin-module" className="space-y-5">
@@ -139,25 +202,42 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
         {!restrictToClientAdmin && activeSubTab === 'sensor' && (
           <SensorTable
-            sensors={sensors}
-            onAddSensor={onAddSensor}
+            sensors={realSensors}
+            error={sensorsError}
+            categories={sensorCategories}
+            onCreateSensor={onCreateSensor}
+            onUpdateSensor={onUpdateSensor}
+            onCreateCategory={onCreateSensorCategory}
           />
         )}
 
         {!restrictToClientAdmin && activeSubTab === 'tool-mapping' && (
           <ToolMappingTable
-            mappings={toolMappings}
-            onAddMapping={onAddToolMapping}
-            availableSensors={sensors}
+            mappings={realToolMappings}
+            error={toolMappingsError}
+            onCreateMapping={onCreateToolMapping}
+            onUpdateMapping={onUpdateToolMapping}
+            availableSensors={realSensors}
           />
         )}
 
         {!restrictToClientAdmin && activeSubTab === 'category' && (
           <CategoryView
-            categories={categories}
-            onAddCategory={onAddCategory}
-            onUpdateCategory={onUpdateCategory}
-            onDeleteCategory={onDeleteCategory}
+            classes={equipmentClasses}
+            error={equipmentClassesError}
+            onCreateClass={onCreateEquipmentClass}
+            onUpdateClass={onUpdateEquipmentClass}
+            onPublishClass={onPublishEquipmentClass}
+            onRetireClass={onRetireEquipmentClass}
+          />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'equipment-template' && (
+          <EquipmentTemplateView
+            templates={equipmentTemplates}
+            error={equipmentTemplatesError}
+            onCreateTemplate={onCreateEquipmentTemplate}
+            onUpdateTemplate={onUpdateEquipmentTemplate}
           />
         )}
 
@@ -170,17 +250,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
-        {activeSubTab === 'plant' && (
+        {restrictToClientAdmin && activeSubTab === 'plant' && (
           <PlantView
-            items={plants}
-            onAddPlant={onAddPlant}
+            plants={realPlants}
+            error={plantsError}
+            onCreatePlant={onCreatePlant}
             onUpdatePlant={onUpdatePlant}
-            onDeletePlant={onDeletePlant}
-            clients={clients}
+            onToggleStatus={onTogglePlantStatus}
           />
         )}
 
-        {activeSubTab === 'devices' && (
+        {restrictToClientAdmin && activeSubTab === 'devices' && (
           <DeviceManagement
             devices={devices}
             onNavigateToSetup={onNavigateToDeviceSetup}
@@ -189,7 +269,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
-        {activeSubTab === 'equipment' && (
+        {!restrictToClientAdmin && activeSubTab === 'devices' && (
+          <DevicePoolManagement
+            pool={devicePool}
+            error={devicePoolError}
+            clients={clients}
+            onNavigateToRegister={onNavigateToRegisterDevice}
+            onAssign={onAssignDevice}
+          />
+        )}
+
+        {restrictToClientAdmin && activeSubTab === 'equipment' && (
           <EquipmentManagement
             equipmentList={equipmentList}
             onAddEquipment={onAddEquipment}

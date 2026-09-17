@@ -1,82 +1,94 @@
-import React, { useState } from 'react';
-import { X, Check, Plus, Trash2 } from 'lucide-react';
-import { SensorItem, SensorParameterSpec } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
+import {
+  ApiError, Sensor, SensorCategory, SensorInput, SensorParameterSpec,
+} from '../../lib/api';
 
 interface AddSensorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (sensor: SensorItem) => void;
-  categories?: string[];
+  onCreate: (input: SensorInput) => Promise<Sensor>;
+  onUpdate: (id: string, input: SensorInput) => Promise<Sensor>;
+  categories: SensorCategory[];
+  onCreateCategory: (name: string) => Promise<SensorCategory>;
+  existingSensor?: Sensor | null;
 }
 
 const emptySpec = (): SensorParameterSpec => ({
-  parameter: '',
-  unit: '',
-  min: 0,
-  max: 0,
-  normalRange: '',
-  notes: '',
+  parameter: '', unit: '', min: 0, max: 0, normalRange: '', notes: '',
 });
 
+const NEW_CATEGORY = '__new__';
+
 export const AddSensorModal: React.FC<AddSensorModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-  categories = [],
+  isOpen, onClose, onCreate, onUpdate, categories, onCreateCategory, existingSensor,
 }) => {
-  const [category, setCategory] = useState(categories[0] || '');
+  const [categoryId, setCategoryId] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [sensorName, setSensorName] = useState('');
   const [description, setDescription] = useState('');
   const [specs, setSpecs] = useState<SensorParameterSpec[]>([emptySpec()]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const isEditing = !!existingSensor;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCategoryId(existingSensor?.categoryId ?? '');
+    setNewCategoryName('');
+    setSensorName(existingSensor?.sensorName ?? '');
+    setDescription(existingSensor?.description ?? '');
+    setSpecs(existingSensor?.parameterSpecs?.length ? existingSensor.parameterSpecs : [emptySpec()]);
+    setError(undefined);
+  }, [isOpen, existingSensor]);
 
   if (!isOpen) return null;
 
   const updateSpec = (index: number, field: keyof SensorParameterSpec, value: string) => {
-    setSpecs((prev) =>
-      prev.map((s, i) => {
-        if (i !== index) return s;
-        if (field === 'min' || field === 'max') {
-          return { ...s, [field]: value === '' ? 0 : Number(value) };
-        }
-        return { ...s, [field]: value };
-      })
-    );
+    setSpecs((prev) => prev.map((s, i) => {
+      if (i !== index) return s;
+      if (field === 'min' || field === 'max') return { ...s, [field]: value === '' ? 0 : Number(value) };
+      return { ...s, [field]: value };
+    }));
   };
-
   const addSpecRow = () => setSpecs((prev) => [...prev, emptySpec()]);
   const removeSpecRow = (index: number) =>
     setSpecs((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
-  const resetForm = () => {
-    setCategory(categories[0] || '');
-    setSensorName('');
-    setDescription('');
-    setSpecs([emptySpec()]);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sensorName.trim()) return;
+    const finalName = sensorName.trim();
+    if (!finalName) return;
+    if (categoryId === NEW_CATEGORY && !newCategoryName.trim()) return;
 
-    const validSpecs = specs.filter((s) => s.parameter.trim());
+    const parameterSpecs = specs.filter((s) => s.parameter.trim());
 
-    const newSensor: SensorItem = {
-      id: `SN-${Date.now().toString().slice(-6)}`,
-      sensorName: sensorName.trim().replace(/\s+/g, '_'),
-      code: `SNS-${Math.floor(10 + Math.random() * 90)}`,
-      createdAt: '09-03-2026',
-      updatedAt: '09-03-2026',
-      description: description.trim() || 'Telematics channel monitoring transducer',
-      category: category || undefined,
-      parameters: validSpecs.length
-        ? validSpecs.map((s) => s.parameter.trim())
-        : ['Differential Pressure', 'Opacity', 'Temperature'],
-      parameterSpecs: validSpecs.length ? validSpecs : undefined,
-    };
-
-    onSave(newSensor);
-    resetForm();
-    onClose();
+    setBusy(true);
+    setError(undefined);
+    try {
+      let finalCategoryId = categoryId || undefined;
+      if (categoryId === NEW_CATEGORY) {
+        const created = await onCreateCategory(newCategoryName.trim());
+        finalCategoryId = created.id;
+      }
+      const input: SensorInput = {
+        sensorName: finalName,
+        categoryId: finalCategoryId,
+        description: description.trim() || undefined,
+        parameterSpecs,
+      };
+      if (isEditing) {
+        await onUpdate(existingSensor!.id, input);
+      } else {
+        await onCreate(input);
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the sensor.`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -87,7 +99,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh]">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 shrink-0">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">
-            Add New Telematics Sensor
+            {isEditing ? 'Edit Telematics Sensor' : 'Add New Telematics Sensor'}
           </h3>
           <button
             onClick={onClose}
@@ -102,26 +114,27 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Sensor Category <span className="text-red-500">*</span>
             </label>
-            {categories.length > 0 ? (
-              <select
-                required
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-sky-500 outline-none cursor-pointer"
-              >
-                <option value="">— Select Category —</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            ) : (
+            <select
+              required
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-sky-500 outline-none cursor-pointer"
+            >
+              <option value="">— Select Category —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+              <option value={NEW_CATEGORY}>+ Add new category…</option>
+            </select>
+            {categoryId === NEW_CATEGORY && (
               <input
                 type="text"
+                autoFocus
                 required
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
                 placeholder="e.g. Engine, Hydraulics"
-                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none"
+                className="w-full mt-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none"
               />
             )}
           </div>
@@ -230,6 +243,13 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             />
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+              <Info className="w-3.5 h-3.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <div className="pt-3 flex items-center justify-end gap-2.5">
             <button
               type="button"
@@ -240,10 +260,11 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-[#0077b6] hover:bg-[#023e8a] text-white font-medium shadow-xs flex items-center gap-1.5"
+              disabled={busy}
+              className="px-5 py-2 rounded-lg bg-[#0077b6] hover:bg-[#023e8a] text-white font-medium shadow-xs flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />
-              Save Sensor
+              {busy ? 'Saving…' : 'Save Sensor'}
             </button>
           </div>
         </form>

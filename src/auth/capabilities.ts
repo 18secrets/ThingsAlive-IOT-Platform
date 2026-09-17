@@ -25,6 +25,8 @@ export type Capability =
   | 'device.manage'
   | 'device.read'
   | 'device.claim'
+  | 'device-catalog.write'
+  | 'equipment-template.write'
   | 'prediction.read'
   | 'prediction.run'
   | 'utilization.read'
@@ -86,6 +88,17 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // Fitting a device to a machine and taking it off again. The customer's act, not
   // ours — nobody at Things Alive knows which generator the logger ended up on.
   'device.claim': ['super admin', 'admin'],
+  // Sensors, tool mappings and their categories: the hardware-wiring reference data
+  // devices are registered against. Distinct from `catalog.write` (prediction
+  // templates, also grants catalog-author) and `device.manage` (the stock ledger's
+  // commercial acts) even though today all three resolve to master-admin alone.
+  'device-catalog.write': ['master-admin'],
+  // Common onboarding fields (manufacturer, engine type, tank capacity...) for a
+  // named/categorised kind of equipment. Deliberately separate from `catalog.write`:
+  // EquipmentClassProfile is the prediction catalog (expected signals, failure
+  // modes) and stays untouched by this — a template here is onboarding convenience,
+  // not a product a tenant is entitled to.
+  'equipment-template.write': ['master-admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it

@@ -98,6 +98,7 @@ export type AdminSubTab =
   | 'tool-mapping'
   | 'devices'
   | 'equipment'
+  | 'equipment-template'
   | 'clients';
 
 export interface SensorParameterSpec {

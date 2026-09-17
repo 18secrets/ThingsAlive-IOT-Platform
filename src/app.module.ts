@@ -25,6 +25,8 @@ import { IntelligenceModule } from './intelligence/intelligence.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { DeviceCatalogModule } from './device-catalog/device-catalog.module';
+import { EquipmentTemplateModule } from './equipment-template/equipment-template.module';
 import { PredictionModule } from './prediction/prediction.module';
 import { ActivationModule } from './activation/activation.module';
 import { ScopeModule } from './scope/scope.module';
@@ -73,6 +75,8 @@ export class AppModule {
               ActivationModule,
               PredictionModule,
               InventoryModule,
+              DeviceCatalogModule,
+              EquipmentTemplateModule,
               IdentityModule,
               TenancyModule,
               EquipmentModule,

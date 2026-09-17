@@ -49,7 +49,16 @@ import { RolesPage } from './pages/RolesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import {
   apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount,
-  apiResendInvitation, ApiError, Account, ResendInvitationResult,
+  apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
+  apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
+  apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
+  apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
+  apiListDevicePool, apiRegisterDevices, apiAssignDevices,
+  apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
+  ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
+  SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
+  EquipmentTemplate, EquipmentTemplateInput,
 } from './lib/api';
 
 const MASTER_ADMIN_PASSWORD_KEY = 'ta_master_admin_password';
@@ -106,18 +115,47 @@ function accountToClient(a: Account): ClientAccount {
 /** `/admin` on its own picks a sensible default subtab for whoever is signed in. */
 function AdminIndexRedirect() {
   const { authUser } = useAuth();
-  const subTab = authUser?.role === 'client' ? 'plant' : 'industry';
+  // 'industry' is hidden from Master Admin's tab bar for now, so their default
+  // landing tab is 'clients' instead.
+  const subTab = authUser?.role === 'client' ? 'plant' : 'clients';
   return <Navigate to={`/admin/${subTab}`} replace />;
 }
 
 function AppData() {
-  const { authUser } = useAuth();
+  const { authUser, restoringSession } = useAuth();
   const navigate = useNavigate();
 
   // Real accounts (Clients admin screen) — fetched from the API, never
   // cached locally. Everything below this is still mock data.
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [accountsError, setAccountsError] = useState<string | undefined>(undefined);
+  // The signed-in client's own real sites (GET /equipment/plants). Separate
+  // from the mock `plants` array below on purpose: Master Admin has no
+  // tenant of their own, so this stays empty for them, while their still-mock
+  // Equipment/Devices screens keep working off INITIAL_PLANTS unaffected.
+  const [realPlants, setRealPlants] = useState<Plant[]>([]);
+  const [plantsError, setPlantsError] = useState<string | undefined>(undefined);
+  // The real catalog (Equipment Classes admin screen) — platform-owned, so
+  // this is Master Admin's data the same way accounts are, not tenant data
+  // the way plants are. Separate from the mock `categories` array below,
+  // which still feeds Equipment's still-mock "category" picker.
+  const [equipmentClasses, setEquipmentClasses] = useState<EquipmentClass[]>([]);
+  const [equipmentClassesError, setEquipmentClassesError] = useState<string | undefined>(undefined);
+  // Master Admin's real reference data for wiring a device before it exists —
+  // separate from the mock `sensors`/`toolMappings`/`devices` below, which
+  // still feed Equipment's still-mock pickers and the client's still-mock
+  // Devices tab.
+  const [sensorCategories, setSensorCategories] = useState<SensorCategory[]>([]);
+  const [realSensors, setRealSensors] = useState<Sensor[]>([]);
+  const [sensorsError, setSensorsError] = useState<string | undefined>(undefined);
+  const [realToolMappings, setRealToolMappings] = useState<ToolMapping[]>([]);
+  const [toolMappingsError, setToolMappingsError] = useState<string | undefined>(undefined);
+  const [devicePool, setDevicePool] = useState<PooledDevice[]>([]);
+  const [devicePoolError, setDevicePoolError] = useState<string | undefined>(undefined);
+  // Onboarding-convenience templates — separate from `equipmentClasses` above,
+  // which is the prediction catalog and stays untouched by this.
+  const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
+  const [equipmentTemplatesError, setEquipmentTemplatesError] = useState<string | undefined>(undefined);
   const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(loadClientUsers);
   const [roles, setRoles] = useState<RoleDefinition[]>(loadRoles);
   const [masterAdminPassword, setMasterAdminPassword] = useState<string>(loadMasterAdminPassword);
@@ -145,7 +183,11 @@ function AppData() {
   };
 
   useEffect(() => {
-    if (authUser?.role !== 'master-admin') return;
+    // Wait for the session-resume check: `authUser` can be a cached, optimistic
+    // value from sessionStorage before the real access token is confirmed to
+    // still work, and firing early sends an authenticated call with no token
+    // at all — surfaced to the user as a raw "Bearer token required." error.
+    if (restoringSession || authUser?.role !== 'master-admin') return;
     let live = true;
     (async () => {
       try {
@@ -158,7 +200,138 @@ function AppData() {
       }
     })();
     return () => { live = false; };
-  }, [authUser]);
+  }, [authUser, restoringSession]);
+
+  const refreshPlants = async () => {
+    try {
+      setRealPlants(await apiListPlants());
+      setPlantsError(undefined);
+    } catch (err) {
+      setPlantsError(err instanceof ApiError ? err.message : 'Could not load plants.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'client') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListPlants();
+        if (!live) return;
+        setRealPlants(list);
+        setPlantsError(undefined);
+      } catch (err) {
+        if (live) setPlantsError(err instanceof ApiError ? err.message : 'Could not load plants.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshEquipmentClasses = async () => {
+    try {
+      setEquipmentClasses(await apiListEquipmentClasses());
+      setEquipmentClassesError(undefined);
+    } catch (err) {
+      setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+    }
+  };
+
+  useEffect(() => {
+    // Wait for the session-resume check: `authUser` can be a cached, optimistic
+    // value from sessionStorage before the real access token is confirmed to
+    // still work, and firing early sends an authenticated call with no token
+    // at all — surfaced to the user as a raw "Bearer token required." error.
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListEquipmentClasses();
+        if (!live) return;
+        setEquipmentClasses(list);
+        setEquipmentClassesError(undefined);
+      } catch (err) {
+        if (live) setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshSensorCatalog = async () => {
+    try {
+      const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()]);
+      setSensorCategories(cats);
+      setRealSensors(list);
+      setSensorsError(undefined);
+    } catch (err) {
+      setSensorsError(err instanceof ApiError ? err.message : 'Could not load sensors.');
+    }
+  };
+
+  const refreshToolMappings = async () => {
+    try {
+      setRealToolMappings(await apiListToolMappings());
+      setToolMappingsError(undefined);
+    } catch (err) {
+      setToolMappingsError(err instanceof ApiError ? err.message : 'Could not load tool mappings.');
+    }
+  };
+
+  const refreshDevicePool = async () => {
+    try {
+      setDevicePool(await apiListDevicePool());
+      setDevicePoolError(undefined);
+    } catch (err) {
+      setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+    }
+  };
+
+  const refreshEquipmentTemplates = async () => {
+    try {
+      setEquipmentTemplates(await apiListEquipmentTemplates());
+      setEquipmentTemplatesError(undefined);
+    } catch (err) {
+      setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
+    }
+  };
+
+  useEffect(() => {
+    // Wait for the session-resume check: `authUser` can be a cached, optimistic
+    // value from sessionStorage before the real access token is confirmed to
+    // still work, and firing early sends an authenticated call with no token
+    // at all — surfaced to the user as a raw "Bearer token required." error.
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()])
+        .catch((err) => {
+          if (live) setSensorsError(err instanceof ApiError ? err.message : 'Could not load sensors.');
+          return [null, null] as const;
+        });
+      if (live && cats && list) { setSensorCategories(cats); setRealSensors(list); setSensorsError(undefined); }
+
+      try {
+        const mappings = await apiListToolMappings();
+        if (live) { setRealToolMappings(mappings); setToolMappingsError(undefined); }
+      } catch (err) {
+        if (live) setToolMappingsError(err instanceof ApiError ? err.message : 'Could not load tool mappings.');
+      }
+
+      try {
+        const pool = await apiListDevicePool();
+        if (live) { setDevicePool(pool); setDevicePoolError(undefined); }
+      } catch (err) {
+        if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+      }
+
+      try {
+        const templates = await apiListEquipmentTemplates();
+        if (live) { setEquipmentTemplates(templates); setEquipmentTemplatesError(undefined); }
+      } catch (err) {
+        if (live) setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
 
   useEffect(() => {
     localStorage.setItem(MASTER_ADMIN_PASSWORD_KEY, masterAdminPassword);
@@ -281,17 +454,111 @@ function AppData() {
   const handleDeleteUser = (id: number) => setUsers((prev) => prev.filter((u) => u.id !== id));
   const handleToggleUserStatus = (id: number) => setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, active: !u.active } : u)));
 
-  const handleAddSensor = (newSensor: SensorItem) => setSensors([newSensor, ...sensors]);
-  const handleAddToolMapping = (newMapping: ToolMappingItem) =>
-    setToolMappings([newMapping, ...toolMappings.filter((t) => t.id !== newMapping.id)]);
-  const handleAddCategory = (newCat: CategoryItem) => setCategories([newCat, ...categories]);
-  const handleUpdateCategory = (updatedCat: CategoryItem) =>
-    setCategories(categories.map((c) => (c.id === updatedCat.id ? updatedCat : c)));
-  const handleDeleteCategory = (id: string) => setCategories(categories.filter((c) => c.id !== id));
+  // POST /device-catalog/sensors and friends, for real — Master Admin's own
+  // reference data for wiring a device before it exists.
+  const handleCreateSensorCategory = async (name: string) => {
+    const created = await apiCreateSensorCategory(name);
+    await refreshSensorCatalog();
+    return created;
+  };
+  const handleCreateSensor = async (input: SensorInput) => {
+    const created = await apiCreateSensor(input);
+    await refreshSensorCatalog();
+    return created;
+  };
+  const handleUpdateSensor = async (id: string, input: SensorInput) => {
+    const updated = await apiUpdateSensor(id, input);
+    await refreshSensorCatalog();
+    return updated;
+  };
+  const handleCreateToolMapping = async (input: ToolMappingInput) => {
+    const created = await apiCreateToolMapping(input);
+    await refreshToolMappings();
+    return created;
+  };
+  const handleUpdateToolMapping = async (id: string, input: ToolMappingInput) => {
+    const updated = await apiUpdateToolMapping(id, input);
+    await refreshToolMappings();
+    return updated;
+  };
+  const handleRegisterDevices = async (devicesToRegister: RegisterDeviceInput[]) => {
+    const result = await apiRegisterDevices(devicesToRegister);
+    await refreshDevicePool();
+    return result;
+  };
+  const handleAssignDevice = async (imei: string, tenantId: string) => {
+    await apiAssignDevices([imei], tenantId);
+    await refreshDevicePool();
+  };
+  // POST /catalog/equipment-classes, for real — Master Admin authors the
+  // template as a draft; publishing it (a separate step) is what makes it
+  // visible to any tenant's entitlement join.
+  const handleCreateEquipmentClass = async (slug: string, input: EquipmentClassInput) => {
+    const created = await apiCreateEquipmentClass(slug, input);
+    await refreshEquipmentClasses();
+    return created;
+  };
+
+  const handleUpdateEquipmentClass = async (slug: string, input: EquipmentClassInput) => {
+    const updated = await apiUpdateEquipmentClass(slug, input);
+    await refreshEquipmentClasses();
+    return updated;
+  };
+
+  const handlePublishEquipmentClass = async (slug: string) => {
+    try {
+      await apiPublishEquipmentClass(slug);
+      await refreshEquipmentClasses();
+    } catch (err) {
+      setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleRetireEquipmentClass = async (slug: string) => {
+    try {
+      await apiRetireEquipmentClass(slug);
+      await refreshEquipmentClasses();
+    } catch (err) {
+      setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not retire.');
+    }
+  };
+  const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
+    const created = await apiCreateEquipmentTemplate(input);
+    await refreshEquipmentTemplates();
+    return created;
+  };
+  const handleUpdateEquipmentTemplate = async (id: string, input: EquipmentTemplateInput) => {
+    const updated = await apiUpdateEquipmentTemplate(id, input);
+    await refreshEquipmentTemplates();
+    return updated;
+  };
   const handleAddEquipment = (newEquip: EquipmentItem) => setEquipmentList([newEquip, ...equipmentList]);
-  const handleAddPlant = (newPlant: PlantItem) => setPlants([newPlant, ...plants]);
-  const handleUpdatePlant = (updatedPlant: PlantItem) => setPlants(plants.map((p) => (p.id === updatedPlant.id ? updatedPlant : p)));
-  const handleDeletePlant = (id: string) => setPlants(plants.filter((p) => p.id !== id));
+  // POST /equipment/plants, for real. Runs inside the caller's own tenant
+  // session — there is no client picker, unlike the mock version this
+  // replaced, because the plant already belongs to whoever is asking.
+  const handleCreatePlant = async (input: PlantInput) => {
+    const created = await apiCreatePlant(input);
+    await refreshPlants();
+    return created;
+  };
+
+  const handleUpdatePlantReal = async (id: string, input: Partial<PlantInput>) => {
+    const updated = await apiUpdatePlant(id, input);
+    await refreshPlants();
+    return updated;
+  };
+
+  // Retire/reopen — retiring is refused by the API (409) while equipment is
+  // still standing there, so the error has to reach the screen, not just be
+  // swallowed the way a plain toggle would.
+  const handleTogglePlantStatus = async (id: string, currentStatus: Plant['status']) => {
+    try {
+      if (currentStatus === 'active') await apiRetirePlant(id); else await apiReopenPlant(id);
+      await refreshPlants();
+    } catch (err) {
+      setPlantsError(err instanceof ApiError ? err.message : 'That action failed.');
+    }
+  };
   const handleAddIndustryType = (newType: IndustryTypeItem) => setIndustryTypes([newType, ...industryTypes]);
   const handleUpdateIndustryType = (updatedType: IndustryTypeItem) =>
     setIndustryTypes(industryTypes.map((i) => (i.id === updatedType.id ? updatedType : i)));
@@ -338,6 +605,8 @@ function AppData() {
                   plants={plants}
                   clients={clients}
                   onSaveDevice={handleAddDevice}
+                  realToolMappings={realToolMappings}
+                  onRegisterDevices={handleRegisterDevices}
                 />
               }
             />
@@ -350,17 +619,38 @@ function AppData() {
                   categories={categories}
                   industryTypes={industryTypes}
                   plants={plants}
-                  onAddSensor={handleAddSensor}
-                  onAddToolMapping={handleAddToolMapping}
-                  onAddCategory={handleAddCategory}
-                  onUpdateCategory={handleUpdateCategory}
-                  onDeleteCategory={handleDeleteCategory}
+                  sensorCategories={sensorCategories}
+                  realSensors={realSensors}
+                  sensorsError={sensorsError}
+                  onCreateSensor={handleCreateSensor}
+                  onUpdateSensor={handleUpdateSensor}
+                  onCreateSensorCategory={handleCreateSensorCategory}
+                  realToolMappings={realToolMappings}
+                  toolMappingsError={toolMappingsError}
+                  onCreateToolMapping={handleCreateToolMapping}
+                  onUpdateToolMapping={handleUpdateToolMapping}
+                  devicePool={devicePool}
+                  devicePoolError={devicePoolError}
+                  onNavigateToRegisterDevice={() => navigate('/admin/devices/new')}
+                  onAssignDevice={handleAssignDevice}
+                  equipmentClasses={equipmentClasses}
+                  equipmentClassesError={equipmentClassesError}
+                  onCreateEquipmentClass={handleCreateEquipmentClass}
+                  onUpdateEquipmentClass={handleUpdateEquipmentClass}
+                  onPublishEquipmentClass={handlePublishEquipmentClass}
+                  onRetireEquipmentClass={handleRetireEquipmentClass}
+                  equipmentTemplates={equipmentTemplates}
+                  equipmentTemplatesError={equipmentTemplatesError}
+                  onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
+                  onUpdateEquipmentTemplate={handleUpdateEquipmentTemplate}
                   onAddIndustryType={handleAddIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}
-                  onAddPlant={handleAddPlant}
-                  onUpdatePlant={handleUpdatePlant}
-                  onDeletePlant={handleDeletePlant}
+                  realPlants={realPlants}
+                  plantsError={plantsError}
+                  onCreatePlant={handleCreatePlant}
+                  onUpdatePlant={handleUpdatePlantReal}
+                  onTogglePlantStatus={handleTogglePlantStatus}
                   devices={devices}
                   onDeleteDevice={handleDeleteDevice}
                   equipmentList={equipmentList}

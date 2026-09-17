@@ -39,6 +39,10 @@ import { PlatformUser } from '../identity/entities/platform-user.entity';
 import { PlatformSession } from '../identity/entities/platform-session.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
+import { SensorCategory } from '../device-catalog/entities/sensor-category.entity';
+import { Sensor } from '../device-catalog/entities/sensor.entity';
+import { ToolMapping } from '../device-catalog/entities/tool-mapping.entity';
+import { EquipmentTemplate } from '../equipment-template/entities/equipment-template.entity';
 import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';
@@ -94,6 +98,10 @@ export const ENTITIES = [
   AlertEvent,
   PlatformUser,
   PlatformSession,
+  SensorCategory,
+  Sensor,
+  ToolMapping,
+  EquipmentTemplate,
 ];
 
 export interface DataSourceChoices {

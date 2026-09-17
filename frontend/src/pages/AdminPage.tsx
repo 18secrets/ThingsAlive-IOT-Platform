@@ -4,7 +4,11 @@ import {
   AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem,
   EquipmentItem, DeviceItem, ClientAccount,
 } from '../types';
-import { Account, CreateAccountResult, ResendInvitationResult } from '../lib/api';
+import {
+  Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
+  Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
+  EquipmentTemplate, EquipmentTemplateInput,
+} from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
 
@@ -14,17 +18,38 @@ interface AdminPageProps {
   categories: CategoryItem[];
   industryTypes: IndustryTypeItem[];
   plants: PlantItem[];
-  onAddSensor: (sensor: SensorItem) => void;
-  onAddToolMapping: (mapping: ToolMappingItem) => void;
-  onAddCategory: (category: CategoryItem) => void;
-  onUpdateCategory: (category: CategoryItem) => void;
-  onDeleteCategory: (id: string) => void;
+  sensorCategories: SensorCategory[];
+  realSensors: Sensor[];
+  sensorsError?: string;
+  onCreateSensor: (input: SensorInput) => Promise<Sensor>;
+  onUpdateSensor: (id: string, input: SensorInput) => Promise<Sensor>;
+  onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
+  realToolMappings: ToolMapping[];
+  toolMappingsError?: string;
+  onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
+  onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  devicePool: PooledDevice[];
+  devicePoolError?: string;
+  onNavigateToRegisterDevice: () => void;
+  onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
+  equipmentClasses: EquipmentClass[];
+  equipmentClassesError?: string;
+  onCreateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
+  onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
+  onPublishEquipmentClass: (slug: string) => Promise<void>;
+  onRetireEquipmentClass: (slug: string) => Promise<void>;
+  equipmentTemplates: EquipmentTemplate[];
+  equipmentTemplatesError?: string;
+  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
   onAddIndustryType: (industryType: IndustryTypeItem) => void;
   onUpdateIndustryType: (industryType: IndustryTypeItem) => void;
   onDeleteIndustryType: (id: string) => void;
-  onAddPlant: (plant: PlantItem) => void;
-  onUpdatePlant: (plant: PlantItem) => void;
-  onDeletePlant: (id: string) => void;
+  realPlants: Plant[];
+  plantsError?: string;
+  onCreatePlant: (input: PlantInput) => Promise<Plant>;
+  onUpdatePlant: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
+  onTogglePlantStatus: (id: string, currentStatus: Plant['status']) => void;
   devices: DeviceItem[];
   onDeleteDevice: (id: number) => void;
   equipmentList: EquipmentItem[];
@@ -49,7 +74,9 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
   if (!authUser) return null;
 
   const restrictToClientAdmin = authUser.role === 'client';
-  const activeSubTab = (subTab ?? (restrictToClientAdmin ? 'plant' : 'industry')) as AdminSubTab;
+  // 'industry' is hidden from Master Admin's tab bar for now — see
+  // AdminIndexRedirect's own comment in App.tsx, which this must match.
+  const activeSubTab = (subTab ?? (restrictToClientAdmin ? 'plant' : 'clients')) as AdminSubTab;
 
   const visiblePlants = restrictToClientAdmin ? props.plants.filter((p) => p.clientId === authUser.clientId) : props.plants;
   const visibleDevices = restrictToClientAdmin ? props.devices.filter((d) => d.clientId === authUser.clientId) : props.devices;
@@ -65,17 +92,38 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       categories={props.categories}
       industryTypes={props.industryTypes}
       plants={visiblePlants}
-      onAddSensor={props.onAddSensor}
-      onAddToolMapping={props.onAddToolMapping}
-      onAddCategory={props.onAddCategory}
-      onUpdateCategory={props.onUpdateCategory}
-      onDeleteCategory={props.onDeleteCategory}
+      sensorCategories={props.sensorCategories}
+      realSensors={props.realSensors}
+      sensorsError={props.sensorsError}
+      onCreateSensor={props.onCreateSensor}
+      onUpdateSensor={props.onUpdateSensor}
+      onCreateSensorCategory={props.onCreateSensorCategory}
+      realToolMappings={props.realToolMappings}
+      toolMappingsError={props.toolMappingsError}
+      onCreateToolMapping={props.onCreateToolMapping}
+      onUpdateToolMapping={props.onUpdateToolMapping}
+      devicePool={props.devicePool}
+      devicePoolError={props.devicePoolError}
+      onNavigateToRegisterDevice={props.onNavigateToRegisterDevice}
+      onAssignDevice={props.onAssignDevice}
+      equipmentClasses={props.equipmentClasses}
+      equipmentClassesError={props.equipmentClassesError}
+      onCreateEquipmentClass={props.onCreateEquipmentClass}
+      onUpdateEquipmentClass={props.onUpdateEquipmentClass}
+      onPublishEquipmentClass={props.onPublishEquipmentClass}
+      onRetireEquipmentClass={props.onRetireEquipmentClass}
+      equipmentTemplates={props.equipmentTemplates}
+      equipmentTemplatesError={props.equipmentTemplatesError}
+      onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
+      onUpdateEquipmentTemplate={props.onUpdateEquipmentTemplate}
       onAddIndustryType={props.onAddIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}
-      onAddPlant={props.onAddPlant}
+      realPlants={props.realPlants}
+      plantsError={props.plantsError}
+      onCreatePlant={props.onCreatePlant}
       onUpdatePlant={props.onUpdatePlant}
-      onDeletePlant={props.onDeletePlant}
+      onTogglePlantStatus={props.onTogglePlantStatus}
       devices={visibleDevices}
       onNavigateToDeviceSetup={() => navigate('/admin/devices/new')}
       onNavigateToAISetup={
