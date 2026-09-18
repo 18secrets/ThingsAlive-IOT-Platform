@@ -42,6 +42,18 @@ interface AdminPageProps {
   equipmentTemplatesError?: string;
   onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
   onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onOpenEquipmentTemplate: (templateId: string) => void;
+  templateSensorCounts: Record<string, number>;
+  templateAlertCounts: Record<string, number>;
+  templateKpiCounts: Record<string, number>;
+  myEquipmentTemplates: EquipmentTemplate[];
+  myEquipmentTemplatesError?: string;
+  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onOpenMyEquipmentTemplate: (templateId: string) => void;
+  myTemplateSensorCounts: Record<string, number>;
+  myTemplateAlertCounts: Record<string, number>;
+  myTemplateKpiCounts: Record<string, number>;
   onAddIndustryType: (industryType: IndustryTypeItem) => void;
   onUpdateIndustryType: (industryType: IndustryTypeItem) => void;
   onDeleteIndustryType: (id: string) => void;
@@ -116,6 +128,18 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       equipmentTemplatesError={props.equipmentTemplatesError}
       onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
       onUpdateEquipmentTemplate={props.onUpdateEquipmentTemplate}
+      onOpenEquipmentTemplate={props.onOpenEquipmentTemplate}
+      templateSensorCounts={props.templateSensorCounts}
+      templateAlertCounts={props.templateAlertCounts}
+      templateKpiCounts={props.templateKpiCounts}
+      myEquipmentTemplates={props.myEquipmentTemplates}
+      myEquipmentTemplatesError={props.myEquipmentTemplatesError}
+      onCreateMyEquipmentTemplate={props.onCreateMyEquipmentTemplate}
+      onUpdateMyEquipmentTemplate={props.onUpdateMyEquipmentTemplate}
+      onOpenMyEquipmentTemplate={props.onOpenMyEquipmentTemplate}
+      myTemplateSensorCounts={props.myTemplateSensorCounts}
+      myTemplateAlertCounts={props.myTemplateAlertCounts}
+      myTemplateKpiCounts={props.myTemplateKpiCounts}
       onAddIndustryType={props.onAddIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}

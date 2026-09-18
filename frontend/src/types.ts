@@ -237,3 +237,35 @@ export interface OnboardingSessionItem {
   createdAt: string;
   updatedAt: string;
 }
+
+// --- Equipment Template detail: sensors, alert rules, KPI formulas ---
+// UI-only mock, no backend yet. Everything below is keyed by equipmentTemplateId
+// rather than by any "Equipment Class" of its own — per the master admin flow,
+// the template itself is what a sensor/alert/KPI set is attached to; if a
+// template has nothing configured yet, it's added there directly.
+
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+export type AlertCondition = '>' | '>=' | '<' | '<=' | '==' | '!=';
+
+export interface TemplateAlertRule {
+  id: string;
+  equipmentTemplateId: string;
+  name: string;
+  parameter: string;
+  condition: AlertCondition;
+  threshold: number;
+  severity: AlertSeverity;
+  message: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface TemplateKpiFormula {
+  id: string;
+  equipmentTemplateId: string;
+  name: string;
+  formula: string;
+  unit?: string;
+  description?: string;
+  createdAt: string;
+}

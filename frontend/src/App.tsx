@@ -17,6 +17,8 @@ import {
   PlatformUserItem,
   ClientUserItem,
   RoleDefinition,
+  TemplateAlertRule,
+  TemplateKpiFormula,
 } from './types';
 import {
   INITIAL_SENSORS,
@@ -40,6 +42,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
+import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
@@ -67,6 +70,9 @@ import {
 const MASTER_ADMIN_PASSWORD_KEY = 'ta_master_admin_password';
 const CLIENT_USERS_KEY = 'ta_client_users';
 const ROLES_KEY = 'ta_roles';
+const TEMPLATE_SENSOR_LINKS_KEY = 'ta_template_sensor_links';
+const ALERT_RULES_KEY = 'ta_template_alert_rules';
+const KPI_FORMULAS_KEY = 'ta_template_kpi_formulas';
 
 function loadMasterAdminPassword(): string {
   try {
@@ -93,6 +99,51 @@ function loadRoles(): RoleDefinition[] {
     return INITIAL_ROLES;
   }
 }
+
+// Equipment class configuration is UI-only (no backend yet — see App.tsx's own
+// comment where this state is declared), so localStorage is what makes it survive
+// a reload or a fresh sign-in on the same machine instead of resetting every time.
+function loadTemplateSensorLinks(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(TEMPLATE_SENSOR_LINKS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadAlertRules(): TemplateAlertRule[] {
+  try {
+    const raw = localStorage.getItem(ALERT_RULES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadKpiFormulas(): TemplateKpiFormula[] {
+  try {
+    const raw = localStorage.getItem(KPI_FORMULAS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+// A client's own equipment templates and their sensors/alert rules/KPI formulas —
+// same UI-only reasoning as above, but keyed per client id rather than one shared
+// key: two different clients on the same machine (or the same browser used to
+// review a demo account) must never see each other's, and neither may ever leak
+// into Master Admin's own global list.
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+const clientKey = (base: string, clientId: string) => `${base}_${clientId}`;
 
 // A real account, as the existing ClientAccount-shaped UI displays it.
 // Contact info is the account's ceo-manager, not a separate "contact person" —
@@ -159,6 +210,19 @@ function AppData() {
   // which is the prediction catalog and stays untouched by this.
   const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
   const [equipmentTemplatesError, setEquipmentTemplatesError] = useState<string | undefined>(undefined);
+  // Equipment class configuration — UI only, no backend yet. Sensors/alert
+  // rules/KPI formulas are all keyed by equipmentTemplateId directly rather than
+  // by any separate "Equipment Class" row: the template itself is what they're
+  // attached to.
+  const [templateSensorLinks, setTemplateSensorLinks] = useState<Record<string, string[]>>(loadTemplateSensorLinks);
+  const [alertRules, setAlertRules] = useState<TemplateAlertRule[]>(loadAlertRules);
+  const [kpiFormulas, setKpiFormulas] = useState<TemplateKpiFormula[]>(loadKpiFormulas);
+  // This client's own equipment templates — loaded/persisted per clientId below,
+  // never touching Master Admin's global equivalents above.
+  const [myEquipmentTemplates, setMyEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
+  const [myTemplateSensorLinks, setMyTemplateSensorLinks] = useState<Record<string, string[]>>({});
+  const [myAlertRules, setMyAlertRules] = useState<TemplateAlertRule[]>([]);
+  const [myKpiFormulas, setMyKpiFormulas] = useState<TemplateKpiFormula[]>([]);
   // The signed-in client's own real roles/users (/identity/roles, /identity/users)
   // — separate from the mock `roles`/`clientUsers` below, which still feed the
   // Master-Admin-only cross-client view (AllClientUsersView), out of scope this
@@ -394,6 +458,51 @@ function AppData() {
     localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
   }, [roles]);
 
+  useEffect(() => {
+    localStorage.setItem(TEMPLATE_SENSOR_LINKS_KEY, JSON.stringify(templateSensorLinks));
+  }, [templateSensorLinks]);
+
+  useEffect(() => {
+    localStorage.setItem(ALERT_RULES_KEY, JSON.stringify(alertRules));
+  }, [alertRules]);
+
+  useEffect(() => {
+    localStorage.setItem(KPI_FORMULAS_KEY, JSON.stringify(kpiFormulas));
+  }, [kpiFormulas]);
+
+  // Load this client's own equipment-template config the moment their id is
+  // known — not on mount, because it isn't known then. Re-runs if a different
+  // client signs in on the same browser, so the previous client's data is
+  // never shown to the next one.
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    const cid = authUser.clientId;
+    setMyEquipmentTemplates(loadJson(clientKey('ta_client_equipment_templates', cid), []));
+    setMyTemplateSensorLinks(loadJson(clientKey('ta_client_template_sensor_links', cid), {}));
+    setMyAlertRules(loadJson(clientKey('ta_client_alert_rules', cid), []));
+    setMyKpiFormulas(loadJson(clientKey('ta_client_kpi_formulas', cid), []));
+  }, [authUser?.role, authUser?.clientId]);
+
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    localStorage.setItem(clientKey('ta_client_equipment_templates', authUser.clientId), JSON.stringify(myEquipmentTemplates));
+  }, [myEquipmentTemplates, authUser?.role, authUser?.clientId]);
+
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    localStorage.setItem(clientKey('ta_client_template_sensor_links', authUser.clientId), JSON.stringify(myTemplateSensorLinks));
+  }, [myTemplateSensorLinks, authUser?.role, authUser?.clientId]);
+
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    localStorage.setItem(clientKey('ta_client_alert_rules', authUser.clientId), JSON.stringify(myAlertRules));
+  }, [myAlertRules, authUser?.role, authUser?.clientId]);
+
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    localStorage.setItem(clientKey('ta_client_kpi_formulas', authUser.clientId), JSON.stringify(myKpiFormulas));
+  }, [myKpiFormulas, authUser?.role, authUser?.clientId]);
+
   // Self-service password change from Settings, for either role. Returns an
   // error message on failure, or null on success.
   const handleChangeOwnPassword = (currentPassword: string, newPassword: string): string | null => {
@@ -618,6 +727,115 @@ function AppData() {
     await refreshEquipmentTemplates();
     return updated;
   };
+
+  const handleOpenEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
+
+  const handleAttachTemplateSensor = (templateId: string, sensorId: string) =>
+    setTemplateSensorLinks((prev) => ({
+      ...prev,
+      [templateId]: [...new Set([...(prev[templateId] ?? []), sensorId])],
+    }));
+
+  const handleDetachTemplateSensor = (templateId: string, sensorId: string) =>
+    setTemplateSensorLinks((prev) => ({
+      ...prev,
+      [templateId]: (prev[templateId] ?? []).filter((id) => id !== sensorId),
+    }));
+
+  const handleCreateAlertRule = (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) =>
+    setAlertRules((prev) => [
+      { ...rule, id: `alert-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdateAlertRule = (rule: TemplateAlertRule) =>
+    setAlertRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
+  const handleDeleteAlertRule = (id: string) =>
+    setAlertRules((prev) => prev.filter((r) => r.id !== id));
+
+  const handleCreateKpiFormula = (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) =>
+    setKpiFormulas((prev) => [
+      { ...formula, id: `kpi-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdateKpiFormula = (formula: TemplateKpiFormula) =>
+    setKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
+  const handleDeleteKpiFormula = (id: string) =>
+    setKpiFormulas((prev) => prev.filter((f) => f.id !== id));
+
+  // This client's own equipment templates — created/edited entirely client-side
+  // (no API), mirroring the Master Admin handlers above one-for-one but writing
+  // to the client-scoped state instead. Never touches `equipmentTemplates`,
+  // `templateSensorLinks`, `alertRules` or `kpiFormulas`.
+  const handleCreateMyEquipmentTemplate = async (input: EquipmentTemplateInput): Promise<EquipmentTemplate> => {
+    const now = new Date().toISOString();
+    const created: EquipmentTemplate = {
+      id: `my-template-${Date.now()}`,
+      name: input.name ?? '',
+      category: input.category ?? null,
+      manufacturer: input.manufacturer ?? null,
+      engineType: input.engineType ?? null,
+      fuelTankCapacityLiters: input.fuelTankCapacityLiters ?? null,
+      serviceIntervalHours: input.serviceIntervalHours ?? null,
+      description: input.description ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setMyEquipmentTemplates((prev) => [created, ...prev]);
+    return created;
+  };
+
+  const handleUpdateMyEquipmentTemplate = async (id: string, input: EquipmentTemplateInput): Promise<EquipmentTemplate> => {
+    const existing = myEquipmentTemplates.find((t) => t.id === id);
+    if (!existing) throw new Error('Template not found.');
+    const updated: EquipmentTemplate = {
+      ...existing,
+      name: input.name ?? existing.name,
+      category: input.category ?? existing.category,
+      manufacturer: input.manufacturer ?? existing.manufacturer,
+      engineType: input.engineType ?? existing.engineType,
+      fuelTankCapacityLiters: input.fuelTankCapacityLiters ?? existing.fuelTankCapacityLiters,
+      serviceIntervalHours: input.serviceIntervalHours ?? existing.serviceIntervalHours,
+      description: input.description ?? existing.description,
+      updatedAt: new Date().toISOString(),
+    };
+    setMyEquipmentTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    return updated;
+  };
+
+  const handleOpenMyEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
+
+  const handleAttachMyTemplateSensor = (templateId: string, sensorId: string) =>
+    setMyTemplateSensorLinks((prev) => ({
+      ...prev,
+      [templateId]: [...new Set([...(prev[templateId] ?? []), sensorId])],
+    }));
+
+  const handleDetachMyTemplateSensor = (templateId: string, sensorId: string) =>
+    setMyTemplateSensorLinks((prev) => ({
+      ...prev,
+      [templateId]: (prev[templateId] ?? []).filter((id) => id !== sensorId),
+    }));
+
+  const handleCreateMyAlertRule = (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) =>
+    setMyAlertRules((prev) => [
+      { ...rule, id: `my-alert-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdateMyAlertRule = (rule: TemplateAlertRule) =>
+    setMyAlertRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
+  const handleDeleteMyAlertRule = (id: string) =>
+    setMyAlertRules((prev) => prev.filter((r) => r.id !== id));
+
+  const handleCreateMyKpiFormula = (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) =>
+    setMyKpiFormulas((prev) => [
+      { ...formula, id: `my-kpi-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdateMyKpiFormula = (formula: TemplateKpiFormula) =>
+    setMyKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
+  const handleDeleteMyKpiFormula = (id: string) =>
+    setMyKpiFormulas((prev) => prev.filter((f) => f.id !== id));
+
   const handleAddEquipment = (newEquip: EquipmentItem) => setEquipmentList([newEquip, ...equipmentList]);
   // POST /equipment/plants, for real. Runs inside the caller's own tenant
   // session — there is no client picker, unlike the mock version this
@@ -656,6 +874,25 @@ function AppData() {
   const handleRefreshOnboardingSession = (id: string) =>
     setOnboardingSessions(onboardingSessions.map((s) => (s.id === id ? { ...s, updatedAt: 'Just now' } : s)));
 
+  const templateSensorCounts = Object.fromEntries(
+    equipmentTemplates.map((t) => [t.id, (templateSensorLinks[t.id] ?? []).length]),
+  );
+  const templateAlertCounts = Object.fromEntries(
+    equipmentTemplates.map((t) => [t.id, alertRules.filter((r) => r.equipmentTemplateId === t.id).length]),
+  );
+  const templateKpiCounts = Object.fromEntries(
+    equipmentTemplates.map((t) => [t.id, kpiFormulas.filter((f) => f.equipmentTemplateId === t.id).length]),
+  );
+  const myTemplateSensorCounts = Object.fromEntries(
+    myEquipmentTemplates.map((t) => [t.id, (myTemplateSensorLinks[t.id] ?? []).length]),
+  );
+  const myTemplateAlertCounts = Object.fromEntries(
+    myEquipmentTemplates.map((t) => [t.id, myAlertRules.filter((r) => r.equipmentTemplateId === t.id).length]),
+  );
+  const myTemplateKpiCounts = Object.fromEntries(
+    myEquipmentTemplates.map((t) => [t.id, myKpiFormulas.filter((f) => f.equipmentTemplateId === t.id).length]),
+  );
+
   return (
     <Routes>
       <Route element={<GuestOnly />}>
@@ -675,6 +912,13 @@ function AppData() {
                 devices={devices}
                 equipmentList={equipmentList}
                 onboardingSessions={onboardingSessions}
+                masterEquipmentTemplates={equipmentTemplates}
+                myEquipmentTemplates={myEquipmentTemplates}
+                templateSensorLinks={templateSensorLinks}
+                myTemplateSensorLinks={myTemplateSensorLinks}
+                alertRules={alertRules}
+                myAlertRules={myAlertRules}
+                realSensors={realSensors}
               />
             }
           />
@@ -693,6 +937,32 @@ function AppData() {
                   onSaveDevice={handleAddDevice}
                   realToolMappings={realToolMappings}
                   onRegisterDevices={handleRegisterDevices}
+                />
+              }
+            />
+            <Route
+              path="equipment-template/:templateId"
+              element={
+                <EquipmentTemplateDetailPage
+                  // A client can only ever reach this route for one of their own
+                  // templates (the master library has no "Configure" link for
+                  // them) — so which data source feeds this page is decided once,
+                  // here, by role, rather than threading role checks through the
+                  // page itself.
+                  templates={authUser?.role === 'client' ? myEquipmentTemplates : equipmentTemplates}
+                  allSensors={realSensors}
+                  sensorCategories={sensorCategories}
+                  templateSensorLinks={authUser?.role === 'client' ? myTemplateSensorLinks : templateSensorLinks}
+                  onAttachSensor={authUser?.role === 'client' ? handleAttachMyTemplateSensor : handleAttachTemplateSensor}
+                  onDetachSensor={authUser?.role === 'client' ? handleDetachMyTemplateSensor : handleDetachTemplateSensor}
+                  alertRules={authUser?.role === 'client' ? myAlertRules : alertRules}
+                  onCreateAlertRule={authUser?.role === 'client' ? handleCreateMyAlertRule : handleCreateAlertRule}
+                  onUpdateAlertRule={authUser?.role === 'client' ? handleUpdateMyAlertRule : handleUpdateAlertRule}
+                  onDeleteAlertRule={authUser?.role === 'client' ? handleDeleteMyAlertRule : handleDeleteAlertRule}
+                  kpiFormulas={authUser?.role === 'client' ? myKpiFormulas : kpiFormulas}
+                  onCreateKpiFormula={authUser?.role === 'client' ? handleCreateMyKpiFormula : handleCreateKpiFormula}
+                  onUpdateKpiFormula={authUser?.role === 'client' ? handleUpdateMyKpiFormula : handleUpdateKpiFormula}
+                  onDeleteKpiFormula={authUser?.role === 'client' ? handleDeleteMyKpiFormula : handleDeleteKpiFormula}
                 />
               }
             />
@@ -729,6 +999,17 @@ function AppData() {
                   equipmentTemplatesError={equipmentTemplatesError}
                   onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
                   onUpdateEquipmentTemplate={handleUpdateEquipmentTemplate}
+                  onOpenEquipmentTemplate={handleOpenEquipmentTemplate}
+                  templateSensorCounts={templateSensorCounts}
+                  templateAlertCounts={templateAlertCounts}
+                  templateKpiCounts={templateKpiCounts}
+                  myEquipmentTemplates={myEquipmentTemplates}
+                  onCreateMyEquipmentTemplate={handleCreateMyEquipmentTemplate}
+                  onUpdateMyEquipmentTemplate={handleUpdateMyEquipmentTemplate}
+                  onOpenMyEquipmentTemplate={handleOpenMyEquipmentTemplate}
+                  myTemplateSensorCounts={myTemplateSensorCounts}
+                  myTemplateAlertCounts={myTemplateAlertCounts}
+                  myTemplateKpiCounts={myTemplateKpiCounts}
                   onAddIndustryType={handleAddIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}

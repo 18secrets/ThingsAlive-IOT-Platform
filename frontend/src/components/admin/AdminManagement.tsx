@@ -18,6 +18,7 @@ import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
 import { CategoryView } from './CategoryView';
 import { EquipmentTemplateView } from './EquipmentTemplateView';
+import { ClientEquipmentTemplateView } from './ClientEquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
 import { DeviceManagement } from '../devices/DeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
@@ -63,6 +64,20 @@ interface AdminManagementProps {
   equipmentTemplatesError?: string;
   onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
   onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onOpenEquipmentTemplate: (templateId: string) => void;
+  templateSensorCounts: Record<string, number>;
+  templateAlertCounts: Record<string, number>;
+  templateKpiCounts: Record<string, number>;
+  /** This client's own templates — client role only, invisible to Master Admin
+   *  and every other client. See ClientEquipmentTemplateView's own comment. */
+  myEquipmentTemplates: EquipmentTemplate[];
+  myEquipmentTemplatesError?: string;
+  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onOpenMyEquipmentTemplate: (templateId: string) => void;
+  myTemplateSensorCounts: Record<string, number>;
+  myTemplateAlertCounts: Record<string, number>;
+  myTemplateKpiCounts: Record<string, number>;
   onAddIndustryType?: (industryType: IndustryTypeItem) => void;
   onUpdateIndustryType?: (industryType: IndustryTypeItem) => void;
   onDeleteIndustryType?: (id: string) => void;
@@ -95,7 +110,7 @@ interface AdminManagementProps {
   restrictToClientAdmin?: boolean;
 }
 
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
+const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'equipment-template'];
 
 export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensors,
@@ -127,6 +142,18 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   equipmentTemplatesError,
   onCreateEquipmentTemplate,
   onUpdateEquipmentTemplate,
+  onOpenEquipmentTemplate,
+  templateSensorCounts,
+  templateAlertCounts,
+  templateKpiCounts,
+  myEquipmentTemplates,
+  myEquipmentTemplatesError,
+  onCreateMyEquipmentTemplate,
+  onUpdateMyEquipmentTemplate,
+  onOpenMyEquipmentTemplate,
+  myTemplateSensorCounts,
+  myTemplateAlertCounts,
+  myTemplateKpiCounts,
   onAddIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
@@ -165,11 +192,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
   // same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement), and no Equipment Classes, Equipment, or Industry Type tab
-  // (the last hidden for now, by request).
+  // ClientManagement), and no Equipment Classes, Equipment, or Industry Type tab.
+  // Tool Mapping and Devices are hidden for now too, by request — re-enable later.
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
-    : allSubTabs.filter((tab) => !['plant', 'category', 'equipment', 'industry'].includes(tab.id));
+    : allSubTabs.filter((tab) => !['plant', 'category', 'equipment', 'industry', 'tool-mapping', 'devices'].includes(tab.id));
 
   return (
     <div id="admin-module" className="space-y-5">
@@ -238,6 +265,24 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             error={equipmentTemplatesError}
             onCreateTemplate={onCreateEquipmentTemplate}
             onUpdateTemplate={onUpdateEquipmentTemplate}
+            onOpenTemplate={onOpenEquipmentTemplate}
+            sensorCounts={templateSensorCounts}
+            alertCounts={templateAlertCounts}
+            kpiCounts={templateKpiCounts}
+          />
+        )}
+
+        {restrictToClientAdmin && activeSubTab === 'equipment-template' && (
+          <ClientEquipmentTemplateView
+            masterTemplates={equipmentTemplates}
+            myTemplates={myEquipmentTemplates}
+            myTemplatesError={myEquipmentTemplatesError}
+            onCreateMyTemplate={onCreateMyEquipmentTemplate}
+            onUpdateMyTemplate={onUpdateMyEquipmentTemplate}
+            onOpenMyTemplate={onOpenMyEquipmentTemplate}
+            mySensorCounts={myTemplateSensorCounts}
+            myAlertCounts={myTemplateAlertCounts}
+            myKpiCounts={myTemplateKpiCounts}
           />
         )}
 

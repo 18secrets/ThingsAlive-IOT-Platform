@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, Edit2, AlertCircle, Cog, Fuel } from 'lucide-react';
+import { Search, Plus, Edit2, AlertCircle, Cog, Fuel, Radio, Bell, Sigma, ArrowRight } from 'lucide-react';
 import { EquipmentTemplate, EquipmentTemplateInput } from '../../lib/api';
 import { AddEquipmentTemplateModal } from './AddEquipmentTemplateModal';
 
@@ -8,10 +8,15 @@ interface EquipmentTemplateViewProps {
   error?: string;
   onCreateTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
   onUpdateTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
+  onOpenTemplate: (templateId: string) => void;
+  /** Mock counts, keyed by template id — sensors/alerts/KPIs attached to it. */
+  sensorCounts: Record<string, number>;
+  alertCounts: Record<string, number>;
+  kpiCounts: Record<string, number>;
 }
 
 export const EquipmentTemplateView: React.FC<EquipmentTemplateViewProps> = ({
-  templates, error, onCreateTemplate, onUpdateTemplate,
+  templates, error, onCreateTemplate, onUpdateTemplate, onOpenTemplate, sensorCounts, alertCounts, kpiCounts,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,6 +112,30 @@ export const EquipmentTemplateView: React.FC<EquipmentTemplateViewProps> = ({
                   <span>{t.serviceIntervalHours} hrs service</span>
                 </div>
               )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1" title="Sensors attached">
+                  <Radio className="w-3 h-3 text-sky-600" />
+                  {sensorCounts[t.id] ?? 0}
+                </span>
+                <span className="flex items-center gap-1" title="Alert rules">
+                  <Bell className="w-3 h-3 text-amber-600" />
+                  {alertCounts[t.id] ?? 0}
+                </span>
+                <span className="flex items-center gap-1" title="KPI formulas">
+                  <Sigma className="w-3 h-3 text-emerald-600" />
+                  {kpiCounts[t.id] ?? 0}
+                </span>
+              </div>
+              <button
+                onClick={() => onOpenTemplate(t.id)}
+                className="flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
+              >
+                <span>Configure</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             </div>
           </div>
         ))}
