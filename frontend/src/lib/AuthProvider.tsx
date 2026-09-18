@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthUser, CLIENT_ASSIGNABLE_TABS } from '../types';
-import { apiAcceptInvitation, apiResume, apiSignIn, apiSignOut, hasStoredSession, SignedInUser } from './api';
+import { AuthUser, NavigationTab } from '../types';
+import {
+  apiAcceptInvitation, apiMyPermissions, apiResume, apiSignIn, apiSignOut, hasStoredSession,
+  setSessionDeadHandler, SignedInUser,
+} from './api';
 
 const SESSION_KEY = 'ta_session';
 
@@ -24,14 +27,15 @@ function loadSession(): AuthUser | null {
 }
 
 // Builds the app's AuthUser shape from a real sign-in/refresh/accept response.
-// Real tenant accounts aren't in the mock role/tab system yet, so every
-// signed-in one gets the full client tab set for now — narrowing this to the
-// account's actual capabilities is its own piece of integration work (the
-// Roles & Permissions screen), not something to guess at here.
-function authUserFromApi(user: SignedInUser): AuthUser {
+// Fetches /me/permissions for the real allowedTabs and capabilities — the
+// signed-in user's own role, resolved server-side, is the only correct source
+// for "which pages does this person see" and "are they this account's super
+// admin" (holding both user.manage and role.manage).
+async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
   if (user.tenantId === PLATFORM_TENANT_ID) {
     return { role: 'master-admin', username: user.email };
   }
+  const { capabilities, allowedTabs } = await apiMyPermissions();
   return {
     role: 'client',
     username: user.email,
@@ -42,8 +46,8 @@ function authUserFromApi(user: SignedInUser): AuthUser {
     clientName: user.tenantId,
     userId: user.id,
     roleId: user.roleSlug,
-    allowedTabs: CLIENT_ASSIGNABLE_TABS,
-    isSuperAdmin: user.roleSlug === 'ceo-manager',
+    allowedTabs: allowedTabs as NavigationTab[],
+    isSuperAdmin: !!(capabilities['user.manage'] && capabilities['role.manage']),
   };
 }
 
@@ -74,8 +78,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = await apiResume();
       if (!live) return;
       // A dead refresh token means the cached session was a lie.
-      setAuthUser(user ? authUserFromApi(user) : null);
-      setRestoringSession(false);
+      setAuthUser(user ? await authUserFromApi(user) : null);
+      if (live) setRestoringSession(false);
     })();
     return () => { live = false; };
     // Runs once, on mount only.
@@ -91,17 +95,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [authUser]);
 
+  // A refresh token dying mid-session (revoked, expired, or the account
+  // suspended) has to bounce this back to null, or every screen keeps
+  // rendering as signed in while no request it makes will ever work again.
+  useEffect(() => {
+    setSessionDeadHandler(() => setAuthUser(null));
+    return () => setSessionDeadHandler(null);
+  }, []);
+
   // One real call for everyone — the backend's own /auth/sign-in decides
   // whether this is a Things Alive staff credential (platform_user) or a
   // tenant account (app_user) and returns the same shape either way.
   const signIn = async (identifier: string, password: string) => {
     const user = await apiSignIn(identifier, password);
-    setAuthUser(authUserFromApi(user));
+    setAuthUser(await authUserFromApi(user));
   };
 
   const acceptInvitation = async (token: string, password: string) => {
     const user = await apiAcceptInvitation(token, password);
-    setAuthUser(authUserFromApi(user));
+    setAuthUser(await authUserFromApi(user));
   };
 
   const signOut = () => {

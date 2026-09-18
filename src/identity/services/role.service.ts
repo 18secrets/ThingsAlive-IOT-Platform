@@ -5,6 +5,7 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AppUser } from '../entities/app-user.entity';
 import { ScopeShape, TenantRole } from '../entities/tenant-role.entity';
+import { TENANT_ASSIGNABLE_PAGES } from '../pages';
 import { ROLE_TEMPLATES } from '../role-templates';
 
 export interface RoleInput {
@@ -13,6 +14,7 @@ export interface RoleInput {
   description?: string | null;
   capabilities: string[];
   scopeShape: ScopeShape;
+  allowedTabs?: string[];
 }
 
 const SCOPE_SHAPES: ScopeShape[] = ['tenant', 'plant', 'equipment'];
@@ -53,6 +55,7 @@ export class RoleService {
           description: template.description,
           capabilities: [...template.capabilities],
           scopeShape: template.scopeShape,
+          allowedTabs: [...template.allowedTabs],
           isBuiltIn: true,
           templateSlug: template.slug,
           copiedAt: now,
@@ -86,6 +89,7 @@ export class RoleService {
         description: input.description ?? null,
         capabilities,
         scopeShape: input.scopeShape,
+        allowedTabs: this.validateAllowedTabs(input.allowedTabs ?? []),
         isBuiltIn: false,
         templateSlug: null,
         copiedAt: null,
@@ -112,6 +116,7 @@ export class RoleService {
       // scope shape nobody was touching.
       if (input.capabilities) role.capabilities = this.validateCapabilities(input.capabilities);
       if (input.scopeShape) role.scopeShape = this.validateScopeShape(input.scopeShape);
+      if (input.allowedTabs) role.allowedTabs = this.validateAllowedTabs(input.allowedTabs);
       if (input.name !== undefined) role.name = input.name;
       if (input.description !== undefined) role.description = input.description ?? null;
       role.updatedBy = scope.userId;
@@ -180,5 +185,32 @@ export class RoleService {
       );
     }
     return shape;
+  }
+
+  /** Pages are a closed vocabulary too — same reasoning as capabilities. */
+  private validateAllowedTabs(pages: string[]): string[] {
+    const known = new Set<string>(TENANT_ASSIGNABLE_PAGES);
+    const unknown = pages.filter((p) => !known.has(p));
+    if (unknown.length) {
+      throw new BadRequestException(
+        `Unknown ${unknown.length === 1 ? 'page' : 'pages'}: ${unknown.join(', ')}. `
+        + 'A role can only be granted a page the console actually has.',
+      );
+    }
+    return [...new Set(pages)];
+  }
+
+  /**
+   * What the caller's own role lets them see, for `/me/permissions`. No capability
+   * guard: reading your own permissions is not itself a privileged act, the same
+   * reason `capabilitiesFor` needs none.
+   */
+  async myAllowedTabs(scope: RequestScope): Promise<string[]> {
+    const slug = scope.roles[0];
+    if (!slug) return [];
+    return withTenantSession(this.ds, scope, async (m) => {
+      const role = await m.getRepository(TenantRole).findOne({ where: { tenantId: scope.tenantId, slug } });
+      return role?.allowedTabs ?? [];
+    });
   }
 }

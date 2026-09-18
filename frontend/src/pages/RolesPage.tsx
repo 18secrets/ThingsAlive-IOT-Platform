@@ -1,46 +1,45 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ClientAccount, ClientUserItem, RoleDefinition } from '../types';
+import { RoleInput, RolePatchInput, TenantRole, TenantUser } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { RoleManagement } from '../components/clients/RoleManagement';
+import { NotAvailableNotice } from '../components/NotAvailableNotice';
 
 interface RolesPageProps {
-  clients: ClientAccount[];
-  clientUsers: ClientUserItem[];
-  roles: RoleDefinition[];
+  roles: TenantRole[];
+  users: TenantUser[];
+  error?: string;
   manageAccessClientId: string | null;
   onBackToClients: () => void;
-  onAddRole: (role: RoleDefinition) => void;
-  onUpdateRole: (role: RoleDefinition) => void;
-  onDeleteRole: (id: string) => void;
+  onCreateRole: (input: RoleInput) => Promise<TenantRole>;
+  onUpdateRole: (slug: string, input: RolePatchInput) => Promise<TenantRole>;
+  onDeleteRole: (slug: string) => Promise<void>;
 }
 
 export const RolesPage: React.FC<RolesPageProps> = ({
-  clients, clientUsers, roles, manageAccessClientId, onBackToClients,
-  onAddRole, onUpdateRole, onDeleteRole,
+  roles, users, error, manageAccessClientId, onBackToClients, onCreateRole, onUpdateRole, onDeleteRole,
 }) => {
   const { authUser } = useAuth();
-  const navigate = useNavigate();
   if (!authUser) return null;
 
-  const scopeClientId = authUser.role === 'client' ? authUser.clientId : (manageAccessClientId ?? undefined);
-  const scopeClientLabel = authUser.role === 'client'
-    ? authUser.clientName
-    : clients.find((c) => c.id === manageAccessClientId)?.clientName;
-  if (!scopeClientId) return null;
+  // role.manage is that account's own super admin only — see ClientUsersPage's
+  // own comment on the same boundary.
+  if (authUser.role === 'master-admin' || manageAccessClientId) {
+    return (
+      <NotAvailableNotice title="Not available yet" onBack={onBackToClients}>
+        Managing another account's roles is the account's own super admin's call —
+        there is no Master Admin route for it today.
+      </NotAvailableNotice>
+    );
+  }
 
   return (
     <RoleManagement
-      scopeClientId={scopeClientId}
-      clientLabel={scopeClientLabel}
-      isMasterAdminView={authUser.role === 'master-admin'}
-      roles={roles.filter((r) => r.clientId === scopeClientId)}
-      users={clientUsers.filter((u) => u.clientId === scopeClientId)}
-      onAddRole={onAddRole}
+      roles={roles}
+      users={users}
+      error={error}
+      onCreateRole={onCreateRole}
       onUpdateRole={onUpdateRole}
       onDeleteRole={onDeleteRole}
-      onViewUsers={authUser.role === 'master-admin' ? () => navigate('/client-users') : undefined}
-      onBackToClients={authUser.role === 'master-admin' ? onBackToClients : undefined}
     />
   );
 };

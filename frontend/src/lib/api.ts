@@ -63,6 +63,16 @@ export function hasStoredSession(): boolean {
   return !!sessionStorage.getItem(REFRESH_KEY);
 }
 
+// AuthProvider registers a handler here so that a refresh token dying mid-session
+// (not just on cold load) forces authUser back to null. Without this, a 401 whose
+// retry-resume also fails leaves `authUser` stale and every future call repeats
+// the same failed dance forever — the screen stays rendered as signed in while
+// nothing it does ever works, because no token is ever attached again.
+let onSessionDead: (() => void) | null = null;
+export function setSessionDeadHandler(handler: (() => void) | null): void {
+  onSessionDead = handler;
+}
+
 export async function apiSignIn(email: string, password: string): Promise<SignedInUser> {
   const res = await fetch(`${BASE_URL}/auth/sign-in`, {
     method: 'POST',
@@ -140,6 +150,11 @@ async function authFetch(path: string, init: RequestInit = {}, retried = false):
   if (res.status === 401 && !retried) {
     const resumed = await apiResume();
     if (resumed) return authFetch(path, init, true);
+    // The refresh token is genuinely dead, not just this access token. Force the
+    // rest of the app to notice now, rather than parsing this one response as an
+    // ordinary error and leaving `authUser` pointing at a session that no longer
+    // exists.
+    onSessionDead?.();
   }
   return parse(res);
 }
@@ -554,4 +569,120 @@ export function apiCreateEquipmentTemplate(input: EquipmentTemplateInput): Promi
 
 export function apiUpdateEquipmentTemplate(id: string, input: EquipmentTemplateInput): Promise<EquipmentTemplate> {
   return authFetch(`/equipment-templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+// ------------------------------------------------------------------- my permissions
+
+/** GET /me/permissions — what the signed-in caller may do, and which pages they see. */
+export function apiMyPermissions(): Promise<{ tenantId: string; capabilities: Record<string, boolean>; allowedTabs: string[] }> {
+  return authFetch('/me/permissions');
+}
+
+// ------------------------------------------------------------------------- roles
+
+/**
+ * A client's own role (/identity/roles, `role.manage` — that account's own super
+ * admin only). `capabilities` gates the API; `allowedTabs` gates which pages the
+ * console shows — two different questions, never merged.
+ */
+export interface TenantRole {
+  id: string;
+  tenantId: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  capabilities: string[];
+  scopeShape: 'tenant' | 'plant' | 'equipment';
+  allowedTabs: string[];
+  isBuiltIn: boolean;
+  templateSlug: string | null;
+  updatedAt: string;
+}
+
+export interface RoleInput {
+  slug: string;
+  name: string;
+  description?: string;
+  capabilities: string[];
+  scopeShape: TenantRole['scopeShape'];
+  allowedTabs: string[];
+}
+
+export interface RolePatchInput {
+  name?: string;
+  description?: string;
+  allowedTabs?: string[];
+}
+
+export function apiListRoles(): Promise<TenantRole[]> {
+  return authFetch('/identity/roles');
+}
+
+export function apiCreateRole(input: RoleInput): Promise<TenantRole> {
+  return authFetch('/identity/roles', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function apiUpdateRole(slug: string, input: RolePatchInput): Promise<TenantRole> {
+  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function apiDeleteRole(slug: string): Promise<void> {
+  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+}
+
+// -------------------------------------------------------------------------- users
+
+/**
+ * A person inside the signed-in client's own account (/identity/users,
+ * `user.manage` — that account's own super admin only). Invite-only: there is no
+ * admin-set password, and no username — a person accepts an invitation and sets
+ * their own credential, the same flow already used for a new account's first
+ * super admin.
+ */
+export interface TenantUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  roleSlug: string;
+  status: 'invited' | 'active' | 'suspended';
+  suspendedReason: string | null;
+  plants: { plantId: string }[];
+  equipment: { sourceSystem: string; equipmentExternalId: string }[];
+}
+
+export interface InviteUserInput {
+  email: string;
+  fullName: string;
+  roleSlug: string;
+  phone?: string;
+}
+
+export interface InviteUserResult extends TenantUser {
+  invitationToken?: string;
+  invitationExpiresAt?: string;
+}
+
+export function apiListTenantUsers(): Promise<TenantUser[]> {
+  return authFetch('/identity/users');
+}
+
+export function apiInviteUser(input: InviteUserInput): Promise<InviteUserResult> {
+  return authFetch('/identity/users', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function apiSetUserRole(userId: string, roleSlug: string): Promise<TenantUser> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/role`, {
+    method: 'PUT', body: JSON.stringify({ roleSlug }),
+  });
+}
+
+export function apiSuspendUser(userId: string, reason: string): Promise<TenantUser> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/suspend`, {
+    method: 'POST', body: JSON.stringify({ reason }),
+  });
+}
+
+export function apiReinstateUser(userId: string): Promise<TenantUser> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/reinstate`, { method: 'POST' });
 }

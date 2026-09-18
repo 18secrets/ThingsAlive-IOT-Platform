@@ -8,6 +8,7 @@ import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { ScopeShape } from './entities/tenant-role.entity';
+import { CredentialService } from './services/credential.service';
 import { RoleService } from './services/role.service';
 import { UserService } from './services/user.service';
 
@@ -44,6 +45,7 @@ export class RoleDto {
   @IsOptional() @IsString() description?: string;
   @IsArray() @IsString({ each: true }) capabilities: string[];
   @IsIn(['tenant', 'plant', 'equipment']) scopeShape: ScopeShape;
+  @IsOptional() @IsArray() @IsString({ each: true }) allowedTabs?: string[];
 }
 
 export class RolePatchDto {
@@ -51,6 +53,7 @@ export class RolePatchDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) capabilities?: string[];
   @IsOptional() @IsIn(['tenant', 'plant', 'equipment']) scopeShape?: ScopeShape;
+  @IsOptional() @IsArray() @IsString({ each: true }) allowedTabs?: string[];
 }
 
 export class SuspendDto {
@@ -75,6 +78,7 @@ export class IdentityController {
   constructor(
     private readonly users: UserService,
     private readonly roles: RoleService,
+    private readonly credentials: CredentialService,
   ) {}
 
   @Get('roles')
@@ -119,8 +123,14 @@ export class IdentityController {
   @Post('users')
   @Requires('user.manage')
   @ApiOperation({ summary: 'Invite somebody. The role is part of the invitation, not a later step' })
-  invite(@CurrentScope() scope: RequestScope, @Body() body: InviteDto) {
-    return this.users.invite(scope, body);
+  async invite(@CurrentScope() scope: RequestScope, @Body() body: InviteDto) {
+    const user = await this.users.invite(scope, body);
+    // Composed rather than done inside UserService: the invited row and the token
+    // that lets somebody claim it are different concerns, the same split as
+    // ProvisioningService (which mints one for a tenant's first super admin) and
+    // CredentialService (which mints and consumes them for everyone else).
+    const { token, expiresAt } = await this.credentials.issueInvitation(scope, user.id);
+    return { ...user, invitationToken: token, invitationExpiresAt: expiresAt };
   }
 
   @Put('users/:id/role')

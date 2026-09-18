@@ -1,53 +1,52 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ClientAccount, ClientUserItem, RoleDefinition } from '../types';
+import {
+  InviteUserInput, InviteUserResult, TenantRole, TenantUser,
+} from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { ClientUserManagement } from '../components/clients/ClientUserManagement';
+import { NotAvailableNotice } from '../components/NotAvailableNotice';
 
 interface ClientUsersPageProps {
-  clients: ClientAccount[];
-  clientUsers: ClientUserItem[];
-  roles: RoleDefinition[];
-  /** Master Admin's drill-down pick from the Users hub — absent for a client's own view. */
+  users: TenantUser[];
+  roles: TenantRole[];
+  error?: string;
+  /** Master Admin's drill-down pick from the Clients tab — absent for a client's own view. */
   manageAccessClientId: string | null;
-  /** Clears the drill-down and returns to Admin ▸ Clients. */
   onBackToClients: () => void;
-  onAddUser: (user: ClientUserItem) => void;
-  onUpdateUser: (user: ClientUserItem) => void;
-  onDeleteUser: (id: string) => void;
-  onToggleUserStatus: (id: string) => void;
-  onResetPassword: (id: string) => void;
+  onInviteUser: (input: InviteUserInput) => Promise<InviteUserResult>;
+  onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
+  onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
+  onReinstateUser: (userId: string) => Promise<TenantUser>;
 }
 
 export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
-  clients, clientUsers, roles, manageAccessClientId, onBackToClients,
-  onAddUser, onUpdateUser, onDeleteUser, onToggleUserStatus, onResetPassword,
+  users, roles, error, manageAccessClientId, onBackToClients,
+  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
 }) => {
   const { authUser } = useAuth();
-  const navigate = useNavigate();
   if (!authUser) return null;
 
-  const scopeClientId = authUser.role === 'client' ? authUser.clientId : (manageAccessClientId ?? undefined);
-  const scopeClientLabel = authUser.role === 'client'
-    ? authUser.clientName
-    : clients.find((c) => c.id === manageAccessClientId)?.clientName;
-  if (!scopeClientId) return null;
+  // user.manage is that account's own super admin only — there is no cross-tenant
+  // read or write for it, so a Master Admin drilling into a specific client from
+  // the Clients tab has nothing real to see here yet.
+  if (authUser.role === 'master-admin' || manageAccessClientId) {
+    return (
+      <NotAvailableNotice title="Not available yet" onBack={onBackToClients}>
+        Managing another account's users is the account's own super admin's call —
+        there is no Master Admin route for it today.
+      </NotAvailableNotice>
+    );
+  }
 
   return (
     <ClientUserManagement
-      scopeClientId={scopeClientId}
-      clientLabel={scopeClientLabel}
-      isMasterAdminView={authUser.role === 'master-admin'}
-      users={clientUsers.filter((u) => u.clientId === scopeClientId)}
-      roles={roles.filter((r) => r.clientId === scopeClientId)}
-      existingUsernames={clientUsers.map((u) => u.username.toLowerCase())}
-      onAddUser={onAddUser}
-      onUpdateUser={onUpdateUser}
-      onDeleteUser={onDeleteUser}
-      onToggleUserStatus={onToggleUserStatus}
-      onResetPassword={onResetPassword}
-      onViewRoles={authUser.role === 'master-admin' ? () => navigate('/roles') : undefined}
-      onBackToClients={authUser.role === 'master-admin' ? onBackToClients : undefined}
+      users={users}
+      roles={roles}
+      error={error}
+      onInviteUser={onInviteUser}
+      onSetUserRole={onSetUserRole}
+      onSuspendUser={onSuspendUser}
+      onReinstateUser={onReinstateUser}
     />
   );
 };

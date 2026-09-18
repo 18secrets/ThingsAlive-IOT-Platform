@@ -23,9 +23,9 @@ interface SidebarProps {
   isSuperAdmin?: boolean;
 }
 
-// Master Admin's own allowlist. Platform Users (staff directory) is
-// ThingsAlive-internal, so it lives here — not on the client side.
-const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>(['dashboard', 'admin', 'users', 'settings']);
+// Master Admin's own allowlist. 'users' (Platform Users / Client Users) is
+// hidden for now, by request.
+const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>(['dashboard', 'admin', 'settings']);
 
 // Client-side structural tabs a Super Admin always has, independent of
 // whatever pages their own role happens to grant — a role can't grant the

@@ -340,6 +340,7 @@ export class ProvisioningService {
         description: template.description,
         capabilities: [...template.capabilities],
         scopeShape: template.scopeShape,
+        allowedTabs: [...template.allowedTabs],
         isBuiltIn: true,
         templateSlug: template.slug,
         copiedAt: now,

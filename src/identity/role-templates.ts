@@ -7,6 +7,7 @@ export interface RoleTemplate {
   description: string;
   scopeShape: ScopeShape;
   capabilities: Capability[];
+  allowedTabs: string[];
 }
 
 /**
@@ -35,6 +36,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
     ],
+    allowedTabs: ['dashboard', 'ai-onboarding', 'alert-agent', 'admin', 'settings'],
   },
   {
     slug: 'site-manager',
@@ -49,6 +51,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
     ],
+    allowedTabs: ['dashboard', 'ai-onboarding', 'alert-agent', 'admin', 'settings'],
   },
   {
     slug: 'operator',
@@ -61,6 +64,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'action.work', 'catalog.read', 'client-catalog.read',
       'prediction.read', 'utilization.read', 'device.read',
     ],
+    allowedTabs: ['dashboard', 'alert-agent', 'settings'],
   },
 ];
 

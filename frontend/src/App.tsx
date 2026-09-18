@@ -56,9 +56,12 @@ import {
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
   apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
+  apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
+  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
+  TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
 } from './lib/api';
 
 const MASTER_ADMIN_PASSWORD_KEY = 'ta_master_admin_password';
@@ -156,6 +159,14 @@ function AppData() {
   // which is the prediction catalog and stays untouched by this.
   const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
   const [equipmentTemplatesError, setEquipmentTemplatesError] = useState<string | undefined>(undefined);
+  // The signed-in client's own real roles/users (/identity/roles, /identity/users)
+  // — separate from the mock `roles`/`clientUsers` below, which still feed the
+  // Master-Admin-only cross-client view (AllClientUsersView), out of scope this
+  // round: there is no real cross-tenant read for another account's people.
+  const [tenantRoles, setTenantRoles] = useState<TenantRole[]>([]);
+  const [rolesError, setRolesError] = useState<string | undefined>(undefined);
+  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
+  const [usersError, setUsersError] = useState<string | undefined>(undefined);
   const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(loadClientUsers);
   const [roles, setRoles] = useState<RoleDefinition[]>(loadRoles);
   const [masterAdminPassword, setMasterAdminPassword] = useState<string>(loadMasterAdminPassword);
@@ -222,6 +233,44 @@ function AppData() {
         setPlantsError(undefined);
       } catch (err) {
         if (live) setPlantsError(err instanceof ApiError ? err.message : 'Could not load plants.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshRoles = async () => {
+    try {
+      setTenantRoles(await apiListRoles());
+      setRolesError(undefined);
+    } catch (err) {
+      setRolesError(err instanceof ApiError ? err.message : 'Could not load roles.');
+    }
+  };
+
+  const refreshTenantUsers = async () => {
+    try {
+      setTenantUsers(await apiListTenantUsers());
+      setUsersError(undefined);
+    } catch (err) {
+      setUsersError(err instanceof ApiError ? err.message : 'Could not load users.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'client') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListRoles();
+        if (live) { setTenantRoles(list); setRolesError(undefined); }
+      } catch (err) {
+        if (live) setRolesError(err instanceof ApiError ? err.message : 'Could not load roles.');
+      }
+      try {
+        const list = await apiListTenantUsers();
+        if (live) { setTenantUsers(list); setUsersError(undefined); }
+      } catch (err) {
+        if (live) setUsersError(err instanceof ApiError ? err.message : 'Could not load users.');
       }
     })();
     return () => { live = false; };
@@ -429,11 +478,32 @@ function AppData() {
   const handleResendInvitation = (tenantId: string): Promise<ResendInvitationResult> =>
     apiResendInvitation(tenantId);
 
-  const handleAddClientUser = (user: ClientUserItem) => setClientUsers((prev) => [user, ...prev]);
-  const handleUpdateClientUser = (user: ClientUserItem) => setClientUsers((prev) => prev.map((u) => (u.id === user.id ? user : u)));
-  const handleDeleteClientUser = (id: string) => setClientUsers((prev) => prev.filter((u) => u.id !== id));
-  const handleToggleClientUserStatus = (id: string) => setClientUsers((prev) => prev.map((u) => (u.id === id ? { ...u, active: !u.active } : u)));
-  const handleResetClientUserPassword = (id: string) => setClientUsers((prev) => prev.map((u) => (u.id === id ? { ...u, mustChangePassword: true } : u)));
+  // POST /identity/users, for real — invites a person into the signed-in client's
+  // own account. The invitation token is shown once, same pattern as a new
+  // account's first super admin (handleCreateAccount above).
+  const handleInviteUser = async (input: InviteUserInput) => {
+    const result = await apiInviteUser(input);
+    await refreshTenantUsers();
+    return result;
+  };
+
+  const handleSetUserRole = async (userId: string, roleSlug: string) => {
+    const updated = await apiSetUserRole(userId, roleSlug);
+    await refreshTenantUsers();
+    return updated;
+  };
+
+  const handleSuspendUser = async (userId: string, reason: string) => {
+    const updated = await apiSuspendUser(userId, reason);
+    await refreshTenantUsers();
+    return updated;
+  };
+
+  const handleReinstateUser = async (userId: string) => {
+    const updated = await apiReinstateUser(userId);
+    await refreshTenantUsers();
+    return updated;
+  };
 
   const backToClients = () => {
     setManageAccessClientId(null);
@@ -445,9 +515,25 @@ function AppData() {
     navigate('/client-users');
   };
 
-  const handleAddRole = (role: RoleDefinition) => setRoles((prev) => [role, ...prev]);
-  const handleUpdateRole = (role: RoleDefinition) => setRoles((prev) => prev.map((r) => (r.id === role.id ? role : r)));
-  const handleDeleteRole = (id: string) => setRoles((prev) => prev.filter((r) => r.id !== id));
+  // POST /identity/roles, for real — composed from an existing role's own
+  // capabilities/scopeShape (see RoleManagement's "Based on" picker); this form
+  // only ever edits name and page access directly.
+  const handleCreateRole = async (input: RoleInput) => {
+    const created = await apiCreateRole(input);
+    await refreshRoles();
+    return created;
+  };
+
+  const handleUpdateRole = async (slug: string, input: RolePatchInput) => {
+    const updated = await apiUpdateRole(slug, input);
+    await refreshRoles();
+    return updated;
+  };
+
+  const handleDeleteRole = async (slug: string) => {
+    await apiDeleteRole(slug);
+    await refreshRoles();
+  };
 
   const handleAddUser = (newUser: PlatformUserItem) => setUsers((prev) => [newUser, ...prev]);
   const handleUpdateUser = (updatedUser: PlatformUserItem) => setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
@@ -700,16 +786,15 @@ function AppData() {
             path="client-users"
             element={
               <ClientUsersPage
-                clients={clients}
-                clientUsers={clientUsers}
-                roles={roles}
+                users={tenantUsers}
+                roles={tenantRoles}
+                error={usersError}
                 manageAccessClientId={manageAccessClientId}
                 onBackToClients={backToClients}
-                onAddUser={handleAddClientUser}
-                onUpdateUser={handleUpdateClientUser}
-                onDeleteUser={handleDeleteClientUser}
-                onToggleUserStatus={handleToggleClientUserStatus}
-                onResetPassword={handleResetClientUserPassword}
+                onInviteUser={handleInviteUser}
+                onSetUserRole={handleSetUserRole}
+                onSuspendUser={handleSuspendUser}
+                onReinstateUser={handleReinstateUser}
               />
             }
           />
@@ -718,12 +803,12 @@ function AppData() {
             path="roles"
             element={
               <RolesPage
-                clients={clients}
-                clientUsers={clientUsers}
-                roles={roles}
+                roles={tenantRoles}
+                users={tenantUsers}
+                error={rolesError}
                 manageAccessClientId={manageAccessClientId}
                 onBackToClients={backToClients}
-                onAddRole={handleAddRole}
+                onCreateRole={handleCreateRole}
                 onUpdateRole={handleUpdateRole}
                 onDeleteRole={handleDeleteRole}
               />
