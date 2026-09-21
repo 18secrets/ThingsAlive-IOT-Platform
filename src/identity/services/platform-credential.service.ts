@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource, EntityManager, IsNull } from 'typeorm';
@@ -163,6 +163,32 @@ export class PlatformCredentialService {
       { platformUserId, revokedAt: IsNull() },
       { revokedAt: now, revokedReason: reason },
     );
+  }
+
+  /**
+   * Change your own password, proving you know the current one — PlatformUser's
+   * counterpart to `CredentialService.changeOwnPassword`. Every session dies
+   * afterward, same reasoning as there.
+   */
+  async changeOwnPassword(
+    platformUserId: string, currentPassword: string, newPassword: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<void> {
+    await runTenantSpanning(this.ds, 'platform password change', async (m) => {
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: platformUserId } });
+      if (!user) throw new UnauthorizedException('Account not found.');
+      if (!this.passwords.verify(currentPassword, user.passwordHash)) {
+        throw new BadRequestException('Current password is incorrect.');
+      }
+
+      user.passwordHash = this.passwords.hash(newPassword, user.email);
+      await repo.save(user);
+      await m.getRepository(PlatformSession).update(
+        { platformUserId: user.id, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx, detail: 'self-service change' });
+    });
   }
 
   /**

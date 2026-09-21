@@ -66,7 +66,7 @@ export class DeviceCatalogController {
   constructor(private readonly catalog: DeviceCatalogService) {}
 
   @Get('categories')
-  @Requires('device-catalog.write')
+  @Requires('device-catalog.read')
   @ApiOperation({ summary: 'Sensor categories' })
   listCategories() {
     return this.catalog.listCategories();
@@ -80,7 +80,7 @@ export class DeviceCatalogController {
   }
 
   @Get('sensors')
-  @Requires('device-catalog.write')
+  @Requires('device-catalog.read')
   @ApiOperation({ summary: 'Every reference sensor' })
   listSensors() {
     return this.catalog.listSensors();

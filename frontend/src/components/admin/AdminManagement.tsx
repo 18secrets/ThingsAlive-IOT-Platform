@@ -283,6 +283,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             mySensorCounts={myTemplateSensorCounts}
             myAlertCounts={myTemplateAlertCounts}
             myKpiCounts={myTemplateKpiCounts}
+            masterSensorCounts={templateSensorCounts}
+            masterAlertCounts={templateAlertCounts}
+            masterKpiCounts={templateKpiCounts}
           />
         )}
 

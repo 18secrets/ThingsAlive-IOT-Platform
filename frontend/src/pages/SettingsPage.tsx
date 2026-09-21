@@ -5,7 +5,7 @@ import { SettingsView } from '../components/settings/SettingsView';
 
 interface SettingsPageProps {
   clients: ClientAccount[];
-  onChangePassword: (currentPassword: string, newPassword: string) => string | null;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ clients, onChangePassword }) => {

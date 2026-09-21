@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Eye, Edit2, AlertCircle, ChevronsUpDown } from 'lucide-react';
 import { Sensor, SensorCategory, SensorInput } from '../../lib/api';
+import { compareByCategoryOrder, sortByCategory } from '../../lib/sensorCategoryOrder';
 import { AddSensorModal } from './AddSensorModal';
 import { SensorDetailModal } from './SensorDetailModal';
 
@@ -28,7 +29,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
   }, [categories]);
 
   const filteredSensors = useMemo(() => {
-    return sensors.filter((s) => {
+    const filtered = sensors.filter((s) => {
       const name = categoryName(s.categoryId);
       const matchesSearch =
         s.sensorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -36,7 +37,13 @@ export const SensorTable: React.FC<SensorTableProps> = ({
       const matchesCategory = selectedCategory === 'All' || s.categoryId === selectedCategory;
       return matchesSearch && matchesCategory;
     });
+    return sortByCategory(filtered, (s) => categoryName(s.categoryId), (s) => s.sensorName);
   }, [sensors, searchTerm, selectedCategory, categoryName]);
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => compareByCategoryOrder(a.name, b.name)),
+    [categories],
+  );
 
   return (
     <div id="sensor-management-view" className="space-y-4">
@@ -59,7 +66,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
             className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
           >
             <option value="All">Filter by Category</option>
-            {categories.map((c) => (
+            {sortedCategories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>

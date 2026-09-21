@@ -11,7 +11,7 @@
  * granted independently of what it can already do.
  */
 export const TENANT_ASSIGNABLE_PAGES = [
-  'dashboard', 'ai-onboarding', 'alert-agent', 'admin', 'settings',
+  'dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'settings',
 ] as const;
 
 export type TenantPage = (typeof TENANT_ASSIGNABLE_PAGES)[number];

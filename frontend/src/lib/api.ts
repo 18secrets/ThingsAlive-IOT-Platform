@@ -578,6 +578,11 @@ export function apiMyPermissions(): Promise<{ tenantId: string; capabilities: Re
   return authFetch('/me/permissions');
 }
 
+/** POST /me/change-password — every session (including this one's refresh token) is revoked on success. */
+export function apiChangePassword(currentPassword: string, newPassword: string): Promise<{ changed: boolean }> {
+  return authFetch('/me/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+}
+
 // ------------------------------------------------------------------------- roles
 
 /**

@@ -1,9 +1,17 @@
-import { Controller, Get, Optional } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Ip, Optional, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { RequestScope } from '../auth/types/request-scope';
 import { capabilitiesFor } from '../auth/capabilities';
 import { RoleService } from '../identity/services/role.service';
+import { CredentialService } from '../identity/services/credential.service';
+import { PlatformCredentialService } from '../identity/services/platform-credential.service';
+
+export class ChangePasswordDto {
+  @IsString() @IsNotEmpty() currentPassword: string;
+  @IsString() @IsNotEmpty() newPassword: string;
+}
 
 /**
  * What the caller is, and what they may do.
@@ -18,7 +26,11 @@ export class MeController {
   // Optional: MeController is registered even when the app boots with no database
   // (see AppModule's `withDatabase` gate, used by the contract/wiring suites), and
   // IdentityModule — which provides this — is only imported when one is present.
-  constructor(@Optional() private readonly roles?: RoleService) {}
+  constructor(
+    @Optional() private readonly roles?: RoleService,
+    @Optional() private readonly credentials?: CredentialService,
+    @Optional() private readonly platformCredentials?: PlatformCredentialService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'The resolved scope for this token' })
@@ -49,5 +61,26 @@ export class MeController {
       // (no page-access system yet) or when the app has no database at all.
       allowedTabs: (await this.roles?.myAllowedTabs(scope)) ?? [],
     };
+  }
+
+  @Post('change-password')
+  @ApiOperation({ summary: "Change the signed-in caller's own password" })
+  async changePassword(
+    @CurrentScope() scope: RequestScope,
+    @Body() body: ChangePasswordDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const ctx = { ipAddress: ip, userAgent };
+    if (scope.isPlatformRole) {
+      await this.platformCredentials?.changeOwnPassword(scope.userId, body.currentPassword, body.newPassword, ctx);
+    } else {
+      await this.credentials?.changeOwnPassword(scope, body.currentPassword, body.newPassword, ctx);
+    }
+    // Every session — including this request's own refresh token — is revoked as
+    // part of the change (see CredentialService.changeOwnPassword's own comment), so
+    // the caller signs in again rather than limping along on an access token that
+    // cannot be renewed.
+    return { changed: true };
   }
 }

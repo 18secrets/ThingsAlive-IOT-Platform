@@ -28,7 +28,7 @@ export class EquipmentTemplateController {
   constructor(private readonly templates: EquipmentTemplateService) {}
 
   @Get()
-  @Requires('equipment-template.write')
+  @Requires('equipment-template.read')
   @ApiOperation({ summary: 'Every equipment template' })
   list() {
     return this.templates.list();
