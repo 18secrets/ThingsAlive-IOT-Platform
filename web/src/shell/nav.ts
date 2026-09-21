@@ -48,8 +48,7 @@ export const CLIENT: NavItem[] = [
  *
  * Hidden rather than disabled, and hidden by capability rather than by role: a screen
  * nobody has classified goes missing instead of becoming public, which is the failure
- * worth having. The two lists are concatenated rather than switched between, so a
- * token that somehow held both would show both rather than silently picking one.
+ * worth having.
  */
 export function navFor(
   can: Record<Capability, boolean>,
