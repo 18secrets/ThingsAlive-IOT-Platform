@@ -170,15 +170,30 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'basis', requiredCell: false },
       { name: 'references', requiredCell: false },
     ],
+    // inputs names a declared expected_signal ('coolant_temp_c') rather than a scalar
+    // parameter such as tank capacity: QIMP2 checks a formula's inputs against
+    // declared signals and other formula_keys, and the example workbook has to pass
+    // its own importer's validation, not just its parser.
     example: {
-      class_slug: 'diesel-generator', formula_key: 'usable_fuel_liters', kind: 'empirical',
-      expression: 'tank_capacity_liters * 0.95', inputs: 'tank_capacity_liters',
-      output_unit: 'L', basis: 'Field observation', references: '[]',
+      class_slug: 'diesel-generator', formula_key: 'coolant_margin_c', kind: 'empirical',
+      expression: '105 - coolant_temp_c', inputs: 'coolant_temp_c',
+      output_unit: 'degC', basis: 'OEM derate curve', references: '[]',
     },
   },
 ];
 
 export const ALL_SHEETS: SheetSchema[] = [META_SHEET, ...CONTENT_SHEETS];
+
+// Named and exported individually — not just inlined into KNOWN_ENUMS below — so
+// QIMP2's validator checks a batch against the exact same list a spreadsheet author
+// is shown, rather than a second copy that could drift from it.
+export const CRITICALITY_VALUES = ['required', 'recommended', 'optional'];
+export const ENABLES_VALUES = [
+  'data_quality', 'physics_calculation', 'physics_forecast', 'approved_rule',
+  'statistical_anomaly', 'recommendation_ai', 'predictive_ml', 'agent_action',
+];
+export const FORMULA_KIND_VALUES = ['physics', 'empirical', 'ml_feature'];
+export const SEVERITY_VALUES = ['none', 'low', 'medium', 'high', 'critical'];
 
 /**
  * Enums worth telling a spreadsheet author about — because a CHECK constraint already
@@ -198,15 +213,9 @@ export const ALL_SHEETS: SheetSchema[] = [META_SHEET, ...CONTENT_SHEETS];
  * needs its own vocabulary.
  */
 export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
-  { field: 'sensor_requirement.criticality', values: ['required', 'recommended', 'optional'] },
-  {
-    field: 'sensor_requirement.enables',
-    values: [
-      'data_quality', 'physics_calculation', 'physics_forecast', 'approved_rule',
-      'statistical_anomaly', 'recommendation_ai', 'predictive_ml', 'agent_action',
-    ],
-  },
-  { field: 'formula.kind', values: ['physics', 'empirical', 'ml_feature'] },
+  { field: 'sensor_requirement.criticality', values: CRITICALITY_VALUES },
+  { field: 'sensor_requirement.enables', values: ENABLES_VALUES },
+  { field: 'formula.kind', values: FORMULA_KIND_VALUES },
   { field: 'expected_signal.required', values: ['TRUE', 'FALSE'] },
-  { field: 'default_threshold.severity', values: ['none', 'low', 'medium', 'high', 'critical'] },
+  { field: 'default_threshold.severity', values: SEVERITY_VALUES },
 ];

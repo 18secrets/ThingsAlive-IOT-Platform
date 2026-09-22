@@ -7,6 +7,7 @@ import { TenantMap } from '../projection/entities/tenant-map.entity';
 import { TelemetryReading } from '../telemetry/telemetry-reading.entity';
 import { PlatformAccessLog } from '../audit/platform-access-log.entity';
 import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
+import { EquipmentClassFormula } from '../catalog/entities/equipment-class-formula.entity';
 import { ScenarioDefinition } from '../catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../catalog/entities/alert-rule-template.entity';
@@ -106,6 +107,7 @@ export const ENTITIES = [
   EquipmentTemplate,
   CatalogImportBatch,
   CatalogImportRow,
+  EquipmentClassFormula,
 ];
 
 export interface DataSourceChoices {

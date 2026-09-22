@@ -12,6 +12,7 @@ import { HealthController } from './health/health.controller';
 import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { WorkModule } from './work/work.module';
@@ -71,6 +72,7 @@ export class AppModule {
               ScopeModule,
               ProjectionModule,
               CatalogModule,
+              CatalogImportModule,
               ClientCatalogModule,
               ActivationModule,
               PredictionModule,
