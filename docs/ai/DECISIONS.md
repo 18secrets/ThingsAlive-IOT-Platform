@@ -148,13 +148,52 @@ their class and carry no special severity — presenting them as a gate would im
 certification nothing here performs. For the same reason the archive in D14 needs no
 immutability guarantee and no regulatory retention floor.
 
+## D16 — Alert workflows compile to `alert_rule`; only agent workflows need a new runtime
+
+`alert_rule` stays the runtime's unit of evaluation. `workflow_definition` is the **authored**
+layer above it, with a compiler between them. WF04 is a front end plus a compiler, not a new
+engine — for `kind = 'alert'`.
+
+Today's triggers already are graph leaves: `signal-threshold` is ReadSignal + Condition,
+`no-telemetry` is a freshness gate, `fuel-loss` and `chain-origin` are composite detectors.
+A single-condition graph compiles onto the existing table with no schema change. The only
+shape that does not fit is multi-condition AND/OR with a sustained window, and that is **one
+new trigger kind** holding a compiled expression — not a second runtime.
+
+This avoids the expensive risk: **no migration of live customer alerts.** Hand-authored rules
+keep working untouched. Rules the compiler emits carry `compiled_from_workflow_id` and
+`graph_hash` and are **not hand-editable** — edit the graph and republish — so there is one
+source of truth rather than a rule and a graph drifting apart.
+
+The exception is real and splits the package:
+
+| `kind` | Executes on | Cost |
+|---|---|---|
+| `alert` | compiler → `alert_rule` → existing runtime | small, can land soon |
+| `agent` | `workflow_run` + `workflow_node_state` durable engine | large, waits for Q21E anyway |
+
+Agent graphs genuinely need the durable engine: `HumanApproval` pauses mid-execution and
+`alert_rule` has no run state to pause.
+
+## D17 — Both front ends stay; no UI pages are created here
+
+`web/` and `frontend/` both remain. Whichever is needed gets used; neither is deleted, and no
+UI pages are authored from the backend side. This closes P1-139 as a decision rather than a
+risk — `feature/dev` removing `web/` in full becomes a merge to resolve deliberately instead
+of a surprise decided by whichever branch lands second.
+
 ## Open, and blocking something
 
-- **web/ versus frontend/** — `feature/dev` deletes `web/` entirely. Whichever branch merges
-  second decides silently. `feature/dev` has no merge request open. (P1-139)
-- **`LEGACY_DB_*` credentials** — nothing is scored without them. Now the largest open item.
-- **Does a published workflow compile down to `alert_rule`, or supersede it?** Decides whether
-  WF04 is a new runtime or a front end on the one that ships today.
+- **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
+  The adapter needs **one table, four columns**: `device_sensor_measurement_logs`
+  (`device_sensor_measurement_id`, `timestamp`, `value`, `created_at`), via a login role with
+  `default_transaction_read_only = on` and a column-level `SELECT` grant — no write privilege
+  anywhere, enforced by the database rather than trusted to our code. Then the seven
+  `LEGACY_DB_*` variables on the api and scheduler services. Usually blocked by network reach
+  from Railway's egress and by SSL/CA requirements rather than by the credentials themselves.
+- **Retention policy** — answered; see D14.
+- **Is `device_sensor_measurement_id` → IMEI mapping theirs or ours?** The adapter assumes
+  ours, via `sensor_map_projection`. Worth confirming before the first pull.
 - ~~Visual Workflow Backend Addendum v1.1~~ — reconstructed 22 September, WF01–WF08. Lives in
   the kit as `layers/Visual-Workflow-Backend-Addendum-v1.1.md`; still to be copied into the
   repository. If the original surfaces, reconcile rather than merging both into the queue.
