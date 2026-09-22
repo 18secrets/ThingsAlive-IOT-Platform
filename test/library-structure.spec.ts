@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { createTestDataSource, describeDb } from './db';
+import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 /**
  * The equipment library's schema guarantees (task QL1).
@@ -191,7 +191,10 @@ describeDb('equipment library structure', () => {
       );
       expect(before).toBe(3);
 
-      await ds.undoLastMigration({ transaction: 'all' });
+      // Not undoLastMigration() alone: "last" stops meaning "this one" the moment a
+      // later migration is added, which is exactly what broke this test when
+      // CatalogImport1757980000000 landed afterward. Name the migration.
+      await undoMigrationNamed(ds, 'LibraryStructure1757970000000');
 
       const [{ count: after }] = await ds.query(
         `SELECT count(*)::int FROM information_schema.tables

@@ -46,6 +46,8 @@ import { EquipmentTemplate } from '../equipment-template/entities/equipment-temp
 import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';
+import { CatalogImportBatch } from '../catalog-import/entities/catalog-import-batch.entity';
+import { CatalogImportRow } from '../catalog-import/entities/catalog-import-row.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -102,6 +104,8 @@ export const ENTITIES = [
   Sensor,
   ToolMapping,
   EquipmentTemplate,
+  CatalogImportBatch,
+  CatalogImportRow,
 ];
 
 export interface DataSourceChoices {

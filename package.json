@@ -10,7 +10,7 @@
     "lint": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
-    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts test/platform-credentials.spec.ts test/library-structure.spec.ts",
+    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts test/platform-credentials.spec.ts test/library-structure.spec.ts test/catalog-import-parse.spec.ts",
     "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
     "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
@@ -18,7 +18,8 @@
     "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
     "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts",
     "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts",
-    "staff:bootstrap": "ts-node src/database/seeds/staff-bootstrap.ts"
+    "staff:bootstrap": "ts-node src/database/seeds/staff-bootstrap.ts",
+    "catalog:template": "ts-node src/catalog-import/generate-template.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -31,6 +32,7 @@
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "exceljs": "^4.4.0",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

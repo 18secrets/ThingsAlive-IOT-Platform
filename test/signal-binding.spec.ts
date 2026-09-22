@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { createTestDataSource, describeDb } from './db';
+import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 /**
  * The signal binding layer's schema guarantees (task Q08S).
@@ -235,7 +235,10 @@ describeDb('signal bindings', () => {
       );
       expect(before).toBe(4);
 
-      await ds.undoLastMigration({ transaction: 'all' });
+      // Not undoLastMigration() alone: "last" stops meaning "this one" the moment a
+      // later migration is added — the same bug that broke library-structure.spec.ts
+      // the moment CatalogImport1757980000000 landed after both. Name the migration.
+      await undoMigrationNamed(ds, 'SignalBindings1757960000000');
 
       const [{ count: after }] = await ds.query(
         `SELECT count(*)::int FROM information_schema.tables
