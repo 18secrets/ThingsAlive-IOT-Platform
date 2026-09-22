@@ -110,9 +110,51 @@ the **same image that carries pgvector**, or the database splits and D09 breaks.
 Nothing in the ingest path changes now. Batched inserts, the dedupe index, watermarks and
 late-arrival reconciliation already handle this volume without noticing.
 
+## D14 — 90 days hot, then Parquet outside the database
+
+Raw readings stay at full resolution in `telemetry_reading` for **90 days** — about 441M rows
+and ~110 GB for a 170-asset tenant, three or four monthly partitions live at a time — then
+export to **Parquet** in object storage and drop the partition. Roughly 11 GB per 90 days
+compressed, ~45 GB/year archived. Archives serve model training and historical analytics;
+**DuckDB over Parquet** answers the analytics need, so there is no second database.
+
+Four requirements on the export, each for a failure that only appears later:
+
+1. **Archived rows are self-describing.** A raw row is `(imei, signal, value, unit)`, which is
+   meaningless in three years once the binding that interpreted it has been superseded and its
+   calibration replaced. Denormalise at export: `signal_key`, `measurement_role`, canonical
+   unit, `binding_version_id`, `calibration_version_id`, quality flags, and the equipment and
+   component it resolved to. Otherwise the archive is numbers nobody can read, and P14's
+   dataset is unusable for exactly the reason P14 warns about.
+2. **Export, verify, then drop.** Row count and checksum compared against the partition
+   before `DROP TABLE`; the drop is refused if they disagree. The failure mode is dropping
+   first and discovering the truncation afterwards.
+3. **Isolation does not follow the data out.** RLS protects the table; object storage has
+   none. Per-tenant prefixes with per-tenant credentials — decided before the first export,
+   not after a training job has read across the whole bucket.
+4. **90 days is a revision boundary.** Late-arrival handling rewinds and rescores; past the
+   window it cannot. An outcome older than 90 days is final, which is a promise to customers
+   rather than an operational detail, and belongs somewhere they can see it.
+
+## D15 — Regulatory mandates are library metadata, not a compliance gate
+
+`regulatory_mandates` on a class or model (AIS-140, ICEMA) is descriptive reference data for
+the library and for download. **No compliance obligation is attached and none is claimed.**
+
+This corrects an earlier recommendation in this project: that a signal required by a mandate
+should report `Blocked` rather than `Pending` when unbound. That assumed the mandates were
+obligations. They are not, so mandate-derived signals stay ordinary required or optional per
+their class and carry no special severity — presenting them as a gate would imply a
+certification nothing here performs. For the same reason the archive in D14 needs no
+immutability guarantee and no regulatory retention floor.
+
 ## Open, and blocking something
 
 - **web/ versus frontend/** — `feature/dev` deletes `web/` entirely. Whichever branch merges
   second decides silently. `feature/dev` has no merge request open. (P1-139)
-- **`LEGACY_DB_*` credentials** — nothing is scored without them.
-- **Visual Workflow Backend Addendum v1.1** — referenced by P11 and Q18/Q19, present nowhere.
+- **`LEGACY_DB_*` credentials** — nothing is scored without them. Now the largest open item.
+- **Does a published workflow compile down to `alert_rule`, or supersede it?** Decides whether
+  WF04 is a new runtime or a front end on the one that ships today.
+- ~~Visual Workflow Backend Addendum v1.1~~ — reconstructed 22 September, WF01–WF08. Lives in
+  the kit as `layers/Visual-Workflow-Backend-Addendum-v1.1.md`; still to be copied into the
+  repository. If the original surfaces, reconcile rather than merging both into the queue.
