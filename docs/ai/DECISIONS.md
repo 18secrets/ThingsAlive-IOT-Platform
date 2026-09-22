@@ -71,6 +71,45 @@ consumer. The adapter never implements a second permission policy.
 `domain_event` plus the `shift_run` lease ledger. Redis and RabbitMQ are not present and are
 not added by assumption.
 
+## D12 — No streaming evaluation layer; scoring stays on shift boundaries
+Readings arrive every 30–60 seconds. At ~170 assets and ~10 signals that is ~57 rows/second,
+about 0.2% of what one Postgres does with batched inserts, and the next reading is 30,000 ms
+away. There is no latency budget to optimise, so no Rust/Go stream worker, no PG-Strom (GPU
+only, and not attachable to managed Postgres), no Materialize, and no alerting from memory.
+
+Compute-in-motion also conflicts with the model on purpose: readings are persisted first and
+scored on shift boundaries **so a late reading can revise an outcome**. A stream evaluator
+cannot revise — it has already alerted.
+
+Four principles from the proposals do transfer, none of them about speed: bounded
+pre-allocated buffers for backpressure (the real burst is a store-and-forward logger dumping
+an eight-hour backlog, ~960 readings per signal at once); pipelined stages with bounded
+queues; deterministic work per cycle — no unbounded query in the hot path, a timeout on
+everything, a cap on rows per batch; and fixed-function over dynamic dispatch, which P04's
+allowlisted formula AST already is.
+
+**LISTEN/NOTIFY is rejected as an alert path.** Notifications reach only currently-connected
+listeners, so a redeploy loses them with no replay; the payload caps at 8000 bytes; a trigger
+fires at COMMIT rather than per statement; and PgBouncer in transaction mode breaks LISTEN
+outright. An alert lost during a deploy is worse than a polled one, and `domain_event` is
+already durable. It remains available as a *wake signal* for the outbox drainer.
+
+## D13 — The scaling axis is storage, not speed
+The same arithmetic gives ~1.8B rows/year for one 170-asset tenant — roughly **450 GB**
+with the heap tuple plus the dedupe and lookup indexes. That is where this hurts: vacuum,
+query planning, backup windows and Railway storage cost.
+
+So: **partition `telemetry_reading` by month with native PostgreSQL declarative
+partitioning.** No extension, no image change, no conflict with pgvector, and retention
+becomes `DROP TABLE` on a partition rather than a `DELETE` that leaves bloat behind.
+
+TimescaleDB is revisited later and on evidence. Its compression on time-series is genuinely
+good, and that is a storage argument rather than an ingest-speed one. If adopted it must be
+the **same image that carries pgvector**, or the database splits and D09 breaks.
+
+Nothing in the ingest path changes now. Batched inserts, the dedupe index, watermarks and
+late-arrival reconciliation already handle this volume without noticing.
+
 ## Open, and blocking something
 
 - **web/ versus frontend/** — `feature/dev` deletes `web/` entirely. Whichever branch merges
