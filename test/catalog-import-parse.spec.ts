@@ -1,9 +1,10 @@
 import { DataSource } from 'typeorm';
 import { Workbook } from 'exceljs';
+import { SIGNAL_THRESHOLD_PARAM_KEYS } from '../src/alert/services/alert-rules';
 import { CatalogImportRow } from '../src/catalog-import/entities/catalog-import-row.entity';
 import { CatalogTemplateService } from '../src/catalog-import/services/catalog-template.service';
 import { WorkbookParserService } from '../src/catalog-import/services/workbook-parser.service';
-import { ALL_SHEETS, TEMPLATE_VERSION } from '../src/catalog-import/template-schema';
+import { ALL_SHEETS, CONTENT_SHEETS, TEMPLATE_VERSION } from '../src/catalog-import/template-schema';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 /**
@@ -200,6 +201,19 @@ describeDb('catalog import: workbook template and parser', () => {
     await parser.parse(await workbookBuffer(), 'template.xlsx', 'deepak');
     const [{ count }] = await owner.query(`SELECT count(*)::int FROM "equipment_class_profile"`);
     expect(count).toBe(0);
+  });
+
+  it('keeps default_threshold in sync with the engine parameters it stages', () => {
+    // SIGNAL_THRESHOLD_PARAM_KEYS is generated from SignalThresholdParams itself
+    // (src/alert/services/alert-rules.ts) and fails to compile if that interface
+    // changes without it. A default_threshold column dropped or renamed here without
+    // updating template-schema.ts fails this test, rather than staging a threshold
+    // the alert engine silently cannot run.
+    const schema = CONTENT_SHEETS.find((s) => s.sheet === 'default_threshold')!;
+    const columnNames = new Set(schema.columns.map((c) => c.name));
+    for (const key of SIGNAL_THRESHOLD_PARAM_KEYS) {
+      expect(columnNames.has(key)).toBe(true);
+    }
   });
 
   describe('the template generator', () => {

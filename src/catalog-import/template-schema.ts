@@ -5,7 +5,11 @@
  * because a template that drifted from what the parser expects is exactly the
  * "changed shape, read with the old meanings" failure this slice exists to prevent.
  */
-export const TEMPLATE_VERSION = 'v1';
+// v1 -> v2: default_threshold changed shape (comparator/value -> min/max), because
+// comparator/value described a threshold the alert engine cannot run — see the
+// column comment below. A v1 workbook is refused by template_version rather than
+// silently misread with the old column meanings.
+export const TEMPLATE_VERSION = 'v2';
 
 export interface SheetColumn {
   name: string;
@@ -121,20 +125,36 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       parameter_key: 'temperature', canonical_unit: 'degC',
     },
   },
+  /**
+   * Mirrors `SignalThresholdParams` in `src/alert/services/alert-rules.ts` one-for-one
+   * (`signal`, `min`, `max` — nothing else; the engine has no duration, consecutive-
+   * reading, hysteresis or dwell parameter). A `comparator`/`value` shape read cleanly
+   * and staged cleanly, and the alert engine still could not run it — the exact
+   * failure that looks like "no faults detected" rather than an error. `min`/`max`
+   * cannot express anything the engine does not, because it is what the engine reads.
+   * `unit` and `severity` are kept: `unit` documents the value for whoever fills the
+   * cell in (the engine compares raw numbers, in the reading's own unit), and
+   * `severity` maps to `AlertRule.severity`, a column on the rule rather than a
+   * threshold parameter.
+   */
   {
     sheet: 'default_threshold',
     entityKind: 'default_threshold',
     columns: [
       { name: 'class_slug', requiredCell: true },
       { name: 'signal', requiredCell: true },
-      { name: 'comparator', requiredCell: true },
-      { name: 'value', requiredCell: true },
+      // Either bound may be omitted; at least one is required — the same rule
+      // `validateParams` enforces on `alert_rule` itself. Neither cell is
+      // unconditionally required at the shape level; "at least one, and min below
+      // max" is QIMP2's semantic check, not this slice's.
+      { name: 'min', requiredCell: false },
+      { name: 'max', requiredCell: false },
       { name: 'unit', requiredCell: false },
       { name: 'severity', requiredCell: false },
     ],
     example: {
-      class_slug: 'diesel-generator', signal: 'coolant_temp_c', comparator: '>',
-      value: 105, unit: 'degC', severity: 'critical',
+      class_slug: 'diesel-generator', signal: 'coolant_temp_c', min: '',
+      max: 105, unit: 'degC', severity: 'critical',
     },
   },
   {
@@ -172,12 +192,10 @@ export const ALL_SHEETS: SheetSchema[] = [META_SHEET, ...CONTENT_SHEETS];
  * looking like it was imported successfully, which is the failure this list exists
  * to catch before it reaches a spreadsheet.
  *
- * `default_threshold.comparator` has no equivalent to reuse: `SignalThresholdParams`
- * (`src/alert/services/alert-rules.ts`) does not store a comparator at all — a
- * threshold is a `min`/`max` numeric bound, and "greater than" or "less than" is
- * which bound is set, not a value the schema names anywhere. There is nothing here to
- * be consistent with, so nothing is listed; inventing a symbol (">", "gte", ...) would
- * be exactly the guess this file exists to avoid.
+ * There is no `default_threshold.comparator` entry: the sheet no longer has a
+ * comparator column at all. It mirrors `SignalThresholdParams` as `min`/`max` bounds
+ * directly — "greater than" or "less than" is which bound is set, not a value that
+ * needs its own vocabulary.
  */
 export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
   { field: 'sensor_requirement.criticality', values: ['required', 'recommended', 'optional'] },
