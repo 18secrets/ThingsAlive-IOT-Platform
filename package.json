@@ -10,14 +10,15 @@
     "lint": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
-    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts",
+    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts test/platform-credentials.spec.ts",
     "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
     "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "token:platform": "node dist/platform/mint-token.js",
     "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
     "seed:demo": "ts-node src/database/seeds/seed-demo-fleet.ts",
-    "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts"
+    "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts",
+    "staff:bootstrap": "ts-node src/database/seeds/staff-bootstrap.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

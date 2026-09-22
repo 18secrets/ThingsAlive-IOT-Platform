@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { SCOPE_RESOLVER, ScopeResolver } from '../scope-resolver';
+import { PLATFORM_SESSION_VALIDATOR, PlatformSessionValidator } from '../platform-session-validator';
 import { PLATFORM_ROLE_SET as PLATFORM_ROLES } from '../platform-roles';
 import { REQUEST_SCOPE_KEY, RequestScope } from '../types/request-scope';
 
@@ -29,6 +30,9 @@ export class AuthGuard implements CanActivate {
     // which is what the contract and isolation suites rely on, and what a platform
     // caller gets, since Things Alive staff hold no row in any customer's account.
     @Optional() @Inject(SCOPE_RESOLVER) private readonly resolver?: ScopeResolver,
+    // Optional for the same reason: a bootstrap token carries no session id, and the
+    // contract/isolation suites boot with no database and therefore no validator.
+    @Optional() @Inject(PLATFORM_SESSION_VALIDATOR) private readonly platformSessions?: PlatformSessionValidator,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -69,6 +73,19 @@ export class AuthGuard implements CanActivate {
       equipmentIds: asIdList(payload.equipment_ids),
       deviceIds: asIdList(payload.device_ids),
     };
+
+    // A platform token minted by a real sign-in carries the session it came from
+    // (`sid`); a bootstrap token minted by mint-token.ts carries none, and was never
+    // state-backed, so it keeps working exactly as it always has. A session that has
+    // since been revoked, or an account since suspended, fails here on the very next
+    // request — the same "next request, not next token" property the tenant resolver
+    // below already has.
+    if (scope.isPlatformRole && payload.sid && this.platformSessions) {
+      const usable = await this.platformSessions.isSessionUsable(String(payload.sid));
+      if (!usable) {
+        throw new UnauthorizedException('This session has been revoked or the account is suspended.');
+      }
+    }
 
     // What the account says now beats what the token said when it was issued. This is
     // the whole reason scope is resolved per request: a suspension, a role change or

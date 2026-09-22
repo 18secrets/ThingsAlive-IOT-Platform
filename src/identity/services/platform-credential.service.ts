@@ -32,11 +32,12 @@ const LOCKOUT_MINUTES = 15;
  * app from one minted by the CLI script, and needs no guard change to work.
  *
  * What it adds over the CLI script is what a login is supposed to be: a password
- * instead of shell access to the running service, and a refresh token that can be
- * revoked by deleting the session row. What it does not add is per-request
- * revocation of an already-issued *access* token — that still lives out its hour
- * (ACCESS_TOKEN_SECONDS) regardless, same as the CLI-minted token always did, and
- * same as the guard's documented decision not to look platform tokens up at all.
+ * instead of shell access to the running service, a refresh token that can be
+ * revoked by deleting the session row, and — because the access token carries the
+ * session id (`sid`) that minted it — an *access* token that stops working the
+ * moment that session is revoked or the account is suspended, rather than living out
+ * its hour regardless. A CLI-minted bootstrap token carries no `sid` and keeps the
+ * old behaviour: the guard only ever looks one up when the claim is present.
  */
 @Injectable()
 export class PlatformCredentialService {
@@ -157,6 +158,42 @@ export class PlatformCredentialService {
     });
   }
 
+  /**
+   * A signed-in staff member setting a new password for themselves.
+   *
+   * Every session dies afterwards, including the one that made this call — the same
+   * reason `acceptInvitation` revokes everything on the tenant side. Somebody who
+   * just proved they know the current password is exactly somebody who can sign in
+   * again with the new one.
+   */
+  async changePassword(
+    platformUserId: string, currentPassword: string, newPassword: string,
+    ctx: RequestContext = {}, now = new Date(),
+  ): Promise<void> {
+    await runTenantSpanning(this.ds, 'platform password change', async (m) => {
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: platformUserId } });
+      if (!user) throw new UnauthorizedException('Please sign in again.');
+      if (user.status === 'suspended') {
+        throw new UnauthorizedException('This account has been suspended.');
+      }
+      if (!this.passwords.verify(currentPassword, user.passwordHash)) {
+        throw new UnauthorizedException('Current password is incorrect.');
+      }
+
+      user.passwordHash = this.passwords.hash(newPassword, user.email);
+      user.failedAttempts = 0;
+      user.lockedUntil = null;
+      await repo.save(user);
+
+      await m.getRepository(PlatformSession).update(
+        { platformUserId, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx });
+    });
+  }
+
   /** Every way back in closes at once — used when a platform user is suspended. */
   async revokeAllFor(platformUserId: string, reason: string, now = new Date()): Promise<void> {
     await this.ds.getRepository(PlatformSession).update(
@@ -188,7 +225,7 @@ export class PlatformCredentialService {
     m: EntityManager, user: PlatformUser, ctx: RequestContext, now: Date, family?: string,
   ): Promise<SignInResult> {
     const refreshToken = this.passwords.newToken();
-    await m.getRepository(PlatformSession).save(m.getRepository(PlatformSession).create({
+    const session = await m.getRepository(PlatformSession).save(m.getRepository(PlatformSession).create({
       platformUserId: user.id,
       tokenHash: this.passwords.fingerprint(refreshToken),
       family: family ?? randomUUID(),
@@ -201,8 +238,13 @@ export class PlatformCredentialService {
     // No `sub`-as-DB-id assumption anywhere downstream: the guard only ever reads
     // `roles` off a platform token (see this file's class comment), so `sub` here is
     // free to be the real platform_user.id, same as a tenant user's access token.
+    //
+    // `sid` is what makes this token revocable: the guard looks it up on every
+    // request (auth.guard.ts) and refuses one whose session has since been revoked
+    // or whose account has since been suspended. A CLI-minted bootstrap token carries
+    // no `sid` and is unaffected — see this file's class comment.
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, [claim]: 'things-alive', roles: [user.role] },
+      { sub: user.id, [claim]: 'things-alive', roles: [user.role], sid: session.id },
       { secret: this.config.get<string>('AUTH_JWT_SECRET'), expiresIn: ACCESS_TOKEN_SECONDS, ...(issuer ? { issuer } : {}) },
     );
 
