@@ -10,7 +10,7 @@
     "lint": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
-    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts test/platform-credentials.spec.ts test/platform-staff.spec.ts test/library-structure.spec.ts test/catalog-import-parse.spec.ts test/catalog-import-validate.spec.ts test/catalog-import-apply.spec.ts test/catalog-capability-split.spec.ts test/signal-binding-coverage.spec.ts test/no-password-hash-leak.spec.ts test/auth-matrix.spec.ts test/platform-token.spec.ts",
+    "test:db": "jest --runInBand test/migration.spec.ts test/projection.spec.ts test/platform-credentials.spec.ts test/platform-staff.spec.ts test/library-structure.spec.ts test/catalog-import-parse.spec.ts test/catalog-import-validate.spec.ts test/catalog-import-apply.spec.ts test/catalog-capability-split.spec.ts test/signal-binding-coverage.spec.ts test/no-password-hash-leak.spec.ts test/auth-matrix.spec.ts test/platform-token.spec.ts test/formula-compiler-integration.spec.ts",
     "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
     "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",

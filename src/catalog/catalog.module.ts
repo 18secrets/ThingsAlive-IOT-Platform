@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { CatalogController } from './catalog.controller';
 import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.entity';
+import { EquipmentClassFormula } from './entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from './entities/scenario-definition.entity';
 import { SignalAlias } from './entities/signal-alias.entity';
@@ -25,7 +26,7 @@ import { RecommendationService } from './services/recommendation.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      EquipmentClassProfile, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
+      EquipmentClassProfile, EquipmentClassFormula, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
       ClientCatalogEntitlement, EquipmentProfile,
     ]),
     ClientCatalogModule,
