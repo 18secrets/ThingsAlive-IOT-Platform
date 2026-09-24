@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
-import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
+import { compileFormula, DeclaredSignal, FormulaCompileError } from '../../catalog/formula/formula-compiler';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
@@ -135,17 +135,33 @@ export class CatalogImportValidatorService {
       // as an expected_signal cannot arise from an import; that trigger now only ever
       // fires for `manual` catalog authoring, not this path.
       const expectedSignalsInBatch = new Map<string, Set<string>>();
+      // Unit alongside the name — the compiler needs both to resolve a signal
+      // reference at all (unresolved-unit and undeclared-signal are different
+      // refusals; see formula-compiler.ts).
+      const signalUnitsInBatch = new Map<string, Map<string, string | null>>();
       for (const r of candidates) {
         if (r.sheet !== 'signal' || !live(r)) continue;
         const slug = String(r.payload.class_slug);
+        const signal = String(r.payload.signal);
         const set = expectedSignalsInBatch.get(slug) ?? new Set<string>();
-        set.add(String(r.payload.signal));
+        set.add(signal);
         expectedSignalsInBatch.set(slug, set);
+        const units = signalUnitsInBatch.get(slug) ?? new Map<string, string | null>();
+        units.set(signal, (r.payload.unit as string | undefined) || null);
+        signalUnitsInBatch.set(slug, units);
       }
       const expectedSignalsFor = (slug: string): Set<string> => {
         const fromBatch = expectedSignalsInBatch.get(slug) ?? new Set<string>();
         const fromCatalog = latestExisting(slug)?.expectedSignals?.map((s) => s.signal) ?? [];
         return new Set([...fromBatch, ...fromCatalog]);
+      };
+      /** Batch declarations win over the catalog's existing ones for the same
+       * name — they are the incoming truth for this upload. */
+      const declaredSignalsFor = (slug: string): DeclaredSignal[] => {
+        const merged = new Map<string, string | null>();
+        for (const s of latestExisting(slug)?.expectedSignals ?? []) merged.set(s.signal, s.unit);
+        for (const [signal, unit] of signalUnitsInBatch.get(slug) ?? []) merged.set(signal, unit);
+        return [...merged.entries()].map(([signal, unit]) => ({ signal, unit }));
       };
 
       // ------------------------------------------------ signal-level agreement
@@ -215,40 +231,26 @@ export class CatalogImportValidatorService {
       }
 
       // ------------------------------------------------------------ formula inputs
-      const formulaKeysInBatch = new Map<string, Set<string>>();
+      // The real compiler (task QCE1), not a lighter check against the `inputs`
+      // column: it parses `expression` itself and refuses anything it cannot prove
+      // safe — an undeclared signal is one of many things it now catches, alongside
+      // an unknown function, a unit mismatch, or a malformed expression. Dry run
+      // only: nothing is written, and no declared result_kind/display_unit exists on
+      // a workbook row to check against, so those two checks apply at publish only
+      // (see CatalogAuthoringService.publishClass), not here.
       for (const r of candidates) {
         if (r.sheet !== 'formula' || !live(r)) continue;
         const slug = String(r.payload.class_slug);
-        const set = formulaKeysInBatch.get(slug) ?? new Set<string>();
-        set.add(String(r.payload.formula_key));
-        formulaKeysInBatch.set(slug, set);
-      }
-      const existingFormulas = referencedSlugs.size
-        ? await m.getRepository(EquipmentClassFormula).find({ where: { classSlug: In([...referencedSlugs]) } })
-        : [];
-      const existingFormulaKeysBySlug = new Map<string, Set<string>>();
-      for (const f of existingFormulas) {
-        const set = existingFormulaKeysBySlug.get(f.classSlug) ?? new Set<string>();
-        set.add(f.formulaKey);
-        existingFormulaKeysBySlug.set(f.classSlug, set);
-      }
-
-      for (const r of candidates) {
-        if (r.sheet !== 'formula' || !live(r)) continue;
-        const slug = String(r.payload.class_slug);
-        const inputs = (r.payload.inputs as string[] | undefined) ?? [];
-        const signals = expectedSignalsFor(slug);
-        const formulaKeys = new Set([
-          ...(formulaKeysInBatch.get(slug) ?? []),
-          ...(existingFormulaKeysBySlug.get(slug) ?? []),
-        ]);
-        const unresolved = inputs.filter((i) => !signals.has(i) && !formulaKeys.has(i));
-        if (unresolved.length) {
-          invalidate(
-            r,
-            `formula row ${r.rowNumber}: input "${unresolved.join('", "')}" names neither a declared `
-              + `expected_signal nor another formula_key for "${slug}".`,
-          );
+        try {
+          compileFormula({
+            formulaKey: String(r.payload.formula_key ?? ''),
+            expression: String(r.payload.expression ?? ''),
+            classSlug: slug,
+            expectedSignals: declaredSignalsFor(slug),
+          });
+        } catch (err) {
+          const reason = err instanceof FormulaCompileError ? err.message : `formula could not be compiled (${err}).`;
+          invalidate(r, `formula row ${r.rowNumber}: ${reason}`);
         }
       }
 

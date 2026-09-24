@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { compileFormula, FormulaCompileError } from '../formula/formula-compiler';
+import { EquipmentClassFormula } from '../entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
@@ -41,6 +43,7 @@ export class CatalogAuthoringService {
 
   constructor(
     @InjectRepository(EquipmentClassProfile) private readonly classes: Repository<EquipmentClassProfile>,
+    @InjectRepository(EquipmentClassFormula) private readonly formulas: Repository<EquipmentClassFormula>,
     @InjectRepository(ScenarioDefinition) private readonly scenarios: Repository<ScenarioDefinition>,
     @InjectRepository(SignalAlias) private readonly aliases: Repository<SignalAlias>,
     @InjectRepository(AlertRuleTemplate) private readonly alertTemplates: Repository<AlertRuleTemplate>,
@@ -75,6 +78,14 @@ export class CatalogAuthoringService {
     return this.classes.save(working);
   }
 
+  /**
+   * Publishing is the enforcement point for every formula on the class (task
+   * QCE1): draft content may be broken, published content may not. Every formula
+   * for this version is compiled here, and a single one that fails to compile
+   * blocks the whole publish — the message names every failing formula and why,
+   * not just the first, since a person fixing one should not have to republish
+   * five times to find the rest.
+   */
   async publishClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
     const draft = await this.classes.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
     if (!draft) throw new NotFoundException(`No draft of "${slug}" to publish.`);
@@ -83,10 +94,51 @@ export class CatalogAuthoringService {
       // and the blocker names signals the class never promised. Better to refuse.
       throw new BadRequestException(`"${slug}" declares no expected signals; publishing it would help nobody.`);
     }
-    draft.status = 'published';
-    draft.publishedAt = new Date();
-    this.logger.log(`${scope.userId} published template class "${slug}" v${draft.version}.`);
-    return this.classes.save(draft);
+
+    const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
+    const compiled: { formula: EquipmentClassFormula; result: ReturnType<typeof compileFormula> }[] = [];
+    const failures: string[] = [];
+    for (const formula of formulas) {
+      try {
+        const result = compileFormula({
+          formulaKey: formula.formulaKey,
+          expression: formula.expression,
+          classSlug: slug,
+          expectedSignals: draft.expectedSignals.map((s) => ({ signal: s.signal, unit: s.unit })),
+          declaredResultKind: formula.resultKind,
+          declaredDisplayUnit: formula.displayUnit,
+        });
+        compiled.push({ formula, result });
+      } catch (err) {
+        failures.push(err instanceof FormulaCompileError ? err.message : `formula "${formula.formulaKey}": ${err}`);
+      }
+    }
+    if (failures.length) {
+      throw new BadRequestException(
+        `Cannot publish "${slug}" v${draft.version}: ${failures.join('; ')}`,
+      );
+    }
+
+    return this.classes.manager.transaction(async (m) => {
+      const now = new Date();
+      for (const { formula, result } of compiled) {
+        formula.compiledPlan = result.plan as unknown as Record<string, unknown>;
+        formula.compiledAt = now;
+        formula.compilerVersion = result.compilerVersion;
+        formula.resultUnit = result.resultUnit;
+        formula.requiredSignals = result.requiredSignals;
+        formula.requiredParameters = result.requiredParameters;
+      }
+      if (compiled.length) await m.getRepository(EquipmentClassFormula).save(compiled.map((c) => c.formula));
+
+      draft.status = 'published';
+      draft.publishedAt = now;
+      this.logger.log(
+        `${scope.userId} published template class "${slug}" v${draft.version}`
+          + `${formulas.length ? ` (${formulas.length} formula(s) compiled)` : ''}.`,
+      );
+      return m.getRepository(EquipmentClassProfile).save(draft);
+    });
   }
 
   /**
