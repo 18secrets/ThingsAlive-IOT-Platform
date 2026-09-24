@@ -58,6 +58,7 @@ interface AdminManagementProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onOpenEquipmentClass: (slug: string) => void;
   /** Common onboarding fields, Master Admin only — deliberately separate from
    *  the prediction catalog above; see EquipmentTemplate's own comment. */
   equipmentTemplates: EquipmentTemplate[];
@@ -138,6 +139,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateEquipmentClass,
   onPublishEquipmentClass,
   onRetireEquipmentClass,
+  onOpenEquipmentClass,
   equipmentTemplates,
   equipmentTemplatesError,
   onCreateEquipmentTemplate,
@@ -192,11 +194,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
   // same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement), and no Equipment Classes, Equipment, or Industry Type tab.
-  // Tool Mapping and Devices are hidden for now too, by request — re-enable later.
+  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping and
+  // Devices are hidden for now too, by request — re-enable later. Equipment
+  // Classes is Master Admin's own screen (catalog.write, Things Alive only)
+  // and belongs in this branch, not the client one.
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
-    : allSubTabs.filter((tab) => !['plant', 'category', 'equipment', 'industry', 'tool-mapping', 'devices'].includes(tab.id));
+    : allSubTabs.filter((tab) => !['plant', 'equipment', 'industry', 'tool-mapping', 'devices'].includes(tab.id));
 
   return (
     <div id="admin-module" className="space-y-5">
@@ -256,6 +260,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateClass={onUpdateEquipmentClass}
             onPublishClass={onPublishEquipmentClass}
             onRetireClass={onRetireEquipmentClass}
+            onOpenClass={onOpenEquipmentClass}
           />
         )}
 

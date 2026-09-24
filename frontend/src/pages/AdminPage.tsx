@@ -38,6 +38,7 @@ interface AdminPageProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onOpenEquipmentClass: (slug: string) => void;
   equipmentTemplates: EquipmentTemplate[];
   equipmentTemplatesError?: string;
   onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
@@ -124,6 +125,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateEquipmentClass={props.onUpdateEquipmentClass}
       onPublishEquipmentClass={props.onPublishEquipmentClass}
       onRetireEquipmentClass={props.onRetireEquipmentClass}
+      onOpenEquipmentClass={props.onOpenEquipmentClass}
       equipmentTemplates={props.equipmentTemplates}
       equipmentTemplatesError={props.equipmentTemplatesError}
       onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}

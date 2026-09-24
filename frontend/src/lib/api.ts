@@ -366,6 +366,162 @@ export function apiRetireEquipmentClass(slug: string): Promise<EquipmentClass[]>
   return authFetch(`/catalog/equipment-classes/${encodeURIComponent(slug)}/retire`, { method: 'POST' });
 }
 
+// -------------------------------------------------------------------- scenarios
+
+/**
+ * A prediction scenario on a class (POST/PATCH /catalog/scenarios and friends,
+ * `catalog.write` — Things Alive only). Same draft/publish shape as EquipmentClass:
+ * immutable once published, a new edit forks a new draft version.
+ */
+export type ScenarioParameter = {
+  key: string;
+  label: string;
+  type: 'number' | 'duration' | 'boolean' | 'enum';
+  default: unknown;
+  min?: number;
+  max?: number;
+  options?: string[];
+  unit?: string;
+};
+
+export interface Scenario {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  name: string;
+  description: string | null;
+  severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  tier: 1 | 2 | 3;
+  requiredSignals: string[];
+  minimumHistoryDays: number;
+  parameters: ScenarioParameter[];
+  status: 'draft' | 'published' | 'retired';
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface ScenarioInput {
+  name?: string;
+  description?: string;
+  severity?: Scenario['severity'];
+  tier?: Scenario['tier'];
+  requiredSignals?: string[];
+  minimumHistoryDays?: number;
+  parameters?: ScenarioParameter[];
+}
+
+/** Every version, draft and published, across every class — what the authoring screen lists. */
+export function apiListAuthoringScenarios(equipmentClassSlug?: string): Promise<Scenario[]> {
+  const query = equipmentClassSlug ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}` : '';
+  return authFetch(`/catalog/authoring/scenarios${query}`);
+}
+
+export function apiCreateScenario(
+  slug: string, equipmentClassSlug: string, input: ScenarioInput,
+): Promise<Scenario> {
+  return authFetch('/catalog/scenarios', {
+    method: 'POST', body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
+  });
+}
+
+/** Edits the working draft, forking one from the published version if none exists yet. */
+export function apiUpdateScenario(slug: string, input: ScenarioInput): Promise<Scenario> {
+  return authFetch(`/catalog/scenarios/${encodeURIComponent(slug)}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  });
+}
+
+export function apiPublishScenario(slug: string): Promise<Scenario> {
+  return authFetch(`/catalog/scenarios/${encodeURIComponent(slug)}/publish`, { method: 'POST' });
+}
+
+// -------------------------------------------------------------- alert rule templates
+
+/**
+ * What Things Alive knows is worth alerting on, for a class (POST/PATCH
+ * /catalog/alert-templates and friends, `catalog.write` — Things Alive only).
+ * Granting the class copies these into the account as the client's own `AlertRule`
+ * rows, which the client then owns and edits — this file has no route for that copy,
+ * only for the template it was copied from.
+ *
+ * Only the two triggers a class-level template author can meaningfully set up without
+ * a live machine in front of them are modelled here: a threshold against one of the
+ * class's expected signals, or "this scenario said so". `no-telemetry` needs no
+ * params. `fuel-loss` and `chain-origin` need a GPS fix and a causal chain
+ * respectively — neither exists in this authoring context, so they're left out of the
+ * picker rather than half-modelled.
+ */
+export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry' | 'fuel-loss' | 'chain-origin';
+
+export interface PredictionSeverityParams {
+  atLeast: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  clientScenarioSlug?: string | null;
+}
+
+export interface SignalThresholdParams {
+  signal: string;
+  max?: number | null;
+  min?: number | null;
+}
+
+export type AlertParams = PredictionSeverityParams | SignalThresholdParams | Record<string, unknown>;
+
+export interface AlertRuleTemplate {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  name: string;
+  description: string | null;
+  trigger: AlertTrigger;
+  params: AlertParams;
+  severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  enabledOnCopy: boolean;
+  status: 'draft' | 'published' | 'retired';
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface AlertRuleTemplateInput {
+  name?: string;
+  description?: string;
+  trigger?: AlertTrigger;
+  params?: AlertParams;
+  severity?: AlertRuleTemplate['severity'];
+  enabledOnCopy?: boolean;
+}
+
+/** Every version, draft and published, across every class. */
+export function apiListAuthoringAlertTemplates(equipmentClassSlug?: string): Promise<AlertRuleTemplate[]> {
+  const query = equipmentClassSlug ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}` : '';
+  return authFetch(`/catalog/authoring/alert-templates${query}`);
+}
+
+export function apiCreateAlertTemplate(
+  slug: string, equipmentClassSlug: string, input: AlertRuleTemplateInput,
+): Promise<AlertRuleTemplate> {
+  return authFetch('/catalog/alert-templates', {
+    method: 'POST', body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
+  });
+}
+
+/** Edits the working draft, forking one from the published version if none exists yet. */
+export function apiUpdateAlertTemplate(slug: string, input: AlertRuleTemplateInput): Promise<AlertRuleTemplate> {
+  return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  });
+}
+
+export function apiPublishAlertTemplate(slug: string): Promise<AlertRuleTemplate> {
+  return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST' });
+}
+
+/** Stops shipping it; copies already in accounts keep running. */
+export function apiRetireAlertTemplate(slug: string): Promise<AlertRuleTemplate> {
+  return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}/retire`, { method: 'POST' });
+}
+
 // -------------------------------------------------------------------- device catalog
 
 /**

@@ -8,6 +8,7 @@ import {
   Radio,
   UploadCloud,
   Archive,
+  Activity,
 } from 'lucide-react';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
 import { AddCategoryModal } from './AddCategoryModal';
@@ -19,6 +20,7 @@ interface CategoryViewProps {
   onUpdateClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishClass: (slug: string) => Promise<void>;
   onRetireClass: (slug: string) => Promise<void>;
+  onOpenClass: (slug: string) => void;
 }
 
 const STATUS_STYLE: Record<EquipmentClass['status'], string> = {
@@ -46,7 +48,7 @@ function representativePerSlug(rows: EquipmentClass[]): EquipmentClass[] {
 }
 
 export const CategoryView: React.FC<CategoryViewProps> = ({
-  classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass,
+  classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass, onOpenClass,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -164,6 +166,14 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                 <span>{cls.failureModes.length} Failure Modes</span>
               </div>
             </div>
+
+            <button
+              onClick={() => onOpenClass(cls.slug)}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Configure Predictive Maintenance</span>
+            </button>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[cls.status]}`}>

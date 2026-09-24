@@ -47,6 +47,7 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
+import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
@@ -60,6 +61,9 @@ import {
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
   apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
+  apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
+  apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
@@ -68,6 +72,7 @@ import {
   apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser,
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
+  Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
@@ -202,6 +207,15 @@ function AppData() {
   // which still feeds Equipment's still-mock "category" picker.
   const [equipmentClasses, setEquipmentClasses] = useState<EquipmentClass[]>([]);
   const [equipmentClassesError, setEquipmentClassesError] = useState<string | undefined>(undefined);
+  // Prediction scenarios across every class (task: wire the Templates-styled
+  // detail UI to the real catalog instead of the mock TemplatePredictiveRule
+  // localStorage layer). Same shape as equipmentClasses: platform-owned,
+  // fetched flat, filtered per class in the detail page.
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenariosError, setScenariosError] = useState<string | undefined>(undefined);
+  // Alert rule templates across every class — same shape as scenarios above.
+  const [alertTemplates, setAlertTemplates] = useState<AlertRuleTemplate[]>([]);
+  const [alertTemplatesError, setAlertTemplatesError] = useState<string | undefined>(undefined);
   // Master Admin's real reference data for wiring a device before it exists —
   // separate from the mock `sensors`/`toolMappings`/`devices` below, which
   // still feed Equipment's still-mock pickers and the client's still-mock
@@ -372,6 +386,56 @@ function AppData() {
         setEquipmentClassesError(undefined);
       } catch (err) {
         if (live) setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshScenarios = async () => {
+    try {
+      setScenarios(await apiListAuthoringScenarios());
+      setScenariosError(undefined);
+    } catch (err) {
+      setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListAuthoringScenarios();
+        if (!live) return;
+        setScenarios(list);
+        setScenariosError(undefined);
+      } catch (err) {
+        if (live) setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshAlertTemplates = async () => {
+    try {
+      setAlertTemplates(await apiListAuthoringAlertTemplates());
+      setAlertTemplatesError(undefined);
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListAuthoringAlertTemplates();
+        if (!live) return;
+        setAlertTemplates(list);
+        setAlertTemplatesError(undefined);
+      } catch (err) {
+        if (live) setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
       }
     })();
     return () => { live = false; };
@@ -736,6 +800,59 @@ function AppData() {
       setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not retire.');
     }
   };
+
+  const handleCreateScenario = async (slug: string, equipmentClassSlug: string, input: ScenarioInput) => {
+    const created = await apiCreateScenario(slug, equipmentClassSlug, input);
+    await refreshScenarios();
+    return created;
+  };
+
+  const handleUpdateScenario = async (slug: string, input: ScenarioInput) => {
+    const updated = await apiUpdateScenario(slug, input);
+    await refreshScenarios();
+    return updated;
+  };
+
+  const handlePublishScenario = async (slug: string) => {
+    try {
+      await apiPublishScenario(slug);
+      await refreshScenarios();
+    } catch (err) {
+      setScenariosError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleCreateAlertTemplate = async (
+    slug: string, equipmentClassSlug: string, input: AlertRuleTemplateInput,
+  ) => {
+    const created = await apiCreateAlertTemplate(slug, equipmentClassSlug, input);
+    await refreshAlertTemplates();
+    return created;
+  };
+
+  const handleUpdateAlertTemplate = async (slug: string, input: AlertRuleTemplateInput) => {
+    const updated = await apiUpdateAlertTemplate(slug, input);
+    await refreshAlertTemplates();
+    return updated;
+  };
+
+  const handlePublishAlertTemplate = async (slug: string) => {
+    try {
+      await apiPublishAlertTemplate(slug);
+      await refreshAlertTemplates();
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleRetireAlertTemplate = async (slug: string) => {
+    try {
+      await apiRetireAlertTemplate(slug);
+      await refreshAlertTemplates();
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not retire.');
+    }
+  };
   const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
     const created = await apiCreateEquipmentTemplate(input);
     await refreshEquipmentTemplates();
@@ -748,6 +865,8 @@ function AppData() {
   };
 
   const handleOpenEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
+
+  const handleOpenEquipmentClass = (slug: string) => navigate(`/admin/category/${slug}`);
 
   const handleAttachTemplateSensor = (templateId: string, sensorId: string) =>
     setTemplateSensorLinks((prev) => ({
@@ -980,6 +1099,25 @@ function AppData() {
               }
             />
             <Route
+              path="category/:slug"
+              element={
+                <EquipmentClassDetailPage
+                  classes={equipmentClasses}
+                  scenarios={scenarios}
+                  scenariosError={scenariosError}
+                  onCreateScenario={handleCreateScenario}
+                  onUpdateScenario={handleUpdateScenario}
+                  onPublishScenario={handlePublishScenario}
+                  alertTemplates={alertTemplates}
+                  alertTemplatesError={alertTemplatesError}
+                  onCreateAlertTemplate={handleCreateAlertTemplate}
+                  onUpdateAlertTemplate={handleUpdateAlertTemplate}
+                  onPublishAlertTemplate={handlePublishAlertTemplate}
+                  onRetireAlertTemplate={handleRetireAlertTemplate}
+                />
+              }
+            />
+            <Route
               path="equipment-template/:templateId"
               element={
                 <EquipmentTemplateDetailPage
@@ -1064,6 +1202,7 @@ function AppData() {
                   onUpdateEquipmentClass={handleUpdateEquipmentClass}
                   onPublishEquipmentClass={handlePublishEquipmentClass}
                   onRetireEquipmentClass={handleRetireEquipmentClass}
+                  onOpenEquipmentClass={handleOpenEquipmentClass}
                   equipmentTemplates={equipmentTemplates}
                   equipmentTemplatesError={equipmentTemplatesError}
                   onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
