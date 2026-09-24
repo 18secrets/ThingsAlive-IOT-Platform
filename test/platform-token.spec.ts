@@ -144,7 +144,11 @@ describe('minting a platform token (D-11)', () => {
     beforeAll(async () => {
       process.env.AUTH_JWT_SECRET = SECRET;
       process.env.CORS_ORIGINS = 'http://localhost:3000';
-      delete process.env.AUTH_JWT_ISSUER;
+      // Set to '' rather than deleted: `ConfigModule.forRoot` loads .env through
+      // dotenv, which fills in only variables that are unset — deleting this one
+      // just hands dotenv the opening to repopulate it from a developer's own
+      // AUTH_JWT_ISSUER, and the tokens below carry no issuer to match it with.
+      process.env.AUTH_JWT_ISSUER = '';
       app = await createApp({ database: false });
       await app.init();
     });
