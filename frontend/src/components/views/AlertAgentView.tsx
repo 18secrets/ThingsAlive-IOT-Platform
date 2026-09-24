@@ -374,14 +374,6 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
           </div>
         </div>
       </div>
-
-      {/* Floating help hint matching screenshot's bottom-right "?" button */}
-      <button
-        title="Alert Agent Help"
-        className="fixed bottom-24 right-6 w-10 h-10 rounded-full bg-sky-600 hover:bg-sky-700 text-white shadow-lg flex items-center justify-center transition-colors cursor-pointer z-10"
-      >
-        <HelpCircle className="w-5 h-5" />
-      </button>
     </div>
   );
 };
