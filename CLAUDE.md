@@ -8,7 +8,7 @@ Do not re-derive a decision that is already written down there.
 ## Hard constraints
 - 2.0 **reads** the legacy IoT backend. It never writes to it.
 - Users are created in 2.0. The legacy backend holds raw data only.
-- Do not create, edit or delete anything under `frontend/` or `web/`. Both stay.
+- Do not create, edit or delete anything under `frontend/`. It stays.
   The UI is built by the UI team. Build the API that supports it, never the page.
 - Do not add an npm dependency unless the task explicitly approves it by name.
 - Do not edit an existing test to make new code pass. If an existing test fails,

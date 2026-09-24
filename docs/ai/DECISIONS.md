@@ -175,12 +175,13 @@ The exception is real and splits the package:
 Agent graphs genuinely need the durable engine: `HumanApproval` pauses mid-execution and
 `alert_rule` has no run state to pause.
 
-## D17 — Both front ends stay; no UI pages are created here
+## D17 — `frontend/` is the only front end; no UI pages are created here
 
-`web/` and `frontend/` both remain. Whichever is needed gets used; neither is deleted, and no
-UI pages are authored from the backend side. This closes P1-139 as a decision rather than a
-risk — `feature/dev` removing `web/` in full becomes a merge to resolve deliberately instead
-of a surprise decided by whichever branch lands second.
+Corrected 2026-09-24: this originally said both front ends stay. `web/` was already fully
+deleted in shared history before `feature/dev` was merged into this branch — the deletion
+predates the point the two branches diverged, so merging it brought no decision with it,
+deliberate or otherwise. `frontend/` is the only front end and is what ships. No UI pages
+are authored from the backend side.
 
 ## Open, and blocking something
 
