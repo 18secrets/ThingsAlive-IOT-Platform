@@ -46,3 +46,24 @@ export async function createTestDataSource(
 
 /** The constrained connection. Mirrors how the running service connects. */
 export const createAppDataSource = (): Promise<DataSource> => createTestDataSource({});
+
+/**
+ * Undoes migrations one at a time until the named one has been reverted, then stops.
+ *
+ * `undoLastMigration()` alone reverts whichever migration happens to be newest — a
+ * moving target that stops meaning "this migration" the moment somebody adds a later
+ * one. A down-path test has to name its own migration, not "the last one" (task
+ * QIMP1 follow-up: this is what broke `library-structure.spec.ts` and
+ * `signal-binding.spec.ts` the moment `CatalogImport1757980000000` landed after both).
+ */
+export async function undoMigrationNamed(ds: DataSource, migrationName: string): Promise<void> {
+  for (;;) {
+    const [row] = await ds.query(`SELECT name FROM migrations ORDER BY id DESC LIMIT 1`);
+    const current: string | undefined = row?.name;
+    if (!current) {
+      throw new Error(`Migration "${migrationName}" was never applied — nothing left to undo.`);
+    }
+    await ds.undoLastMigration({ transaction: 'all' });
+    if (current === migrationName) return;
+  }
+}

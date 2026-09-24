@@ -186,6 +186,11 @@ export class CatalogController {
   // service behind them holds no repository for those tables, so "master admin
   // cannot edit a client's settings" is a property of the wiring rather than a rule
   // somebody has to remember to check.
+  //
+  // Every route needs `catalog.write` except `equipment-classes/:slug/publish`
+  // (task QPA2): loading content — creating, editing, importing — writes a draft;
+  // publishing a class version is what makes it grantable to a tenant, and that is
+  // `catalog.publish`, master admin alone.
 
   @Post('equipment-classes')
   @Requires('catalog.write')
@@ -209,7 +214,7 @@ export class CatalogController {
   }
 
   @Post('equipment-classes/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish the draft. Existing client copies are unaffected' })
   publishClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishClass(scope, slug);

@@ -5,6 +5,7 @@ import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { runTenantSpanning } from '../../scope/tenant-session';
 import { PLATFORM_ROLES, PlatformRole } from '../../auth/platform-roles';
+import { PlatformInvitation } from '../entities/platform-invitation.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
 import { PlatformSession } from '../entities/platform-session.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
@@ -20,6 +21,7 @@ const allow = <T>(value: T): Allowed<T> => ({ kind: 'allowed', value });
 const REFRESH_TOKEN_DAYS = 30;
 const MAX_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
+const INVITATION_DAYS = 14;
 
 /**
  * Sign-in for Things Alive staff — PlatformUser's counterpart to CredentialService.
@@ -32,11 +34,12 @@ const LOCKOUT_MINUTES = 15;
  * app from one minted by the CLI script, and needs no guard change to work.
  *
  * What it adds over the CLI script is what a login is supposed to be: a password
- * instead of shell access to the running service, and a refresh token that can be
- * revoked by deleting the session row. What it does not add is per-request
- * revocation of an already-issued *access* token — that still lives out its hour
- * (ACCESS_TOKEN_SECONDS) regardless, same as the CLI-minted token always did, and
- * same as the guard's documented decision not to look platform tokens up at all.
+ * instead of shell access to the running service, a refresh token that can be
+ * revoked by deleting the session row, and — because the access token carries the
+ * session id (`sid`) that minted it — an *access* token that stops working the
+ * moment that session is revoked or the account is suspended, rather than living out
+ * its hour regardless. A CLI-minted bootstrap token carries no `sid` and keeps the
+ * old behaviour: the guard only ever looks one up when the claim is present.
  */
 @Injectable()
 export class PlatformCredentialService {
@@ -98,6 +101,12 @@ export class PlatformCredentialService {
         await this.record(m, 'login.failed', { userId: user.id, ctx, detail: 'suspended' });
         return refuse('This account has been suspended.');
       }
+      // Unreachable via the `verify` check above today, since a null hash always
+      // fails it first — kept anyway, the same belt-and-braces `credential.service.ts`
+      // keeps for `AppUser`, in case that ever stops being true.
+      if (user.status === 'invited' || !user.passwordHash) {
+        return refuse('This invitation has not been accepted yet.');
+      }
 
       user.failedAttempts = 0;
       user.lockedUntil = null;
@@ -157,12 +166,129 @@ export class PlatformCredentialService {
     });
   }
 
+  /**
+   * A signed-in staff member setting a new password for themselves.
+   *
+   * Every session dies afterwards, including the one that made this call — the same
+   * reason `acceptInvitation` revokes everything on the tenant side. Somebody who
+   * just proved they know the current password is exactly somebody who can sign in
+   * again with the new one.
+   */
+  async changePassword(
+    platformUserId: string, currentPassword: string, newPassword: string,
+    ctx: RequestContext = {}, now = new Date(),
+  ): Promise<void> {
+    await runTenantSpanning(this.ds, 'platform password change', async (m) => {
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: platformUserId } });
+      if (!user) throw new UnauthorizedException('Please sign in again.');
+      if (user.status === 'suspended') {
+        throw new UnauthorizedException('This account has been suspended.');
+      }
+      if (!this.passwords.verify(currentPassword, user.passwordHash)) {
+        throw new UnauthorizedException('Current password is incorrect.');
+      }
+
+      user.passwordHash = this.passwords.hash(newPassword, user.email);
+      user.failedAttempts = 0;
+      user.lockedUntil = null;
+      await repo.save(user);
+
+      await m.getRepository(PlatformSession).update(
+        { platformUserId, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx });
+    });
+  }
+
   /** Every way back in closes at once — used when a platform user is suspended. */
   async revokeAllFor(platformUserId: string, reason: string, now = new Date()): Promise<void> {
     await this.ds.getRepository(PlatformSession).update(
       { platformUserId, revokedAt: IsNull() },
       { revokedAt: now, revokedReason: reason },
     );
+  }
+
+  // ------------------------------------------------------------------- invitations
+
+  /**
+   * Mint a token for a staff member to set their first password with — `platform_user`'s
+   * counterpart to `CredentialService.issueInvitation`. Same shape: the plaintext is
+   * returned once and never stored, and any invitation still outstanding for this
+   * person is retired first, so re-sending one never leaves two live at once.
+   *
+   * Neither `platform_user` nor `platform_invitation` carries RLS, so this needs no
+   * `runTenantSpanning` — unlike `acceptInvitation` below, which writes to
+   * `user_security_event`.
+   */
+  async issueInvitation(
+    platformUserId: string, by: string, now = new Date(),
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const user = await this.ds.getRepository(PlatformUser).findOne({ where: { id: platformUserId } });
+    if (!user) throw new BadRequestException('No such platform user.');
+
+    return this.ds.transaction(async (m) => {
+      const repo = m.getRepository(PlatformInvitation);
+      await repo.update(
+        { platformUserId: user.id, consumedAt: IsNull() },
+        { consumedAt: now },
+      );
+
+      const token = this.passwords.newToken();
+      const expiresAt = new Date(now.getTime() + INVITATION_DAYS * 86_400_000);
+      await repo.save(repo.create({
+        platformUserId: user.id,
+        tokenHash: this.passwords.fingerprint(token),
+        expiresAt, consumedAt: null, createdBy: by,
+      }));
+      return { token, expiresAt };
+    });
+  }
+
+  /**
+   * Set a password with an invitation token, and sign in — the same shape as
+   * `CredentialService.acceptInvitation`, including the one message for missing,
+   * consumed and expired, and revoking every session afterwards (there should be
+   * none yet, but the pattern costs nothing to keep and this is the moment somebody
+   * proves they hold the invitation).
+   */
+  async acceptInvitation(
+    token: string, password: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<SignInResult> {
+    const hash = this.passwords.fingerprint(token);
+
+    return runTenantSpanning(this.ds, 'platform invitation acceptance', async (m) => {
+      const invitation = await m.getRepository(PlatformInvitation).findOne({ where: { tokenHash: hash } });
+      if (!invitation || invitation.consumedAt || invitation.expiresAt <= now) {
+        throw new UnauthorizedException('That link is no longer valid. Ask for a new one.');
+      }
+
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: invitation.platformUserId } });
+      if (!user) throw new UnauthorizedException('That link is no longer valid. Ask for a new one.');
+      if (user.status === 'suspended') {
+        throw new UnauthorizedException('This account has been suspended.');
+      }
+
+      user.passwordHash = this.passwords.hash(password, user.email);
+      user.status = 'active';
+      user.activatedAt = user.activatedAt ?? now;
+      user.failedAttempts = 0;
+      user.lockedUntil = null;
+      await repo.save(user);
+
+      invitation.consumedAt = now;
+      await m.getRepository(PlatformInvitation).save(invitation);
+
+      await m.getRepository(PlatformSession).update(
+        { platformUserId: user.id, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx, detail: 'invite' });
+
+      return this.startSession(m, user, ctx, now);
+    });
   }
 
   /**
@@ -214,7 +340,7 @@ export class PlatformCredentialService {
     m: EntityManager, user: PlatformUser, ctx: RequestContext, now: Date, family?: string,
   ): Promise<SignInResult> {
     const refreshToken = this.passwords.newToken();
-    await m.getRepository(PlatformSession).save(m.getRepository(PlatformSession).create({
+    const session = await m.getRepository(PlatformSession).save(m.getRepository(PlatformSession).create({
       platformUserId: user.id,
       tokenHash: this.passwords.fingerprint(refreshToken),
       family: family ?? randomUUID(),
@@ -227,8 +353,13 @@ export class PlatformCredentialService {
     // No `sub`-as-DB-id assumption anywhere downstream: the guard only ever reads
     // `roles` off a platform token (see this file's class comment), so `sub` here is
     // free to be the real platform_user.id, same as a tenant user's access token.
+    //
+    // `sid` is what makes this token revocable: the guard looks it up on every
+    // request (auth.guard.ts) and refuses one whose session has since been revoked
+    // or whose account has since been suspended. A CLI-minted bootstrap token carries
+    // no `sid` and is unaffected — see this file's class comment.
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, [claim]: 'things-alive', roles: [user.role] },
+      { sub: user.id, [claim]: 'things-alive', roles: [user.role], sid: session.id },
       { secret: this.config.get<string>('AUTH_JWT_SECRET'), expiresIn: ACCESS_TOKEN_SECONDS, ...(issuer ? { issuer } : {}) },
     );
 

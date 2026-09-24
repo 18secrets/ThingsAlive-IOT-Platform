@@ -184,7 +184,8 @@ describeDb('identity', () => {
       // Lower-cased and trimmed once, so a stray capital never creates a twin.
       expect(user.email).toBe('dana@acme.test');
       expect(user.status).toBe('invited');
-      expect(user.passwordHash).toBeNull();
+      // UserView never carries passwordHash at all — not even null. See user.service.ts.
+      expect(Object.prototype.hasOwnProperty.call(user, 'passwordHash')).toBe(false);
       expect(user.plants).toEqual([{ plantId: plantIds['PLANT-A'] }]);
     });
 

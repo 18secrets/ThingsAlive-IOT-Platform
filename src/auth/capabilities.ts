@@ -20,6 +20,7 @@ export type Capability =
   | 'action.assign'
   | 'catalog.read'
   | 'catalog.write'
+  | 'catalog.publish'
   | 'client-catalog.read'
   | 'client-catalog.write'
   | 'device.manage'
@@ -65,9 +66,17 @@ const GRANTS: Record<Capability, readonly string[]> = {
     'super admin', 'admin', 'operational', 'support',
     'master-admin', 'catalog-author', 'platform-support',
   ],
-  // Authoring the *templates*. Things Alive only: the catalog is what Things Alive
-  // sells, and a customer editing it would be editing the product.
+  // Authoring the *templates* — loading content, still a draft. Things Alive only:
+  // the catalog is what Things Alive sells, and a customer editing it would be
+  // editing the product. Separate from `catalog.publish` (task QPA2): a
+  // catalog-author can build and stage a version, but making it grantable to a
+  // tenant is a narrower act than writing one, the same reason `scenario.activate`
+  // is not implied by `scenario.author`.
   'catalog.write': ['master-admin', 'catalog-author'],
+  // Publishing a draft version so tenants can be granted it. Master admin alone —
+  // a catalog-author who could also publish could ship what nobody with broader
+  // authority reviewed.
+  'catalog.publish': ['master-admin'],
   // Reading the *client's own copies*. Every role inside the tenant; Things Alive
   // roles are absent on purpose — a platform role reaching a client's copy goes
   // through the audited cross-tenant path, not through an ordinary read.

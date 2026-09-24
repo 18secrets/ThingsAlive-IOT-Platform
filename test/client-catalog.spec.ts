@@ -329,7 +329,7 @@ describeDb('client-owned catalog', () => {
       expect(rule.params).toEqual({ signal: 'coolant_temp', max: 108 });
     });
 
-    it('keeps one account\\'s copies out of another', async () => {
+      it("keeps one account's copies out of another", async () => {
       await publishedTemplate();
       await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
 

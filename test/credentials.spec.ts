@@ -227,7 +227,8 @@ describeDb('credentials', () => {
       const other = await users.invite(
         boss, { email: 'sam@acme.test', fullName: 'Sam', roleSlug: 'operator' }, NOW,
       );
-      expect(other.passwordHash).toBeNull();
+      // UserView never carries passwordHash at all — not even null. See user.service.ts.
+      expect(Object.prototype.hasOwnProperty.call(other, 'passwordHash')).toBe(false);
       await expect(credentials.signIn('sam@acme.test', PASSWORD, {}, NOW))
         .rejects.toThrow('Email or password is incorrect.');
     });
