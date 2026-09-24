@@ -187,10 +187,11 @@ export class CatalogController {
   // cannot edit a client's settings" is a property of the wiring rather than a rule
   // somebody has to remember to check.
   //
-  // Every route needs `catalog.write` except `equipment-classes/:slug/publish`
-  // (task QPA2): loading content — creating, editing, importing — writes a draft;
-  // publishing a class version is what makes it grantable to a tenant, and that is
-  // `catalog.publish`, master admin alone.
+  // Every route needs `catalog.write` except the three `*/publish` routes (task
+  // QPA2): loading content — creating, editing, importing — always writes a draft;
+  // publishing a class version, a scenario or an alert-rule template is what makes
+  // it grantable to a tenant, and every one of those is the same boundary —
+  // `catalog.publish`, master admin alone — not just the class version.
 
   @Post('equipment-classes')
   @Requires('catalog.write')
@@ -247,7 +248,7 @@ export class CatalogController {
   }
 
   @Post('scenarios/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   publishScenario(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishScenario(scope, slug);
   }
@@ -339,7 +340,7 @@ export class CatalogController {
   }
 
   @Post('alert-templates/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish it. Accounts granted the class from now on get a copy' })
   publishAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishAlertTemplate(scope, slug);
