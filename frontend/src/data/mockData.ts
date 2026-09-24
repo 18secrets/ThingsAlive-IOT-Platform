@@ -13,6 +13,9 @@ import {
   RoleDefinition,
   ClientUserItem,
   CLIENT_ASSIGNABLE_TABS,
+  TemplateAlertRule,
+  TemplateKpiFormula,
+  TemplatePredictiveRule,
 } from "../types";
 
 export const INITIAL_SENSORS: SensorItem[] = [
@@ -1961,13 +1964,6 @@ export const INITIAL_ONBOARDING_SESSIONS: OnboardingSessionItem[] = [
   },
 ];
 
-// Master Admin — the single ThingsAlive-owned login. There is no backend yet,
-// so this is a hardcoded demo credential, not a real secret.
-export const MASTER_ADMIN_CREDENTIALS = {
-  username: "thingsalive.admin",
-  password: "Admin@123",
-};
-
 // Seeded so both first-login (forced password change) and steady-state client
 // login can be demoed immediately.
 export const INITIAL_CLIENTS: ClientAccount[] = [
@@ -2057,4 +2053,140 @@ export const INITIAL_USERS: PlatformUserItem[] = [
   { id: 44, employeeId: "EMP0011", username: "constructionOperational", email: "constructionOperational@thingsalive.io", role: "Operational", phone: "7686342876", active: true },
   { id: 43, employeeId: "EMP0010", username: "constructionExecutive", email: "tagore1357@gmail.com", role: "Executive", phone: "8567524574", active: true },
   { id: 40, employeeId: "EMP0007", username: "Premchand", email: "clientexecutive@gmail.com", role: "Super Admin", phone: "8999999898", active: true },
+];
+
+// --- Equipment Template configuration defaults (Sensors / Alert Rules / KPI
+// Formulas / Predictive Maintenance) for three of the real equipment templates
+// seeded in the local backend (Diesel Generator Set, Hydraulic Excavator,
+// Portable Air Compressor). Equipment template config has no backend yet (see
+// the comment on TemplateAlertRule in types.ts), so these are the fallback a
+// fresh browser loads before anything is edited — the same role INITIAL_SENSORS
+// plays for the sensor catalog. The equipmentTemplateId/sensor id values below
+// are real UUIDs from that seed data; if the local database is ever reseeded
+// with new ids, these will need updating to match.
+const DIESEL_GENERATOR_TEMPLATE_ID = "a00ffc91-c664-463e-b2c9-902b5a721660";
+const HYDRAULIC_EXCAVATOR_TEMPLATE_ID = "6f17752e-028a-4eda-9a92-c605ef15c7d0";
+const AIR_COMPRESSOR_TEMPLATE_ID = "ab1a7b5c-2a39-482d-b89e-90c90314a19e";
+
+export const INITIAL_TEMPLATE_SENSOR_LINKS: Record<string, string[]> = {
+  [DIESEL_GENERATOR_TEMPLATE_ID]: [
+    "b5c28e8b-e1e0-42c2-afe1-fd1c32fd3a68", // Engine_Temperature_Sensor
+    "44c803b1-9416-4b25-8f50-4069f1ea40a4", // Oil_Pressure_Sensor
+  ],
+  [HYDRAULIC_EXCAVATOR_TEMPLATE_ID]: [
+    "66b9d3bf-15de-4205-9301-1f57f6212f62", // Hydraulic_Pressure_Sensor
+    "e13b0ceb-3c03-42d3-9ad1-d37cb36a08d6", // Hydraulic_Oil_Level_Sensor
+  ],
+  [AIR_COMPRESSOR_TEMPLATE_ID]: [
+    "af61a0a5-10a0-4919-82f3-37906415acb3", // Air_Filter_Pressure_Sensor
+    "bfa13535-8581-4ee4-a5e3-f5545b355fcc", // Air_Temperature_Sensor
+  ],
+};
+
+export const INITIAL_TEMPLATE_ALERT_RULES: TemplateAlertRule[] = [
+  {
+    id: "alert-seed-diesel-generator",
+    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
+    name: "High Coolant Temperature",
+    parameter: "Engine coolant temperature",
+    condition: ">",
+    threshold: 110,
+    severity: "critical",
+    message: "Engine coolant temperature critical — shut down and inspect.",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "alert-seed-hydraulic-excavator",
+    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
+    name: "Low Hydraulic Oil Level",
+    parameter: "Hydraulic oil level",
+    condition: "<",
+    threshold: 30,
+    severity: "warning",
+    message: "Hydraulic oil level below safe threshold — top up before next shift.",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "alert-seed-air-compressor",
+    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
+    name: "High Air Filter Restriction",
+    parameter: "Air filter restriction",
+    condition: ">",
+    threshold: 3.5,
+    severity: "warning",
+    message: "Air filter restriction above OEM limit — replace filter.",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+];
+
+export const INITIAL_TEMPLATE_KPI_FORMULAS: TemplateKpiFormula[] = [
+  {
+    id: "kpi-seed-diesel-generator",
+    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
+    name: "Thermal Load Index",
+    formula: "Engine coolant temperature / 105",
+    unit: "ratio",
+    description: "Current coolant temperature against rated max — watch as it approaches 1.0.",
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "kpi-seed-hydraulic-excavator",
+    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
+    name: "Hydraulic Pressure Utilization",
+    formula: "Hydraulic pressure / 400 * 100",
+    unit: "%",
+    description: "Percent of maximum rated system pressure.",
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "kpi-seed-air-compressor",
+    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
+    name: "Filter Load Index",
+    formula: "Air filter restriction / 3.7 * 100",
+    unit: "%",
+    description: "Percent of the OEM filter-replacement threshold.",
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+];
+
+export const INITIAL_TEMPLATE_PREDICTIVE_RULES: TemplatePredictiveRule[] = [
+  {
+    id: "pred-seed-diesel-generator",
+    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
+    name: "Coolant Temperature Drift",
+    parameter: "Engine coolant temperature",
+    tier: "T1",
+    method: "unsupervised",
+    windowDays: 7,
+    caption: "vs 7-day rolling baseline",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "pred-seed-hydraulic-excavator",
+    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
+    name: "Hydraulic Pressure Drop",
+    parameter: "Hydraulic pressure",
+    tier: "T0",
+    method: "rule-based",
+    windowDays: 3,
+    caption: "vs 3-day rolling baseline — flags gradual seal wear",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
+  {
+    id: "pred-seed-air-compressor",
+    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
+    name: "Air Filter Restriction Trend",
+    parameter: "Air filter restriction",
+    tier: "T1",
+    method: "unsupervised",
+    windowDays: 7,
+    caption: "vs 7-day rolling baseline — flags gradual clogging before threshold breach",
+    active: true,
+    createdAt: "2026-09-21T00:00:00.000Z",
+  },
 ];

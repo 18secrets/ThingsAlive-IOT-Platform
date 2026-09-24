@@ -328,6 +328,35 @@ export class CredentialService {
     });
   }
 
+  // ---------------------------------------------------------------- self-service
+
+  /**
+   * Change your own password, proving you know the current one.
+   *
+   * Every session dies afterward, same as `acceptInvitation` — a password change is
+   * exactly the moment somebody believes an old one may be compromised, and leaving
+   * other sessions alive would make the change pointless in that case. The caller
+   * (already signed in) is responsible for treating its own access token as dead too;
+   * this only guarantees the *refresh* token can't renew it.
+   */
+  async changeOwnPassword(
+    scope: RequestScope, currentPassword: string, newPassword: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<void> {
+    await withTenantId(this.ds, scope.tenantId, async (m) => {
+      const repo = m.getRepository(AppUser);
+      const user = await repo.findOne({ where: { id: scope.userId } });
+      if (!user) throw new UnauthorizedException('Account not found.');
+      if (!this.passwords.verify(currentPassword, user.passwordHash)) {
+        throw new BadRequestException('Current password is incorrect.');
+      }
+
+      user.passwordHash = this.passwords.hash(newPassword, user.email);
+      await repo.save(user);
+      await this.revokeAll(m, user, 'password changed', now);
+      await this.record(m, 'password.set', { user, ctx, detail: 'self-service change' });
+    });
+  }
+
   // -------------------------------------------------------------------- resetting
 
   /**

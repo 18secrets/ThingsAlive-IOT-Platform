@@ -14,14 +14,12 @@ interface DeviceManagementProps {
   devices: DeviceItem[];
   onNavigateToSetup: () => void;
   onDeleteDevice: (id: number) => void;
-  onNavigateToAISetup?: () => void;
 }
 
 export const DeviceManagement: React.FC<DeviceManagementProps> = ({
   devices,
   onNavigateToSetup,
   onDeleteDevice,
-  onNavigateToAISetup,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -86,16 +84,6 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
 
         {/* Add Device Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {onNavigateToAISetup && (
-            <button
-              id="ai-setup-device-btn"
-              onClick={onNavigateToAISetup}
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Setup with AI</span>
-            </button>
-          )}
           <button
             id="add-device-btn"
             onClick={onNavigateToSetup}

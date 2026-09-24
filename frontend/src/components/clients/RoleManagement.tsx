@@ -7,6 +7,7 @@ const TAB_LABELS: Record<NavigationTab, string> = {
   dashboard: 'Dashboard',
   'ai-onboarding': 'AI Onboarding',
   'alert-agent': 'Alert Agent',
+  predictions: 'Live Predictions',
   admin: 'Administration (Plants, Devices, Equipment)',
   settings: 'Settings',
   users: 'Users',

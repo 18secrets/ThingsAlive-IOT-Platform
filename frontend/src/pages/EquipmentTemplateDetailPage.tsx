@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Cog, Fuel, Radio, Bell, Sigma } from 'lucide-react';
+import { ArrowLeft, Cog, Fuel, Radio, Bell, Sigma, TrendingUp } from 'lucide-react';
 import { EquipmentTemplate, Sensor, SensorCategory } from '../lib/api';
-import { TemplateAlertRule, TemplateKpiFormula } from '../types';
+import { TemplateAlertRule, TemplateKpiFormula, TemplatePredictiveRule } from '../types';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { sortByCategory } from '../lib/sensorCategoryOrder';
 import { TemplateSensorsPanel } from '../components/admin/template-detail/TemplateSensorsPanel';
 import { TemplateAlertRulesPanel } from '../components/admin/template-detail/TemplateAlertRulesPanel';
 import { TemplateKpiFormulasPanel } from '../components/admin/template-detail/TemplateKpiFormulasPanel';
+import { TemplatePredictiveRulesPanel } from '../components/admin/template-detail/TemplatePredictiveRulesPanel';
 
-type DetailTab = 'sensors' | 'alerts' | 'kpis';
+type DetailTab = 'sensors' | 'alerts' | 'kpis' | 'predictive';
 
 interface EquipmentTemplateDetailPageProps {
   templates: EquipmentTemplate[];
@@ -17,20 +19,45 @@ interface EquipmentTemplateDetailPageProps {
   templateSensorLinks: Record<string, string[]>;
   onAttachSensor: (templateId: string, sensorId: string) => void;
   onDetachSensor: (templateId: string, sensorId: string) => void;
+  /** True when the signed-in viewer is a client (not Master Admin) — every rule
+   *  collection below then renders Master Admin's defaults read-only, with the
+   *  client's own `myX` layered underneath as the editable set. */
+  isClientView?: boolean;
   alertRules: TemplateAlertRule[];
   onCreateAlertRule: (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) => void;
   onUpdateAlertRule: (rule: TemplateAlertRule) => void;
   onDeleteAlertRule: (id: string) => void;
+  myAlertRules?: TemplateAlertRule[];
+  onCreateMyAlertRule?: (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) => void;
+  onUpdateMyAlertRule?: (rule: TemplateAlertRule) => void;
+  onDeleteMyAlertRule?: (id: string) => void;
   kpiFormulas: TemplateKpiFormula[];
   onCreateKpiFormula: (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) => void;
   onUpdateKpiFormula: (formula: TemplateKpiFormula) => void;
   onDeleteKpiFormula: (id: string) => void;
+  myKpiFormulas?: TemplateKpiFormula[];
+  onCreateMyKpiFormula?: (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) => void;
+  onUpdateMyKpiFormula?: (formula: TemplateKpiFormula) => void;
+  onDeleteMyKpiFormula?: (id: string) => void;
+  predictiveRules: TemplatePredictiveRule[];
+  onCreatePredictiveRule: (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) => void;
+  onUpdatePredictiveRule: (rule: TemplatePredictiveRule) => void;
+  onDeletePredictiveRule: (id: string) => void;
+  myPredictiveRules?: TemplatePredictiveRule[];
+  onCreateMyPredictiveRule?: (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) => void;
+  onUpdateMyPredictiveRule?: (rule: TemplatePredictiveRule) => void;
+  onDeleteMyPredictiveRule?: (id: string) => void;
 }
 
 export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPageProps> = ({
   templates, allSensors, sensorCategories, templateSensorLinks, onAttachSensor, onDetachSensor,
+  isClientView,
   alertRules, onCreateAlertRule, onUpdateAlertRule, onDeleteAlertRule,
+  myAlertRules, onCreateMyAlertRule, onUpdateMyAlertRule, onDeleteMyAlertRule,
   kpiFormulas, onCreateKpiFormula, onUpdateKpiFormula, onDeleteKpiFormula,
+  myKpiFormulas, onCreateMyKpiFormula, onUpdateMyKpiFormula, onDeleteMyKpiFormula,
+  predictiveRules, onCreatePredictiveRule, onUpdatePredictiveRule, onDeletePredictiveRule,
+  myPredictiveRules, onCreateMyPredictiveRule, onUpdateMyPredictiveRule, onDeleteMyPredictiveRule,
 }) => {
   const { templateId } = useParams<{ templateId: string }>();
   const navigate = useNavigate();
@@ -38,7 +65,7 @@ export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPagePr
 
   usePageHeader({
     title: 'Equipment Class Configuration',
-    subtitle: 'Sensors, Alert Rules & KPI Formulas',
+    subtitle: 'Sensors, Alert Rules, KPI Formulas & Predictive Maintenance',
     breadcrumb: 'Equipment Templates',
     onBack: () => navigate('/admin/equipment-template'),
   });
@@ -55,27 +82,33 @@ export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPagePr
     );
   }
 
+  const categoryName = (id: string | null) => {
+    if (!id) return '—';
+    return sensorCategories.find((c) => c.id === id)?.name ?? '—';
+  };
+
   const attachedSensorIds = templateSensorLinks[template.id] ?? [];
-  const attachedSensors = allSensors.filter((s) => attachedSensorIds.includes(s.id));
+  const attachedSensors = sortByCategory(
+    allSensors.filter((s) => attachedSensorIds.includes(s.id)),
+    (s) => categoryName(s.categoryId),
+    (s) => s.sensorName,
+  );
   const rulesForTemplate = alertRules.filter((r) => r.equipmentTemplateId === template.id);
+  const myRulesForTemplate = (myAlertRules ?? []).filter((r) => r.equipmentTemplateId === template.id);
   const formulasForTemplate = kpiFormulas.filter((f) => f.equipmentTemplateId === template.id);
+  const myFormulasForTemplate = (myKpiFormulas ?? []).filter((f) => f.equipmentTemplateId === template.id);
+  const predictiveForTemplate = predictiveRules.filter((r) => r.equipmentTemplateId === template.id);
+  const myPredictiveForTemplate = (myPredictiveRules ?? []).filter((r) => r.equipmentTemplateId === template.id);
 
   const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count: number }[] = [
     { id: 'sensors', label: 'Sensors', icon: Radio, count: attachedSensors.length },
-    { id: 'alerts', label: 'Alert Rules', icon: Bell, count: rulesForTemplate.length },
-    { id: 'kpis', label: 'KPI Formulas', icon: Sigma, count: formulasForTemplate.length },
+    { id: 'alerts', label: 'Alert Rules', icon: Bell, count: rulesForTemplate.length + myRulesForTemplate.length },
+    { id: 'kpis', label: 'KPI Formulas', icon: Sigma, count: formulasForTemplate.length + myFormulasForTemplate.length },
+    { id: 'predictive', label: 'Predictive Maintenance', icon: TrendingUp, count: predictiveForTemplate.length + myPredictiveForTemplate.length },
   ];
 
   return (
     <div className="space-y-6" data-purpose="equipment-template-detail">
-      <button
-        onClick={() => navigate('/admin/equipment-template')}
-        className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Equipment Templates</span>
-      </button>
-
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -145,6 +178,11 @@ export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPagePr
           onCreate={onCreateAlertRule}
           onUpdate={onUpdateAlertRule}
           onDelete={onDeleteAlertRule}
+          myRules={isClientView ? myRulesForTemplate : undefined}
+          onCreateMy={onCreateMyAlertRule}
+          onUpdateMy={onUpdateMyAlertRule}
+          onDeleteMy={onDeleteMyAlertRule}
+          isClientView={isClientView}
         />
       )}
       {tab === 'kpis' && (
@@ -155,6 +193,26 @@ export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPagePr
           onCreate={onCreateKpiFormula}
           onUpdate={onUpdateKpiFormula}
           onDelete={onDeleteKpiFormula}
+          myFormulas={isClientView ? myFormulasForTemplate : undefined}
+          onCreateMy={onCreateMyKpiFormula}
+          onUpdateMy={onUpdateMyKpiFormula}
+          onDeleteMy={onDeleteMyKpiFormula}
+          isClientView={isClientView}
+        />
+      )}
+      {tab === 'predictive' && (
+        <TemplatePredictiveRulesPanel
+          templateId={template.id}
+          attachedSensors={attachedSensors}
+          rules={predictiveForTemplate}
+          onCreate={onCreatePredictiveRule}
+          onUpdate={onUpdatePredictiveRule}
+          onDelete={onDeletePredictiveRule}
+          myRules={isClientView ? myPredictiveForTemplate : undefined}
+          onCreateMy={onCreateMyPredictiveRule}
+          onUpdateMy={onUpdateMyPredictiveRule}
+          onDeleteMy={onDeleteMyPredictiveRule}
+          isClientView={isClientView}
         />
       )}
     </div>

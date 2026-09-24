@@ -26,7 +26,9 @@ export type Capability =
   | 'device.manage'
   | 'device.read'
   | 'device.claim'
+  | 'device-catalog.read'
   | 'device-catalog.write'
+  | 'equipment-template.read'
   | 'equipment-template.write'
   | 'prediction.read'
   | 'prediction.run'
@@ -102,12 +104,23 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // templates, also grants catalog-author) and `device.manage` (the stock ledger's
   // commercial acts) even though today all three resolve to master-admin alone.
   'device-catalog.write': ['master-admin'],
+  // Seeing that same reference data — what a sensor's parameters are, what
+  // categories exist. A tenant role holds this (granted explicitly in its own
+  // `capabilities`, per ROLE_TEMPLATES) so a client can see which sensors are
+  // attached to their equipment templates without being able to add or rename one
+  // in the shared catalog.
+  'device-catalog.read': ['master-admin'],
   // Common onboarding fields (manufacturer, engine type, tank capacity...) for a
   // named/categorised kind of equipment. Deliberately separate from `catalog.write`:
   // EquipmentClassProfile is the prediction catalog (expected signals, failure
   // modes) and stays untouched by this — a template here is onboarding convenience,
   // not a product a tenant is entitled to.
   'equipment-template.write': ['master-admin'],
+  // Seeing the templates and their attached sensors/alert-rules/KPI/predictive
+  // config — what a client's Equipment Template page reads to show Master Admin's
+  // defaults alongside their own additions. Granted to tenant roles the same way as
+  // `device-catalog.read` above; editing the template itself stays master-admin only.
+  'equipment-template.read': ['master-admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it

@@ -14,7 +14,7 @@ import { PasswordField } from '../common/PasswordField';
 interface SettingsViewProps {
   authUser: AuthUser;
   clients: ClientAccount[];
-  onChangePassword: (currentPassword: string, newPassword: string) => string | null;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, onChangePassword }) => {
@@ -31,8 +31,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const [successMessage, setSuccessMessage] = useState<string | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMessage(undefined);
 
@@ -53,14 +54,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
       return;
     }
 
-    const error = onChangePassword(trimmedCurrent, trimmedNew);
+    setIsSubmitting(true);
+    const error = await onChangePassword(trimmedCurrent, trimmedNew);
+    setIsSubmitting(false);
     if (error) {
       setFormError(error);
       return;
     }
 
     setFormError(undefined);
-    setSuccessMessage('Your password has been updated.');
+    setSuccessMessage('Your password has been updated. Signing you out for a fresh sign-in…');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -166,7 +169,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               label="New Password"
               value={newPassword}
               onChange={setNewPassword}
-              placeholder="At least 8 characters"
+              placeholder="Upper, lower, number & symbol"
               required
             />
 
@@ -194,10 +197,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <KeyRound className="w-4 h-4" />
-              <span>Update Password</span>
+              <span>{isSubmitting ? 'Updating…' : 'Update Password'}</span>
             </button>
           </form>
         </div>

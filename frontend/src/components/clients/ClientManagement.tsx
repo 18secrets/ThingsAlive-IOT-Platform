@@ -104,7 +104,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
             setEditingClient(null);
             setIsModalOpen(true);
           }}
-          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Client</span>

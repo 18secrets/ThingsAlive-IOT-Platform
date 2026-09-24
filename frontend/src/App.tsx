@@ -19,6 +19,7 @@ import {
   RoleDefinition,
   TemplateAlertRule,
   TemplateKpiFormula,
+  TemplatePredictiveRule,
 } from './types';
 import {
   INITIAL_SENSORS,
@@ -29,10 +30,13 @@ import {
   INITIAL_INDUSTRY_TYPES,
   INITIAL_PLANTS,
   INITIAL_ONBOARDING_SESSIONS,
-  MASTER_ADMIN_CREDENTIALS,
   INITIAL_USERS,
   INITIAL_CLIENT_USERS,
   INITIAL_ROLES,
+  INITIAL_TEMPLATE_SENSOR_LINKS,
+  INITIAL_TEMPLATE_ALERT_RULES,
+  INITIAL_TEMPLATE_KPI_FORMULAS,
+  INITIAL_TEMPLATE_PREDICTIVE_RULES,
 } from './data/mockData';
 import { AuthProvider, useAuth } from './lib/AuthProvider';
 import { PageHeaderProvider } from './lib/PageHeaderContext';
@@ -43,9 +47,11 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
+import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
+import { LivePredictionsPage } from './pages/LivePredictionsPage';
 import { UsersPage } from './pages/UsersPage';
 import { ClientUsersPage } from './pages/ClientUsersPage';
 import { RolesPage } from './pages/RolesPage';
@@ -55,32 +61,29 @@ import {
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
   apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
+  apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
+  apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
   apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
   apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
   apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser,
+  apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
+  Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
 } from './lib/api';
 
-const MASTER_ADMIN_PASSWORD_KEY = 'ta_master_admin_password';
 const CLIENT_USERS_KEY = 'ta_client_users';
 const ROLES_KEY = 'ta_roles';
 const TEMPLATE_SENSOR_LINKS_KEY = 'ta_template_sensor_links';
 const ALERT_RULES_KEY = 'ta_template_alert_rules';
 const KPI_FORMULAS_KEY = 'ta_template_kpi_formulas';
-
-function loadMasterAdminPassword(): string {
-  try {
-    return localStorage.getItem(MASTER_ADMIN_PASSWORD_KEY) || MASTER_ADMIN_CREDENTIALS.password;
-  } catch {
-    return MASTER_ADMIN_CREDENTIALS.password;
-  }
-}
+const PREDICTIVE_RULES_KEY = 'ta_template_predictive_rules';
 
 function loadClientUsers(): ClientUserItem[] {
   try {
@@ -106,27 +109,36 @@ function loadRoles(): RoleDefinition[] {
 function loadTemplateSensorLinks(): Record<string, string[]> {
   try {
     const raw = localStorage.getItem(TEMPLATE_SENSOR_LINKS_KEY);
-    return raw ? JSON.parse(raw) : {};
+    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_SENSOR_LINKS;
   } catch {
-    return {};
+    return INITIAL_TEMPLATE_SENSOR_LINKS;
   }
 }
 
 function loadAlertRules(): TemplateAlertRule[] {
   try {
     const raw = localStorage.getItem(ALERT_RULES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_ALERT_RULES;
   } catch {
-    return [];
+    return INITIAL_TEMPLATE_ALERT_RULES;
   }
 }
 
 function loadKpiFormulas(): TemplateKpiFormula[] {
   try {
     const raw = localStorage.getItem(KPI_FORMULAS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_KPI_FORMULAS;
   } catch {
-    return [];
+    return INITIAL_TEMPLATE_KPI_FORMULAS;
+  }
+}
+
+function loadPredictiveRules(): TemplatePredictiveRule[] {
+  try {
+    const raw = localStorage.getItem(PREDICTIVE_RULES_KEY);
+    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_PREDICTIVE_RULES;
+  } catch {
+    return INITIAL_TEMPLATE_PREDICTIVE_RULES;
   }
 }
 
@@ -176,7 +188,7 @@ function AdminIndexRedirect() {
 }
 
 function AppData() {
-  const { authUser, restoringSession } = useAuth();
+  const { authUser, restoringSession, signOut } = useAuth();
   const navigate = useNavigate();
 
   // Real accounts (Clients admin screen) — fetched from the API, never
@@ -195,6 +207,15 @@ function AppData() {
   // which still feeds Equipment's still-mock "category" picker.
   const [equipmentClasses, setEquipmentClasses] = useState<EquipmentClass[]>([]);
   const [equipmentClassesError, setEquipmentClassesError] = useState<string | undefined>(undefined);
+  // Prediction scenarios across every class (task: wire the Templates-styled
+  // detail UI to the real catalog instead of the mock TemplatePredictiveRule
+  // localStorage layer). Same shape as equipmentClasses: platform-owned,
+  // fetched flat, filtered per class in the detail page.
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenariosError, setScenariosError] = useState<string | undefined>(undefined);
+  // Alert rule templates across every class — same shape as scenarios above.
+  const [alertTemplates, setAlertTemplates] = useState<AlertRuleTemplate[]>([]);
+  const [alertTemplatesError, setAlertTemplatesError] = useState<string | undefined>(undefined);
   // Master Admin's real reference data for wiring a device before it exists —
   // separate from the mock `sensors`/`toolMappings`/`devices` below, which
   // still feed Equipment's still-mock pickers and the client's still-mock
@@ -217,12 +238,14 @@ function AppData() {
   const [templateSensorLinks, setTemplateSensorLinks] = useState<Record<string, string[]>>(loadTemplateSensorLinks);
   const [alertRules, setAlertRules] = useState<TemplateAlertRule[]>(loadAlertRules);
   const [kpiFormulas, setKpiFormulas] = useState<TemplateKpiFormula[]>(loadKpiFormulas);
+  const [predictiveRules, setPredictiveRules] = useState<TemplatePredictiveRule[]>(loadPredictiveRules);
   // This client's own equipment templates — loaded/persisted per clientId below,
   // never touching Master Admin's global equivalents above.
   const [myEquipmentTemplates, setMyEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
   const [myTemplateSensorLinks, setMyTemplateSensorLinks] = useState<Record<string, string[]>>({});
   const [myAlertRules, setMyAlertRules] = useState<TemplateAlertRule[]>([]);
   const [myKpiFormulas, setMyKpiFormulas] = useState<TemplateKpiFormula[]>([]);
+  const [myPredictiveRules, setMyPredictiveRules] = useState<TemplatePredictiveRule[]>([]);
   // The signed-in client's own real roles/users (/identity/roles, /identity/users)
   // — separate from the mock `roles`/`clientUsers` below, which still feed the
   // Master-Admin-only cross-client view (AllClientUsersView), out of scope this
@@ -233,7 +256,6 @@ function AppData() {
   const [usersError, setUsersError] = useState<string | undefined>(undefined);
   const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(loadClientUsers);
   const [roles, setRoles] = useState<RoleDefinition[]>(loadRoles);
-  const [masterAdminPassword, setMasterAdminPassword] = useState<string>(loadMasterAdminPassword);
   // Master Admin's optional drill-down into one client's Users/Roles screens.
   const [manageAccessClientId, setManageAccessClientId] = useState<string | null>(null);
 
@@ -369,6 +391,56 @@ function AppData() {
     return () => { live = false; };
   }, [authUser, restoringSession]);
 
+  const refreshScenarios = async () => {
+    try {
+      setScenarios(await apiListAuthoringScenarios());
+      setScenariosError(undefined);
+    } catch (err) {
+      setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListAuthoringScenarios();
+        if (!live) return;
+        setScenarios(list);
+        setScenariosError(undefined);
+      } catch (err) {
+        if (live) setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshAlertTemplates = async () => {
+    try {
+      setAlertTemplates(await apiListAuthoringAlertTemplates());
+      setAlertTemplatesError(undefined);
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListAuthoringAlertTemplates();
+        if (!live) return;
+        setAlertTemplates(list);
+        setAlertTemplatesError(undefined);
+      } catch (err) {
+        if (live) setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
   const refreshSensorCatalog = async () => {
     try {
       const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()]);
@@ -407,12 +479,18 @@ function AppData() {
     }
   };
 
+  // Sensors, their categories, and equipment templates — reference data both roles
+  // now read (`device-catalog.read` / `equipment-template.read`, granted to every
+  // tenant role): a client's own Equipment Template page needs the real sensor
+  // catalog to show attached parameters, and the real template list to find the
+  // Master Library class they opened. Tool mappings and the device pool stay
+  // master-admin only below — clients have no capability for either.
   useEffect(() => {
     // Wait for the session-resume check: `authUser` can be a cached, optimistic
     // value from sessionStorage before the real access token is confirmed to
     // still work, and firing early sends an authenticated call with no token
     // at all — surfaced to the user as a raw "Bearer token required." error.
-    if (restoringSession || authUser?.role !== 'master-admin') return;
+    if (restoringSession || !authUser) return;
     let live = true;
     (async () => {
       const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()])
@@ -422,6 +500,20 @@ function AppData() {
         });
       if (live && cats && list) { setSensorCategories(cats); setRealSensors(list); setSensorsError(undefined); }
 
+      try {
+        const templates = await apiListEquipmentTemplates();
+        if (live) { setEquipmentTemplates(templates); setEquipmentTemplatesError(undefined); }
+      } catch (err) {
+        if (live) setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
       try {
         const mappings = await apiListToolMappings();
         if (live) { setRealToolMappings(mappings); setToolMappingsError(undefined); }
@@ -435,20 +527,9 @@ function AppData() {
       } catch (err) {
         if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
       }
-
-      try {
-        const templates = await apiListEquipmentTemplates();
-        if (live) { setEquipmentTemplates(templates); setEquipmentTemplatesError(undefined); }
-      } catch (err) {
-        if (live) setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
-      }
     })();
     return () => { live = false; };
   }, [authUser, restoringSession]);
-
-  useEffect(() => {
-    localStorage.setItem(MASTER_ADMIN_PASSWORD_KEY, masterAdminPassword);
-  }, [masterAdminPassword]);
 
   useEffect(() => {
     localStorage.setItem(CLIENT_USERS_KEY, JSON.stringify(clientUsers));
@@ -470,6 +551,10 @@ function AppData() {
     localStorage.setItem(KPI_FORMULAS_KEY, JSON.stringify(kpiFormulas));
   }, [kpiFormulas]);
 
+  useEffect(() => {
+    localStorage.setItem(PREDICTIVE_RULES_KEY, JSON.stringify(predictiveRules));
+  }, [predictiveRules]);
+
   // Load this client's own equipment-template config the moment their id is
   // known — not on mount, because it isn't known then. Re-runs if a different
   // client signs in on the same browser, so the previous client's data is
@@ -481,6 +566,7 @@ function AppData() {
     setMyTemplateSensorLinks(loadJson(clientKey('ta_client_template_sensor_links', cid), {}));
     setMyAlertRules(loadJson(clientKey('ta_client_alert_rules', cid), []));
     setMyKpiFormulas(loadJson(clientKey('ta_client_kpi_formulas', cid), []));
+    setMyPredictiveRules(loadJson(clientKey('ta_client_predictive_rules', cid), []));
   }, [authUser?.role, authUser?.clientId]);
 
   useEffect(() => {
@@ -503,28 +589,25 @@ function AppData() {
     localStorage.setItem(clientKey('ta_client_kpi_formulas', authUser.clientId), JSON.stringify(myKpiFormulas));
   }, [myKpiFormulas, authUser?.role, authUser?.clientId]);
 
-  // Self-service password change from Settings, for either role. Returns an
-  // error message on failure, or null on success.
-  const handleChangeOwnPassword = (currentPassword: string, newPassword: string): string | null => {
-    if (!authUser) return 'You must be signed in to change your password.';
+  useEffect(() => {
+    if (authUser?.role !== 'client' || !authUser.clientId) return;
+    localStorage.setItem(clientKey('ta_client_predictive_rules', authUser.clientId), JSON.stringify(myPredictiveRules));
+  }, [myPredictiveRules, authUser?.role, authUser?.clientId]);
 
-    if (authUser.role === 'master-admin') {
-      if (currentPassword !== masterAdminPassword) {
-        return 'Current password is incorrect.';
-      }
-      setMasterAdminPassword(newPassword);
+
+  // Self-service password change from Settings, for either role — POST
+  // /me/change-password, for real. Returns an error message on failure, or null
+  // on success. The API revokes every session as part of the change (see
+  // CredentialService.changeOwnPassword's own comment), so this signs the caller
+  // out shortly after a success response, once they've had a moment to see it.
+  const handleChangeOwnPassword = async (currentPassword: string, newPassword: string): Promise<string | null> => {
+    try {
+      await apiChangePassword(currentPassword, newPassword);
+      window.setTimeout(() => signOut(), 1500);
       return null;
+    } catch (err) {
+      return err instanceof ApiError ? err.message : 'Could not change your password.';
     }
-
-    const user = clientUsers.find((u) => u.id === authUser.userId);
-    if (!user) {
-      return 'Account not found.';
-    }
-    if (currentPassword !== user.password) {
-      return 'Current password is incorrect.';
-    }
-    setClientUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, password: newPassword } : u)));
-    return null;
   };
 
   // POST /accounts, for real — creates the tenant and its super admin in one
@@ -717,6 +800,59 @@ function AppData() {
       setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not retire.');
     }
   };
+
+  const handleCreateScenario = async (slug: string, equipmentClassSlug: string, input: ScenarioInput) => {
+    const created = await apiCreateScenario(slug, equipmentClassSlug, input);
+    await refreshScenarios();
+    return created;
+  };
+
+  const handleUpdateScenario = async (slug: string, input: ScenarioInput) => {
+    const updated = await apiUpdateScenario(slug, input);
+    await refreshScenarios();
+    return updated;
+  };
+
+  const handlePublishScenario = async (slug: string) => {
+    try {
+      await apiPublishScenario(slug);
+      await refreshScenarios();
+    } catch (err) {
+      setScenariosError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleCreateAlertTemplate = async (
+    slug: string, equipmentClassSlug: string, input: AlertRuleTemplateInput,
+  ) => {
+    const created = await apiCreateAlertTemplate(slug, equipmentClassSlug, input);
+    await refreshAlertTemplates();
+    return created;
+  };
+
+  const handleUpdateAlertTemplate = async (slug: string, input: AlertRuleTemplateInput) => {
+    const updated = await apiUpdateAlertTemplate(slug, input);
+    await refreshAlertTemplates();
+    return updated;
+  };
+
+  const handlePublishAlertTemplate = async (slug: string) => {
+    try {
+      await apiPublishAlertTemplate(slug);
+      await refreshAlertTemplates();
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleRetireAlertTemplate = async (slug: string) => {
+    try {
+      await apiRetireAlertTemplate(slug);
+      await refreshAlertTemplates();
+    } catch (err) {
+      setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not retire.');
+    }
+  };
   const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
     const created = await apiCreateEquipmentTemplate(input);
     await refreshEquipmentTemplates();
@@ -729,6 +865,8 @@ function AppData() {
   };
 
   const handleOpenEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
+
+  const handleOpenEquipmentClass = (slug: string) => navigate(`/admin/category/${slug}`);
 
   const handleAttachTemplateSensor = (templateId: string, sensorId: string) =>
     setTemplateSensorLinks((prev) => ({
@@ -761,6 +899,16 @@ function AppData() {
     setKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
   const handleDeleteKpiFormula = (id: string) =>
     setKpiFormulas((prev) => prev.filter((f) => f.id !== id));
+
+  const handleCreatePredictiveRule = (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) =>
+    setPredictiveRules((prev) => [
+      { ...rule, id: `pred-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdatePredictiveRule = (rule: TemplatePredictiveRule) =>
+    setPredictiveRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
+  const handleDeletePredictiveRule = (id: string) =>
+    setPredictiveRules((prev) => prev.filter((r) => r.id !== id));
 
   // This client's own equipment templates — created/edited entirely client-side
   // (no API), mirroring the Master Admin handlers above one-for-one but writing
@@ -835,6 +983,16 @@ function AppData() {
     setMyKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
   const handleDeleteMyKpiFormula = (id: string) =>
     setMyKpiFormulas((prev) => prev.filter((f) => f.id !== id));
+
+  const handleCreateMyPredictiveRule = (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) =>
+    setMyPredictiveRules((prev) => [
+      { ...rule, id: `my-pred-${Date.now()}`, createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+  const handleUpdateMyPredictiveRule = (rule: TemplatePredictiveRule) =>
+    setMyPredictiveRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
+  const handleDeleteMyPredictiveRule = (id: string) =>
+    setMyPredictiveRules((prev) => prev.filter((r) => r.id !== id));
 
   const handleAddEquipment = (newEquip: EquipmentItem) => setEquipmentList([newEquip, ...equipmentList]);
   // POST /equipment/plants, for real. Runs inside the caller's own tenant
@@ -941,6 +1099,25 @@ function AppData() {
               }
             />
             <Route
+              path="category/:slug"
+              element={
+                <EquipmentClassDetailPage
+                  classes={equipmentClasses}
+                  scenarios={scenarios}
+                  scenariosError={scenariosError}
+                  onCreateScenario={handleCreateScenario}
+                  onUpdateScenario={handleUpdateScenario}
+                  onPublishScenario={handlePublishScenario}
+                  alertTemplates={alertTemplates}
+                  alertTemplatesError={alertTemplatesError}
+                  onCreateAlertTemplate={handleCreateAlertTemplate}
+                  onUpdateAlertTemplate={handleUpdateAlertTemplate}
+                  onPublishAlertTemplate={handlePublishAlertTemplate}
+                  onRetireAlertTemplate={handleRetireAlertTemplate}
+                />
+              }
+            />
+            <Route
               path="equipment-template/:templateId"
               element={
                 <EquipmentTemplateDetailPage
@@ -949,20 +1126,50 @@ function AppData() {
                   // them) — so which data source feeds this page is decided once,
                   // here, by role, rather than threading role checks through the
                   // page itself.
-                  templates={authUser?.role === 'client' ? myEquipmentTemplates : equipmentTemplates}
+                  //
+                  // Alert rules, KPI formulas and predictive rules are different
+                  // from sensors/the template itself: Master Admin's rules are the
+                  // account's defaults and stay visible (read-only) to every
+                  // client, alongside whatever a client has additionally authored
+                  // for themselves — so both `x` (master) and `myX` (client-owned,
+                  // only when signed in as a client) are always passed down. A
+                  // client's own create/update/delete only ever touches `myX`;
+                  // Master Admin's own create/update/delete only ever touches `x`.
+                  isClientView={authUser?.role === 'client'}
+                  // A client reaches this route either for one of their own invented
+                  // templates, or for a Master Library class they opened to layer their
+                  // own alerts/KPIs/predictive rules on top of — so both lists are
+                  // searched, master's real template id included.
+                  templates={authUser?.role === 'client' ? [...equipmentTemplates, ...myEquipmentTemplates] : equipmentTemplates}
                   allSensors={realSensors}
                   sensorCategories={sensorCategories}
                   templateSensorLinks={authUser?.role === 'client' ? myTemplateSensorLinks : templateSensorLinks}
                   onAttachSensor={authUser?.role === 'client' ? handleAttachMyTemplateSensor : handleAttachTemplateSensor}
                   onDetachSensor={authUser?.role === 'client' ? handleDetachMyTemplateSensor : handleDetachTemplateSensor}
-                  alertRules={authUser?.role === 'client' ? myAlertRules : alertRules}
-                  onCreateAlertRule={authUser?.role === 'client' ? handleCreateMyAlertRule : handleCreateAlertRule}
-                  onUpdateAlertRule={authUser?.role === 'client' ? handleUpdateMyAlertRule : handleUpdateAlertRule}
-                  onDeleteAlertRule={authUser?.role === 'client' ? handleDeleteMyAlertRule : handleDeleteAlertRule}
-                  kpiFormulas={authUser?.role === 'client' ? myKpiFormulas : kpiFormulas}
-                  onCreateKpiFormula={authUser?.role === 'client' ? handleCreateMyKpiFormula : handleCreateKpiFormula}
-                  onUpdateKpiFormula={authUser?.role === 'client' ? handleUpdateMyKpiFormula : handleUpdateKpiFormula}
-                  onDeleteKpiFormula={authUser?.role === 'client' ? handleDeleteMyKpiFormula : handleDeleteKpiFormula}
+                  alertRules={alertRules}
+                  onCreateAlertRule={handleCreateAlertRule}
+                  onUpdateAlertRule={handleUpdateAlertRule}
+                  onDeleteAlertRule={handleDeleteAlertRule}
+                  myAlertRules={authUser?.role === 'client' ? myAlertRules : undefined}
+                  onCreateMyAlertRule={handleCreateMyAlertRule}
+                  onUpdateMyAlertRule={handleUpdateMyAlertRule}
+                  onDeleteMyAlertRule={handleDeleteMyAlertRule}
+                  kpiFormulas={kpiFormulas}
+                  onCreateKpiFormula={handleCreateKpiFormula}
+                  onUpdateKpiFormula={handleUpdateKpiFormula}
+                  onDeleteKpiFormula={handleDeleteKpiFormula}
+                  myKpiFormulas={authUser?.role === 'client' ? myKpiFormulas : undefined}
+                  onCreateMyKpiFormula={handleCreateMyKpiFormula}
+                  onUpdateMyKpiFormula={handleUpdateMyKpiFormula}
+                  onDeleteMyKpiFormula={handleDeleteMyKpiFormula}
+                  predictiveRules={predictiveRules}
+                  onCreatePredictiveRule={handleCreatePredictiveRule}
+                  onUpdatePredictiveRule={handleUpdatePredictiveRule}
+                  onDeletePredictiveRule={handleDeletePredictiveRule}
+                  myPredictiveRules={authUser?.role === 'client' ? myPredictiveRules : undefined}
+                  onCreateMyPredictiveRule={handleCreateMyPredictiveRule}
+                  onUpdateMyPredictiveRule={handleUpdateMyPredictiveRule}
+                  onDeleteMyPredictiveRule={handleDeleteMyPredictiveRule}
                 />
               }
             />
@@ -995,6 +1202,7 @@ function AppData() {
                   onUpdateEquipmentClass={handleUpdateEquipmentClass}
                   onPublishEquipmentClass={handlePublishEquipmentClass}
                   onRetireEquipmentClass={handleRetireEquipmentClass}
+                  onOpenEquipmentClass={handleOpenEquipmentClass}
                   equipmentTemplates={equipmentTemplates}
                   equipmentTemplatesError={equipmentTemplatesError}
                   onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
@@ -1045,6 +1253,7 @@ function AppData() {
           />
 
           <Route path="alert-agent" element={<AlertAgentPage />} />
+          <Route path="predictions" element={<LivePredictionsPage />} />
 
           <Route
             path="users"

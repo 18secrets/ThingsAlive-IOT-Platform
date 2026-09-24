@@ -76,4 +76,86 @@
   background: #64748B;
 }
 
+/*
+ * React Flow (Work Flow canvas) — restyle default chrome to match the app's
+ * slate/sky palette in both themes. This app's dark mode (see every `dark:`
+ * Tailwind utility elsewhere) is driven by `prefers-color-scheme`, not by the
+ * `.dark` class the header's light/dark toggle sets on <html> — this project's
+ * Tailwind v4 setup never opts into the class strategy, so that toggle is
+ * currently a no-op everywhere. These rules key off the same media query so
+ * the canvas actually matches the rest of the app instead of only reacting to
+ * that dead toggle.
+ */
+.react-flow {
+  background-color: #FFFFFF;
+}
+
+.react-flow__background-pattern {
+  color: #CBD5E1; /* slate-300 */
+}
+
+.react-flow__edge-path {
+  stroke: #CBD5E1; /* slate-300 */
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #0284C7; /* sky-600 */
+}
+
+.react-flow__controls {
+  box-shadow: none;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  color: #475569;
+}
+
+.react-flow__controls-button:hover {
+  background: #F8FAFC;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__minimap {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .react-flow {
+    background-color: #0F172A; /* slate-900 */
+  }
+
+  .react-flow__background-pattern {
+    color: #334155; /* slate-700 */
+  }
+
+  .react-flow__edge-path {
+    stroke: #334155; /* slate-700 */
+  }
+
+  .react-flow__controls {
+    border-color: #334155;
+  }
+
+  .react-flow__controls-button {
+    background: #1E293B;
+    border-bottom-color: #334155;
+    color: #CBD5E1;
+  }
+
+  .react-flow__controls-button:hover {
+    background: #334155;
+  }
+}
+
 

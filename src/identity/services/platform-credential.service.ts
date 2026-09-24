@@ -292,6 +292,32 @@ export class PlatformCredentialService {
   }
 
   /**
+   * Change your own password, proving you know the current one — PlatformUser's
+   * counterpart to `CredentialService.changeOwnPassword`. Every session dies
+   * afterward, same reasoning as there.
+   */
+  async changeOwnPassword(
+    platformUserId: string, currentPassword: string, newPassword: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<void> {
+    await runTenantSpanning(this.ds, 'platform password change', async (m) => {
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: platformUserId } });
+      if (!user) throw new UnauthorizedException('Account not found.');
+      if (!this.passwords.verify(currentPassword, user.passwordHash)) {
+        throw new BadRequestException('Current password is incorrect.');
+      }
+
+      user.passwordHash = this.passwords.hash(newPassword, user.email);
+      await repo.save(user);
+      await m.getRepository(PlatformSession).update(
+        { platformUserId: user.id, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx, detail: 'self-service change' });
+    });
+  }
+
+  /**
    * Creates the very first platform user, or any subsequent one. There is no HTTP
    * route for this today — see scripts/create-platform-user.ts, run from the
    * server's own shell, the same trust boundary `token:platform` always relied on.

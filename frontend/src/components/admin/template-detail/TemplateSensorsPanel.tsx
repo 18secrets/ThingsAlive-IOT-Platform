@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2, Radio, X, Check } from 'lucide-react';
 import { Sensor, SensorCategory } from '../../../lib/api';
+import { sortByCategory } from '../../../lib/sensorCategoryOrder';
 
 interface TemplateSensorsPanelProps {
   templateId: string;
@@ -23,12 +24,12 @@ export const TemplateSensorsPanel: React.FC<TemplateSensorsPanelProps> = ({
   }, [categories]);
 
   const attached = useMemo(
-    () => allSensors.filter((s) => attachedSensorIds.includes(s.id)),
-    [allSensors, attachedSensorIds],
+    () => sortByCategory(allSensors.filter((s) => attachedSensorIds.includes(s.id)), (s) => categoryName(s.categoryId), (s) => s.sensorName),
+    [allSensors, attachedSensorIds, categoryName],
   );
   const available = useMemo(
-    () => allSensors.filter((s) => !attachedSensorIds.includes(s.id)),
-    [allSensors, attachedSensorIds],
+    () => sortByCategory(allSensors.filter((s) => !attachedSensorIds.includes(s.id)), (s) => categoryName(s.categoryId), (s) => s.sensorName),
+    [allSensors, attachedSensorIds, categoryName],
   );
 
   return (

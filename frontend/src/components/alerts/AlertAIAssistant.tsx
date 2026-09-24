@@ -47,37 +47,6 @@ const QUICK_EXAMPLES: { text: string; tags: string[] }[] = [
   },
 ];
 
-const TEMPLATES: CardItem[] = [
-  {
-    id: 't-temp',
-    title: 'Temperature Alert Workflow',
-    description: 'Alerts when temperature exceeds the threshold',
-    prompt: 'Raise a critical alarm if the average temperature is above 75C for 10 minutes.',
-    icon: Thermometer,
-    iconBg: 'bg-rose-50 dark:bg-rose-950/40',
-    iconColor: 'text-rose-600 dark:text-rose-400',
-  },
-  {
-    id: 't-pressure',
-    title: 'Pressure Drop Alert',
-    description: 'Alerts when pressure drops below a safe operating threshold',
-    prompt: 'Alert team if pressure drop exceeds 15% across all valves in the system.',
-    icon: Droplet,
-    iconBg: 'bg-blue-50 dark:bg-blue-950/40',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-  },
-  {
-    id: 't-vibration',
-    title: 'High Speed & Vibration Alert',
-    description: 'Alerts when machine speed and vibration exceed the defined safety thresholds',
-    prompt:
-      'Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.',
-    icon: Activity,
-    iconBg: 'bg-violet-50 dark:bg-violet-950/40',
-    iconColor: 'text-violet-600 dark:text-violet-400',
-  },
-];
-
 interface DraftItem extends CardItem {
   workflowName: string;
 }
@@ -217,7 +186,6 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   const [prompt, setPrompt] = useState('');
   const [phase, setPhase] = useState<'suggest' | 'clarifying'>('suggest');
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'All' | 'Template' | 'Draft'>('All');
 
   const runPrompt = (text: string, name?: string) => {
     const spec = parsePromptToWorkflow(text, name);
@@ -249,19 +217,11 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     });
   }, [prompt]);
 
-  const filteredTemplates = useMemo(() => {
-    if (typeFilter === 'Draft') return [];
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return TEMPLATES;
-    return TEMPLATES.filter((t) => t.title.toLowerCase().includes(term) || t.description.toLowerCase().includes(term));
-  }, [searchTerm, typeFilter]);
-
   const filteredDrafts = useMemo(() => {
-    if (typeFilter === 'Template') return [];
     const term = searchTerm.trim().toLowerCase();
     if (!term) return DRAFTS;
     return DRAFTS.filter((d) => d.title.toLowerCase().includes(term) || d.description.toLowerCase().includes(term));
-  }, [searchTerm, typeFilter]);
+  }, [searchTerm]);
 
   return (
     <div id="alert-ai-assistant-view" className="space-y-6">
@@ -395,59 +355,26 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         )}
       </div>
 
-      {/* Template / Draft search & filter */}
+      {/* Draft search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-xs">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search templates..."
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
-            />
-          </div>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as 'All' | 'Template' | 'Draft')}
-            className="py-2 px-3 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">Select Templates Type</option>
-            <option value="Template">Templates only</option>
-            <option value="Draft">Drafts only</option>
-          </select>
+        <div className="relative flex-1 min-w-[220px] max-w-xs">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search drafts..."
+            className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+          />
         </div>
         <button
           type="button"
-          onClick={() => {
-            setSearchTerm('');
-            setTypeFilter('All');
-          }}
+          onClick={() => setSearchTerm('')}
           className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:text-sky-700 flex items-center gap-1 shrink-0 cursor-pointer"
         >
           Explore more <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
-
-      {/* Templates */}
-      {filteredTemplates.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Templates</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {filteredTemplates.map((t) => (
-              <ItemCard
-                key={t.id}
-                item={t}
-                tag="Template"
-                tagClass="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                buttonLabel="Use Template"
-                onUse={() => runPrompt(t.prompt, t.title.replace(/\s+/g, '_'))}
-              />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Drafts */}
       {filteredDrafts.length > 0 && (
@@ -468,8 +395,8 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         </div>
       )}
 
-      {filteredTemplates.length === 0 && filteredDrafts.length === 0 && (
-        <div className="text-center text-sm text-slate-400 py-8">No templates or drafts match your search.</div>
+      {filteredDrafts.length === 0 && (
+        <div className="text-center text-sm text-slate-400 py-8">No drafts match your search.</div>
       )}
     </div>
   );

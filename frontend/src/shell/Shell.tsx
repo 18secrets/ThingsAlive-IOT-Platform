@@ -17,7 +17,7 @@ interface ShellProps {
 function tabFromPath(pathname: string): NavigationTab {
   const first = pathname.split('/')[1];
   const known: NavigationTab[] = [
-    'dashboard', 'ai-onboarding', 'alert-agent', 'admin', 'client-users', 'roles', 'users', 'settings',
+    'dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'client-users', 'roles', 'users', 'settings',
   ];
   return (known as string[]).includes(first) ? (first as NavigationTab) : 'dashboard';
 }
@@ -29,6 +29,7 @@ function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeade
     case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
     case 'ai-onboarding': return { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' };
     case 'alert-agent': return { title: 'Alert Agent', subtitle: 'Automated Dispatch' };
+    case 'predictions': return { title: 'Live Predictions', subtitle: 'Automated Dispatch' };
     case 'users': return { title: 'User Management', subtitle: 'Access & Permissions' };
     case 'client-users': return { title: 'Client Users', subtitle: 'People & Access' };
     case 'roles': return { title: 'Roles & Permissions', subtitle: 'Page Access Control' };

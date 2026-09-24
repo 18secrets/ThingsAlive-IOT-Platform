@@ -8,7 +8,8 @@ import {
   Network,
   Sparkles,
   UserCog,
-  KeyRound
+  KeyRound,
+  Activity
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 
@@ -37,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, role,
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'ai-onboarding', label: 'AI Onboarding', icon: Sparkles },
     { id: 'alert-agent', label: 'Alert Agent', icon: Bell },
+    { id: 'predictions', label: 'Live Predictions', icon: Activity },
     { id: 'admin', label: 'Administration', icon: UserCheck },
     { id: 'client-users', label: 'Client Users', icon: UserCog },
     { id: 'roles', label: 'Roles & Permissions', icon: KeyRound },

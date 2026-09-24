@@ -2,6 +2,7 @@ export type NavigationTab =
   | 'dashboard'
   | 'ai-onboarding'
   | 'alert-agent'
+  | 'predictions'
   | 'admin'
   | 'users'
   | 'settings'
@@ -13,7 +14,7 @@ export type NavigationTab =
 // never assignable to a custom role (a role can't grant the ability to manage
 // roles). 'users' (Platform Users) and 'administrator' are ThingsAlive-side
 // screens and never apply to a client role either.
-export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = ['dashboard', 'ai-onboarding', 'alert-agent', 'admin', 'settings'];
+export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = ['dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'settings'];
 
 export type UserRole = 'master-admin' | 'client';
 
@@ -267,5 +268,25 @@ export interface TemplateKpiFormula {
   formula: string;
   unit?: string;
   description?: string;
+  createdAt: string;
+}
+
+// T0 = rule-based (a fixed threshold, evaluated deterministically); T1 = an
+// unsupervised model scoring live telemetry against its own learned baseline.
+// Matches the tiering already shown on the client's Live Predictions dashboard.
+export type PredictionTier = 'T0' | 'T1';
+export type PredictionMethod = 'rule-based' | 'unsupervised';
+
+export interface TemplatePredictiveRule {
+  id: string;
+  equipmentTemplateId: string;
+  name: string;
+  parameter: string;
+  tier: PredictionTier;
+  method: PredictionMethod;
+  windowDays: number;
+  /** Shown to the client under the value, e.g. "vs 7-day rolling baseline". */
+  caption: string;
+  active: boolean;
   createdAt: string;
 }
