@@ -107,12 +107,12 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
 
     it('refuses a class_slug that is neither in this batch nor in the catalog', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'expected_signal', {
-          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE', description: '',
+        addRow(wb, 'signal', {
+          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE',
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = await rowsFor(id, 'expected_signal').then((rs) => rs.filter((r) => r.rowNumber === 3));
+      const [row] = await rowsFor(id, 'signal').then((rs) => rs.filter((r) => r.rowNumber === 3));
       expect(row.status).toBe('invalid');
       expect(row.message).toMatch(/class "ghost-machine".*not defined.*not exist in the catalog/);
     });
@@ -120,53 +120,92 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
     it('resolves a class_slug that already exists in the catalog, not just in this batch', async () => {
       await seedClass('concrete-pump', [{ signal: 'boom_angle_deg', unit: 'deg', required: true }]);
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'sensor_requirement', {
-          class_slug: 'concrete-pump', measurement_role: 'boom_angle_deg', component_scope: '',
-          criticality: 'required', min_count: 1, canonical_unit: 'deg', enables: '', notes: '',
+        addRow(wb, 'signal', {
+          class_slug: 'concrete-pump', signal: 'boom_angle_deg', unit: 'deg', required: 'TRUE',
+          criticality: 'required', min_count: 1,
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'sensor_requirement')).filter((r) => r.rowNumber === 3);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('valid');
     });
 
-    it('refuses a sensor_requirement role the class never declares as an expected_signal', async () => {
+    // There is no "sensor_requirement role never declared as an expected_signal" case
+    // to test any more: `signal` is the one column that both is the role and names
+    // expected_signals, so a row cannot disagree with itself (template v3).
+
+    it('a blank criticality is valid: the class declares the signal without requiring it fitted', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'sensor_requirement', {
-          class_slug: CLASS_SLUG, measurement_role: 'undeclared_signal', component_scope: 'x1',
-          criticality: 'required', min_count: 1, canonical_unit: 'unit', enables: '', notes: '',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'oil_pressure_kpa', unit: 'kPa', required: 'FALSE', criticality: '',
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'sensor_requirement')).filter((r) => r.rowNumber === 3);
-      expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/measurement_role "undeclared_signal" is not declared/);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
+      expect(row.status).toBe('valid');
     });
 
     it('refuses an unrecognised criticality', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'sensor_requirement', {
-          class_slug: CLASS_SLUG, measurement_role: 'coolant_temp_c', component_scope: 'x2',
-          criticality: 'urgent-ish', min_count: 1, canonical_unit: 'degC', enables: '', notes: '',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_a', unit: 'unitX', required: 'TRUE',
+          criticality: 'urgent-ish', min_count: 1,
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'sensor_requirement')).filter((r) => r.rowNumber === 3);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
       expect(row.message).toMatch(/"urgent-ish" is not a valid criticality/);
     });
 
     it('refuses an unrecognised enables value, naming it', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'sensor_requirement', {
-          class_slug: CLASS_SLUG, measurement_role: 'coolant_temp_c', component_scope: 'x3',
-          criticality: 'required', min_count: 1, canonical_unit: 'degC', enables: 'data_quality,telepathy', notes: '',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_b', unit: 'unitX', required: 'TRUE',
+          criticality: 'required', min_count: 1, enables: 'data_quality,telepathy',
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'sensor_requirement')).filter((r) => r.rowNumber === 3);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
       expect(row.message).toMatch(/"telepathy".*not a recognised enables value/);
+    });
+
+    it('accepts two rows for the same signal with different component_scope, agreeing on the shared fields', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_c', unit: 'unitX', required: 'TRUE',
+          component_scope: 'left', criticality: 'required', min_count: 1,
+        });
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_c', unit: 'unitX', required: 'TRUE',
+          component_scope: 'right', criticality: 'recommended', min_count: 1,
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const rows = (await rowsFor(id, 'signal')).filter((r) => [3, 4].includes(r.rowNumber));
+      expect(rows).toHaveLength(2);
+      for (const r of rows) expect(r.status).toBe('valid');
+    });
+
+    it('rejects rows sharing a signal that disagree on a signal-level field, naming both row numbers', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_d', unit: 'unitX', required: 'TRUE',
+          component_scope: 'left', criticality: 'required', min_count: 1,
+        });
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_d', unit: 'unitY', required: 'TRUE',
+          component_scope: 'right', criticality: 'required', min_count: 1,
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const rows = (await rowsFor(id, 'signal')).filter((r) => [3, 4].includes(r.rowNumber));
+      expect(rows).toHaveLength(2);
+      for (const r of rows) {
+        expect(r.status).toBe('invalid');
+        expect(r.message).toMatch(/must agree.*\(rows 3, 4\)/);
+      }
     });
 
     it('refuses an unrecognised formula kind', async () => {
@@ -184,15 +223,15 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
 
     it('refuses a blank unit where the sheet has a unit column', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'sensor_requirement', {
-          class_slug: CLASS_SLUG, measurement_role: 'coolant_temp_c', component_scope: 'x4',
-          criticality: 'required', min_count: 1, canonical_unit: '', enables: '', notes: '',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_e', unit: '', required: 'TRUE',
+          criticality: 'required', min_count: 1,
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'sensor_requirement')).filter((r) => r.rowNumber === 3);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/"canonical_unit" is required/);
+      expect(row.message).toMatch(/"unit" is required/);
     });
 
     it('refuses a formula input that names neither a declared signal nor another formula_key', async () => {
@@ -229,7 +268,7 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
     it('refuses a sensor_capability name that resolves to zero sensors', async () => {
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'sensor_capability', {
-          sensor_name: 'Nonexistent Probe', measurement_role: 'coolant_temp_c',
+          sensor_name: 'Nonexistent Probe', signal: 'coolant_temp_c',
           parameter_key: 'temperature', canonical_unit: 'degC',
         });
       });
@@ -244,7 +283,7 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Ambiguous Probe' }));
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'sensor_capability', {
-          sensor_name: 'Ambiguous Probe', measurement_role: 'coolant_temp_c',
+          sensor_name: 'Ambiguous Probe', signal: 'coolant_temp_c',
           parameter_key: 'temperature', canonical_unit: 'degC',
         });
       });
@@ -270,29 +309,59 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       }
     });
 
-    it('refuses a threshold with neither a minimum nor a maximum', async () => {
+    it('rejects a duplicate (class_slug, signal, component_scope) on the signal sheet', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'default_threshold', {
-          class_slug: CLASS_SLUG, signal: 'vibration_mm_s', min: '', max: '', unit: 'mm/s', severity: 'high',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_f', unit: 'unitX', required: 'TRUE', component_scope: 'x1',
+        });
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_f', unit: 'unitX', required: 'TRUE', component_scope: 'x1',
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const [row] = (await rowsFor(id, 'default_threshold')).filter((r) => r.rowNumber === 3);
+      const rows = (await rowsFor(id, 'signal')).filter((r) => [3, 4].includes(r.rowNumber));
+      expect(rows).toHaveLength(2);
+      for (const r of rows) {
+        expect(r.status).toBe('invalid');
+        expect(r.message).toMatch(/duplicate within this batch \(rows 3, 4\)/);
+      }
+    });
+
+    it('a signal row with both min and max blank is valid: it declares no threshold', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'vibration_mm_s', unit: 'mm/s', required: 'TRUE', min: '', max: '',
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
+      expect(row.status).toBe('valid');
+    });
+
+    it('refuses a severity with neither a minimum nor a maximum', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'vibration_mm_s', unit: 'mm/s', required: 'TRUE',
+          min: '', max: '', severity: 'high',
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const [row] = (await rowsFor(id, 'signal')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/needs a minimum, a maximum, or both/);
+      expect(row.message).toMatch(/"severity" is set but neither "min" nor "max" is/);
     });
 
     it('rejects equal bounds and inverted bounds alike', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'default_threshold', {
-          class_slug: CLASS_SLUG, signal: 'fuel_level_pct', min: 50, max: 50, unit: '%', severity: 'high',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'fuel_level_pct', unit: '%', required: 'TRUE', min: 50, max: 50,
         });
-        addRow(wb, 'default_threshold', {
-          class_slug: CLASS_SLUG, signal: 'engine_load_pct', min: 90, max: 10, unit: '%', severity: 'high',
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'engine_load_pct', unit: '%', required: 'TRUE', min: 90, max: 10,
         });
       });
       const { id } = await parseAndValidate(buffer);
-      const rows = (await rowsFor(id, 'default_threshold')).filter((r) => [3, 4].includes(r.rowNumber));
+      const rows = (await rowsFor(id, 'signal')).filter((r) => [3, 4].includes(r.rowNumber));
       for (const r of rows) {
         expect(r.status).toBe('invalid');
         expect(r.message).toMatch(/min \(\d+\) must be below max \(\d+\)/);
@@ -310,8 +379,7 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       // own (a sensor is device-catalog reference data, not tied to one class), so it
       // is reported separately, in sensorCapabilities below.
       expect(entry.countsBySheet).toEqual({
-        equipment_class: 1, expected_signal: 1, failure_mode: 1, sensor_requirement: 1,
-        default_threshold: 1, formula: 1,
+        equipment_class: 1, signal: 1, failure_mode: 1, formula: 1,
       });
       expect(result.sensorCapabilities).toEqual({ valid: 1, invalid: 0 });
     });
@@ -330,11 +398,11 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
     it('classifies an existing class as "unchanged" when nothing valid actually targets it', async () => {
       await seedClass('concrete-pump', [{ signal: 'boom_angle_deg', unit: 'deg', required: true }]);
       const buffer = await workbookBuffer((wb) => {
-        // References concrete-pump, but with a role the class never declared — the
-        // only row naming it is invalid, so nothing valid actually reaches it.
-        addRow(wb, 'sensor_requirement', {
-          class_slug: 'concrete-pump', measurement_role: 'not_a_real_role', component_scope: '',
-          criticality: 'required', min_count: 1, canonical_unit: 'deg', enables: '', notes: '',
+        // References concrete-pump, but with an unrecognised criticality — the only
+        // row naming it is invalid, so nothing valid actually reaches it.
+        addRow(wb, 'signal', {
+          class_slug: 'concrete-pump', signal: 'not_a_real_role', unit: 'deg', required: 'TRUE',
+          criticality: 'not-a-real-criticality', min_count: 1,
         });
       });
       const { id } = await parseAndValidate(buffer);
@@ -346,13 +414,13 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
 
     it('lists every rejected row with its sheet, row number and reason', async () => {
       const buffer = await workbookBuffer((wb) => {
-        addRow(wb, 'expected_signal', {
-          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE', description: '',
+        addRow(wb, 'signal', {
+          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE',
         });
       });
       const { id } = await parseAndValidate(buffer);
       const result = await diff.buildDiff(id);
-      const rejected = result.rejectedRows.find((r) => r.sheet === 'expected_signal' && r.rowNumber === 3);
+      const rejected = result.rejectedRows.find((r) => r.sheet === 'signal' && r.rowNumber === 3);
       expect(rejected?.reason).toMatch(/ghost-machine/);
     });
 
@@ -361,8 +429,8 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       expect((await diff.buildDiff(clean.id)).partialApplyNote).toMatch(/nothing would be skipped/i);
 
       const dirty = await parseAndValidate(await workbookBuffer((wb) => {
-        addRow(wb, 'expected_signal', {
-          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE', description: '',
+        addRow(wb, 'signal', {
+          class_slug: 'ghost-machine', signal: 'x', unit: 'unit', required: 'TRUE',
         });
       }));
       expect((await diff.buildDiff(dirty.id)).partialApplyNote).toMatch(/1 row\(s\) are invalid.*would be skipped/i);

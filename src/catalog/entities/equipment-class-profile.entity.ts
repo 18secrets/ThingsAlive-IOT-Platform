@@ -89,4 +89,11 @@ export class EquipmentClassProfile {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  /** `'manual'` unless written by an import; see `1757990000000-CatalogImportProvenance.ts`. */
+  @Column({ type: 'text', default: 'manual' })
+  source: 'manual' | 'excel-import';
+
+  @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
+  importBatchId: string | null;
 }

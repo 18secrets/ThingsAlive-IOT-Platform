@@ -70,4 +70,11 @@ export class EquipmentClassFormula {
 
   @Column({ name: 'compiler_version', type: 'text', nullable: true })
   compilerVersion: string | null;
+
+  /** `'manual'` unless written by an import; see `1757990000000-CatalogImportProvenance.ts`. */
+  @Column({ type: 'text', default: 'manual' })
+  source: 'manual' | 'excel-import';
+
+  @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
+  importBatchId: string | null;
 }

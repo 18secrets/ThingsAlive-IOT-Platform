@@ -71,8 +71,7 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(result.status).toBe('parsed');
     expect(result.invalidRowCount).toBe(0);
     expect(result.countsBySheet).toEqual({
-      equipment_class: 1, expected_signal: 1, failure_mode: 1, sensor_requirement: 1,
-      sensor_capability: 1, default_threshold: 1, formula: 1,
+      equipment_class: 1, signal: 1, failure_mode: 1, sensor_capability: 1, formula: 1,
     });
   });
 
@@ -82,19 +81,20 @@ describeDb('catalog import: workbook template and parser', () => {
         slug: 'concrete-pump', name: 'Concrete Pump', description: '', category: 'fluid',
         service_interval_hours: 500,
       });
-      addRow(wb, 'expected_signal', {
+      addRow(wb, 'signal', {
         class_slug: 'concrete-pump', signal: 'boom_angle_deg', unit: 'deg',
-        required: 'FALSE', description: '',
+        required: 'FALSE', description: '', min: '', max: '', severity: '',
+        component_scope: '', criticality: '', min_count: '', enables: '', notes: '',
       });
     });
 
     const result = await parser.parse(buffer, 'more-rows.xlsx', 'deepak');
     expect(result.countsBySheet.equipment_class).toBe(2);
-    expect(result.countsBySheet.expected_signal).toBe(2);
+    expect(result.countsBySheet.signal).toBe(2);
 
     const rows = await ds.getRepository(CatalogImportRow).find({ where: { batchId: result.id } });
-    // 7 example rows from the template, plus the 2 just added.
-    expect(rows).toHaveLength(9);
+    // 5 example rows from the template, plus the 2 just added.
+    expect(rows).toHaveLength(7);
   });
 
   it('splits a comma-separated multi-value cell and parses the boolean column', async () => {
@@ -105,10 +105,11 @@ describeDb('catalog import: workbook template and parser', () => {
     });
     expect(failureMode.payload.signals).toEqual(['coolant_temp_c', 'oil_pressure_kpa']);
 
-    const expectedSignal = await ds.getRepository(CatalogImportRow).findOneOrFail({
-      where: { batchId: result.id, sheet: 'expected_signal' },
+    const signal = await ds.getRepository(CatalogImportRow).findOneOrFail({
+      where: { batchId: result.id, sheet: 'signal' },
     });
-    expect(expectedSignal.payload.required).toBe(true);
+    expect(signal.payload.required).toBe(true);
+    expect(signal.payload.enables).toEqual(['data_quality', 'physics_calculation']);
   });
 
   it('refuses a workbook with no _meta sheet', async () => {
@@ -203,13 +204,13 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(count).toBe(0);
   });
 
-  it('keeps default_threshold in sync with the engine parameters it stages', () => {
+  it('keeps the signal sheet in sync with the engine parameters it stages', () => {
     // SIGNAL_THRESHOLD_PARAM_KEYS is generated from SignalThresholdParams itself
     // (src/alert/services/alert-rules.ts) and fails to compile if that interface
-    // changes without it. A default_threshold column dropped or renamed here without
+    // changes without it. A signal-sheet column dropped or renamed here without
     // updating template-schema.ts fails this test, rather than staging a threshold
     // the alert engine silently cannot run.
-    const schema = CONTENT_SHEETS.find((s) => s.sheet === 'default_threshold')!;
+    const schema = CONTENT_SHEETS.find((s) => s.sheet === 'signal')!;
     const columnNames = new Set(schema.columns.map((c) => c.name));
     for (const key of SIGNAL_THRESHOLD_PARAM_KEYS) {
       expect(columnNames.has(key)).toBe(true);
@@ -221,8 +222,7 @@ describeDb('catalog import: workbook template and parser', () => {
       const wb = new Workbook();
       await loadWorkbook(wb, await templates.build());
       expect(wb.worksheets.map((s) => s.name)).toEqual([
-        '_meta', 'equipment_class', 'expected_signal', 'failure_mode', 'sensor_requirement',
-        'sensor_capability', 'default_threshold', 'formula', '_enums',
+        '_meta', 'equipment_class', 'signal', 'failure_mode', 'sensor_capability', 'formula', '_enums',
       ]);
     });
 
@@ -239,11 +239,11 @@ describeDb('catalog import: workbook template and parser', () => {
       await loadWorkbook(wb, await templates.build());
       const enums = wb.getWorksheet('_enums')!;
       const criticalityRow = enums.getRow(2);
-      expect(criticalityRow.getCell(1).value).toBe('sensor_requirement.criticality');
+      expect(criticalityRow.getCell(1).value).toBe('signal.criticality');
       expect(criticalityRow.getCell(2).value).toBe('required, recommended, optional');
     });
 
-    it('lists default_threshold.severity, reused from AlertRule.severity — and no comparator vocabulary, because alert_rule has none', async () => {
+    it('lists signal.severity, reused from AlertRule.severity — and no comparator vocabulary, because alert_rule has none', async () => {
       const wb = new Workbook();
       await loadWorkbook(wb, await templates.build());
       const enums = wb.getWorksheet('_enums')!;
@@ -252,11 +252,11 @@ describeDb('catalog import: workbook template and parser', () => {
         if (rowNumber === 1) return;
         fields.push(row.getCell(1).value);
       });
-      expect(fields).toContain('default_threshold.severity');
-      expect(fields).not.toContain('default_threshold.comparator');
+      expect(fields).toContain('signal.severity');
+      expect(fields).not.toContain('signal.comparator');
 
       const severityRow = enums.getRows(1, enums.rowCount)!
-        .find((row) => row.getCell(1).value === 'default_threshold.severity')!;
+        .find((row) => row.getCell(1).value === 'signal.severity')!;
       expect(severityRow.getCell(2).value).toBe('none, low, medium, high, critical');
     });
   });

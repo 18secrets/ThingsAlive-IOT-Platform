@@ -6,17 +6,19 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { CatalogImportApplyService } from './services/catalog-import-apply.service';
 import { CatalogImportDiffService } from './services/catalog-import-diff.service';
 import { CatalogImportValidatorService } from './services/catalog-import-validator.service';
 import { CatalogTemplateService } from './services/catalog-template.service';
 import { CatalogImportRefusal, WorkbookParserService } from './services/workbook-parser.service';
 
 /**
- * The Excel catalog import, over HTTP (task QIMP2).
+ * The Excel catalog import, over HTTP (tasks QIMP2, QIMP3).
  *
  * `catalog.write` throughout — the same capability the rest of catalog authoring
- * already requires (`src/catalog/catalog.controller.ts`). Staging a workbook is
- * authoring the library, not a new kind of action that needs its own permission.
+ * already requires (`src/catalog/catalog.controller.ts`). Staging or applying a
+ * workbook is authoring the library, not a new kind of action that needs its own
+ * permission.
  */
 @ApiTags('Catalog Import')
 @Controller('platform/catalog')
@@ -26,6 +28,7 @@ export class CatalogImportController {
     private readonly validator: CatalogImportValidatorService,
     private readonly diff: CatalogImportDiffService,
     private readonly templates: CatalogTemplateService,
+    private readonly applier: CatalogImportApplyService,
   ) {}
 
   @Post('imports')
@@ -63,6 +66,13 @@ export class CatalogImportController {
   @ApiOperation({ summary: 'The dry-run diff for one batch: what would change if it were applied' })
   diffFor(@Param('id') id: string) {
     return this.diff.buildDiff(id);
+  }
+
+  @Post('imports/:id/apply')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Apply a validated batch: writes the catalog, versioned and provenanced' })
+  apply(@Param('id') id: string, @CurrentScope() scope: RequestScope) {
+    return this.applier.apply(id, scope.userId);
   }
 
   @Get('template')

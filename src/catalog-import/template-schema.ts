@@ -9,15 +9,26 @@
 // comparator/value described a threshold the alert engine cannot run — see the
 // column comment below. A v1 workbook is refused by template_version rather than
 // silently misread with the old column meanings.
-export const TEMPLATE_VERSION = 'v2';
+//
+// v2 -> v3: expected_signal, sensor_requirement and default_threshold — three sheets
+// that each registered class+signal facts under a different name — are replaced by
+// one `signal` sheet, keyed (class_slug, signal, component_scope). Three sheets
+// naming the same signal were three chances for them to disagree; one row per signal
+// per machine is how a person actually thinks about it. `measurement_role` and
+// `canonical_unit` are gone as separate columns — `signal` and `unit` now feed both
+// expected_signals and equipment_class_sensor_requirement directly, which makes
+// QL1's role-must-be-declared trigger impossible to violate from an import, by
+// construction rather than by validation. A v2 workbook is refused by
+// template_version rather than silently read against column names it no longer has.
+export const TEMPLATE_VERSION = 'v3';
 
 export interface SheetColumn {
   name: string;
   /** A blank cell here rejects the row. Declared per sheet, not inferred from data. */
   requiredCell: boolean;
-  /** Comma-separated in the cell: failure_mode.signals, requirement.enables, formula.inputs. */
+  /** Comma-separated in the cell: failure_mode.signals, signal.enables, formula.inputs. */
   multiValue?: boolean;
-  /** TRUE/FALSE in the cell, parsed to a boolean. Only expected_signal.required today. */
+  /** TRUE/FALSE in the cell, parsed to a boolean. Only signal.required today. */
   boolean?: boolean;
 }
 
@@ -62,19 +73,65 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       category: 'power', service_interval_hours: 250,
     },
   },
+  /**
+   * One row per signal per machine — the natural key is (class_slug, signal,
+   * component_scope), not (class_slug, signal): a composite machine needs two rows
+   * naming the same signal with different component_scope (template v3).
+   *
+   * A row writes between one and three tables:
+   *   - always: an expected_signals entry (signal, unit, required, description)
+   *   - criticality non-blank: an equipment_class_sensor_requirement row
+   *     (component_scope, criticality, min_count, enables, notes)
+   *   - min or max non-blank: a default threshold (min, max, severity), mirroring
+   *     `SignalThresholdParams` in `src/alert/services/alert-rules.ts` one-for-one —
+   *     the engine has no duration, consecutive-reading, hysteresis or dwell
+   *     parameter, so a `comparator`/`value` shape would read and stage cleanly and
+   *     the engine still could not run it. `severity` maps to `AlertRule.severity`,
+   *     a column on the rule rather than a threshold parameter.
+   * A blank criticality means the class declares the signal but does not require it
+   * to be fitted — the difference between a signal we can use and one we insist on,
+   * and it must survive the merge into expected_signals vs. sensor_requirement.
+   *
+   * unit, required, description, min, max and severity are signal-level, not
+   * row-level: they must agree across every row sharing (class_slug, signal), and
+   * QIMP2's validator rejects disagreement by row number rather than silently taking
+   * the first row — that would make the class's declared unit depend on row order.
+   * The expected_signals entry and the threshold are written once per signal, not
+   * once per component row (`class-content.ts`).
+   *
+   * `measurement_role` and `canonical_unit` do not exist here as separate columns:
+   * `signal` writes into both expected_signals.signal and
+   * equipment_class_sensor_requirement.measurementRole, and `unit` into every place a
+   * unit was previously given. One word for one concept, and the role-must-be-
+   * declared trigger in `1757970000000-LibraryStructure.ts` becomes impossible to
+   * violate from an import, by construction.
+   */
   {
-    sheet: 'expected_signal',
-    entityKind: 'expected_signal',
+    sheet: 'signal',
+    entityKind: 'signal',
     columns: [
       { name: 'class_slug', requiredCell: true },
       { name: 'signal', requiredCell: true },
       { name: 'unit', requiredCell: false },
       { name: 'required', requiredCell: true, boolean: true },
       { name: 'description', requiredCell: false },
+      // Either bound may be omitted; a blank min and max together mean this signal
+      // has no threshold, not a rejection — "at least one, and min below max" is
+      // QIMP2's semantic check on a row that supplies one, not this slice's.
+      { name: 'min', requiredCell: false },
+      { name: 'max', requiredCell: false },
+      { name: 'severity', requiredCell: false },
+      { name: 'component_scope', requiredCell: false },
+      { name: 'criticality', requiredCell: false },
+      { name: 'min_count', requiredCell: false },
+      { name: 'enables', requiredCell: false, multiValue: true },
+      { name: 'notes', requiredCell: false },
     ],
     example: {
       class_slug: 'diesel-generator', signal: 'coolant_temp_c', unit: 'degC',
-      required: 'TRUE', description: 'Coolant temperature',
+      required: 'TRUE', description: 'Coolant temperature', min: '', max: 105, severity: 'critical',
+      component_scope: '', criticality: 'required', min_count: 1,
+      enables: 'data_quality,physics_calculation', notes: 'Primary coolant probe',
     },
   },
   {
@@ -93,68 +150,17 @@ export const CONTENT_SHEETS: SheetSchema[] = [
     },
   },
   {
-    sheet: 'sensor_requirement',
-    entityKind: 'sensor_requirement',
-    columns: [
-      { name: 'class_slug', requiredCell: true },
-      { name: 'measurement_role', requiredCell: true },
-      { name: 'component_scope', requiredCell: false },
-      { name: 'criticality', requiredCell: false },
-      { name: 'min_count', requiredCell: false },
-      { name: 'canonical_unit', requiredCell: false },
-      { name: 'enables', requiredCell: false, multiValue: true },
-      { name: 'notes', requiredCell: false },
-    ],
-    example: {
-      class_slug: 'diesel-generator', measurement_role: 'coolant_temp_c', component_scope: '',
-      criticality: 'required', min_count: 1, canonical_unit: 'degC',
-      enables: 'data_quality,physics_calculation', notes: 'Primary coolant probe',
-    },
-  },
-  {
     sheet: 'sensor_capability',
     entityKind: 'sensor_capability',
     columns: [
       { name: 'sensor_name', requiredCell: true },
-      { name: 'measurement_role', requiredCell: true },
+      { name: 'signal', requiredCell: true },
       { name: 'parameter_key', requiredCell: false },
       { name: 'canonical_unit', requiredCell: false },
     ],
     example: {
-      sensor_name: 'Coolant Temp Probe', measurement_role: 'coolant_temp_c',
+      sensor_name: 'Coolant Temp Probe', signal: 'coolant_temp_c',
       parameter_key: 'temperature', canonical_unit: 'degC',
-    },
-  },
-  /**
-   * Mirrors `SignalThresholdParams` in `src/alert/services/alert-rules.ts` one-for-one
-   * (`signal`, `min`, `max` — nothing else; the engine has no duration, consecutive-
-   * reading, hysteresis or dwell parameter). A `comparator`/`value` shape read cleanly
-   * and staged cleanly, and the alert engine still could not run it — the exact
-   * failure that looks like "no faults detected" rather than an error. `min`/`max`
-   * cannot express anything the engine does not, because it is what the engine reads.
-   * `unit` and `severity` are kept: `unit` documents the value for whoever fills the
-   * cell in (the engine compares raw numbers, in the reading's own unit), and
-   * `severity` maps to `AlertRule.severity`, a column on the rule rather than a
-   * threshold parameter.
-   */
-  {
-    sheet: 'default_threshold',
-    entityKind: 'default_threshold',
-    columns: [
-      { name: 'class_slug', requiredCell: true },
-      { name: 'signal', requiredCell: true },
-      // Either bound may be omitted; at least one is required — the same rule
-      // `validateParams` enforces on `alert_rule` itself. Neither cell is
-      // unconditionally required at the shape level; "at least one, and min below
-      // max" is QIMP2's semantic check, not this slice's.
-      { name: 'min', requiredCell: false },
-      { name: 'max', requiredCell: false },
-      { name: 'unit', requiredCell: false },
-      { name: 'severity', requiredCell: false },
-    ],
-    example: {
-      class_slug: 'diesel-generator', signal: 'coolant_temp_c', min: '',
-      max: 105, unit: 'degC', severity: 'critical',
     },
   },
   {
@@ -198,24 +204,26 @@ export const SEVERITY_VALUES = ['none', 'low', 'medium', 'high', 'critical'];
 /**
  * Enums worth telling a spreadsheet author about — because a CHECK constraint already
  * enforces them (`1757970000000-LibraryStructure.ts`) or the task states them verbatim
- * (`required` is TRUE/FALSE).
+ * (`required` is TRUE/FALSE). All five live on the `signal` sheet as of template v3 —
+ * criticality and enables feed equipment_class_sensor_requirement, required feeds
+ * expected_signals, severity feeds the threshold, and all four are read off the same
+ * row that names the signal.
  *
- * `default_threshold.severity` reuses `AlertRule.severity` (`src/alert/entities/
+ * `signal.severity` reuses `AlertRule.severity` (`src/alert/entities/
  * alert-rule.entity.ts`), which is `Severity` from `src/common/severity.ts` — the one
  * severity vocabulary the whole platform maps foreign values onto. A threshold loaded
  * with a severity the alert engine cannot read is a threshold that never fires while
  * looking like it was imported successfully, which is the failure this list exists
  * to catch before it reaches a spreadsheet.
  *
- * There is no `default_threshold.comparator` entry: the sheet no longer has a
- * comparator column at all. It mirrors `SignalThresholdParams` as `min`/`max` bounds
- * directly — "greater than" or "less than" is which bound is set, not a value that
- * needs its own vocabulary.
+ * There is no `signal.comparator` entry: the sheet has no comparator column at all.
+ * It mirrors `SignalThresholdParams` as `min`/`max` bounds directly — "greater than"
+ * or "less than" is which bound is set, not a value that needs its own vocabulary.
  */
 export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
-  { field: 'sensor_requirement.criticality', values: CRITICALITY_VALUES },
-  { field: 'sensor_requirement.enables', values: ENABLES_VALUES },
+  { field: 'signal.criticality', values: CRITICALITY_VALUES },
+  { field: 'signal.enables', values: ENABLES_VALUES },
   { field: 'formula.kind', values: FORMULA_KIND_VALUES },
-  { field: 'expected_signal.required', values: ['TRUE', 'FALSE'] },
-  { field: 'default_threshold.severity', values: SEVERITY_VALUES },
+  { field: 'signal.required', values: ['TRUE', 'FALSE'] },
+  { field: 'signal.severity', values: SEVERITY_VALUES },
 ];

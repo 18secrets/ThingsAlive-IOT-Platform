@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
-import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
+import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
+import { buildProposedClass, classesIdentical, loadCurrentClass } from './class-content';
 
 export type ClassDiffAction = 'create' | 'new_version' | 'unchanged';
 
@@ -33,11 +33,17 @@ const classSlugOf = (row: CatalogImportRow): string | undefined => {
 };
 
 /**
- * The dry-run diff, and the recent-batches list (task QIMP2).
+ * The dry-run diff, and the recent-batches list (tasks QIMP2, QIMP3).
  *
  * Read-only, deliberately: both methods only ever `find()`. Computed fresh on every
  * call rather than cached at validate time, because the catalog can change between a
  * batch being staged and somebody looking at what it would do.
+ *
+ * "unchanged" shares its definition with `CatalogImportApplyService` — both call
+ * `class-content.ts`'s comparison — because a diff and an apply that could disagree
+ * about whether a class changed would be a diff nobody could trust: re-uploading the
+ * same workbook has to look like nothing happened here for the same reason apply has
+ * to actually do nothing (task QIMP3).
  */
 @Injectable()
 export class CatalogImportDiffService {
@@ -63,28 +69,28 @@ export class CatalogImportDiffService {
       if (slug) referencedSlugs.add(slug);
     }
 
-    const existing = referencedSlugs.size
-      ? await this.ds.getRepository(EquipmentClassProfile).find({ where: { slug: In([...referencedSlugs]) } })
-      : [];
-    const existingSlugs = new Set(existing.map((c) => c.slug));
-
-    const classes: ClassDiffEntry[] = [...referencedSlugs].map((slug) => {
+    const classes: ClassDiffEntry[] = [];
+    for (const slug of referencedSlugs) {
       const validForClass = validRows.filter((r) => classSlugOf(r) === slug);
       const countsBySheet: Record<string, number> = {};
       for (const r of validForClass) countsBySheet[r.sheet] = (countsBySheet[r.sheet] ?? 0) + 1;
 
-      // Content for an existing class always versions on touch (QIMP3): a published
-      // version is immutable, so any valid row targeting it needs a new one to land
-      // in. "unchanged" is therefore not "identical content" but "nothing valid
-      // actually reaches this class" — everything that named it was itself invalid.
-      const action: ClassDiffAction = !existingSlugs.has(slug)
-        ? 'create'
-        : validForClass.length > 0
-          ? 'new_version'
-          : 'unchanged';
+      const { current, content: currentContent } = await loadCurrentClass(this.ds.manager, slug);
+      const proposed = buildProposedClass(validForClass, currentContent);
 
-      return { slug, action, countsBySheet };
-    }).sort((a, b) => a.slug.localeCompare(b.slug));
+      // A published version is never mutated (QIMP3), so any real change to an
+      // existing class always lands in a new version — "unchanged" means the content
+      // that would be written is byte-identical to what the current version already
+      // holds, not merely that something touched it.
+      const action: ClassDiffAction = !current
+        ? 'create'
+        : classesIdentical(proposed, currentContent)
+          ? 'unchanged'
+          : 'new_version';
+
+      classes.push({ slug, action, countsBySheet });
+    }
+    classes.sort((a, b) => a.slug.localeCompare(b.slug));
 
     const rejectedRows: RejectedRow[] = [...invalidRows]
       .sort((a, b) => a.sheet.localeCompare(b.sheet) || a.rowNumber - b.rowNumber)

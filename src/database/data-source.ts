@@ -8,6 +8,8 @@ import { TelemetryReading } from '../telemetry/telemetry-reading.entity';
 import { PlatformAccessLog } from '../audit/platform-access-log.entity';
 import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassFormula } from '../catalog/entities/equipment-class-formula.entity';
+import { EquipmentClassSensorRequirement } from '../catalog/entities/equipment-class-sensor-requirement.entity';
+import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { ScenarioDefinition } from '../catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../catalog/entities/alert-rule-template.entity';
@@ -108,6 +110,8 @@ export const ENTITIES = [
   CatalogImportBatch,
   CatalogImportRow,
   EquipmentClassFormula,
+  EquipmentClassSensorRequirement,
+  SensorRoleCapability,
 ];
 
 export interface DataSourceChoices {

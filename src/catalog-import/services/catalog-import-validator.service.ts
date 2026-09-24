@@ -14,12 +14,15 @@ import { CRITICALITY_VALUES, ENABLES_VALUES, FORMULA_KIND_VALUES } from '../temp
  * semantic question for this slice, not a shape one.
  */
 const UNIT_COLUMN_BY_SHEET: Record<string, string> = {
-  expected_signal: 'unit',
-  sensor_requirement: 'canonical_unit',
+  signal: 'unit',
   sensor_capability: 'canonical_unit',
-  default_threshold: 'unit',
   formula: 'output_unit',
 };
+
+/** unit, required, description, min, max, severity — must agree across every row
+ * sharing (class_slug, signal); component_scope, criticality, min_count, enables and
+ * notes are legitimately different per component and are not checked here. */
+const SIGNAL_AGREEMENT_FIELDS = ['unit', 'required', 'description', 'min', 'max', 'severity'] as const;
 
 const parseNumber = (value: unknown): number | undefined => {
   if (typeof value !== 'string' || value.trim() === '') return undefined;
@@ -37,11 +40,9 @@ function duplicateKey(row: CatalogImportRow): string | null {
   const p = row.payload;
   switch (row.sheet) {
     case 'equipment_class': return `${p.slug}`;
-    case 'expected_signal': return `${p.class_slug}::${p.signal}`;
+    case 'signal': return `${p.class_slug}::${p.signal}::${p.component_scope}`;
     case 'failure_mode': return `${p.class_slug}::${p.code}`;
-    case 'sensor_requirement': return `${p.class_slug}::${p.measurement_role}::${p.component_scope}`;
-    case 'sensor_capability': return `${p.sensor_name}::${p.measurement_role}::${p.parameter_key}`;
-    case 'default_threshold': return `${p.class_slug}::${p.signal}`;
+    case 'sensor_capability': return `${p.sensor_name}::${p.signal}::${p.parameter_key}`;
     case 'formula': return `${p.class_slug}::${p.formula_key}`;
     default: return null;
   }
@@ -50,10 +51,12 @@ function duplicateKey(row: CatalogImportRow): string | null {
 /**
  * Semantic validation, per row, on top of QIMP1's shape check (task QIMP2).
  *
- * Every rule here is one the database would eventually enforce anyway — the
- * sensor_requirement/expected_signal rule is the same trigger `1757970000000-
- * LibraryStructure.ts` runs at apply time — caught earlier so the person gets a row
- * number and a sentence instead of a constraint name after the fact.
+ * As of template v3, the trigger `1757970000000-LibraryStructure.ts` runs at apply
+ * time — a sensor_requirement role not declared in expected_signals — cannot be
+ * reached from this path at all: `signal` is the one column that writes both, so
+ * there is no row shape left that could disagree with itself. Every rule still here
+ * is one the database would otherwise enforce anyway, caught earlier so the person
+ * gets a row number and a sentence instead of a constraint name after the fact.
  *
  * A row already marked invalid by the parser keeps that message rather than
  * gaining a second, possibly contradictory one; later rules here only ever look at
@@ -127,10 +130,13 @@ export class CatalogImportValidatorService {
         );
       }
 
-      // ------------------------------------------- sensor_requirement role declared
+      // signal is the one column that both is the measurement role and names
+      // expected_signals — a sensor_requirement row referencing a role never declared
+      // as an expected_signal cannot arise from an import; that trigger now only ever
+      // fires for `manual` catalog authoring, not this path.
       const expectedSignalsInBatch = new Map<string, Set<string>>();
       for (const r of candidates) {
-        if (r.sheet !== 'expected_signal' || !live(r)) continue;
+        if (r.sheet !== 'signal' || !live(r)) continue;
         const slug = String(r.payload.class_slug);
         const set = expectedSignalsInBatch.get(slug) ?? new Set<string>();
         set.add(String(r.payload.signal));
@@ -142,25 +148,43 @@ export class CatalogImportValidatorService {
         return new Set([...fromBatch, ...fromCatalog]);
       };
 
+      // ------------------------------------------------ signal-level agreement
+      // unit, required, description, min, max and severity are declared once per
+      // (class_slug, signal) even though a composite machine can stage several rows
+      // for that signal (one per component_scope). Disagreement between those rows
+      // names every row in the group — taking the first silently would make the
+      // class's declared unit depend on row order.
+      const signalGroups = new Map<string, CatalogImportRow[]>();
       for (const r of candidates) {
-        if (r.sheet !== 'sensor_requirement' || !live(r)) continue;
-        const slug = String(r.payload.class_slug);
-        const role = String(r.payload.measurement_role);
-        if (expectedSignalsFor(slug).has(role)) continue;
-        invalidate(
-          r,
-          `sensor_requirement row ${r.rowNumber}: measurement_role "${role}" is not declared as an `
-            + `expected_signal for class "${slug}".`,
-        );
+        if (r.sheet !== 'signal' || !live(r)) continue;
+        const key = `${r.payload.class_slug}::${r.payload.signal}`;
+        const list = signalGroups.get(key) ?? [];
+        list.push(r);
+        signalGroups.set(key, list);
+      }
+      const signature = (r: CatalogImportRow) =>
+        SIGNAL_AGREEMENT_FIELDS.map((f) => JSON.stringify(r.payload[f] ?? null)).join('|');
+      for (const group of signalGroups.values()) {
+        if (group.length < 2) continue;
+        if (new Set(group.map(signature)).size < 2) continue;
+        const rowNumbers = group.map((r) => r.rowNumber).sort((a, b) => a - b);
+        for (const r of group) {
+          invalidate(
+            r,
+            `signal row ${r.rowNumber}: unit, required, description, min, max and severity must agree `
+              + `across every row for class "${r.payload.class_slug}" signal "${r.payload.signal}" `
+              + `(rows ${rowNumbers.join(', ')}).`,
+          );
+        }
       }
 
       // ------------------------------------------------------------------- enums
       for (const r of candidates) {
         if (!live(r)) continue;
-        if (r.sheet === 'sensor_requirement') {
+        if (r.sheet === 'signal') {
           const criticality = r.payload.criticality;
           if (criticality && !CRITICALITY_VALUES.includes(criticality as string)) {
-            invalidate(r, `sensor_requirement row ${r.rowNumber}: "${criticality}" is not a valid criticality.`);
+            invalidate(r, `signal row ${r.rowNumber}: "${criticality}" is not a valid criticality.`);
             continue;
           }
           const enables = (r.payload.enables as string[] | undefined) ?? [];
@@ -168,7 +192,7 @@ export class CatalogImportValidatorService {
           if (badEnables.length) {
             invalidate(
               r,
-              `sensor_requirement row ${r.rowNumber}: "${badEnables.join('", "')}" `
+              `signal row ${r.rowNumber}: "${badEnables.join('", "')}" `
                 + `${badEnables.length > 1 ? 'are' : 'is'} not a recognised enables value.`,
             );
           }
@@ -252,16 +276,23 @@ export class CatalogImportValidatorService {
       }
 
       // ---------------------------------------------------------- threshold bounds
+      // Both min and max blank means this signal has no threshold — not a rejection;
+      // only a row that supplies one gets its bounds checked. Severity describes a
+      // threshold, though, not a signal on its own: a severity with neither bound is
+      // a half-filled row that would silently produce no threshold at all.
       for (const r of candidates) {
-        if (r.sheet !== 'default_threshold' || !live(r)) continue;
+        if (r.sheet !== 'signal' || !live(r)) continue;
         const min = parseNumber(r.payload.min);
         const max = parseNumber(r.payload.max);
         if (min === undefined && max === undefined) {
-          invalidate(r, `default_threshold row ${r.rowNumber}: needs a minimum, a maximum, or both.`);
+          const severity = r.payload.severity;
+          if (typeof severity === 'string' && severity.trim() !== '') {
+            invalidate(r, `signal row ${r.rowNumber}: "severity" is set but neither "min" nor "max" is.`);
+          }
           continue;
         }
         if (min !== undefined && max !== undefined && min >= max) {
-          invalidate(r, `default_threshold row ${r.rowNumber}: min (${min}) must be below max (${max}).`);
+          invalidate(r, `signal row ${r.rowNumber}: min (${min}) must be below max (${max}).`);
         }
       }
 
