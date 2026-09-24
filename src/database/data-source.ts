@@ -40,6 +40,7 @@ import { TenantRole } from '../identity/entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../identity/entities/user-access.entity';
 import { PlatformUser } from '../identity/entities/platform-user.entity';
 import { PlatformSession } from '../identity/entities/platform-session.entity';
+import { PlatformInvitation } from '../identity/entities/platform-invitation.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
 import { SensorCategory } from '../device-catalog/entities/sensor-category.entity';
@@ -51,6 +52,10 @@ import { PredictionBaseline } from '../prediction/entities/prediction-baseline.e
 import { DomainEvent } from '../events/domain-event.entity';
 import { CatalogImportBatch } from '../catalog-import/entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../catalog-import/entities/catalog-import-row.entity';
+import { SignalBindingVersion } from '../signal-binding/entities/signal-binding-version.entity';
+import { SensorInstance } from '../signal-binding/entities/sensor-instance.entity';
+import { CalibrationVersion } from '../signal-binding/entities/calibration-version.entity';
+import { EquipmentParameter } from '../signal-binding/entities/equipment-parameter.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -103,6 +108,7 @@ export const ENTITIES = [
   AlertEvent,
   PlatformUser,
   PlatformSession,
+  PlatformInvitation,
   SensorCategory,
   Sensor,
   ToolMapping,
@@ -112,6 +118,10 @@ export const ENTITIES = [
   EquipmentClassFormula,
   EquipmentClassSensorRequirement,
   SensorRoleCapability,
+  SignalBindingVersion,
+  SensorInstance,
+  CalibrationVersion,
+  EquipmentParameter,
 ];
 
 export interface DataSourceChoices {

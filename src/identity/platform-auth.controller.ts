@@ -4,7 +4,7 @@ import { IsNotEmpty, IsString } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequestScope } from '../auth/types/request-scope';
-import { RefreshDto, SignInDto } from './auth.controller';
+import { AcceptDto, RefreshDto, SignInDto } from './auth.controller';
 import { PlatformCredentialService } from './services/platform-credential.service';
 
 export class ChangePasswordDto {
@@ -31,6 +31,13 @@ export class PlatformAuthController {
   @ApiOperation({ summary: 'Exchange a Things Alive staff email and password for a short access token' })
   signIn(@Body() body: SignInDto, @Ip() ip: string, @Headers('user-agent') userAgent?: string) {
     return this.platformCredentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
+  }
+
+  @Post('accept-invitation')
+  @Public('Accepting an invitation is how a staff member gets their first credential.')
+  @ApiOperation({ summary: 'Set a password with a staff invitation token and sign in' })
+  accept(@Body() body: AcceptDto, @Ip() ip: string, @Headers('user-agent') userAgent?: string) {
+    return this.platformCredentials.acceptInvitation(body.token, body.password, { ipAddress: ip, userAgent });
   }
 
   @Post('refresh')

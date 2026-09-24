@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
@@ -82,6 +83,7 @@ export class AppModule {
               IdentityModule,
               TenancyModule,
               EquipmentModule,
+              SignalBindingModule,
               WorkModule,
               ShiftModule,
               UtilizationModule,

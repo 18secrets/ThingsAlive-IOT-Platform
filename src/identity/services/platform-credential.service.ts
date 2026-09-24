@@ -1,10 +1,11 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { runTenantSpanning } from '../../scope/tenant-session';
 import { PLATFORM_ROLES, PlatformRole } from '../../auth/platform-roles';
+import { PlatformInvitation } from '../entities/platform-invitation.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
 import { PlatformSession } from '../entities/platform-session.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
@@ -20,6 +21,7 @@ const allow = <T>(value: T): Allowed<T> => ({ kind: 'allowed', value });
 const REFRESH_TOKEN_DAYS = 30;
 const MAX_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
+const INVITATION_DAYS = 14;
 
 /**
  * Sign-in for Things Alive staff — PlatformUser's counterpart to CredentialService.
@@ -98,6 +100,12 @@ export class PlatformCredentialService {
       if (user.status === 'suspended') {
         await this.record(m, 'login.failed', { userId: user.id, ctx, detail: 'suspended' });
         return refuse('This account has been suspended.');
+      }
+      // Unreachable via the `verify` check above today, since a null hash always
+      // fails it first — kept anyway, the same belt-and-braces `credential.service.ts`
+      // keeps for `AppUser`, in case that ever stops being true.
+      if (user.status === 'invited' || !user.passwordHash) {
+        return refuse('This invitation has not been accepted yet.');
       }
 
       user.failedAttempts = 0;
@@ -200,6 +208,87 @@ export class PlatformCredentialService {
       { platformUserId, revokedAt: IsNull() },
       { revokedAt: now, revokedReason: reason },
     );
+  }
+
+  // ------------------------------------------------------------------- invitations
+
+  /**
+   * Mint a token for a staff member to set their first password with — `platform_user`'s
+   * counterpart to `CredentialService.issueInvitation`. Same shape: the plaintext is
+   * returned once and never stored, and any invitation still outstanding for this
+   * person is retired first, so re-sending one never leaves two live at once.
+   *
+   * Neither `platform_user` nor `platform_invitation` carries RLS, so this needs no
+   * `runTenantSpanning` — unlike `acceptInvitation` below, which writes to
+   * `user_security_event`.
+   */
+  async issueInvitation(
+    platformUserId: string, by: string, now = new Date(),
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const user = await this.ds.getRepository(PlatformUser).findOne({ where: { id: platformUserId } });
+    if (!user) throw new BadRequestException('No such platform user.');
+
+    return this.ds.transaction(async (m) => {
+      const repo = m.getRepository(PlatformInvitation);
+      await repo.update(
+        { platformUserId: user.id, consumedAt: IsNull() },
+        { consumedAt: now },
+      );
+
+      const token = this.passwords.newToken();
+      const expiresAt = new Date(now.getTime() + INVITATION_DAYS * 86_400_000);
+      await repo.save(repo.create({
+        platformUserId: user.id,
+        tokenHash: this.passwords.fingerprint(token),
+        expiresAt, consumedAt: null, createdBy: by,
+      }));
+      return { token, expiresAt };
+    });
+  }
+
+  /**
+   * Set a password with an invitation token, and sign in — the same shape as
+   * `CredentialService.acceptInvitation`, including the one message for missing,
+   * consumed and expired, and revoking every session afterwards (there should be
+   * none yet, but the pattern costs nothing to keep and this is the moment somebody
+   * proves they hold the invitation).
+   */
+  async acceptInvitation(
+    token: string, password: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<SignInResult> {
+    const hash = this.passwords.fingerprint(token);
+
+    return runTenantSpanning(this.ds, 'platform invitation acceptance', async (m) => {
+      const invitation = await m.getRepository(PlatformInvitation).findOne({ where: { tokenHash: hash } });
+      if (!invitation || invitation.consumedAt || invitation.expiresAt <= now) {
+        throw new UnauthorizedException('That link is no longer valid. Ask for a new one.');
+      }
+
+      const repo = m.getRepository(PlatformUser);
+      const user = await repo.findOne({ where: { id: invitation.platformUserId } });
+      if (!user) throw new UnauthorizedException('That link is no longer valid. Ask for a new one.');
+      if (user.status === 'suspended') {
+        throw new UnauthorizedException('This account has been suspended.');
+      }
+
+      user.passwordHash = this.passwords.hash(password, user.email);
+      user.status = 'active';
+      user.activatedAt = user.activatedAt ?? now;
+      user.failedAttempts = 0;
+      user.lockedUntil = null;
+      await repo.save(user);
+
+      invitation.consumedAt = now;
+      await m.getRepository(PlatformInvitation).save(invitation);
+
+      await m.getRepository(PlatformSession).update(
+        { platformUserId: user.id, revokedAt: IsNull() },
+        { revokedAt: now, revokedReason: 'password changed' },
+      );
+      await this.record(m, 'password.set', { userId: user.id, ctx, detail: 'invite' });
+
+      return this.startSession(m, user, ctx, now);
+    });
   }
 
   /**
