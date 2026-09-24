@@ -15,6 +15,10 @@ const CLASS_SLUG = 'diesel-generator';
  * shipping it. Proven end to end, the same workbook-import round trip
  * catalog-import-apply.spec.ts already uses: a catalog-author can upload, diff and
  * apply (all catalog.write), and is refused the one act catalog.publish gates.
+ *
+ * The boundary is "publishing anything a tenant can be granted", not just a class
+ * version — a scenario and an alert-rule template are each entitled to a tenant the
+ * same way, so their publish routes are covered here too.
  */
 describeDb('catalog capability split: write vs. publish', () => {
   let ds: DataSource;
@@ -42,7 +46,8 @@ describeDb('catalog capability split: write vs. publish', () => {
     await owner.query(
       `TRUNCATE TABLE "catalog_import_row", "catalog_import_batch",
         "equipment_class_formula", "equipment_class_sensor_requirement",
-        "sensor_role_capability", "equipment_class_profile", "sensor"
+        "sensor_role_capability", "equipment_class_profile", "sensor",
+        "scenario_definition", "alert_rule_template"
        RESTART IDENTITY CASCADE`,
     );
   });
@@ -109,6 +114,84 @@ describeDb('catalog capability split: write vs. publish', () => {
 
     const publish = await request(app.getHttpServer())
       .post(`/api/v1/catalog/equipment-classes/${CLASS_SLUG}/publish`)
+      .set('Authorization', `Bearer ${bearer('master-admin')}`);
+    expect(publish.status).toBe(201);
+    expect(publish.body.status).toBe('published');
+  });
+
+  // Publishing anything a tenant can be granted is the boundary — not just a class
+  // version. A scenario and an alert-rule template are each entitled to a tenant the
+  // same way a class is, so both publish routes are catalog.publish too.
+
+  it('a catalog-author can draft a scenario but is refused publishing it', async () => {
+    await uploadAndApply('catalog-author');
+
+    const create = await request(app.getHttpServer())
+      .post('/api/v1/catalog/scenarios')
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`)
+      .send({
+        slug: 'overheat-watch', equipmentClassSlug: CLASS_SLUG, name: 'Overheat Watch',
+        requiredSignals: ['coolant_temp_c'],
+      });
+    expect(create.status).toBe(201);
+
+    const publish = await request(app.getHttpServer())
+      .post(`/api/v1/catalog/scenarios/${create.body.slug}/publish`)
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`);
+    expect(publish.status).toBe(403);
+  });
+
+  it('master admin can publish a scenario a catalog-author drafted', async () => {
+    await uploadAndApply('catalog-author');
+
+    const create = await request(app.getHttpServer())
+      .post('/api/v1/catalog/scenarios')
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`)
+      .send({
+        slug: 'overheat-watch-2', equipmentClassSlug: CLASS_SLUG, name: 'Overheat Watch',
+        requiredSignals: ['coolant_temp_c'],
+      });
+    expect(create.status).toBe(201);
+
+    const publish = await request(app.getHttpServer())
+      .post(`/api/v1/catalog/scenarios/${create.body.slug}/publish`)
+      .set('Authorization', `Bearer ${bearer('master-admin')}`);
+    expect(publish.status).toBe(201);
+    expect(publish.body.status).toBe('published');
+  });
+
+  it('a catalog-author can draft an alert-rule template but is refused publishing it', async () => {
+    await uploadAndApply('catalog-author');
+
+    const create = await request(app.getHttpServer())
+      .post('/api/v1/catalog/alert-templates')
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`)
+      .send({
+        slug: 'coolant-high', equipmentClassSlug: CLASS_SLUG, name: 'Coolant High',
+        trigger: 'signal-threshold', params: { signal: 'coolant_temp_c', max: 105 },
+      });
+    expect(create.status).toBe(201);
+
+    const publish = await request(app.getHttpServer())
+      .post(`/api/v1/catalog/alert-templates/${create.body.slug}/publish`)
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`);
+    expect(publish.status).toBe(403);
+  });
+
+  it('master admin can publish an alert-rule template a catalog-author drafted', async () => {
+    await uploadAndApply('catalog-author');
+
+    const create = await request(app.getHttpServer())
+      .post('/api/v1/catalog/alert-templates')
+      .set('Authorization', `Bearer ${bearer('catalog-author')}`)
+      .send({
+        slug: 'coolant-high-2', equipmentClassSlug: CLASS_SLUG, name: 'Coolant High',
+        trigger: 'signal-threshold', params: { signal: 'coolant_temp_c', max: 105 },
+      });
+    expect(create.status).toBe(201);
+
+    const publish = await request(app.getHttpServer())
+      .post(`/api/v1/catalog/alert-templates/${create.body.slug}/publish`)
       .set('Authorization', `Bearer ${bearer('master-admin')}`);
     expect(publish.status).toBe(201);
     expect(publish.body.status).toBe('published');
