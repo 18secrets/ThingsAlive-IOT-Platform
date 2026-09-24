@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 import { Public } from '../auth/decorators/public.decorator';
 import { CredentialService } from './services/credential.service';
+import { PlatformCredentialService } from './services/platform-credential.service';
 
 export class SignInDto {
   @IsEmail() email: string;
@@ -32,16 +33,29 @@ export class ResetRequestDto {
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly credentials: CredentialService) {}
+  constructor(
+    private readonly credentials: CredentialService,
+    private readonly platformCredentials: PlatformCredentialService,
+  ) {}
 
   @Post('sign-in')
   @Public('The route that produces a token cannot require one.')
   @ApiOperation({ summary: 'Exchange an email and password for a short access token' })
-  signIn(
+  async signIn(
     @Body() body: SignInDto,
     @Ip() ip: string,
     @Headers('user-agent') userAgent?: string,
   ) {
+    // Checked first, by a cheap indexed lookup on an email that already identifies a
+    // person across the whole platform (see UserService's own comment on app_user.
+    // email) — a platform credential and a tenant one for the same address would be
+    // two accounts nobody could tell apart at sign-in, so this order is what makes
+    // that collision fail loudly (a unique-email check at platform-user creation, not
+    // built yet) rather than picking one silently.
+    const platformUser = await this.platformCredentials.findByEmail(body.email);
+    if (platformUser) {
+      return this.platformCredentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
+    }
     return this.credentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
   }
 
@@ -59,11 +73,14 @@ export class AuthController {
   @Post('refresh')
   @Public('The access token being refreshed has expired by definition.')
   @ApiOperation({ summary: 'Rotate a refresh token for a new access token' })
-  refresh(
+  async refresh(
     @Body() body: RefreshDto,
     @Ip() ip: string,
     @Headers('user-agent') userAgent?: string,
   ) {
+    if (await this.platformCredentials.hasSession(body.refreshToken)) {
+      return this.platformCredentials.refresh(body.refreshToken, { ipAddress: ip, userAgent });
+    }
     return this.credentials.refresh(body.refreshToken, { ipAddress: ip, userAgent });
   }
 
@@ -71,7 +88,11 @@ export class AuthController {
   @Public('Signing out must work with an expired access token, which is the common case.')
   @ApiOperation({ summary: 'End this sign-in and every token descended from it' })
   async signOut(@Body() body: RefreshDto) {
-    await this.credentials.signOut(body.refreshToken);
+    if (await this.platformCredentials.hasSession(body.refreshToken)) {
+      await this.platformCredentials.signOut(body.refreshToken);
+    } else {
+      await this.credentials.signOut(body.refreshToken);
+    }
     return { signedOut: true };
   }
 

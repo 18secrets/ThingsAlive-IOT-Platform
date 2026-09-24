@@ -12,8 +12,10 @@ import { HealthController } from './health/health.controller';
 import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
@@ -25,6 +27,8 @@ import { IntelligenceModule } from './intelligence/intelligence.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { DeviceCatalogModule } from './device-catalog/device-catalog.module';
+import { EquipmentTemplateModule } from './equipment-template/equipment-template.module';
 import { PredictionModule } from './prediction/prediction.module';
 import { ActivationModule } from './activation/activation.module';
 import { ScopeModule } from './scope/scope.module';
@@ -69,13 +73,17 @@ export class AppModule {
               ScopeModule,
               ProjectionModule,
               CatalogModule,
+              CatalogImportModule,
               ClientCatalogModule,
               ActivationModule,
               PredictionModule,
               InventoryModule,
+              DeviceCatalogModule,
+              EquipmentTemplateModule,
               IdentityModule,
               TenancyModule,
               EquipmentModule,
+              SignalBindingModule,
               WorkModule,
               ShiftModule,
               UtilizationModule,

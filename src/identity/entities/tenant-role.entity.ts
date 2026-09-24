@@ -53,6 +53,15 @@ export class TenantRole {
   scopeShape: ScopeShape;
 
   /**
+   * Which pages this role's holders see — a UI concern, not an API one. Checked
+   * against a fixed vocabulary the same way `capabilities` is, and deliberately a
+   * separate column: a page can show controls backed by several different
+   * capabilities, and narrowing this never narrows what the API itself allows.
+   */
+  @Column({ name: 'allowed_tabs', type: 'text', array: true, default: () => `'{}'::text[]` })
+  allowedTabs: string[];
+
+  /**
    * A role the account cannot delete, because deleting it would strand its holders
    * with no role at all. It can still be renamed and re-scoped: it is the client's.
    */

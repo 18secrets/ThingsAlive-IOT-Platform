@@ -18,6 +18,12 @@ describe('auth matrix (P0-03 / P0-04)', () => {
   beforeAll(async () => {
     process.env.AUTH_JWT_SECRET = 'test-secret';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
+    // Set to '' explicitly, not left alone: `ConfigModule.forRoot` loads .env
+    // through dotenv, which fills in only variables that are unset. A developer's
+    // own AUTH_JWT_ISSUER would otherwise leak in here, and every token this file
+    // signs below carries no issuer to match it with — every "protected route"
+    // assertion would fail with 401 for the wrong reason.
+    process.env.AUTH_JWT_ISSUER = '';
     // These suites exercise HTTP behaviour and need no database. Saying so
     // explicitly beats depending on whether DB_HOST happens to be set.
     app = await createApp({ database: false });

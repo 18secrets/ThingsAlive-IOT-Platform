@@ -48,12 +48,12 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
     ds = moduleRef.get(DataSource);
     projections = moduleRef.get(ProjectionService);
     telemetry = moduleRef.get(TelemetryService);
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
   beforeEach(async () => {
-    await resetSchema();
+    await truncateData();
   });
 
   /**
@@ -68,6 +68,24 @@ describeDb('projection + telemetry (P1-41 … P1-50)', () => {
   async function resetSchema(): Promise<void> {
     await owner.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     await owner.runMigrations({ transaction: 'all' });
+    await owner.getRepository(TenantMap).save({
+      sourceSystem: SOURCE, externalClientId: 'client-7', tenantId: 'tenant-7', displayName: 'Cemdindia',
+    });
+  }
+
+  /**
+   * Only the tables this suite writes to. Migrations seed reference data — the
+   * catalog, sensor definitions, the roles a fresh tenant gets — and re-running every
+   * migration per test was paying for all of that on every single one, for a suite
+   * that reads none of it. No foreign key from outside this list points at any of
+   * these six tables, so CASCADE has nothing else to reach.
+   */
+  async function truncateData(): Promise<void> {
+    await owner.query(`
+      TRUNCATE TABLE
+        "equipment_projection", "device_projection", "sensor_map_projection",
+        "projection_rejection", "telemetry_reading", "tenant_map"
+      RESTART IDENTITY CASCADE`);
     await owner.getRepository(TenantMap).save({
       sourceSystem: SOURCE, externalClientId: 'client-7', tenantId: 'tenant-7', displayName: 'Cemdindia',
     });

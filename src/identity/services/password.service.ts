@@ -3,17 +3,6 @@ import { compareSync, hashSync } from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 
 /**
- * Twelve, and no composition rules (task P1-88).
- *
- * Requiring an uppercase, a digit and a symbol reliably produces `Password1!` and
- * nothing else: the rules are satisfied by the most predictable string that satisfies
- * them. Length is the property that actually costs an attacker something, so length
- * is what is required — this follows the current NIST guidance rather than the
- * habits that predate it.
- */
-export const MINIMUM_PASSWORD_LENGTH = 12;
-
-/**
  * Deliberately short. A serious check needs a real breached-password corpus, which is
  * a dependency and a decision of its own (P1-90); this stops the handful that would
  * otherwise be chosen on a Friday afternoon and does not pretend to be more.
@@ -21,6 +10,10 @@ export const MINIMUM_PASSWORD_LENGTH = 12;
 const OBVIOUS = new Set([
   'password', 'passw0rd', 'password123', 'password1234', '123456789012',
   'qwertyuiop', 'letmein12345', 'iloveyou1234', 'administrator', 'thingsalive',
+  // The exact string composition rules push everybody towards: one of each
+  // required class and nothing else. Without this, the class requirements
+  // below would make this the single most common password on the platform.
+  'password1!',
 ]);
 
 /**
@@ -51,16 +44,22 @@ export class PasswordService {
 
   assertAcceptable(password: string, email?: string): void {
     const value = password ?? '';
-    if (value.length < MINIMUM_PASSWORD_LENGTH) {
-      throw new BadRequestException(
-        `A password needs at least ${MINIMUM_PASSWORD_LENGTH} characters. `
-        + 'Length is what makes one hard to guess; there are no rules about symbols.',
-      );
-    }
     if (value.length > 200) {
       // Not a strength rule. bcrypt ignores everything past 72 bytes, and an
       // unbounded input is a cheap way to make the server do work on request.
       throw new BadRequestException('That password is too long.');
+    }
+    if (!/[A-Z]/.test(value)) {
+      throw new BadRequestException('A password needs at least one uppercase letter.');
+    }
+    if (!/[a-z]/.test(value)) {
+      throw new BadRequestException('A password needs at least one lowercase letter.');
+    }
+    if (!/[0-9]/.test(value)) {
+      throw new BadRequestException('A password needs at least one number.');
+    }
+    if (!/[^A-Za-z0-9]/.test(value)) {
+      throw new BadRequestException('A password needs at least one special character.');
     }
     if (OBVIOUS.has(value.toLowerCase())) {
       throw new BadRequestException('That password is one of the first anybody tries.');

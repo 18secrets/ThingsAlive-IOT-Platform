@@ -5,6 +5,8 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentClassProfile } from '../entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
+import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
+import { validateParams } from '../../alert/services/alert-rules';
 
 type ClassDraft = Partial<Pick<EquipmentClassProfile,
   'name' | 'description' | 'category' | 'expectedSignals' | 'failureModes' | 'defaultThresholds'>>;
@@ -12,6 +14,10 @@ type ClassDraft = Partial<Pick<EquipmentClassProfile,
 type ScenarioDraft = Partial<Pick<ScenarioDefinition,
   'name' | 'description' | 'severity' | 'tier' | 'requiredSignals'
   | 'minimumHistoryDays' | 'parameters' | 'equipmentClassSlug'>>;
+
+type AlertTemplateDraft = Partial<Pick<AlertRuleTemplate,
+  'name' | 'description' | 'trigger' | 'params' | 'severity' | 'enabledOnCopy'
+  | 'equipmentClassSlug'>>;
 
 /**
  * Template authoring, for Things Alive (tasks P1-01, P1-02).
@@ -37,6 +43,7 @@ export class CatalogAuthoringService {
     @InjectRepository(EquipmentClassProfile) private readonly classes: Repository<EquipmentClassProfile>,
     @InjectRepository(ScenarioDefinition) private readonly scenarios: Repository<ScenarioDefinition>,
     @InjectRepository(SignalAlias) private readonly aliases: Repository<SignalAlias>,
+    @InjectRepository(AlertRuleTemplate) private readonly alertTemplates: Repository<AlertRuleTemplate>,
   ) {}
 
   async createClass(scope: RequestScope, slug: string, draft: ClassDraft): Promise<EquipmentClassProfile> {
@@ -155,6 +162,100 @@ export class CatalogAuthoringService {
     this.logger.warn(`${scope.userId} removed alias "${key}" (${sourceSystem}).`);
   }
 
+  // ---- What the authoring console reads (task P1-133) ---------------------------
+  //
+  // Every version and every status, because the authoring screen is where a draft is
+  // supposed to be visible. These are separate from the reads in CatalogService, which
+  // narrow by entitlement and return published rows only — and must keep doing so.
+
+  allClasses(): Promise<EquipmentClassProfile[]> {
+    return this.classes.find({ order: { slug: 'ASC', version: 'DESC' } });
+  }
+
+  allScenarios(equipmentClassSlug?: string): Promise<ScenarioDefinition[]> {
+    return this.scenarios.find({
+      where: equipmentClassSlug ? { equipmentClassSlug } : {},
+      order: { slug: 'ASC', version: 'DESC' },
+    });
+  }
+
+  allAlertTemplates(equipmentClassSlug?: string): Promise<AlertRuleTemplate[]> {
+    return this.alertTemplates.find({
+      where: equipmentClassSlug ? { equipmentClassSlug } : {},
+      order: { slug: 'ASC', version: 'DESC' },
+    });
+  }
+
+  allAliases(): Promise<SignalAlias[]> {
+    return this.aliases.find({ order: { sourceSystem: 'ASC', alias: 'ASC' } });
+  }
+
+  // ---- Alert rule templates (task P1-128) --------------------------------------
+  //
+  // The fourth kind of catalog content, and it works exactly like the other three on
+  // purpose. A customer should not have to learn that scenarios version one way and
+  // alert rules another, and a second copy mechanism is a second thing to get wrong.
+
+  async createAlertTemplate(
+    scope: RequestScope, slug: string, draft: AlertTemplateDraft,
+  ): Promise<AlertRuleTemplate> {
+    if (await this.alertTemplates.findOne({ where: { slug } })) {
+      throw new BadRequestException(`Alert template "${slug}" already exists. Edit it to create a new version.`);
+    }
+    if (!draft.equipmentClassSlug) {
+      throw new BadRequestException('An alert template must name the equipment class it belongs to.');
+    }
+    if (!draft.trigger) throw new BadRequestException('An alert template needs a trigger.');
+
+    await this.requireAlertTemplateSane(draft.equipmentClassSlug, draft);
+    this.logger.log(`${scope.userId} created alert template "${slug}".`);
+    return this.alertTemplates.save(this.alertTemplates.create({
+      slug, version: 1, status: 'draft', publishedAt: null,
+      equipmentClassSlug: draft.equipmentClassSlug,
+      name: draft.name ?? slug,
+      description: draft.description ?? null,
+      trigger: draft.trigger,
+      params: draft.params ?? ({} as any),
+      severity: draft.severity ?? ('high' as any),
+      enabledOnCopy: draft.enabledOnCopy ?? true,
+      createdBy: scope.userId,
+    }));
+  }
+
+  async editAlertTemplate(
+    scope: RequestScope, slug: string, draft: AlertTemplateDraft,
+  ): Promise<AlertRuleTemplate> {
+    const working = await this.workingAlertTemplate(slug);
+    Object.assign(working, draft);
+    await this.requireAlertTemplateSane(working.equipmentClassSlug, working);
+    this.logger.log(`${scope.userId} edited alert template "${slug}" v${working.version}.`);
+    return this.alertTemplates.save(working);
+  }
+
+  async publishAlertTemplate(scope: RequestScope, slug: string): Promise<AlertRuleTemplate> {
+    const draft = await this.alertTemplates.findOne({
+      where: { slug, status: 'draft' }, order: { version: 'DESC' },
+    });
+    if (!draft) throw new NotFoundException(`No draft of alert template "${slug}" to publish.`);
+    await this.requireAlertTemplateSane(draft.equipmentClassSlug, draft);
+    draft.status = 'published';
+    draft.publishedAt = new Date();
+    this.logger.log(`${scope.userId} published alert template "${slug}" v${draft.version}.`);
+    return this.alertTemplates.save(draft);
+  }
+
+  /**
+   * Stops offering it. Copies already in client accounts keep running, and keep being
+   * the client's — retiring a template has never meant reaching into an account.
+   */
+  async retireAlertTemplate(scope: RequestScope, slug: string): Promise<AlertRuleTemplate[]> {
+    const published = await this.alertTemplates.find({ where: { slug, status: 'published' } });
+    if (!published.length) throw new NotFoundException(`No published alert template "${slug}" to retire.`);
+    for (const row of published) row.status = 'retired';
+    this.logger.warn(`${scope.userId} retired alert template "${slug}". Existing copies keep running.`);
+    return this.alertTemplates.save(published);
+  }
+
   /** The draft in progress, or a fresh fork of the current published version. */
   private async workingClass(slug: string): Promise<EquipmentClassProfile> {
     const draft = await this.classes.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
@@ -180,6 +281,45 @@ export class CatalogAuthoringService {
       ...published, id: undefined as any,
       version: published.version + 1, status: 'draft', publishedAt: null,
     });
+  }
+
+  private async workingAlertTemplate(slug: string): Promise<AlertRuleTemplate> {
+    const draft = await this.alertTemplates.findOne({
+      where: { slug, status: 'draft' }, order: { version: 'DESC' },
+    });
+    if (draft) return draft;
+
+    const published = await this.alertTemplates.findOne({ where: { slug }, order: { version: 'DESC' } });
+    if (!published) throw new NotFoundException(`No alert template "${slug}".`);
+
+    return this.alertTemplates.create({
+      ...published, id: undefined as any,
+      version: published.version + 1, status: 'draft', publishedAt: null,
+    });
+  }
+
+  /**
+   * The template is checked by the same function that checks a client's own rule.
+   *
+   * A template that passes here and fails on copy would be a rule Things Alive shipped
+   * that no account can hold — discovered at grant time, in front of a customer, for a
+   * mistake made weeks earlier by somebody else.
+   *
+   * The signal check is the scenario rule again: a threshold on a signal the class does
+   * not declare copies into every account and never fires, and the reason is invisible
+   * from inside the account, because the class is ours.
+   */
+  private async requireAlertTemplateSane(
+    classSlug: string, draft: AlertTemplateDraft,
+  ): Promise<void> {
+    if (!draft.trigger) throw new BadRequestException('An alert template needs a trigger.');
+    const problem = validateParams(draft.trigger, draft.params ?? ({} as any));
+    if (problem) throw new BadRequestException(problem);
+
+    const watched = (draft.params as { signal?: string } | undefined)?.signal;
+    if (draft.trigger === 'signal-threshold' && watched) {
+      await this.requireDeclaredSignals(classSlug, [watched]);
+    }
   }
 
   /**

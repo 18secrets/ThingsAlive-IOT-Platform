@@ -36,6 +36,19 @@ export interface SignalThresholdParams {
   min?: number | null;
 }
 
+/**
+ * The field names above, kept in sync with the interface by the compiler rather than
+ * by memory: adding or removing a field from `SignalThresholdParams` without updating
+ * this object fails to type-check. Exported so anything staging threshold data outside
+ * this module — the catalog import template, in particular — can be checked against
+ * the same list instead of drifting out of sync with it by hand.
+ */
+const SIGNAL_THRESHOLD_PARAM_KEY_SET: Record<keyof SignalThresholdParams, true> = {
+  signal: true, max: true, min: true,
+};
+export const SIGNAL_THRESHOLD_PARAM_KEYS = Object.keys(SIGNAL_THRESHOLD_PARAM_KEY_SET) as
+  (keyof SignalThresholdParams)[];
+
 export interface NoTelemetryParams {
   /** Nothing to configure. A shift that produced no readings at all fires it. */
   reserved?: never;

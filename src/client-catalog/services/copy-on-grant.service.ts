@@ -2,15 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../../catalog/entities/scenario-definition.entity';
+import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
+import { AlertRule } from '../../alert/entities/alert-rule.entity';
 import { withTenantId } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
-import { classContentChecksum, scenarioContentChecksum } from './provenance';
+import { alertRuleContentChecksum, classContentChecksum, scenarioContentChecksum } from './provenance';
 
 export interface CopyResult {
   classSlug: string;
   templateVersion: number;
   scenariosCopied: number;
+  alertRulesCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -49,6 +52,7 @@ export class CopyOnGrantService {
     }
 
     const scenarios = await this.latestPublishedScenarios(templateSlug);
+    const alertTemplates = await this.latestPublishedAlertTemplates(templateSlug);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
@@ -61,6 +65,7 @@ export class CopyOnGrantService {
           classSlug: existing.slug,
           templateVersion: existing.templateVersion ?? template.version,
           scenariosCopied: 0,
+          alertRulesCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -109,13 +114,49 @@ export class CopyOnGrantService {
         copied += 1;
       }
 
+      // Alert rules, the fourth kind of catalog content (task P1-128). They copy last
+      // because a rule can name a scenario, and a rule pointing at a scenario that is
+      // not there yet is a rule that looks configured and never fires.
+      const rules = m.getRepository(AlertRule);
+      let rulesCopied = 0;
+      for (const t of alertTemplates) {
+        const already = await rules.findOne({ where: { tenantId, slug: t.slug } });
+        if (already) continue;
+        await rules.save(rules.create({
+          tenantId,
+          slug: t.slug,
+          name: t.name,
+          description: t.description,
+          trigger: t.trigger,
+          params: t.params,
+          // Scoped to the class it came from, not to the account. A rule authored about
+          // generators watching the account would fire on the air compressors too.
+          appliesTo: 'equipment-class',
+          equipmentClassSlug: template.slug,
+          plantId: null,
+          sourceSystem: null,
+          externalId: null,
+          severity: t.severity,
+          enabled: t.enabledOnCopy,
+          templateSlug: t.slug,
+          templateVersion: t.version,
+          templateChecksum: alertRuleContentChecksum({ ...t, enabled: t.enabledOnCopy }),
+          copiedAt: now,
+          createdBy: copiedBy,
+          updatedBy: copiedBy,
+        }));
+        rulesCopied += 1;
+      }
+
       this.logger.log(
-        `Copied "${template.slug}" v${template.version} and ${copied} scenario(s) to tenant ${tenantId}.`,
+        `Copied "${template.slug}" v${template.version}, ${copied} scenario(s) and `
+        + `${rulesCopied} alert rule(s) to tenant ${tenantId}.`,
       );
       return {
         classSlug: template.slug,
         templateVersion: template.version,
         scenariosCopied: copied,
+        alertRulesCopied: rulesCopied,
         alreadyPresent: false,
       };
     });
@@ -137,6 +178,19 @@ export class CopyOnGrantService {
       order: { slug: 'ASC', version: 'DESC' },
     });
     const latest = new Map<string, ScenarioDefinition>();
+    for (const row of rows) {
+      const seen = latest.get(row.slug);
+      if (!seen || row.version > seen.version) latest.set(row.slug, row);
+    }
+    return [...latest.values()];
+  }
+
+  private async latestPublishedAlertTemplates(classSlug: string): Promise<AlertRuleTemplate[]> {
+    const rows = await this.ds.getRepository(AlertRuleTemplate).find({
+      where: { equipmentClassSlug: classSlug, status: 'published' },
+      order: { slug: 'ASC', version: 'DESC' },
+    });
+    const latest = new Map<string, AlertRuleTemplate>();
     for (const row of rows) {
       const seen = latest.get(row.slug);
       if (!seen || row.version > seen.version) latest.set(row.slug, row);

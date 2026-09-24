@@ -46,6 +46,10 @@ export class DeviceInventory {
   @Column({ type: 'text', nullable: true })
   model: string | null;
 
+  /** The device profile this was registered against — nullable, same as `model`. */
+  @Column({ name: 'tool_mapping_id', type: 'uuid', nullable: true })
+  toolMappingId: string | null;
+
   /**
    * The delivery this device arrived in. Kept because hardware faults are
    * overwhelmingly correlated by batch — the question "what else came in that box"

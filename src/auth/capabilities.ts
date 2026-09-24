@@ -20,11 +20,16 @@ export type Capability =
   | 'action.assign'
   | 'catalog.read'
   | 'catalog.write'
+  | 'catalog.publish'
   | 'client-catalog.read'
   | 'client-catalog.write'
   | 'device.manage'
   | 'device.read'
   | 'device.claim'
+  | 'device-catalog.read'
+  | 'device-catalog.write'
+  | 'equipment-template.read'
+  | 'equipment-template.write'
   | 'prediction.read'
   | 'prediction.run'
   | 'utilization.read'
@@ -61,9 +66,17 @@ const GRANTS: Record<Capability, readonly string[]> = {
     'super admin', 'admin', 'operational', 'support',
     'master-admin', 'catalog-author', 'platform-support',
   ],
-  // Authoring the *templates*. Things Alive only: the catalog is what Things Alive
-  // sells, and a customer editing it would be editing the product.
+  // Authoring the *templates* — loading content, still a draft. Things Alive only:
+  // the catalog is what Things Alive sells, and a customer editing it would be
+  // editing the product. Separate from `catalog.publish` (task QPA2): a
+  // catalog-author can build and stage a version, but making it grantable to a
+  // tenant is a narrower act than writing one, the same reason `scenario.activate`
+  // is not implied by `scenario.author`.
   'catalog.write': ['master-admin', 'catalog-author'],
+  // Publishing a draft version so tenants can be granted it. Master admin alone —
+  // a catalog-author who could also publish could ship what nobody with broader
+  // authority reviewed.
+  'catalog.publish': ['master-admin'],
   // Reading the *client's own copies*. Every role inside the tenant; Things Alive
   // roles are absent on purpose — a platform role reaching a client's copy goes
   // through the audited cross-tenant path, not through an ordinary read.
@@ -86,6 +99,28 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // Fitting a device to a machine and taking it off again. The customer's act, not
   // ours — nobody at Things Alive knows which generator the logger ended up on.
   'device.claim': ['super admin', 'admin'],
+  // Sensors, tool mappings and their categories: the hardware-wiring reference data
+  // devices are registered against. Distinct from `catalog.write` (prediction
+  // templates, also grants catalog-author) and `device.manage` (the stock ledger's
+  // commercial acts) even though today all three resolve to master-admin alone.
+  'device-catalog.write': ['master-admin'],
+  // Seeing that same reference data — what a sensor's parameters are, what
+  // categories exist. A tenant role holds this (granted explicitly in its own
+  // `capabilities`, per ROLE_TEMPLATES) so a client can see which sensors are
+  // attached to their equipment templates without being able to add or rename one
+  // in the shared catalog.
+  'device-catalog.read': ['master-admin'],
+  // Common onboarding fields (manufacturer, engine type, tank capacity...) for a
+  // named/categorised kind of equipment. Deliberately separate from `catalog.write`:
+  // EquipmentClassProfile is the prediction catalog (expected signals, failure
+  // modes) and stays untouched by this — a template here is onboarding convenience,
+  // not a product a tenant is entitled to.
+  'equipment-template.write': ['master-admin'],
+  // Seeing the templates and their attached sensors/alert-rules/KPI/predictive
+  // config — what a client's Equipment Template page reads to show Master Admin's
+  // defaults alongside their own additions. Granted to tenant roles the same way as
+  // `device-catalog.read` above; editing the template itself stays master-admin only.
+  'equipment-template.read': ['master-admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it

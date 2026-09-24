@@ -74,6 +74,15 @@ describe('capabilities', () => {
     }
   });
 
+  it('splits catalog.write from catalog.publish: master admin holds both, catalog-author only the first', () => {
+    // Loading content stays broad; publishing a draft version so tenants can be
+    // granted it is narrower (task QPA2).
+    expect(can(scopeWith('master-admin'), 'catalog.write')).toBe(true);
+    expect(can(scopeWith('master-admin'), 'catalog.publish')).toBe(true);
+    expect(can(scopeWith('catalog-author'), 'catalog.write')).toBe(true);
+    expect(can(scopeWith('catalog-author'), 'catalog.publish')).toBe(false);
+  });
+
   it('lets every role inside a tenant read the catalog', () => {
     // What they see is narrowed by the entitlement join, not by the role. Those are
     // different questions, and conflating them is how a role silently grants access

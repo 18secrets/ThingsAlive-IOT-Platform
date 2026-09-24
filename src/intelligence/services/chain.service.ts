@@ -114,6 +114,22 @@ export class ChainService {
   }
 
   /**
+   * Every chain version and status, for the authoring console (task P1-133).
+   *
+   * Separate from `publishedFor` on purpose, and behind `catalog.write` at the route.
+   * The client-facing read returns published chains only and must keep doing so — a
+   * tenant running against a draft chain would be scored on physics nobody has stood
+   * behind yet. But the authoring screen is where a draft has to be visible, and
+   * without this a chain could be drafted and then never found again.
+   */
+  async allFor(equipmentClassSlug?: string): Promise<CausalChainDefinition[]> {
+    return this.ds.getRepository(CausalChainDefinition).find({
+      where: equipmentClassSlug ? { equipmentClassSlug } : {},
+      order: { slug: 'ASC', version: 'DESC' },
+    });
+  }
+
+  /**
    * What every chain bound to this machine's class says about it right now.
    *
    * A machine with no class gets no chains and is told so, rather than being run

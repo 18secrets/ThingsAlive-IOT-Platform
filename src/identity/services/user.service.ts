@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { DataSource, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
-import { AppUser } from '../entities/app-user.entity';
+import { AppUser, UserStatus } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
 import { UserSession } from '../entities/user-session.entity';
@@ -16,7 +16,33 @@ export interface InviteInput {
   equipment?: { sourceSystem: string; equipmentExternalId: string }[];
 }
 
-export interface UserView extends AppUser {
+/**
+ * What GET /identity/users and every write here are allowed to return.
+ *
+ * Deliberately not `extends AppUser`: a type that mirrors the entity invites
+ * building the view by spreading it, which is exactly how `passwordHash` (and
+ * `failedAttempts`/`lockedUntil`, internal lockout bookkeeping nobody outside
+ * `CredentialService` needs) ended up on every response from this controller.
+ * `view()` below selects each field by name instead, so a new entity column
+ * needs a deliberate decision to appear here — never an accident of `{...user}`.
+ */
+export interface UserView {
+  id: string;
+  tenantId: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  roleSlug: string;
+  status: UserStatus;
+  externalUserId: string | null;
+  externalSourceSystem: string | null;
+  invitedBy: string | null;
+  invitedAt: Date | null;
+  activatedAt: Date | null;
+  suspendedAt: Date | null;
+  suspendedReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   plants: { plantId: string }[];
   equipment: { sourceSystem: string; equipmentExternalId: string }[];
 }
@@ -233,7 +259,12 @@ export class UserService {
       where: { tenantId, userId: user.id }, order: { equipmentExternalId: 'ASC' },
     });
     return {
-      ...user,
+      id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, phone: user.phone,
+      roleSlug: user.roleSlug, status: user.status,
+      externalUserId: user.externalUserId, externalSourceSystem: user.externalSourceSystem,
+      invitedBy: user.invitedBy, invitedAt: user.invitedAt, activatedAt: user.activatedAt,
+      suspendedAt: user.suspendedAt, suspendedReason: user.suspendedReason,
+      createdAt: user.createdAt, updatedAt: user.updatedAt,
       plants: plants.map((p) => ({ plantId: p.plantId })),
       equipment: equipment.map((e) => ({ sourceSystem: e.sourceSystem, equipmentExternalId: e.equipmentExternalId })),
     };

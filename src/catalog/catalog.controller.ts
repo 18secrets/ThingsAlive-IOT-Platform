@@ -1,6 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray, IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -10,13 +13,35 @@ import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
 import { RecommendationService } from './services/recommendation.service';
 
+export class ExpectedSignalDto {
+  @IsString() @IsNotEmpty() signal: string;
+  @IsOptional() @IsString() unit: string | null = null;
+  @IsBoolean() required: boolean;
+  @IsOptional() @IsString() description?: string;
+}
+
+export class FailureModeDto {
+  @IsString() @IsNotEmpty() code: string;
+  @IsString() @IsNotEmpty() name: string;
+  @IsString() @IsNotEmpty() symptom: string;
+  @IsArray() @IsString({ each: true }) signals: string[];
+}
+
 export class TemplateClassDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
-  @IsOptional() expectedSignals?: any[];
-  @IsOptional() failureModes?: any[];
-  @IsOptional() defaultThresholds?: Record<string, unknown>;
+  // Bare `any[]` here used to reach the service as a corrupted `[[]]` — with
+  // no @Type() telling class-transformer what an array element is, its
+  // implicit-conversion pass (see main.ts's ValidationPipe) reduces every
+  // object item to an empty array instead of leaving it alone. The same
+  // class of bug this file already fixed once for a keyed slug; nested
+  // arrays need their own @ValidateNested, not just the property itself.
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExpectedSignalDto)
+  expectedSignals?: ExpectedSignalDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FailureModeDto)
+  failureModes?: FailureModeDto[];
+  @IsOptional() @IsObject() defaultThresholds?: Record<string, unknown>;
 }
 
 export class TemplateScenarioDto {
@@ -28,6 +53,38 @@ export class TemplateScenarioDto {
   @IsOptional() requiredSignals?: string[];
   @IsOptional() minimumHistoryDays?: number;
   @IsOptional() parameters?: any[];
+}
+
+/**
+ * Creating a template sends its slug in the body; editing one names it in the path.
+ *
+ * The create routes used to read that slug with a second `@Body('slug')` parameter
+ * beside a DTO that never declared it — and a pipe set to whitelist +
+ * forbidNonWhitelisted strips an undeclared property and then refuses the request for
+ * carrying it. Both routes answered 400 to every correct call. Declaring the property
+ * is what makes the body legal; reading it off the DTO is what stops the two halves
+ * from drifting apart again.
+ */
+export class CreateTemplateClassDto extends TemplateClassDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
+export class CreateTemplateScenarioDto extends TemplateScenarioDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
+export class AlertTemplateDto {
+  @IsOptional() @IsString() equipmentClassSlug?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() trigger?: any;
+  @IsOptional() params?: any;
+  @IsOptional() @IsString() severity?: any;
+  @IsOptional() @IsBoolean() enabledOnCopy?: boolean;
+}
+
+export class CreateAlertTemplateDto extends AlertTemplateDto {
+  @IsString() @IsNotEmpty() slug: string;
 }
 
 export class AliasDto {
@@ -129,16 +186,21 @@ export class CatalogController {
   // service behind them holds no repository for those tables, so "master admin
   // cannot edit a client's settings" is a property of the wiring rather than a rule
   // somebody has to remember to check.
+  //
+  // Every route needs `catalog.write` except the three `*/publish` routes (task
+  // QPA2): loading content — creating, editing, importing — always writes a draft;
+  // publishing a class version, a scenario or an alert-rule template is what makes
+  // it grantable to a tenant, and every one of those is the same boundary —
+  // `catalog.publish`, master admin alone — not just the class version.
 
   @Post('equipment-classes')
   @Requires('catalog.write')
   @ApiOperation({ summary: 'Create a template class as a draft' })
   createClass(
     @CurrentScope() scope: RequestScope,
-    @Body('slug') slug: string,
-    @Body() dto: TemplateClassDto,
+    @Body() dto: CreateTemplateClassDto,
   ) {
-    return this.authoring.createClass(scope, slug, dto);
+    return this.authoring.createClass(scope, dto.slug, dto);
   }
 
   @Patch('equipment-classes/:slug')
@@ -153,7 +215,7 @@ export class CatalogController {
   }
 
   @Post('equipment-classes/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish the draft. Existing client copies are unaffected' })
   publishClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishClass(scope, slug);
@@ -170,10 +232,9 @@ export class CatalogController {
   @Requires('catalog.write')
   createScenario(
     @CurrentScope() scope: RequestScope,
-    @Body('slug') slug: string,
-    @Body() dto: TemplateScenarioDto,
+    @Body() dto: CreateTemplateScenarioDto,
   ) {
-    return this.authoring.createScenario(scope, slug, dto);
+    return this.authoring.createScenario(scope, dto.slug, dto);
   }
 
   @Patch('scenarios/:slug')
@@ -187,7 +248,7 @@ export class CatalogController {
   }
 
   @Post('scenarios/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   publishScenario(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishScenario(scope, slug);
   }
@@ -209,6 +270,87 @@ export class CatalogController {
     @Param('alias') alias: string,
   ) {
     return this.authoring.deleteAlias(scope, sourceSystem, alias);
+  }
+
+  // ---- What the authoring console reads (task P1-133) ---------------------------
+  //
+  // `GET /catalog/equipment-classes` returns published classes only, and correctly: a
+  // tenant that could see a draft could activate something Things Alive has not
+  // finished writing. But the authoring screen is the one place drafts must be
+  // visible, and until now nothing could list them — a draft could be created and
+  // then never found again except by knowing its slug.
+  //
+  // A separate route rather than a flag on the existing one. A `?includeDrafts=true`
+  // that a client could also send is one forgotten capability check away from being
+  // the leak the published-only rule exists to prevent.
+
+  @Get('authoring/equipment-classes')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every class version, draft and published — Things Alive only' })
+  authoringClasses() {
+    return this.authoring.allClasses();
+  }
+
+  @Get('authoring/scenarios')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every scenario version, draft and published' })
+  authoringScenarios(@Query('equipmentClassSlug') classSlug?: string) {
+    return this.authoring.allScenarios(classSlug);
+  }
+
+  @Get('authoring/alert-templates')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every alert-rule template version, draft and published' })
+  authoringAlertTemplates(@Query('equipmentClassSlug') classSlug?: string) {
+    return this.authoring.allAlertTemplates(classSlug);
+  }
+
+  @Get('authoring/signal-aliases')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Every signal alias' })
+  authoringAliases() {
+    return this.authoring.allAliases();
+  }
+
+  // ---- Alert rule templates (task P1-128) ---------------------------------------
+  //
+  // What Things Alive knows is worth being told about, for a kind of machine. Granting
+  // the class copies these into the account as the client's own rules, which they then
+  // edit and Things Alive cannot.
+
+  @Post('alert-templates')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Create an alert-rule template as a draft' })
+  createAlertTemplate(
+    @CurrentScope() scope: RequestScope,
+    @Body() dto: CreateAlertTemplateDto,
+  ) {
+    return this.authoring.createAlertTemplate(scope, dto.slug, dto);
+  }
+
+  @Patch('alert-templates/:slug')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Edit the draft, forking one from the published version if needed' })
+  editAlertTemplate(
+    @CurrentScope() scope: RequestScope,
+    @Param('slug') slug: string,
+    @Body() dto: AlertTemplateDto,
+  ) {
+    return this.authoring.editAlertTemplate(scope, slug, dto);
+  }
+
+  @Post('alert-templates/:slug/publish')
+  @Requires('catalog.publish')
+  @ApiOperation({ summary: 'Publish it. Accounts granted the class from now on get a copy' })
+  publishAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.publishAlertTemplate(scope, slug);
+  }
+
+  @Post('alert-templates/:slug/retire')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Stop shipping it. Copies already in accounts keep running' })
+  retireAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.retireAlertTemplate(scope, slug);
   }
 
   @Post('entitlements/:id/revoke')

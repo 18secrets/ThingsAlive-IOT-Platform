@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/calculation-result.v1.json",
+  "title": "CalculationResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_id", "equipment_id", "definition_version", "context",
+    "window", "status", "reasons", "computed_at", "estimate_kind"
+  ],
+  "properties": {
+    "result_id": { "type": "string", "format": "uuid" },
+    "equipment_id": { "type": "string", "format": "uuid" },
+    "definition_version": { "type": "string" },
+    "context": { "enum": ["live", "simulation"] },
+    "run_id": {
+      "oneOf": [{ "type": "string", "format": "uuid" }, { "type": "null" }],
+      "description": "Required for simulation. A simulation result never becomes live evidence."
+    },
+    "window": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      }
+    },
+    "input_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "binding_id": { "type": "string", "format": "uuid" },
+          "binding_version": { "type": "integer" },
+          "role": { "type": "string" }
+        }
+      }
+    },
+    "parameter_set_version": { "type": ["string", "null"] },
+    "source_reading_range_hash": { "type": ["string", "null"] },
+    "value": { "type": ["number", "null"] },
+    "unit": { "type": ["string", "null"] },
+    "method": { "type": ["string", "null"] },
+    "status": {
+      "enum": ["ready", "partial", "pending", "blocked", "error", "data_unavailable"]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "ready", "missing_inputs", "mapping_required", "quality_blocked",
+          "parameters_required", "validation_required", "unsupported_regime"
+        ]
+      }
+    },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "computed_at": { "type": "string", "format": "date-time" },
+    "source_as_of": {
+      "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+    },
+    "failure_probability": {
+      "type": "null",
+      "description": "Null unless an approved probability model produced it. A thermal crossing is not RUL; a rule deviation is not a probability."
+    },
+    "estimate_kind": { "type": "string" },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } }
+  }
+}

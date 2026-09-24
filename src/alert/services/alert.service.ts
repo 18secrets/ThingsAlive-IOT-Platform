@@ -6,6 +6,10 @@ import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AlertAppliesTo, AlertRule } from '../entities/alert-rule.entity';
 import { AlertEvent } from '../entities/alert-event.entity';
+import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
+import {
+  alertRuleContentChecksum, describeProvenance, Provenance,
+} from '../../client-catalog/services/provenance';
 import {
   AlertParams, AlertTrigger, evaluateRule, validateParams, WindowPrediction, WindowReading,
   WindowChain,
@@ -21,6 +25,7 @@ export interface RuleInput {
   plantId?: string | null;
   sourceSystem?: string | null;
   externalId?: string | null;
+  equipmentClassSlug?: string | null;
   severity?: Severity;
 }
 
@@ -57,11 +62,51 @@ export class AlertService {
 
   constructor(private readonly ds: DataSource) {}
 
-  async listRules(scope: RequestScope): Promise<AlertRule[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+  /**
+   * The account's rules, each saying where it came from (task P1-128).
+   *
+   * Three states a screen has to tell apart, and only one of them is visible in the
+   * row itself. A rule with no `templateSlug` is the client's own. A rule whose content
+   * still hashes to what was copied is the shipped one, untouched. A rule that hashes
+   * differently has been edited — and that is the state worth naming, because it is the
+   * one where "what did Things Alive ship?" and "what is running?" have different
+   * answers, which is exactly the question support is asked.
+   *
+   * The comparison happens here rather than in the browser because the checksum is
+   * computed by the same function that wrote it at copy time. A second implementation
+   * in the console would drift, and the failure would be silent: every copy would look
+   * edited, or none would.
+   */
+  async listRules(
+    scope: RequestScope,
+  ): Promise<(AlertRule & { provenance: Provenance })[]> {
+    const rules = await withTenantSession(this.ds, scope, (m) =>
       m.getRepository(AlertRule).find({
         where: { tenantId: scope.tenantId }, order: { name: 'ASC' },
       }));
+
+    // One query for every template these rules came from, rather than one per rule.
+    // An account with forty rules is ordinary and forty round trips for a listing is
+    // how a screen that felt fine in testing becomes the slow one in production.
+    const slugs = [...new Set(rules.map((r) => r.templateSlug).filter((s): s is string => !!s))];
+    const latest = new Map<string, number>();
+    if (slugs.length) {
+      const templates = await this.ds.getRepository(AlertRuleTemplate).find({
+        where: { slug: In(slugs), status: 'published' },
+        select: { slug: true, version: true },
+      });
+      for (const t of templates) {
+        latest.set(t.slug, Math.max(latest.get(t.slug) ?? 0, t.version));
+      }
+    }
+
+    return rules.map((rule) => Object.assign(rule, {
+      provenance: describeProvenance(
+        rule,
+        alertRuleContentChecksum(rule),
+        rule.templateSlug ? latest.get(rule.templateSlug) ?? null : null,
+      ),
+    }));
   }
 
   async createRule(scope: RequestScope, input: RuleInput): Promise<AlertRule> {
@@ -82,6 +127,7 @@ export class AlertService {
         plantId: input.plantId ?? null,
         sourceSystem: input.sourceSystem ?? null,
         externalId: input.externalId ?? null,
+        equipmentClassSlug: input.equipmentClassSlug ?? null,
         severity: input.severity ?? Severity.High,
         enabled: true,
         createdBy: scope.userId,
@@ -106,6 +152,8 @@ export class AlertService {
         plantId: input.plantId !== undefined ? input.plantId : rule.plantId,
         sourceSystem: input.sourceSystem !== undefined ? input.sourceSystem : rule.sourceSystem,
         externalId: input.externalId !== undefined ? input.externalId : rule.externalId,
+        equipmentClassSlug: input.equipmentClassSlug !== undefined
+          ? input.equipmentClassSlug : rule.equipmentClassSlug,
         severity: input.severity ?? rule.severity,
       };
       await this.validate(scope, merged);
@@ -273,21 +321,34 @@ export class AlertService {
   private async applicableTo(
     m: EntityManager, context: WindowContext, rules: AlertRule[],
   ): Promise<AlertRule[]> {
-    const needsPlant = rules.some((r) => r.appliesTo === 'plant');
-    const plantId = needsPlant
-      ? (await m.getRepository(EquipmentProfile).findOne({
+    // One read for both, because a rule scoped to a site and one scoped to a class
+    // both need the machine's own row, and asking twice for the same row in a loop
+    // that runs once per shift per machine is how a scorer gets slow quietly.
+    const needsProfile = rules.some(
+      (r) => r.appliesTo === 'plant' || r.appliesTo === 'equipment-class',
+    );
+    const profile = needsProfile
+      ? await m.getRepository(EquipmentProfile).findOne({
           where: {
             tenantId: context.tenantId,
             sourceSystem: context.sourceSystem,
             externalId: context.externalId,
           },
-          select: { plantId: true },
-        }))?.plantId ?? null
+          select: { plantId: true, equipmentClassSlug: true },
+        })
       : null;
+    const plantId = profile?.plantId ?? null;
+    const classSlug = profile?.equipmentClassSlug ?? null;
 
     return rules.filter((rule) => {
       if (rule.appliesTo === 'account') return true;
       if (rule.appliesTo === 'plant') return !!plantId && rule.plantId === plantId;
+      // A machine with no class matches no class-scoped rule. Not an oversight: an
+      // unclassified machine has nothing the rule was written about, and treating the
+      // missing class as a match would fire generator rules on anything unlabelled.
+      if (rule.appliesTo === 'equipment-class') {
+        return !!classSlug && rule.equipmentClassSlug === classSlug;
+      }
       return rule.sourceSystem === context.sourceSystem && rule.externalId === context.externalId;
     });
   }
@@ -309,6 +370,9 @@ export class AlertService {
     }
     if (appliesTo === 'equipment' && !(input.sourceSystem && input.externalId)) {
       throw new BadRequestException('A rule scoped to a machine needs the machine.');
+    }
+    if (appliesTo === 'equipment-class' && !input.equipmentClassSlug) {
+      throw new BadRequestException('A rule scoped to a kind of machine needs the class.');
     }
     if (appliesTo === 'equipment') {
       // Checked here rather than left to fire against nothing: a rule pointing at a

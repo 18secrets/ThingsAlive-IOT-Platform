@@ -3,9 +3,12 @@ import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { DeviceCatalogService } from '../../device-catalog/services/device-catalog.service';
 import { DeviceInventory, InventoryState } from '../entities/device-inventory.entity';
 import { DeviceInventoryEvent } from '../entities/device-inventory-event.entity';
 import { InventoryAction, inventoryTransition } from './inventory-state-machine';
+
+export type PooledDevice = DeviceInventory & { toolMappingName: string | null };
 
 export type AssignOutcome =
   | 'assigned'
@@ -22,6 +25,7 @@ export interface BatchResult {
 export interface RegisterInput {
   imei: string;
   model?: string | null;
+  toolMappingId?: string | null;
   batchRef?: string | null;
   receivedAt?: Date | null;
   notes?: string | null;
@@ -45,7 +49,7 @@ export interface RegisterInput {
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly ds: DataSource) {}
+  constructor(private readonly ds: DataSource, private readonly deviceCatalog: DeviceCatalogService) {}
 
   // ---------------------------------------------------------------- platform side
 
@@ -73,7 +77,7 @@ export class InventoryService {
         const { to } = inventoryTransition('register', null, null);
         await repo.save(repo.create({
           imei, tenantId: null, state: to,
-          model: d.model ?? null, batchRef: d.batchRef ?? null,
+          model: d.model ?? null, toolMappingId: d.toolMappingId ?? null, batchRef: d.batchRef ?? null,
           receivedAt: d.receivedAt ?? now, notes: d.notes ?? null,
           assignedAt: null, assignedBy: null,
           equipmentExternalId: null, claimedAt: null, claimedBy: null,
@@ -204,10 +208,10 @@ export class InventoryService {
   async pool(
     scope: RequestScope,
     filters: { state?: InventoryState; tenantId?: string; batchRef?: string; unassignedOnly?: boolean } = {},
-  ): Promise<DeviceInventory[]> {
+  ): Promise<PooledDevice[]> {
     this.requirePlatform(scope, 'read the device pool');
 
-    return runTenantSpanning(this.ds, `inventory pool read by ${scope.userId}`, (m) =>
+    const rows = await runTenantSpanning(this.ds, `inventory pool read by ${scope.userId}`, (m) =>
       m.getRepository(DeviceInventory).find({
         where: {
           ...(filters.state ? { state: filters.state } : {}),
@@ -217,6 +221,9 @@ export class InventoryService {
         order: { imei: 'ASC' },
       }),
     );
+
+    const names = await this.deviceCatalog.resolveToolMappingNames(rows.map((r) => r.toolMappingId));
+    return rows.map((r) => ({ ...r, toolMappingName: r.toolMappingId ? names.get(r.toolMappingId) ?? null : null }));
   }
 
   // ------------------------------------------------------------------ tenant side
