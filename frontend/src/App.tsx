@@ -67,6 +67,8 @@ import {
   apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
   apiApplyCatalogImport, apiDownloadCatalogTemplate,
+  apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
+  apiSuspendPlatformStaff, apiReinstatePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
@@ -76,7 +78,7 @@ import {
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
-  CatalogImportBatch,
+  CatalogImportBatch, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
@@ -224,6 +226,10 @@ function AppData() {
   // classes/scenarios/alert templates above.
   const [catalogImportBatches, setCatalogImportBatches] = useState<CatalogImportBatch[]>([]);
   const [catalogImportBatchesError, setCatalogImportBatchesError] = useState<string | undefined>(undefined);
+  // Things Alive's own staff (/platform/staff) — master admin only, same reasoning
+  // as accounts: real data, not tenant data, so no client-id scoping anywhere here.
+  const [platformStaff, setPlatformStaff] = useState<PlatformStaffMember[]>([]);
+  const [platformStaffError, setPlatformStaffError] = useState<string | undefined>(undefined);
   // Master Admin's real reference data for wiring a device before it exists —
   // separate from the mock `sensors`/`toolMappings`/`devices` below, which
   // still feed Equipment's still-mock pickers and the client's still-mock
@@ -469,6 +475,31 @@ function AppData() {
         setCatalogImportBatchesError(undefined);
       } catch (err) {
         if (live) setCatalogImportBatchesError(err instanceof ApiError ? err.message : 'Could not load recent uploads.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshPlatformStaff = async () => {
+    try {
+      setPlatformStaff(await apiListPlatformStaff());
+      setPlatformStaffError(undefined);
+    } catch (err) {
+      setPlatformStaffError(err instanceof ApiError ? err.message : 'Could not load staff.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListPlatformStaff();
+        if (!live) return;
+        setPlatformStaff(list);
+        setPlatformStaffError(undefined);
+      } catch (err) {
+        if (live) setPlatformStaffError(err instanceof ApiError ? err.message : 'Could not load staff.');
       }
     })();
     return () => { live = false; };
@@ -916,6 +947,29 @@ function AppData() {
     a.remove();
     URL.revokeObjectURL(url);
   };
+
+  const handleInviteStaff = async (input: {
+    email: string; fullName: string; role: PlatformStaffRole,
+  }): Promise<InvitePlatformStaffResult> => {
+    const result = await apiInvitePlatformStaff(input);
+    await refreshPlatformStaff();
+    return result;
+  };
+
+  const handleSetStaffRole = async (id: string, role: PlatformStaffRole) => {
+    await apiSetPlatformStaffRole(id, role);
+    await refreshPlatformStaff();
+  };
+
+  const handleSuspendStaff = async (id: string, reason: string) => {
+    await apiSuspendPlatformStaff(id, reason);
+    await refreshPlatformStaff();
+  };
+
+  const handleReinstateStaff = async (id: string) => {
+    await apiReinstatePlatformStaff(id);
+    await refreshPlatformStaff();
+  };
   const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
     const created = await apiCreateEquipmentTemplate(input);
     await refreshEquipmentTemplates();
@@ -1315,6 +1369,12 @@ function AppData() {
                   onUpdateAccount={handleUpdateAccount}
                   onResendInvitation={handleResendInvitation}
                   onToggleClientStatus={handleToggleClientStatus}
+                  staff={platformStaff}
+                  staffError={platformStaffError}
+                  onInviteStaff={handleInviteStaff}
+                  onSetStaffRole={handleSetStaffRole}
+                  onSuspendStaff={handleSuspendStaff}
+                  onReinstateStaff={handleReinstateStaff}
                 />
               }
             />

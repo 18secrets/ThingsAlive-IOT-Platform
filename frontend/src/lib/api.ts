@@ -91,18 +91,37 @@ export async function apiSignIn(
   return body.user;
 }
 
-export async function apiAcceptInvitation(
-  token: string,
-  password: string,
-): Promise<SignedInUser> {
-  const res = await fetch(`${BASE_URL}/auth/accept-invitation`, {
+async function postAcceptInvitation(path: string, token: string, password: string): Promise<SessionTokens> {
+  const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
   });
-  const body: SessionTokens = await parse(res);
-  store(body);
-  return body.user;
+  return parse(res);
+}
+
+/**
+ * A tenant invitation and a Things Alive staff invitation look identical from here —
+ * only the backend can tell which table a given token's hash actually belongs to
+ * (`user_invitation` vs `platform_invitation`). Tried as the tenant route first since
+ * that is the common case; a 401 there means "not this one," not "wrong password"
+ * (there is no current password on an invitation), so it's safe to retry the staff
+ * route before surfacing a refusal.
+ */
+export async function apiAcceptInvitation(
+  token: string,
+  password: string,
+): Promise<SignedInUser> {
+  try {
+    const body = await postAcceptInvitation("/auth/accept-invitation", token, password);
+    store(body);
+    return body.user;
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    const body = await postAcceptInvitation("/platform/auth/accept-invitation", token, password);
+    store(body);
+    return body.user;
+  }
 }
 
 /** Exchanges the stored refresh token for a fresh access token. False means the session is dead. */
@@ -291,6 +310,67 @@ export function apiResendInvitation(
     `/accounts/${encodeURIComponent(tenantId)}/resend-invitation`,
     { method: "POST" },
   );
+}
+
+// ------------------------------------------------------------------ platform staff
+
+/**
+ * Things Alive's own people (/platform/staff, `platform.admin` — master admin
+ * only). A separate population from `Account`/`ClientAccount`: staff sign in as
+ * platform users (master-admin, platform-support, catalog-author), never scoped to
+ * a tenant, and this is the only place they're created after the very first one.
+ */
+export type PlatformStaffRole = "master-admin" | "platform-support" | "catalog-author";
+export type PlatformStaffStatus = "invited" | "active" | "suspended";
+
+export interface PlatformStaffMember {
+  id: string;
+  email: string;
+  fullName: string;
+  role: PlatformStaffRole;
+  status: PlatformStaffStatus;
+  invitedBy: string | null;
+  invitedAt: string | null;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvitePlatformStaffResult extends PlatformStaffMember {
+  invitationToken: string;
+  invitationExpiresAt: string;
+}
+
+export function apiListPlatformStaff(): Promise<PlatformStaffMember[]> {
+  return authFetch("/platform/staff");
+}
+
+export function apiInvitePlatformStaff(input: {
+  email: string;
+  fullName: string;
+  role: PlatformStaffRole;
+}): Promise<InvitePlatformStaffResult> {
+  return authFetch("/platform/staff", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiSetPlatformStaffRole(
+  id: string, role: PlatformStaffRole,
+): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/role`, {
+    method: "PUT", body: JSON.stringify({ role }),
+  });
+}
+
+export function apiSuspendPlatformStaff(id: string, reason: string): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/suspend`, {
+    method: "POST", body: JSON.stringify({ reason }),
+  });
+}
+
+export function apiReinstatePlatformStaff(id: string): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/reinstate`, { method: "POST" });
 }
 
 // ------------------------------------------------------------------------- plants
