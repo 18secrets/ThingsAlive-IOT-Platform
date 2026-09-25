@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AuthUser, ClientAccount } from '../../types';
 import { PasswordField } from '../common/PasswordField';
+import { ROLE_LABEL } from '../staff/StaffManagement';
 
 interface SettingsViewProps {
   authUser: AuthUser;
@@ -18,13 +19,19 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, onChangePassword }) => {
-  const isMasterAdmin = authUser.role === 'master-admin';
+  const isPlatformUser = authUser.role === 'master-admin';
+  // authUser.role is 'master-admin' for every platform-tenant login; the
+  // actual assigned role (which is what a person should see about themselves)
+  // lives in platformStaffRole.
+  const platformRoleLabel = authUser.platformStaffRole
+    ? ROLE_LABEL[authUser.platformStaffRole]
+    : 'Master Admin';
 
   // For a client, look up their live account record for status / created date
   const clientRecord = useMemo(() => {
-    if (isMasterAdmin) return null;
+    if (isPlatformUser) return null;
     return clients.find((c) => c.id === authUser.clientId) || null;
-  }, [clients, authUser.clientId, isMasterAdmin]);
+  }, [clients, authUser.clientId, isPlatformUser]);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -69,7 +76,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     setConfirmPassword('');
   };
 
-  const displayName = isMasterAdmin ? 'ThingsAlive Master Admin' : (authUser.clientName || authUser.username);
+  const displayName = isPlatformUser ? `ThingsAlive ${platformRoleLabel}` : (authUser.clientName || authUser.username);
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
@@ -100,7 +107,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
                 Role
               </span>
               <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 text-[11px]">
-                {isMasterAdmin ? 'ThingsAlive Master Admin' : 'Client'}
+                {isPlatformUser ? platformRoleLabel : 'Client'}
               </span>
             </div>
 
@@ -112,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{authUser.username}</span>
             </div>
 
-            {!isMasterAdmin && (
+            {!isPlatformUser && (
               <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
                 <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                   <Briefcase className="w-3.5 h-3.5 text-sky-600" />
@@ -128,17 +135,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
                 Account Status
               </span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                • {isMasterAdmin ? 'Active' : (clientRecord?.status || 'Active')}
+                • {isPlatformUser ? 'Active' : (clientRecord?.status || 'Active')}
               </span>
             </div>
 
             <div className="flex items-center justify-between py-1.5">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                {isMasterAdmin ? 'Access Level' : 'Client Since'}
+                {isPlatformUser ? 'Access Level' : 'Client Since'}
               </span>
               <span className="font-medium text-slate-700 dark:text-slate-200">
-                {isMasterAdmin ? 'All Plants & Clients' : (clientRecord?.createdAt || '—')}
+                {isPlatformUser ? 'All Plants & Clients' : (clientRecord?.createdAt || '—')}
               </span>
             </div>
           </div>

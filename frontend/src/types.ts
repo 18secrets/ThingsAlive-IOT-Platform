@@ -1,3 +1,5 @@
+import { PlatformStaffRole } from './lib/api';
+
 export type NavigationTab =
   | 'dashboard'
   | 'ai-onboarding'
@@ -77,6 +79,12 @@ export interface AuthUser {
   allowedTabs?: NavigationTab[];
   /** Whether this client user holds the built-in Super Admin role. */
   isSuperAdmin?: boolean;
+  /** Set for the 'master-admin' role only, when it's really a platform-tenant
+   *  login: the actual assigned role (master-admin/platform-support/catalog-author).
+   *  `role` itself stays 'master-admin' for all three — that's what gates the
+   *  platform shell vs. the client shell app-wide — so this is the only place
+   *  the real assignment survives to be shown back to the person signed in. */
+  platformStaffRole?: PlatformStaffRole;
 }
 
 export type PlatformUserRole = 'Operational' | 'Executive' | 'Support' | 'Admin' | 'Super Admin';

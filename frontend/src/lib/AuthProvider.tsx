@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthUser, NavigationTab } from '../types';
 import {
   apiAcceptInvitation, apiMyPermissions, apiResume, apiSignIn, apiSignOut, hasStoredSession,
-  setSessionDeadHandler, SignedInUser,
+  PlatformStaffRole, setSessionDeadHandler, SignedInUser,
 } from './api';
 
 const SESSION_KEY = 'ta_session';
@@ -33,7 +33,14 @@ function loadSession(): AuthUser | null {
 // admin" (holding both user.manage and role.manage).
 async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
   if (user.tenantId === PLATFORM_TENANT_ID) {
-    return { role: 'master-admin', username: user.email };
+    return {
+      role: 'master-admin',
+      username: user.email,
+      // The real assignment (master-admin/platform-support/catalog-author) —
+      // `role` above stays 'master-admin' for the shell gate; this is what
+      // Settings shows.
+      platformStaffRole: user.roleSlug as PlatformStaffRole,
+    };
   }
   const { capabilities, allowedTabs } = await apiMyPermissions();
   return {

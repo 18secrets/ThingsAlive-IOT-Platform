@@ -16,7 +16,7 @@ interface StaffManagementProps {
   onReinstate: (id: string) => Promise<void>;
 }
 
-const ROLE_LABEL: Record<PlatformStaffRole, string> = {
+export const ROLE_LABEL: Record<PlatformStaffRole, string> = {
   'master-admin': 'Master Admin',
   'platform-support': 'Platform Support',
   'catalog-author': 'Catalog Author',
