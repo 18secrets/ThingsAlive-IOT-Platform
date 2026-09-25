@@ -48,6 +48,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
+import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
@@ -64,6 +65,8 @@ import {
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
   apiPublishAlertTemplate, apiRetireAlertTemplate,
+  apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
+  apiApplyCatalogImport, apiDownloadCatalogTemplate,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
@@ -73,6 +76,7 @@ import {
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
+  CatalogImportBatch,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
@@ -216,6 +220,10 @@ function AppData() {
   // Alert rule templates across every class — same shape as scenarios above.
   const [alertTemplates, setAlertTemplates] = useState<AlertRuleTemplate[]>([]);
   const [alertTemplatesError, setAlertTemplatesError] = useState<string | undefined>(undefined);
+  // Recently uploaded catalog-import workbooks — same platform-owned shape as the
+  // classes/scenarios/alert templates above.
+  const [catalogImportBatches, setCatalogImportBatches] = useState<CatalogImportBatch[]>([]);
+  const [catalogImportBatchesError, setCatalogImportBatchesError] = useState<string | undefined>(undefined);
   // Master Admin's real reference data for wiring a device before it exists —
   // separate from the mock `sensors`/`toolMappings`/`devices` below, which
   // still feed Equipment's still-mock pickers and the client's still-mock
@@ -436,6 +444,31 @@ function AppData() {
         setAlertTemplatesError(undefined);
       } catch (err) {
         if (live) setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshCatalogImports = async () => {
+    try {
+      setCatalogImportBatches(await apiListCatalogImports());
+      setCatalogImportBatchesError(undefined);
+    } catch (err) {
+      setCatalogImportBatchesError(err instanceof ApiError ? err.message : 'Could not load recent uploads.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListCatalogImports();
+        if (!live) return;
+        setCatalogImportBatches(list);
+        setCatalogImportBatchesError(undefined);
+      } catch (err) {
+        if (live) setCatalogImportBatchesError(err instanceof ApiError ? err.message : 'Could not load recent uploads.');
       }
     })();
     return () => { live = false; };
@@ -853,6 +886,36 @@ function AppData() {
       setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not retire.');
     }
   };
+
+  const handleUploadCatalogImport = async (file: File) => {
+    const result = await apiUploadCatalogImport(file);
+    await refreshCatalogImports();
+    return result;
+  };
+
+  const handleLoadCatalogImportDiff = (id: string) => apiGetCatalogImportDiff(id);
+
+  const handleApplyCatalogImport = async (id: string) => {
+    const summary = await apiApplyCatalogImport(id);
+    // The workbook can create or version classes, scenarios and alert templates —
+    // every screen that already lists those needs to see the result without a reload.
+    await Promise.all([
+      refreshCatalogImports(), refreshEquipmentClasses(), refreshScenarios(), refreshAlertTemplates(),
+    ]);
+    return summary;
+  };
+
+  const handleDownloadCatalogTemplate = async () => {
+    const blob = await apiDownloadCatalogTemplate();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'equipment-library-template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
   const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
     const created = await apiCreateEquipmentTemplate(input);
     await refreshEquipmentTemplates();
@@ -867,6 +930,8 @@ function AppData() {
   const handleOpenEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
 
   const handleOpenEquipmentClass = (slug: string) => navigate(`/admin/category/${slug}`);
+
+  const handleOpenCatalogImport = () => navigate('/admin/catalog-import');
 
   const handleAttachTemplateSensor = (templateId: string, sensorId: string) =>
     setTemplateSensorLinks((prev) => ({
@@ -1099,6 +1164,19 @@ function AppData() {
               }
             />
             <Route
+              path="catalog-import"
+              element={
+                <CatalogImportPage
+                  batches={catalogImportBatches}
+                  batchesError={catalogImportBatchesError}
+                  onDownloadTemplate={handleDownloadCatalogTemplate}
+                  onUpload={handleUploadCatalogImport}
+                  onLoadDiff={handleLoadCatalogImportDiff}
+                  onApply={handleApplyCatalogImport}
+                />
+              }
+            />
+            <Route
               path="category/:slug"
               element={
                 <EquipmentClassDetailPage
@@ -1203,6 +1281,7 @@ function AppData() {
                   onPublishEquipmentClass={handlePublishEquipmentClass}
                   onRetireEquipmentClass={handleRetireEquipmentClass}
                   onOpenEquipmentClass={handleOpenEquipmentClass}
+                  onOpenCatalogImport={handleOpenCatalogImport}
                   equipmentTemplates={equipmentTemplates}
                   equipmentTemplatesError={equipmentTemplatesError}
                   onCreateEquipmentTemplate={handleCreateEquipmentTemplate}

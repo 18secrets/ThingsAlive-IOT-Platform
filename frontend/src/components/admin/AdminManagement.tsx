@@ -59,6 +59,7 @@ interface AdminManagementProps {
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
+  onOpenCatalogImport: () => void;
   /** Common onboarding fields, Master Admin only — deliberately separate from
    *  the prediction catalog above; see EquipmentTemplate's own comment. */
   equipmentTemplates: EquipmentTemplate[];
@@ -140,6 +141,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onPublishEquipmentClass,
   onRetireEquipmentClass,
   onOpenEquipmentClass,
+  onOpenCatalogImport,
   equipmentTemplates,
   equipmentTemplatesError,
   onCreateEquipmentTemplate,
@@ -261,6 +263,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onPublishClass={onPublishEquipmentClass}
             onRetireClass={onRetireEquipmentClass}
             onOpenClass={onOpenEquipmentClass}
+            onOpenBulkImport={onOpenCatalogImport}
           />
         )}
 
