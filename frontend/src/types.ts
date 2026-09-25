@@ -100,7 +100,8 @@ export type AdminSubTab =
   | 'devices'
   | 'equipment'
   | 'equipment-template'
-  | 'clients';
+  | 'clients'
+  | 'staff';
 
 export interface SensorParameterSpec {
   parameter: string;

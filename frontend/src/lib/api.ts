@@ -7,18 +7,22 @@
 // sign-out against Platform 2.0's actual /auth routes. Every other screen in
 // this app still reads and writes mock data — see App.tsx.
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
 
 // The refresh token is the only thing persisted, and it goes in sessionStorage
 // rather than localStorage — per tab, matching this app's existing session
 // model (see App.tsx's SESSION_KEY comment). The access token lives only in
 // memory: it is never written to storage, and a page reload loses it on
 // purpose, recovered via one refresh call rather than kept lying around.
-const REFRESH_KEY = 'ta_api_refresh_token';
+const REFRESH_KEY = "ta_api_refresh_token";
 let accessToken: string | null = null;
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
   }
 }
@@ -40,7 +44,7 @@ interface SessionTokens {
 async function parse(res: Response): Promise<any> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(body?.error?.message ?? 'Request failed.', res.status);
+    throw new ApiError(body?.error?.message ?? "Request failed.", res.status);
   }
   return body;
 }
@@ -73,10 +77,13 @@ export function setSessionDeadHandler(handler: (() => void) | null): void {
   onSessionDead = handler;
 }
 
-export async function apiSignIn(email: string, password: string): Promise<SignedInUser> {
+export async function apiSignIn(
+  email: string,
+  password: string,
+): Promise<SignedInUser> {
   const res = await fetch(`${BASE_URL}/auth/sign-in`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   const body: SessionTokens = await parse(res);
@@ -84,15 +91,37 @@ export async function apiSignIn(email: string, password: string): Promise<Signed
   return body.user;
 }
 
-export async function apiAcceptInvitation(token: string, password: string): Promise<SignedInUser> {
-  const res = await fetch(`${BASE_URL}/auth/accept-invitation`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+async function postAcceptInvitation(path: string, token: string, password: string): Promise<SessionTokens> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
   });
-  const body: SessionTokens = await parse(res);
-  store(body);
-  return body.user;
+  return parse(res);
+}
+
+/**
+ * A tenant invitation and a Things Alive staff invitation look identical from here —
+ * only the backend can tell which table a given token's hash actually belongs to
+ * (`user_invitation` vs `platform_invitation`). Tried as the tenant route first since
+ * that is the common case; a 401 there means "not this one," not "wrong password"
+ * (there is no current password on an invitation), so it's safe to retry the staff
+ * route before surfacing a refusal.
+ */
+export async function apiAcceptInvitation(
+  token: string,
+  password: string,
+): Promise<SignedInUser> {
+  try {
+    const body = await postAcceptInvitation("/auth/accept-invitation", token, password);
+    store(body);
+    return body.user;
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    const body = await postAcceptInvitation("/platform/auth/accept-invitation", token, password);
+    store(body);
+    return body.user;
+  }
 }
 
 /** Exchanges the stored refresh token for a fresh access token. False means the session is dead. */
@@ -101,8 +130,8 @@ export async function apiResume(): Promise<SignedInUser | null> {
   if (!refreshToken) return null;
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
     const body: SessionTokens = await parse(res);
@@ -120,8 +149,8 @@ export async function apiSignOut(): Promise<void> {
   if (!refreshToken) return;
   try {
     await fetch(`${BASE_URL}/auth/sign-out`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
   } catch {
@@ -138,11 +167,15 @@ export async function apiSignOut(): Promise<void> {
  * rotated is dead, and retrying it again would just be a slower way to find
  * that out.
  */
-async function authFetch(path: string, init: RequestInit = {}, retried = false): Promise<any> {
+async function authFetch(
+  path: string,
+  init: RequestInit = {},
+  retried = false,
+): Promise<any> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init.headers,
     },
@@ -159,18 +192,44 @@ async function authFetch(path: string, init: RequestInit = {}, retried = false):
   return parse(res);
 }
 
+/**
+ * Same retry-once-on-401 shape as `authFetch`, but hands back the raw `Response`
+ * instead of parsing it as JSON — for a multipart upload (no fixed Content-Type; the
+ * browser has to set its own boundary) and a binary download (the body is a workbook,
+ * not JSON).
+ */
+async function authFetchRaw(
+  path: string,
+  init: RequestInit = {},
+  retried = false,
+): Promise<Response> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...init.headers,
+    },
+  });
+  if (res.status === 401 && !retried) {
+    const resumed = await apiResume();
+    if (resumed) return authFetchRaw(path, init, true);
+    onSessionDead?.();
+  }
+  return res;
+}
+
 export interface SuperAdminContact {
   fullName: string;
   email: string;
   phone: string | null;
   /** 'invited' until they accept and set a password. */
-  status: 'invited' | 'active' | 'suspended';
+  status: "invited" | "active" | "suspended";
 }
 
 export interface Account {
   tenantId: string;
   name: string;
-  status: 'active' | 'suspended';
+  status: "active" | "suspended";
   plan: string | null;
   region: string | null;
   suspendedAt: string | null;
@@ -194,7 +253,7 @@ export interface CreateAccountResult {
 }
 
 export function apiListAccounts(): Promise<Account[]> {
-  return authFetch('/accounts');
+  return authFetch("/accounts");
 }
 
 export function apiCreateAccount(input: {
@@ -202,28 +261,39 @@ export function apiCreateAccount(input: {
   name: string;
   superAdmin: { email: string; fullName: string; phone?: string };
 }): Promise<CreateAccountResult> {
-  return authFetch('/accounts', { method: 'POST', body: JSON.stringify(input) });
-}
-
-export function apiUpdateAccount(tenantId: string, input: {
-  name?: string;
-  superAdmin?: { fullName?: string; email?: string; phone?: string };
-}): Promise<Account> {
-  return authFetch(`/accounts/${encodeURIComponent(tenantId)}`, {
-    method: 'PATCH',
+  return authFetch("/accounts", {
+    method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export function apiSuspendAccount(tenantId: string, reason: string): Promise<Account> {
+export function apiUpdateAccount(
+  tenantId: string,
+  input: {
+    name?: string;
+    superAdmin?: { fullName?: string; email?: string; phone?: string };
+  },
+): Promise<Account> {
+  return authFetch(`/accounts/${encodeURIComponent(tenantId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function apiSuspendAccount(
+  tenantId: string,
+  reason: string,
+): Promise<Account> {
   return authFetch(`/accounts/${encodeURIComponent(tenantId)}/suspend`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
 
 export function apiReinstateAccount(tenantId: string): Promise<Account> {
-  return authFetch(`/accounts/${encodeURIComponent(tenantId)}/reinstate`, { method: 'POST' });
+  return authFetch(`/accounts/${encodeURIComponent(tenantId)}/reinstate`, {
+    method: "POST",
+  });
 }
 
 export interface ResendInvitationResult {
@@ -233,8 +303,74 @@ export interface ResendInvitationResult {
 }
 
 /** Only works while the super admin has never accepted — see the backend's own comment. */
-export function apiResendInvitation(tenantId: string): Promise<ResendInvitationResult> {
-  return authFetch(`/accounts/${encodeURIComponent(tenantId)}/resend-invitation`, { method: 'POST' });
+export function apiResendInvitation(
+  tenantId: string,
+): Promise<ResendInvitationResult> {
+  return authFetch(
+    `/accounts/${encodeURIComponent(tenantId)}/resend-invitation`,
+    { method: "POST" },
+  );
+}
+
+// ------------------------------------------------------------------ platform staff
+
+/**
+ * Things Alive's own people (/platform/staff, `platform.admin` — master admin
+ * only). A separate population from `Account`/`ClientAccount`: staff sign in as
+ * platform users (master-admin, platform-support, catalog-author), never scoped to
+ * a tenant, and this is the only place they're created after the very first one.
+ */
+export type PlatformStaffRole = "master-admin" | "platform-support" | "catalog-author";
+export type PlatformStaffStatus = "invited" | "active" | "suspended";
+
+export interface PlatformStaffMember {
+  id: string;
+  email: string;
+  fullName: string;
+  role: PlatformStaffRole;
+  status: PlatformStaffStatus;
+  invitedBy: string | null;
+  invitedAt: string | null;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvitePlatformStaffResult extends PlatformStaffMember {
+  invitationToken: string;
+  invitationExpiresAt: string;
+}
+
+export function apiListPlatformStaff(): Promise<PlatformStaffMember[]> {
+  return authFetch("/platform/staff");
+}
+
+export function apiInvitePlatformStaff(input: {
+  email: string;
+  fullName: string;
+  role: PlatformStaffRole;
+}): Promise<InvitePlatformStaffResult> {
+  return authFetch("/platform/staff", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiSetPlatformStaffRole(
+  id: string, role: PlatformStaffRole,
+): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/role`, {
+    method: "PUT", body: JSON.stringify({ role }),
+  });
+}
+
+export function apiSuspendPlatformStaff(id: string, reason: string): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/suspend`, {
+    method: "POST", body: JSON.stringify({ reason }),
+  });
+}
+
+export function apiReinstatePlatformStaff(id: string): Promise<PlatformStaffMember> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/reinstate`, { method: "POST" });
 }
 
 // ------------------------------------------------------------------------- plants
@@ -255,7 +391,7 @@ export interface Plant {
   projectType: string | null;
   operationalStatus: string | null;
   description: string | null;
-  status: 'active' | 'retired';
+  status: "active" | "retired";
   sourceSystem: string | null;
   externalId: string | null;
   createdAt: string;
@@ -274,23 +410,38 @@ export interface PlantInput {
 }
 
 export function apiListPlants(includeRetired = true): Promise<Plant[]> {
-  return authFetch(`/equipment/plants${includeRetired ? '?includeRetired=true' : ''}`);
+  return authFetch(
+    `/equipment/plants${includeRetired ? "?includeRetired=true" : ""}`,
+  );
 }
 
 export function apiCreatePlant(input: PlantInput): Promise<Plant> {
-  return authFetch('/equipment/plants', { method: 'POST', body: JSON.stringify(input) });
+  return authFetch("/equipment/plants", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function apiUpdatePlant(id: string, input: Partial<PlantInput>): Promise<Plant> {
-  return authFetch(`/equipment/plants/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+export function apiUpdatePlant(
+  id: string,
+  input: Partial<PlantInput>,
+): Promise<Plant> {
+  return authFetch(`/equipment/plants/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function apiRetirePlant(id: string): Promise<Plant> {
-  return authFetch(`/equipment/plants/${encodeURIComponent(id)}/retire`, { method: 'POST' });
+  return authFetch(`/equipment/plants/${encodeURIComponent(id)}/retire`, {
+    method: "POST",
+  });
 }
 
 export function apiReopenPlant(id: string): Promise<Plant> {
-  return authFetch(`/equipment/plants/${encodeURIComponent(id)}/reopen`, { method: 'POST' });
+  return authFetch(`/equipment/plants/${encodeURIComponent(id)}/reopen`, {
+    method: "POST",
+  });
 }
 
 // ---------------------------------------------------------------- equipment classes
@@ -326,7 +477,7 @@ export interface EquipmentClass {
   expectedSignals: ExpectedSignal[];
   failureModes: FailureMode[];
   defaultThresholds: Record<string, unknown>;
-  status: 'draft' | 'published' | 'retired';
+  status: "draft" | "published" | "retired";
   publishedAt: string | null;
   updatedAt: string;
 }
@@ -342,28 +493,48 @@ export interface EquipmentClassInput {
 
 /** Every version, draft and published — Things Alive only. What CategoryView lists. */
 export function apiListEquipmentClasses(): Promise<EquipmentClass[]> {
-  return authFetch('/catalog/authoring/equipment-classes');
+  return authFetch("/catalog/authoring/equipment-classes");
 }
 
-export function apiCreateEquipmentClass(slug: string, input: EquipmentClassInput): Promise<EquipmentClass> {
-  return authFetch('/catalog/equipment-classes', { method: 'POST', body: JSON.stringify({ slug, ...input }) });
+export function apiCreateEquipmentClass(
+  slug: string,
+  input: EquipmentClassInput,
+): Promise<EquipmentClass> {
+  return authFetch("/catalog/equipment-classes", {
+    method: "POST",
+    body: JSON.stringify({ slug, ...input }),
+  });
 }
 
 /** Edits the working draft, forking one from the published version if none exists yet. */
-export function apiUpdateEquipmentClass(slug: string, input: EquipmentClassInput): Promise<EquipmentClass> {
+export function apiUpdateEquipmentClass(
+  slug: string,
+  input: EquipmentClassInput,
+): Promise<EquipmentClass> {
   return authFetch(`/catalog/equipment-classes/${encodeURIComponent(slug)}`, {
-    method: 'PATCH', body: JSON.stringify(input),
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
 /** Refused with no expected signals — a class declaring none blocks every scenario on it. */
-export function apiPublishEquipmentClass(slug: string): Promise<EquipmentClass> {
-  return authFetch(`/catalog/equipment-classes/${encodeURIComponent(slug)}/publish`, { method: 'POST' });
+export function apiPublishEquipmentClass(
+  slug: string,
+): Promise<EquipmentClass> {
+  return authFetch(
+    `/catalog/equipment-classes/${encodeURIComponent(slug)}/publish`,
+    { method: "POST" },
+  );
 }
 
 /** Stops offering it; accounts that already have a copy keep running it. */
-export function apiRetireEquipmentClass(slug: string): Promise<EquipmentClass[]> {
-  return authFetch(`/catalog/equipment-classes/${encodeURIComponent(slug)}/retire`, { method: 'POST' });
+export function apiRetireEquipmentClass(
+  slug: string,
+): Promise<EquipmentClass[]> {
+  return authFetch(
+    `/catalog/equipment-classes/${encodeURIComponent(slug)}/retire`,
+    { method: "POST" },
+  );
 }
 
 // -------------------------------------------------------------------- scenarios
@@ -376,7 +547,7 @@ export function apiRetireEquipmentClass(slug: string): Promise<EquipmentClass[]>
 export type ScenarioParameter = {
   key: string;
   label: string;
-  type: 'number' | 'duration' | 'boolean' | 'enum';
+  type: "number" | "duration" | "boolean" | "enum";
   default: unknown;
   min?: number;
   max?: number;
@@ -391,12 +562,12 @@ export interface Scenario {
   equipmentClassSlug: string;
   name: string;
   description: string | null;
-  severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  severity: "none" | "low" | "medium" | "high" | "critical";
   tier: 1 | 2 | 3;
   requiredSignals: string[];
   minimumHistoryDays: number;
   parameters: ScenarioParameter[];
-  status: 'draft' | 'published' | 'retired';
+  status: "draft" | "published" | "retired";
   publishedAt: string | null;
   updatedAt: string;
 }
@@ -404,36 +575,49 @@ export interface Scenario {
 export interface ScenarioInput {
   name?: string;
   description?: string;
-  severity?: Scenario['severity'];
-  tier?: Scenario['tier'];
+  severity?: Scenario["severity"];
+  tier?: Scenario["tier"];
   requiredSignals?: string[];
   minimumHistoryDays?: number;
   parameters?: ScenarioParameter[];
 }
 
 /** Every version, draft and published, across every class — what the authoring screen lists. */
-export function apiListAuthoringScenarios(equipmentClassSlug?: string): Promise<Scenario[]> {
-  const query = equipmentClassSlug ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}` : '';
+export function apiListAuthoringScenarios(
+  equipmentClassSlug?: string,
+): Promise<Scenario[]> {
+  const query = equipmentClassSlug
+    ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}`
+    : "";
   return authFetch(`/catalog/authoring/scenarios${query}`);
 }
 
 export function apiCreateScenario(
-  slug: string, equipmentClassSlug: string, input: ScenarioInput,
+  slug: string,
+  equipmentClassSlug: string,
+  input: ScenarioInput,
 ): Promise<Scenario> {
-  return authFetch('/catalog/scenarios', {
-    method: 'POST', body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
+  return authFetch("/catalog/scenarios", {
+    method: "POST",
+    body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
   });
 }
 
 /** Edits the working draft, forking one from the published version if none exists yet. */
-export function apiUpdateScenario(slug: string, input: ScenarioInput): Promise<Scenario> {
+export function apiUpdateScenario(
+  slug: string,
+  input: ScenarioInput,
+): Promise<Scenario> {
   return authFetch(`/catalog/scenarios/${encodeURIComponent(slug)}`, {
-    method: 'PATCH', body: JSON.stringify(input),
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
 export function apiPublishScenario(slug: string): Promise<Scenario> {
-  return authFetch(`/catalog/scenarios/${encodeURIComponent(slug)}/publish`, { method: 'POST' });
+  return authFetch(`/catalog/scenarios/${encodeURIComponent(slug)}/publish`, {
+    method: "POST",
+  });
 }
 
 // -------------------------------------------------------------- alert rule templates
@@ -452,10 +636,15 @@ export function apiPublishScenario(slug: string): Promise<Scenario> {
  * respectively — neither exists in this authoring context, so they're left out of the
  * picker rather than half-modelled.
  */
-export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry' | 'fuel-loss' | 'chain-origin';
+export type AlertTrigger =
+  | "prediction-severity"
+  | "signal-threshold"
+  | "no-telemetry"
+  | "fuel-loss"
+  | "chain-origin";
 
 export interface PredictionSeverityParams {
-  atLeast: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  atLeast: "none" | "low" | "medium" | "high" | "critical";
   clientScenarioSlug?: string | null;
 }
 
@@ -465,7 +654,10 @@ export interface SignalThresholdParams {
   min?: number | null;
 }
 
-export type AlertParams = PredictionSeverityParams | SignalThresholdParams | Record<string, unknown>;
+export type AlertParams =
+  | PredictionSeverityParams
+  | SignalThresholdParams
+  | Record<string, unknown>;
 
 export interface AlertRuleTemplate {
   id: string;
@@ -476,9 +668,9 @@ export interface AlertRuleTemplate {
   description: string | null;
   trigger: AlertTrigger;
   params: AlertParams;
-  severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  severity: "none" | "low" | "medium" | "high" | "critical";
   enabledOnCopy: boolean;
-  status: 'draft' | 'published' | 'retired';
+  status: "draft" | "published" | "retired";
   publishedAt: string | null;
   createdAt: string;
 }
@@ -488,38 +680,173 @@ export interface AlertRuleTemplateInput {
   description?: string;
   trigger?: AlertTrigger;
   params?: AlertParams;
-  severity?: AlertRuleTemplate['severity'];
+  severity?: AlertRuleTemplate["severity"];
   enabledOnCopy?: boolean;
 }
 
 /** Every version, draft and published, across every class. */
-export function apiListAuthoringAlertTemplates(equipmentClassSlug?: string): Promise<AlertRuleTemplate[]> {
-  const query = equipmentClassSlug ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}` : '';
+export function apiListAuthoringAlertTemplates(
+  equipmentClassSlug?: string,
+): Promise<AlertRuleTemplate[]> {
+  const query = equipmentClassSlug
+    ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}`
+    : "";
   return authFetch(`/catalog/authoring/alert-templates${query}`);
 }
 
 export function apiCreateAlertTemplate(
-  slug: string, equipmentClassSlug: string, input: AlertRuleTemplateInput,
+  slug: string,
+  equipmentClassSlug: string,
+  input: AlertRuleTemplateInput,
 ): Promise<AlertRuleTemplate> {
-  return authFetch('/catalog/alert-templates', {
-    method: 'POST', body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
+  return authFetch("/catalog/alert-templates", {
+    method: "POST",
+    body: JSON.stringify({ slug, equipmentClassSlug, ...input }),
   });
 }
 
 /** Edits the working draft, forking one from the published version if none exists yet. */
-export function apiUpdateAlertTemplate(slug: string, input: AlertRuleTemplateInput): Promise<AlertRuleTemplate> {
+export function apiUpdateAlertTemplate(
+  slug: string,
+  input: AlertRuleTemplateInput,
+): Promise<AlertRuleTemplate> {
   return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}`, {
-    method: 'PATCH', body: JSON.stringify(input),
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
-export function apiPublishAlertTemplate(slug: string): Promise<AlertRuleTemplate> {
-  return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST' });
+export function apiPublishAlertTemplate(
+  slug: string,
+): Promise<AlertRuleTemplate> {
+  return authFetch(
+    `/catalog/alert-templates/${encodeURIComponent(slug)}/publish`,
+    { method: "POST" },
+  );
 }
 
 /** Stops shipping it; copies already in accounts keep running. */
-export function apiRetireAlertTemplate(slug: string): Promise<AlertRuleTemplate> {
-  return authFetch(`/catalog/alert-templates/${encodeURIComponent(slug)}/retire`, { method: 'POST' });
+export function apiRetireAlertTemplate(
+  slug: string,
+): Promise<AlertRuleTemplate> {
+  return authFetch(
+    `/catalog/alert-templates/${encodeURIComponent(slug)}/retire`,
+    { method: "POST" },
+  );
+}
+
+// ------------------------------------------------------------------ catalog import
+
+/**
+ * The Excel catalog import (`/platform/catalog/*`, `catalog.write` — Things Alive
+ * only). Bulk-authors the same classes/scenarios/alert-templates the screens above
+ * edit one at a time: upload a workbook, review the dry-run diff, apply it. A batch is
+ * immutable once uploaded — fixing a mistake means uploading a new workbook, not
+ * editing this one.
+ */
+export type CatalogImportBatchStatus =
+  | "parsed"
+  | "validated"
+  | "rejected"
+  | "applied";
+
+export interface CatalogImportBatch {
+  id: string;
+  filename: string;
+  templateVersion: string;
+  uploadedBy: string;
+  status: CatalogImportBatchStatus;
+  summary: Record<string, unknown>;
+  error: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  appliedBy: string | null;
+}
+
+export type ClassDiffAction = "create" | "new_version" | "unchanged";
+
+export interface ClassDiffEntry {
+  slug: string;
+  action: ClassDiffAction;
+  countsBySheet: Record<string, number>;
+}
+
+export interface RejectedImportRow {
+  sheet: string;
+  rowNumber: number;
+  reason: string;
+}
+
+export interface CatalogImportDiff {
+  batchId: string;
+  status: string;
+  classes: ClassDiffEntry[];
+  sensorCapabilities: { valid: number; invalid: number };
+  rejectedRows: RejectedImportRow[];
+  partialApplyNote: string;
+}
+
+export interface ClassApplyResult {
+  action: ClassDiffAction;
+  version: number;
+  created: Record<string, number>;
+}
+
+export interface CatalogImportApplySummary {
+  classes: Record<string, ClassApplyResult>;
+  sensorCapabilities: { created: number; skipped: number };
+}
+
+/** Uploaded, parsed and validated in one step. Rejects outright on a malformed workbook. */
+export async function apiUploadCatalogImport(
+  file: File,
+): Promise<{ id: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw("/platform/catalog/imports", {
+    method: "POST",
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok)
+    throw new ApiError(
+      body?.error?.message ?? "Could not upload the workbook.",
+      res.status,
+    );
+  return body;
+}
+
+export function apiListCatalogImports(): Promise<CatalogImportBatch[]> {
+  return authFetch("/platform/catalog/imports");
+}
+
+/** The dry-run diff: what applying this batch would change. */
+export function apiGetCatalogImportDiff(
+  id: string,
+): Promise<CatalogImportDiff> {
+  return authFetch(`/platform/catalog/imports/${encodeURIComponent(id)}`);
+}
+
+export function apiApplyCatalogImport(
+  id: string,
+): Promise<CatalogImportApplySummary> {
+  return authFetch(
+    `/platform/catalog/imports/${encodeURIComponent(id)}/apply`,
+    { method: "POST" },
+  );
+}
+
+/** The current workbook template, ready to fill in and re-upload. */
+export async function apiDownloadCatalogTemplate(): Promise<Blob> {
+  const res = await authFetchRaw("/platform/catalog/template");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      body?.error?.message ?? "Could not download the template.",
+      res.status,
+    );
+  }
+  return res.blob();
 }
 
 // -------------------------------------------------------------------- device catalog
@@ -564,24 +891,34 @@ export interface SensorInput {
 }
 
 export function apiListSensorCategories(): Promise<SensorCategory[]> {
-  return authFetch('/device-catalog/categories');
+  return authFetch("/device-catalog/categories");
 }
 
 export function apiCreateSensorCategory(name: string): Promise<SensorCategory> {
-  return authFetch('/device-catalog/categories', { method: 'POST', body: JSON.stringify({ name }) });
+  return authFetch("/device-catalog/categories", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
 }
 
 export function apiListSensors(): Promise<Sensor[]> {
-  return authFetch('/device-catalog/sensors');
+  return authFetch("/device-catalog/sensors");
 }
 
 export function apiCreateSensor(input: SensorInput): Promise<Sensor> {
-  return authFetch('/device-catalog/sensors', { method: 'POST', body: JSON.stringify(input) });
+  return authFetch("/device-catalog/sensors", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function apiUpdateSensor(id: string, input: SensorInput): Promise<Sensor> {
+export function apiUpdateSensor(
+  id: string,
+  input: SensorInput,
+): Promise<Sensor> {
   return authFetch(`/device-catalog/sensors/${encodeURIComponent(id)}`, {
-    method: 'PATCH', body: JSON.stringify(input),
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
@@ -610,16 +947,25 @@ export interface ToolMappingInput {
 }
 
 export function apiListToolMappings(): Promise<ToolMapping[]> {
-  return authFetch('/device-catalog/tool-mappings');
+  return authFetch("/device-catalog/tool-mappings");
 }
 
-export function apiCreateToolMapping(input: ToolMappingInput): Promise<ToolMapping> {
-  return authFetch('/device-catalog/tool-mappings', { method: 'POST', body: JSON.stringify(input) });
+export function apiCreateToolMapping(
+  input: ToolMappingInput,
+): Promise<ToolMapping> {
+  return authFetch("/device-catalog/tool-mappings", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function apiUpdateToolMapping(id: string, input: ToolMappingInput): Promise<ToolMapping> {
+export function apiUpdateToolMapping(
+  id: string,
+  input: ToolMappingInput,
+): Promise<ToolMapping> {
   return authFetch(`/device-catalog/tool-mappings/${encodeURIComponent(id)}`, {
-    method: 'PATCH', body: JSON.stringify(input),
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
@@ -634,7 +980,7 @@ export interface PooledDevice {
   id: string;
   imei: string;
   tenantId: string | null;
-  state: 'in-stock' | 'assigned' | 'retired';
+  state: "in-stock" | "assigned" | "retired";
   model: string | null;
   batchRef: string | null;
   toolMappingId: string | null;
@@ -653,34 +999,64 @@ export interface RegisterDeviceInput {
 }
 
 export function apiListDevicePool(
-  filters: { state?: PooledDevice['state']; tenantId?: string; unassignedOnly?: boolean } = {},
+  filters: {
+    state?: PooledDevice["state"];
+    tenantId?: string;
+    unassignedOnly?: boolean;
+  } = {},
 ): Promise<PooledDevice[]> {
   const params = new URLSearchParams();
-  if (filters.state) params.set('state', filters.state);
-  if (filters.tenantId) params.set('tenantId', filters.tenantId);
-  if (filters.unassignedOnly) params.set('unassignedOnly', 'true');
+  if (filters.state) params.set("state", filters.state);
+  if (filters.tenantId) params.set("tenantId", filters.tenantId);
+  if (filters.unassignedOnly) params.set("unassignedOnly", "true");
   const query = params.toString();
-  return authFetch(`/inventory/pool${query ? `?${query}` : ''}`);
+  return authFetch(`/inventory/pool${query ? `?${query}` : ""}`);
 }
 
-export function apiRegisterDevices(devices: RegisterDeviceInput[]): Promise<{ registered: number; alreadyKnown: number }> {
-  return authFetch('/inventory/register', { method: 'POST', body: JSON.stringify({ devices }) });
+export function apiRegisterDevices(
+  devices: RegisterDeviceInput[],
+): Promise<{ registered: number; alreadyKnown: number }> {
+  return authFetch("/inventory/register", {
+    method: "POST",
+    body: JSON.stringify({ devices }),
+  });
 }
 
-export type DeviceBatchOutcome = 'assigned' | 'already-in-this-account' | 'held-elsewhere' | 'retired' | 'unknown';
+export type DeviceBatchOutcome =
+  | "assigned"
+  | "already-in-this-account"
+  | "held-elsewhere"
+  | "retired"
+  | "unknown";
 
 export function apiAssignDevices(
-  imeis: string[], tenantId: string,
+  imeis: string[],
+  tenantId: string,
 ): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
-  return authFetch('/inventory/assign', { method: 'POST', body: JSON.stringify({ imeis, tenantId }) });
+  return authFetch("/inventory/assign", {
+    method: "POST",
+    body: JSON.stringify({ imeis, tenantId }),
+  });
 }
 
-export function apiReleaseDevices(imeis: string[], reason: string): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
-  return authFetch('/inventory/release', { method: 'POST', body: JSON.stringify({ imeis, reason }) });
+export function apiReleaseDevices(
+  imeis: string[],
+  reason: string,
+): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
+  return authFetch("/inventory/release", {
+    method: "POST",
+    body: JSON.stringify({ imeis, reason }),
+  });
 }
 
-export function apiRetireDevices(imeis: string[], reason: string): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
-  return authFetch('/inventory/retire', { method: 'POST', body: JSON.stringify({ imeis, reason }) });
+export function apiRetireDevices(
+  imeis: string[],
+  reason: string,
+): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
+  return authFetch("/inventory/retire", {
+    method: "POST",
+    body: JSON.stringify({ imeis, reason }),
+  });
 }
 
 // --------------------------------------------------------------------- equipment templates
@@ -716,27 +1092,48 @@ export interface EquipmentTemplateInput {
 }
 
 export function apiListEquipmentTemplates(): Promise<EquipmentTemplate[]> {
-  return authFetch('/equipment-templates');
+  return authFetch("/equipment-templates");
 }
 
-export function apiCreateEquipmentTemplate(input: EquipmentTemplateInput): Promise<EquipmentTemplate> {
-  return authFetch('/equipment-templates', { method: 'POST', body: JSON.stringify(input) });
+export function apiCreateEquipmentTemplate(
+  input: EquipmentTemplateInput,
+): Promise<EquipmentTemplate> {
+  return authFetch("/equipment-templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function apiUpdateEquipmentTemplate(id: string, input: EquipmentTemplateInput): Promise<EquipmentTemplate> {
-  return authFetch(`/equipment-templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+export function apiUpdateEquipmentTemplate(
+  id: string,
+  input: EquipmentTemplateInput,
+): Promise<EquipmentTemplate> {
+  return authFetch(`/equipment-templates/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 // ------------------------------------------------------------------- my permissions
 
 /** GET /me/permissions — what the signed-in caller may do, and which pages they see. */
-export function apiMyPermissions(): Promise<{ tenantId: string; capabilities: Record<string, boolean>; allowedTabs: string[] }> {
-  return authFetch('/me/permissions');
+export function apiMyPermissions(): Promise<{
+  tenantId: string;
+  capabilities: Record<string, boolean>;
+  allowedTabs: string[];
+}> {
+  return authFetch("/me/permissions");
 }
 
 /** POST /me/change-password — every session (including this one's refresh token) is revoked on success. */
-export function apiChangePassword(currentPassword: string, newPassword: string): Promise<{ changed: boolean }> {
-  return authFetch('/me/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+export function apiChangePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ changed: boolean }> {
+  return authFetch("/me/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
 }
 
 // ------------------------------------------------------------------------- roles
@@ -753,7 +1150,7 @@ export interface TenantRole {
   name: string;
   description: string | null;
   capabilities: string[];
-  scopeShape: 'tenant' | 'plant' | 'equipment';
+  scopeShape: "tenant" | "plant" | "equipment";
   allowedTabs: string[];
   isBuiltIn: boolean;
   templateSlug: string | null;
@@ -765,7 +1162,7 @@ export interface RoleInput {
   name: string;
   description?: string;
   capabilities: string[];
-  scopeShape: TenantRole['scopeShape'];
+  scopeShape: TenantRole["scopeShape"];
   allowedTabs: string[];
 }
 
@@ -776,19 +1173,30 @@ export interface RolePatchInput {
 }
 
 export function apiListRoles(): Promise<TenantRole[]> {
-  return authFetch('/identity/roles');
+  return authFetch("/identity/roles");
 }
 
 export function apiCreateRole(input: RoleInput): Promise<TenantRole> {
-  return authFetch('/identity/roles', { method: 'POST', body: JSON.stringify(input) });
+  return authFetch("/identity/roles", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function apiUpdateRole(slug: string, input: RolePatchInput): Promise<TenantRole> {
-  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, { method: 'PATCH', body: JSON.stringify(input) });
+export function apiUpdateRole(
+  slug: string,
+  input: RolePatchInput,
+): Promise<TenantRole> {
+  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function apiDeleteRole(slug: string): Promise<void> {
-  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+  return authFetch(`/identity/roles/${encodeURIComponent(slug)}`, {
+    method: "DELETE",
+  });
 }
 
 // -------------------------------------------------------------------------- users
@@ -806,7 +1214,7 @@ export interface TenantUser {
   fullName: string;
   phone: string | null;
   roleSlug: string;
-  status: 'invited' | 'active' | 'suspended';
+  status: "invited" | "active" | "suspended";
   suspendedReason: string | null;
   plants: { plantId: string }[];
   equipment: { sourceSystem: string; equipmentExternalId: string }[];
@@ -825,25 +1233,40 @@ export interface InviteUserResult extends TenantUser {
 }
 
 export function apiListTenantUsers(): Promise<TenantUser[]> {
-  return authFetch('/identity/users');
+  return authFetch("/identity/users");
 }
 
-export function apiInviteUser(input: InviteUserInput): Promise<InviteUserResult> {
-  return authFetch('/identity/users', { method: 'POST', body: JSON.stringify(input) });
-}
-
-export function apiSetUserRole(userId: string, roleSlug: string): Promise<TenantUser> {
-  return authFetch(`/identity/users/${encodeURIComponent(userId)}/role`, {
-    method: 'PUT', body: JSON.stringify({ roleSlug }),
+export function apiInviteUser(
+  input: InviteUserInput,
+): Promise<InviteUserResult> {
+  return authFetch("/identity/users", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
-export function apiSuspendUser(userId: string, reason: string): Promise<TenantUser> {
+export function apiSetUserRole(
+  userId: string,
+  roleSlug: string,
+): Promise<TenantUser> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ roleSlug }),
+  });
+}
+
+export function apiSuspendUser(
+  userId: string,
+  reason: string,
+): Promise<TenantUser> {
   return authFetch(`/identity/users/${encodeURIComponent(userId)}/suspend`, {
-    method: 'POST', body: JSON.stringify({ reason }),
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }
 
 export function apiReinstateUser(userId: string): Promise<TenantUser> {
-  return authFetch(`/identity/users/${encodeURIComponent(userId)}/reinstate`, { method: 'POST' });
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/reinstate`, {
+    method: "POST",
+  });
 }

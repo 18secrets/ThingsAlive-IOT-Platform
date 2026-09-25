@@ -6,13 +6,15 @@ import {
   Building2,
   Wrench,
   Cpu,
-  Briefcase
+  Briefcase,
+  ShieldCheck
 } from 'lucide-react';
 import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, EquipmentItem, DeviceItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
   EquipmentTemplate, EquipmentTemplateInput,
+  InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -24,6 +26,7 @@ import { DeviceManagement } from '../devices/DeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
 import { ClientManagement } from '../clients/ClientManagement';
+import { StaffManagement } from '../staff/StaffManagement';
 
 interface AdminManagementProps {
   sensors: SensorItem[];
@@ -59,6 +62,7 @@ interface AdminManagementProps {
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
+  onOpenCatalogImport: () => void;
   /** Common onboarding fields, Master Admin only — deliberately separate from
    *  the prediction catalog above; see EquipmentTemplate's own comment. */
   equipmentTemplates: EquipmentTemplate[];
@@ -107,6 +111,14 @@ interface AdminManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  staff: PlatformStaffMember[];
+  staffError?: string;
+  onInviteStaff: (input: {
+    email: string; fullName: string; role: PlatformStaffRole;
+  }) => Promise<InvitePlatformStaffResult>;
+  onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
+  onSuspendStaff: (id: string, reason: string) => Promise<void>;
+  onReinstateStaff: (id: string) => Promise<void>;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
 }
@@ -140,6 +152,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onPublishEquipmentClass,
   onRetireEquipmentClass,
   onOpenEquipmentClass,
+  onOpenCatalogImport,
   equipmentTemplates,
   equipmentTemplatesError,
   onCreateEquipmentTemplate,
@@ -178,11 +191,18 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleClientStatus,
+  staff,
+  staffError,
+  onInviteStaff,
+  onSetStaffRole,
+  onSuspendStaff,
+  onReinstateStaff,
   restrictToClientAdmin,
 }) => {
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'industry', label: 'Industry Type', icon: BarChart3 },
     { id: 'clients', label: 'Clients', icon: Briefcase },
+    { id: 'staff', label: 'Staff', icon: ShieldCheck },
     { id: 'plant', label: 'Plant', icon: Building2 },
     { id: 'category', label: 'Equipment Classes', icon: LayoutGrid },
     { id: 'sensor', label: 'Sensor', icon: Disc },
@@ -261,6 +281,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onPublishClass={onPublishEquipmentClass}
             onRetireClass={onRetireEquipmentClass}
             onOpenClass={onOpenEquipmentClass}
+            onOpenBulkImport={onOpenCatalogImport}
           />
         )}
 
@@ -353,6 +374,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateAccount={onUpdateAccount}
             onResendInvitation={onResendInvitation}
             onToggleStatus={onToggleClientStatus}
+          />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'staff' && (
+          <StaffManagement
+            staff={staff}
+            error={staffError}
+            onInvite={onInviteStaff}
+            onSetRole={onSetStaffRole}
+            onSuspend={onSuspendStaff}
+            onReinstate={onReinstateStaff}
           />
         )}
       </div>

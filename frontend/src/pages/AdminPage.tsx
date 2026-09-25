@@ -8,6 +8,7 @@ import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
   EquipmentTemplate, EquipmentTemplateInput,
+  InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -39,6 +40,7 @@ interface AdminPageProps {
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
+  onOpenCatalogImport: () => void;
   equipmentTemplates: EquipmentTemplate[];
   equipmentTemplatesError?: string;
   onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
@@ -78,6 +80,14 @@ interface AdminPageProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  staff: PlatformStaffMember[];
+  staffError?: string;
+  onInviteStaff: (input: {
+    email: string; fullName: string; role: PlatformStaffRole;
+  }) => Promise<InvitePlatformStaffResult>;
+  onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
+  onSuspendStaff: (id: string, reason: string) => Promise<void>;
+  onReinstateStaff: (id: string) => Promise<void>;
 }
 
 export const AdminPage: React.FC<AdminPageProps> = (props) => {
@@ -126,6 +136,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onPublishEquipmentClass={props.onPublishEquipmentClass}
       onRetireEquipmentClass={props.onRetireEquipmentClass}
       onOpenEquipmentClass={props.onOpenEquipmentClass}
+      onOpenCatalogImport={props.onOpenCatalogImport}
       equipmentTemplates={props.equipmentTemplates}
       equipmentTemplatesError={props.equipmentTemplatesError}
       onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
@@ -166,6 +177,12 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateAccount={props.onUpdateAccount}
       onResendInvitation={props.onResendInvitation}
       onToggleClientStatus={props.onToggleClientStatus}
+      staff={props.staff}
+      staffError={props.staffError}
+      onInviteStaff={props.onInviteStaff}
+      onSetStaffRole={props.onSetStaffRole}
+      onSuspendStaff={props.onSuspendStaff}
+      onReinstateStaff={props.onReinstateStaff}
       restrictToClientAdmin={restrictToClientAdmin}
     />
   );

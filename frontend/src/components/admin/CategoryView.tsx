@@ -21,6 +21,7 @@ interface CategoryViewProps {
   onPublishClass: (slug: string) => Promise<void>;
   onRetireClass: (slug: string) => Promise<void>;
   onOpenClass: (slug: string) => void;
+  onOpenBulkImport: () => void;
 }
 
 const STATUS_STYLE: Record<EquipmentClass['status'], string> = {
@@ -49,6 +50,7 @@ function representativePerSlug(rows: EquipmentClass[]): EquipmentClass[] {
 
 export const CategoryView: React.FC<CategoryViewProps> = ({
   classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass, onOpenClass,
+  onOpenBulkImport,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -97,17 +99,26 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
           />
         </div>
 
-        <button
-          id="add-category-btn"
-          onClick={() => {
-            setEditingClass(null);
-            setIsModalOpen(true);
-          }}
-          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Class</span>
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={onOpenBulkImport}
+            className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Bulk Import</span>
+          </button>
+          <button
+            id="add-category-btn"
+            onClick={() => {
+              setEditingClass(null);
+              setIsModalOpen(true);
+            }}
+            className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Class</span>
+          </button>
+        </div>
       </div>
 
       {error && (
