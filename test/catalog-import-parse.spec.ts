@@ -1,6 +1,8 @@
 import { DataSource } from 'typeorm';
 import { Workbook } from 'exceljs';
-import { SIGNAL_THRESHOLD_PARAM_KEYS } from '../src/alert/services/alert-rules';
+import {
+  DEFAULT_LOOKBACK_READINGS, SIGNAL_THRESHOLD_PARAM_KEYS, SIGNAL_THRESHOLD_PARAM_SOURCE,
+} from '../src/alert/services/alert-rules';
 import { CatalogImportRow } from '../src/catalog-import/entities/catalog-import-row.entity';
 import { CatalogTemplateService } from '../src/catalog-import/services/catalog-template.service';
 import { WorkbookParserService } from '../src/catalog-import/services/workbook-parser.service';
@@ -204,17 +206,50 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(count).toBe(0);
   });
 
-  it('keeps the signal sheet in sync with the engine parameters it stages', () => {
-    // SIGNAL_THRESHOLD_PARAM_KEYS is generated from SignalThresholdParams itself
-    // (src/alert/services/alert-rules.ts) and fails to compile if that interface
-    // changes without it. A signal-sheet column dropped or renamed here without
-    // updating template-schema.ts fails this test, rather than staging a threshold
-    // the alert engine silently cannot run.
+  /**
+   * Every engine parameter, staged from the workbook or defaulted in code — never
+   * neither (task QALERT1).
+   *
+   * `SIGNAL_THRESHOLD_PARAM_KEYS` is generated from `SignalThresholdParams` itself
+   * and fails to compile if that interface changes without it; `SIGNAL_THRESHOLD_
+   * PARAM_SOURCE` classifies every one of those same keys as `'staged'` or
+   * `'defaulted'` and fails to compile if a key is left unclassified. Split into two
+   * assertions rather than one "has a column" check, because a `'defaulted'` key —
+   * `lookbackReadings` today — is correct without a column; the original single
+   * check could not tell that apart from a staging gap, which is why it could not
+   * simply be reused unchanged once `lookbackReadings` existed.
+   *
+   * KNOWN_DEFAULTS is the one place a `'defaulted'` key must also be added by hand:
+   * nothing here can discover a default value by reflection, so the classification
+   * map forces the *decision* to compile, and this registry is what makes that
+   * decision checkable. Add a key to `SIGNAL_THRESHOLD_PARAM_SOURCE` as `'defaulted'`
+   * without adding it here, and this test fails rather than passing on silence.
+   */
+  const KNOWN_DEFAULTS: Partial<Record<keyof typeof SIGNAL_THRESHOLD_PARAM_SOURCE, unknown>> = {
+    lookbackReadings: DEFAULT_LOOKBACK_READINGS,
+  };
+
+  it('every staged engine parameter has a workbook column', () => {
+    // A signal-sheet column dropped or renamed here without updating
+    // template-schema.ts fails this test, rather than staging a threshold the
+    // alert engine silently cannot run.
     const schema = CONTENT_SHEETS.find((s) => s.sheet === 'signal')!;
     const columnNames = new Set(schema.columns.map((c) => c.name));
     for (const key of SIGNAL_THRESHOLD_PARAM_KEYS) {
+      if (SIGNAL_THRESHOLD_PARAM_SOURCE[key] !== 'staged') continue;
       expect(columnNames.has(key)).toBe(true);
     }
+  });
+
+  it('every defaulted engine parameter has a default defined in code', () => {
+    for (const key of SIGNAL_THRESHOLD_PARAM_KEYS) {
+      if (SIGNAL_THRESHOLD_PARAM_SOURCE[key] !== 'defaulted') continue;
+      expect(KNOWN_DEFAULTS[key]).not.toBeUndefined();
+    }
+    // lookbackReadings lands with QREC0's template v4 — flipping its classification
+    // to 'staged' makes the test above immediately demand the workbook column.
+    expect(SIGNAL_THRESHOLD_PARAM_SOURCE.lookbackReadings).toBe('defaulted');
+    expect(KNOWN_DEFAULTS.lookbackReadings).toBe(10);
   });
 
   describe('the template generator', () => {
