@@ -484,7 +484,14 @@ export class ShiftRunner {
    */
   private async evaluateAlerts(
     window: OwedWindow,
-    readings: { signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+    // imei rides along explicitly now (task QALERT1): a signal-threshold rule's
+    // window is built per (imei, signal), so alert-rules.ts needs it named here
+    // rather than merely tolerated by structural typing from the caller. Required,
+    // not optional: undefined is a representable value whose grouping behaviour is
+    // unspecified — most likely every device pooled into one window, exactly the
+    // cross-device mixing signalWindows() exists to prevent, reached by a path
+    // this parameter's own type would otherwise still permit.
+    readings: { imei: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
     predictions: {
       clientScenarioSlug: string; severity: any; riskScore: number;
       predictionId: string; confidence: string;

@@ -76,10 +76,17 @@ describe('what an alert rule watches', () => {
     });
 
     it('watches a floor as well as a ceiling', () => {
+      // Task QALERT1 (D34): a window under 3 readings does not fire, so this needs
+      // enough readings for the dip to mean something — a single 1.1 reading used
+      // to fire on its own, which was exactly the single-spike bug D34 removes.
       const firing = evaluateRule({
         trigger: 'signal-threshold',
         params: { signal: 'oil_pressure', min: 2 },
-        readings: [{ ...reading('oil_pressure', 1.1), unit: 'bar' }],
+        readings: [
+          { ...reading('oil_pressure', 3.0, '2026-09-14T07:00:00.000Z'), unit: 'bar' },
+          { ...reading('oil_pressure', 1.1, '2026-09-14T07:01:00.000Z'), unit: 'bar' },
+          { ...reading('oil_pressure', 2.9, '2026-09-14T07:02:00.000Z'), unit: 'bar' },
+        ],
         predictions: [],
       });
       expect(firing!.evidence).toMatchObject({ direction: 'below', worstValue: 1.1 });
