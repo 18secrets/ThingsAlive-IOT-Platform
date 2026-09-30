@@ -13,6 +13,7 @@ import { CatalogImportValidatorService } from '../src/catalog-import/services/ca
 import { CatalogTemplateService } from '../src/catalog-import/services/catalog-template.service';
 import { WorkbookParserService } from '../src/catalog-import/services/workbook-parser.service';
 import { ALL_SHEETS } from '../src/catalog-import/template-schema';
+import { validateSignalCountForPublish } from '../src/catalog/services/content-validation';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 const CLASS_SLUG = 'diesel-generator';
@@ -205,10 +206,54 @@ describeDb('catalog import: apply', () => {
     expect(v2.source).toBe('excel-import');
   });
 
+  // Task QIMP4, finding 5: apply itself does not gate on signal count — the shared
+  // rule lives at publish, which both write paths go through equally. This proves
+  // an import-produced class is refused by the exact same check, not a fixture
+  // built by hand to look like one.
+  it('a class the workbook declares with no signal rows applies with zero signals, '
+    + 'and the shared publish-time check refuses it', async () => {
+    const buffer = await workbookBuffer(new Date('2026-09-22T00:00:00.000Z'), (wb) => {
+      addRow(wb, 'equipment_class', {
+        slug: 'no-signals-yet', name: 'No Signals Yet', description: '', category: '', service_interval_hours: '',
+      });
+    });
+    const { id } = await parseAndValidate(buffer);
+    await applier.apply(id, 'deepak');
+
+    const cls = await ds.getRepository(EquipmentClassProfile).findOneOrFail({ where: { slug: 'no-signals-yet' } });
+    expect(cls.expectedSignals).toEqual([]);
+    expect(validateSignalCountForPublish(cls.expectedSignals)).toMatch(/no expected signals/);
+  });
+
   it('refuses a second apply: status must be "validated"', async () => {
     const { id } = await parseAndValidate(await workbookBuffer(new Date('2026-09-22T00:00:00.000Z')));
     await applier.apply(id, 'deepak');
     await expect(applier.apply(id, 'deepak')).rejects.toThrow(/only a validated batch can be applied/);
+  });
+
+  // Task QIMP4, finding 6: this is how `ex-1200v` got a v1 and a v2 from one batch.
+  // Two overlapping calls both read "validated" before either commits — under READ
+  // COMMITTED, a second transaction's own later statement still sees whatever the
+  // first has committed by then, so it reads a freshly-created v1 as "the current
+  // version" and mints v2 from it, rather than reading "applied" and refusing.
+  // `SELECT ... FOR UPDATE` on the batch row serialises the two: the loser blocks
+  // until the winner commits, then re-reads the now-"applied" status and refuses.
+  it('two concurrent applies of the same batch mint exactly one version, not two', async () => {
+    const { id } = await parseAndValidate(await workbookBuffer(new Date('2026-09-22T00:00:00.000Z')));
+
+    const results = await Promise.allSettled([
+      applier.apply(id, 'deepak-a'),
+      applier.apply(id, 'deepak-b'),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason.message).toMatch(/only a validated batch can be applied/);
+
+    const versions = await ds.getRepository(EquipmentClassProfile).find({ where: { slug: CLASS_SLUG } });
+    expect(versions.map((v) => v.version)).toEqual([1]);
   });
 
   it('applies the valid rows and records the rest as skipped, not silently dropped', async () => {

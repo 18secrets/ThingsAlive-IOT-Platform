@@ -40,16 +40,12 @@ export class WorkbookParserService {
   constructor(private readonly ds: DataSource) {}
 
   async parse(buffer: Buffer, filename: string, uploadedBy: string): Promise<ParsedBatchSummary> {
+    // Not a refusal (task QIMP4): the loop is upload, read the diff, fix something
+    // outside the workbook, upload the same bytes again. Staging the identical
+    // content twice costs nothing — `CatalogImportDiffService` notes the repeat, and
+    // `CatalogImportApplyService` already refuses to write a class version identical
+    // to what is published, whichever batch the content arrived in.
     const checksum = createHash('sha256').update(buffer).digest('hex');
-
-    const existing = await this.ds.getRepository(CatalogImportBatch).findOne({
-      where: { checksumSha256: checksum },
-    });
-    if (existing) {
-      throw new CatalogImportRefusal(
-        `This workbook has already been staged (batch ${existing.id}, filename "${existing.filename}").`,
-      );
-    }
 
     const workbook = new Workbook();
     // Same exceljs/@types-node Buffer mismatch as CatalogTemplateService.build().

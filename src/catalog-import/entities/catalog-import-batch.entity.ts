@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 export type CatalogImportBatchStatus = 'parsed' | 'validated' | 'rejected' | 'applied';
 
@@ -10,7 +10,6 @@ export type CatalogImportBatchStatus = 'parsed' | 'validated' | 'rejected' | 'ap
  * tenant's.
  */
 @Entity('catalog_import_batch')
-@Index('uq_catalog_import_batch_checksum', ['checksumSha256'], { unique: true })
 export class CatalogImportBatch {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -18,7 +17,12 @@ export class CatalogImportBatch {
   @Column({ type: 'text' })
   filename: string;
 
-  /** The same workbook cannot be staged twice. */
+  /**
+   * Provenance, not a uniqueness key (task QIMP4) — the loop is upload, read the
+   * diff, fix something outside the workbook, upload the same bytes again, and that
+   * has to work. `CatalogImportDiffService` uses this to note a repeat rather than
+   * refuse one.
+   */
   @Column({ name: 'checksum_sha256', type: 'text' })
   checksumSha256: string;
 

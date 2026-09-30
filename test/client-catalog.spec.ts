@@ -452,6 +452,30 @@ describeDb('client-owned catalog', () => {
       ).rejects.toThrow(/does not declare/);
     });
 
+    // Task QIMP4, finding 5: `crane-400-kw` (source = 'manual', never touched by
+    // the import) holds a signal `{"unit": null, "signal": "temp"}` — content the
+    // import validator would have refused outright. Same refusal, same shared
+    // module (`content-validation.ts`), on the door that let it through.
+    it('refuses a signal with no unit, the same rule the import path enforces', async () => {
+      await expect(
+        authoring.createClass(master, 'crane-400-kw', {
+          name: 'Crane 400kW',
+          expectedSignals: [{ signal: 'temp', unit: null, required: true }],
+        }),
+      ).rejects.toThrow(/"temp" has no unit/);
+    });
+
+    // The other half of the incident: a scenario with `required_signals: []` —
+    // nothing the import path could even produce (scenarios have no import
+    // surface), but the API path let it through with no check at all.
+    it('refuses a scenario requiring no signals at all, once published', async () => {
+      await authoring.createScenario(master, 'crane-idle-watch', {
+        equipmentClassSlug: 'diesel-generator', requiredSignals: [],
+      });
+      await expect(authoring.publishScenario(master, 'crane-idle-watch'))
+        .rejects.toThrow(/must require at least one signal/);
+    });
+
     it('retires a template without disturbing copies already made from it', async () => {
       await authoring.retireClass(master, 'diesel-generator');
       const [cls] = await client.classes(acmeSuper);

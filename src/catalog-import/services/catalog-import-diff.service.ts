@@ -1,16 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
-import { buildProposedClass, classesIdentical, loadCurrentClass } from './class-content';
+import {
+  ClassDiffEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass,
+} from './class-content';
 
-export type ClassDiffAction = 'create' | 'new_version' | 'unchanged';
-
-export interface ClassDiffEntry {
-  slug: string;
-  action: ClassDiffAction;
-  countsBySheet: Record<string, number>;
-}
+export type { ClassDiffEntry, ClassDiffWarning } from './class-content';
+export type ClassDiffAction = ClassDiffEntry['action'];
 
 export interface RejectedRow {
   sheet: string;
@@ -25,6 +22,9 @@ export interface CatalogImportDiff {
   sensorCapabilities: { valid: number; invalid: number };
   rejectedRows: RejectedRow[];
   partialApplyNote: string;
+  /** Set when an earlier batch staged the identical bytes. A note, not a refusal —
+   * see DropImportChecksumUnique1758040000000 for why staging twice is allowed. */
+  duplicateOfNote: string | null;
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
@@ -53,9 +53,39 @@ export class CatalogImportDiffService {
     return this.ds.getRepository(CatalogImportBatch).find({ order: { createdAt: 'DESC' }, take: 50 });
   }
 
+  /**
+   * Discards a batch that never got applied (task QIMP4) — the other half of
+   * dropping the checksum constraint: staging twice is free, but nothing accumulates
+   * a mistaken upload forever either. `ON DELETE CASCADE` on `catalog_import_row`
+   * takes its rows with it.
+   *
+   * Refused once applied: the batch is a class version's provenance record at that
+   * point (`equipment_class_profile.import_batch_id` points at it), and deleting it
+   * would leave that reference dangling.
+   */
+  async discard(batchId: string): Promise<void> {
+    const batches = this.ds.getRepository(CatalogImportBatch);
+    const batch = await batches.findOneOrFail({ where: { id: batchId } });
+    if (batch.status === 'applied') {
+      throw new BadRequestException(
+        `Batch ${batchId} has already been applied and cannot be discarded — its content is now the `
+          + 'catalog\'s own provenance record.',
+      );
+    }
+    await batches.remove(batch);
+  }
+
   async buildDiff(batchId: string): Promise<CatalogImportDiff> {
     const batch = await this.ds.getRepository(CatalogImportBatch).findOneOrFail({ where: { id: batchId } });
     const rows = await this.ds.getRepository(CatalogImportRow).find({ where: { batchId } });
+
+    const earlierSame = await this.ds.getRepository(CatalogImportBatch).findOne({
+      where: { checksumSha256: batch.checksumSha256 },
+      order: { createdAt: 'ASC' },
+    });
+    const duplicateOfNote = earlierSame && earlierSame.id !== batch.id
+      ? `Identical to batch ${earlierSame.id}, staged ${earlierSame.createdAt.toISOString()}.`
+      : null;
 
     const validRows = rows.filter((r) => r.status === 'parsed' || r.status === 'valid');
     const invalidRows = rows.filter((r) => r.status === 'invalid');
@@ -71,9 +101,8 @@ export class CatalogImportDiffService {
 
     const classes: ClassDiffEntry[] = [];
     for (const slug of referencedSlugs) {
+      const allForClass = rows.filter((r) => classSlugOf(r) === slug);
       const validForClass = validRows.filter((r) => classSlugOf(r) === slug);
-      const countsBySheet: Record<string, number> = {};
-      for (const r of validForClass) countsBySheet[r.sheet] = (countsBySheet[r.sheet] ?? 0) + 1;
 
       const { current, content: currentContent } = await loadCurrentClass(this.ds.manager, slug);
       const proposed = buildProposedClass(validForClass, currentContent);
@@ -88,7 +117,9 @@ export class CatalogImportDiffService {
           ? 'unchanged'
           : 'new_version';
 
-      classes.push({ slug, action, countsBySheet });
+      classes.push(await computeClassDiffEntry(
+        this.ds.manager, slug, allForClass, validForClass, current, currentContent, action,
+      ));
     }
     classes.sort((a, b) => a.slug.localeCompare(b.slug));
 
@@ -113,6 +144,7 @@ export class CatalogImportDiffService {
       },
       rejectedRows,
       partialApplyNote,
+      duplicateOfNote,
     };
   }
 }
