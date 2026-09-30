@@ -64,32 +64,34 @@ describe('what an alert rule watches', () => {
 
   describe('a signal crossing a threshold', () => {
     it('carries the worst breach and how many there were', () => {
+      // Task QALERT2: a lone breach among too few readings to meet the default
+      // requiredBreaches (6) does not fire — see signal-threshold-window.spec.ts
+      // for that behaviour pinned directly. Six of these eight breach the bound.
       const firing = evaluateRule({
         trigger: 'signal-threshold',
         params: { signal: 'coolant_temp', max: 95 },
-        readings: [reading('coolant_temp', 96), reading('coolant_temp', 104), reading('coolant_temp', 80)],
+        readings: [96, 97, 98, 99, 100, 104, 80, 85].map((v) => reading('coolant_temp', v)),
         predictions: [],
       });
       // An alert that says a machine is in trouble and cannot say why is worse than
       // no alert: somebody walks out, finds nothing, and trusts the next one less.
-      expect(firing!.evidence).toMatchObject({ worstValue: 104, breaches: 2, readingsInWindow: 3 });
+      expect(firing!.evidence).toMatchObject({ worstValue: 104, breaches: 6, readingsInWindow: 8 });
     });
 
     it('watches a floor as well as a ceiling', () => {
-      // Task QALERT1 (D34): a window under 3 readings does not fire, so this needs
-      // enough readings for the dip to mean something — a single 1.1 reading used
-      // to fire on its own, which was exactly the single-spike bug D34 removes.
+      // Task QALERT2: needs at least requiredBreaches (default 6) readings below
+      // the bound — a single 1.1 dip used to fire on its own under QALERT1's
+      // max/min-of-window reduction, which was exactly the single-spike bug this
+      // replaced. Six of these eight dip below.
       const firing = evaluateRule({
         trigger: 'signal-threshold',
         params: { signal: 'oil_pressure', min: 2 },
-        readings: [
-          { ...reading('oil_pressure', 3.0, '2026-09-14T07:00:00.000Z'), unit: 'bar' },
-          { ...reading('oil_pressure', 1.1, '2026-09-14T07:01:00.000Z'), unit: 'bar' },
-          { ...reading('oil_pressure', 2.9, '2026-09-14T07:02:00.000Z'), unit: 'bar' },
-        ],
+        readings: [3.0, 2.9, 1.5, 1.4, 1.3, 1.2, 1.1, 1.0].map(
+          (v, i) => ({ ...reading('oil_pressure', v, `2026-09-14T07:0${i}:00.000Z`), unit: 'bar' }),
+        ),
         predictions: [],
       });
-      expect(firing!.evidence).toMatchObject({ direction: 'below', worstValue: 1.1 });
+      expect(firing!.evidence).toMatchObject({ direction: 'below', worstValue: 1.0 });
     });
 
     it('says nothing about a signal the shift did not report', () => {

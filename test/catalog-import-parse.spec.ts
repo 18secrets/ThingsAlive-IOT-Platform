@@ -1,7 +1,8 @@
 import { DataSource } from 'typeorm';
 import { Workbook } from 'exceljs';
 import {
-  DEFAULT_LOOKBACK_READINGS, SIGNAL_THRESHOLD_PARAM_KEYS, SIGNAL_THRESHOLD_PARAM_SOURCE,
+  DEFAULT_LOOKBACK_READINGS, DEFAULT_REQUIRED_BREACHES, SIGNAL_THRESHOLD_PARAM_KEYS,
+  SIGNAL_THRESHOLD_PARAM_SOURCE,
 } from '../src/alert/services/alert-rules';
 import { CatalogImportRow } from '../src/catalog-import/entities/catalog-import-row.entity';
 import { CatalogTemplateService } from '../src/catalog-import/services/catalog-template.service';
@@ -240,6 +241,7 @@ describeDb('catalog import: workbook template and parser', () => {
    */
   const KNOWN_DEFAULTS: Partial<Record<keyof typeof SIGNAL_THRESHOLD_PARAM_SOURCE, unknown>> = {
     lookbackReadings: DEFAULT_LOOKBACK_READINGS,
+    requiredBreaches: DEFAULT_REQUIRED_BREACHES,
   };
 
   it('every staged engine parameter has a workbook column', () => {
@@ -263,6 +265,9 @@ describeDb('catalog import: workbook template and parser', () => {
     // to 'staged' makes the test above immediately demand the workbook column.
     expect(SIGNAL_THRESHOLD_PARAM_SOURCE.lookbackReadings).toBe('defaulted');
     expect(KNOWN_DEFAULTS.lookbackReadings).toBe(10);
+    // Same reasoning, same template v4 (task QALERT2).
+    expect(SIGNAL_THRESHOLD_PARAM_SOURCE.requiredBreaches).toBe('defaulted');
+    expect(KNOWN_DEFAULTS.requiredBreaches).toBe(6);
   });
 
   describe('the template generator', () => {

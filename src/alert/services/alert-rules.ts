@@ -35,12 +35,22 @@ export interface SignalThresholdParams {
   max?: number | null;
   min?: number | null;
   /**
-   * How many recent readings, by source_timestamp, to reduce before comparing to
+   * How many recent readings, by source_timestamp, to look at before comparing to
    * the bound (task QALERT1, D34). Unset means the default applies — D32: an
    * unsupplied value is not a declaration, so this is never written as a literal
    * 10 at write time, only read as one.
    */
   lookbackReadings?: number;
+  /**
+   * Of the last `lookbackReadings`, how many must individually breach the bound
+   * before the rule fires (task QALERT2). Replaces D34's max/min-of-the-window
+   * reduction outright: reducing a window to its single worst reading and
+   * comparing once is indistinguishable from comparing every reading on its own
+   * the moment that worst reading is the only one that breaches, which is exactly
+   * the single-spike behaviour D34 was supposed to remove and did not. Unset means
+   * the default applies, same as `lookbackReadings`.
+   */
+  requiredBreaches?: number;
 }
 
 /** How many recent readings a signal-threshold rule considers absent an explicit
@@ -51,6 +61,13 @@ export const DEFAULT_LOOKBACK_READINGS = 10;
 export const MIN_LOOKBACK_READINGS = 1;
 export const MAX_LOOKBACK_READINGS = 1000;
 
+/** Of the last `lookbackReadings`, how many must breach absent an explicit
+ * `requiredBreaches` (task QALERT2). Six of ten is a majority with margin: a
+ * machine genuinely running hot stays over the line for most of a five-to-ten
+ * minute window; one bad sample among nine clean ones does not. */
+export const DEFAULT_REQUIRED_BREACHES = 6;
+export const MIN_REQUIRED_BREACHES = 1;
+
 /**
  * The field names above, kept in sync with the interface by the compiler rather than
  * by memory: adding or removing a field from `SignalThresholdParams` without updating
@@ -59,7 +76,7 @@ export const MAX_LOOKBACK_READINGS = 1000;
  * the same list instead of drifting out of sync with it by hand.
  */
 const SIGNAL_THRESHOLD_PARAM_KEY_SET: Record<keyof SignalThresholdParams, true> = {
-  signal: true, max: true, min: true, lookbackReadings: true,
+  signal: true, max: true, min: true, lookbackReadings: true, requiredBreaches: true,
 };
 export const SIGNAL_THRESHOLD_PARAM_KEYS = Object.keys(SIGNAL_THRESHOLD_PARAM_KEY_SET) as
   (keyof SignalThresholdParams)[];
@@ -83,6 +100,8 @@ export const SIGNAL_THRESHOLD_PARAM_SOURCE: Record<keyof SignalThresholdParams, 
   // is a one-word change — the moment it happens, the workbook-column half of the
   // sync test starts demanding the column, by construction.
   lookbackReadings: 'defaulted',
+  // Same reasoning, same template v4 (task QALERT2).
+  requiredBreaches: 'defaulted',
 };
 
 export interface NoTelemetryParams {
@@ -177,36 +196,36 @@ export interface Firing {
 const atOrAbove = (value: Severity, floor: Severity): boolean =>
   SEVERITY_ORDER.indexOf(value) >= SEVERITY_ORDER.indexOf(floor);
 
-/** Fewer readings than this in a window and its reduction is not trustworthy (task
- * QALERT1, D34): the max (or min) of one or two readings is just that reading,
- * which reintroduces the single-spike behaviour this task exists to remove. Three
- * is the smallest number for which "the extreme of the window" means anything. */
-const MIN_READINGS_TO_FIRE = 3;
-
 /** The last `lookbackReadings` of a signal, grouped by logger and ordered
  * most-recent-first by `source_timestamp` (task QALERT1, D34). */
 export interface SignalWindow {
   imei: string | null;
   /** Most-recent-first, capped to `lookbackReadings`. */
   readings: WindowReading[];
-  /** Why this window's reduction cannot be trusted; null once it can be. */
+  /** Why this window cannot possibly reach `requiredBreaches`; null once it can. */
   skippedReason: string | null;
 }
 
 /**
  * Groups a shift's readings by (imei, signal) and keeps each group's most recent
- * `lookbackReadings`, without reducing them yet (task QALERT1, D34).
+ * `lookbackReadings`, without counting breaches yet (task QALERT1, D34; QALERT2).
  *
  * Grouped by imei rather than pooled across every logger that ever reported this
  * signal name: a device swap mid-shift, or two loggers that happen to report the
  * same signal, must not let one logger's noise smear into another's clean window,
  * or dilute a real breach on one logger with a quiet reading from another.
  *
+ * A window shorter than `requiredBreaches` is flagged here rather than left for the
+ * caller to notice zero breaches on its own — fewer readings than the count needed
+ * to fire makes firing mathematically impossible, not merely unlikely, and D34's
+ * original fixed floor of 3 was this same reasoning before `requiredBreaches`
+ * existed to say it directly (task QALERT2).
+ *
  * Exported so a test can assert the skip reason directly, and so a caller wanting
  * to know *why* a rule stayed quiet is not left re-deriving it from a bare `null`.
  */
 export function signalWindows(
-  readings: WindowReading[], signal: string, lookbackReadings: number,
+  readings: WindowReading[], signal: string, lookbackReadings: number, requiredBreaches: number,
 ): SignalWindow[] {
   const byImei = new Map<string | null, WindowReading[]>();
   for (const r of readings) {
@@ -223,9 +242,9 @@ export function signalWindows(
     return {
       imei,
       readings: ordered,
-      skippedReason: ordered.length < MIN_READINGS_TO_FIRE
+      skippedReason: ordered.length < requiredBreaches
         ? `only ${ordered.length} reading(s) available in the window; at least `
-          + `${MIN_READINGS_TO_FIRE} are needed before a reduction means anything.`
+          + `${requiredBreaches} are needed for that many to possibly breach.`
         : null,
     };
   });
@@ -272,25 +291,45 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
     case 'signal-threshold': {
       const params = input.params as SignalThresholdParams;
       const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
-      // Windows too short to reduce are dropped here, not compared: a rule watches
-      // "this equipment", but a window that cannot say anything trustworthy must
-      // not fire just because it technically has zero breaches (task QALERT1, D34).
-      const usable = signalWindows(input.readings, params.signal, lookbackReadings)
+      const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
+      // Windows too short to possibly reach requiredBreaches are dropped here, not
+      // compared: a rule watches "this equipment", but a window that cannot say
+      // anything trustworthy must not fire just because it technically has zero
+      // breaches (task QALERT1, D34).
+      const usable = signalWindows(input.readings, params.signal, lookbackReadings, requiredBreaches)
         .filter((w) => w.skippedReason === null);
       if (usable.length === 0) return null;
 
-      // Each bound is reduced and compared independently — max of the window against
-      // the upper bound, min against the lower — never reduced once and compared
-      // twice. A high breach wins a tie against a low one, same as before: a shift
-      // that went both too hot and too cold is one alert about an unstable machine.
-      const high = params.max != null
-        ? usable.flatMap((w) => w.readings.filter((r) => r.value > params.max!).map((r) => ({ r, w })))
-          .sort((a, b) => b.r.value - a.r.value)[0]
-        : undefined;
-      const low = params.min != null
-        ? usable.flatMap((w) => w.readings.filter((r) => r.value < params.min!).map((r) => ({ r, w })))
-          .sort((a, b) => a.r.value - b.r.value)[0]
-        : undefined;
+      // A window fires on a bound only once at least `requiredBreaches` of its own
+      // readings individually breach it (task QALERT2) — max/min-of-the-window is
+      // gone: reducing a window to its single worst reading and comparing once is
+      // indistinguishable from comparing every reading on its own the moment that
+      // worst reading is the only one that breaches, which is the single-spike
+      // behaviour D34 was supposed to remove and did not. Each bound is still
+      // counted independently, never counted once and compared twice.
+      const above = params.max != null
+        ? usable
+          .map((w) => ({ w, matches: w.readings.filter((r) => r.value > params.max!) }))
+          .filter((x) => x.matches.length >= requiredBreaches)
+        : [];
+      const below = params.min != null
+        ? usable
+          .map((w) => ({ w, matches: w.readings.filter((r) => r.value < params.min!) }))
+          .filter((x) => x.matches.length >= requiredBreaches)
+        : [];
+
+      // Worst reading among the windows that actually qualified — not the worst
+      // reading in any window, which would let one extreme reading in a window
+      // that never reached requiredBreaches masquerade as evidence for one that
+      // did. A high breach still wins a tie against a low one, same as before: a
+      // shift that went both too hot and too cold is one alert about an unstable
+      // machine.
+      const high = above
+        .flatMap((x) => x.matches.map((r) => ({ r, w: x.w, count: x.matches.length })))
+        .sort((a, b) => b.r.value - a.r.value)[0];
+      const low = below
+        .flatMap((x) => x.matches.map((r) => ({ r, w: x.w, count: x.matches.length })))
+        .sort((a, b) => a.r.value - b.r.value)[0];
       const breach = high ?? low;
       if (!breach) return null;
 
@@ -298,8 +337,9 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       const bound = direction === 'above' ? params.max! : params.min!;
       const window = breach.w.readings;
       return {
-        summary: `${params.signal} reached ${breach.r.value}${breach.r.unit ? ` ${breach.r.unit}` : ''}, `
-          + `${direction} ${bound}`,
+        summary: `${params.signal} breached ${bound}${breach.r.unit ? ` ${breach.r.unit}` : ''} `
+          + `${direction} on ${breach.count} of the last ${window.length} readings; `
+          + `worst was ${breach.r.value}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
         evidence: {
           signal: params.signal,
           worstValue: breach.r.value,
@@ -309,10 +349,9 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
           bound,
           imei: breach.w.imei,
           lookbackReadings,
+          requiredBreaches,
           readingsInWindow: window.length,
-          breaches: window.filter((r) =>
-            (params.max != null && r.value > params.max!) || (params.min != null && r.value < params.min!),
-          ).length,
+          breaches: breach.count,
         },
       };
     }
@@ -435,6 +474,18 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
       return `lookback_readings has to be a whole number from ${MIN_LOOKBACK_READINGS} `
         + `to ${MAX_LOOKBACK_READINGS}.`;
     }
+    // Bounded by this rule's own lookback_readings, not a fixed ceiling (task
+    // QALERT2): requiring more breaches than the window can ever hold would look
+    // configured but could never fire.
+    const effectiveLookback = p.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
+    if (p.requiredBreaches != null && (
+      !Number.isInteger(p.requiredBreaches)
+      || p.requiredBreaches < MIN_REQUIRED_BREACHES
+      || p.requiredBreaches > effectiveLookback
+    )) {
+      return `required_breaches has to be a whole number from ${MIN_REQUIRED_BREACHES} `
+        + `to this rule's lookback_readings (${effectiveLookback}).`;
+    }
     return null;
   }
   return null;
@@ -449,8 +500,8 @@ export interface SignalDisplayInfo {
 
 /**
  * Renders a signal-threshold rule back into the one sentence it means (task
- * QALERT1): "Fires when the highest of the last 10 readings of coolant temperature
- * rises above 105 degC." An alert rule is stored parameters a person can read back,
+ * QALERT2): "Fires when at least 6 of the last 10 readings of coolant temperature
+ * rise above 105 degC." An alert rule is stored parameters a person can read back,
  * never free text — this is that read-back.
  *
  * Pure and framework-free — no repository, no request — so QWF1 (or anything else
@@ -461,20 +512,21 @@ export function describeSignalThresholdRule(
   params: SignalThresholdParams, signal: SignalDisplayInfo,
 ): string {
   const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
+  const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
   const unitSuffix = signal.unit ? ` ${signal.unit}` : '';
   const clauses: string[] = [];
   if (params.max != null) {
     clauses.push(
-      `the highest of the last ${lookbackReadings} readings of ${signal.displayName} `
-        + `rises above ${params.max}${unitSuffix}`,
+      `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
+        + `rise above ${params.max}${unitSuffix}`,
     );
   }
   if (params.min != null) {
     clauses.push(
       clauses.length
-        ? `the lowest falls below ${params.min}${unitSuffix}`
-        : `the lowest of the last ${lookbackReadings} readings of ${signal.displayName} `
-          + `falls below ${params.min}${unitSuffix}`,
+        ? `at least ${requiredBreaches} fall below ${params.min}${unitSuffix}`
+        : `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
+          + `fall below ${params.min}${unitSuffix}`,
     );
   }
   return `Fires when ${clauses.join(', or ')}.`;
