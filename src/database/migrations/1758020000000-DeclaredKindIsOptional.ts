@@ -14,17 +14,28 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * the same shape of column added in the same migration, was already nullable with
  * no default — this brings `result_kind` in line with it, not the other way round.
  *
- * Nothing has been published through this column yet (task QCE1 and QCE1.1 are
+ * Nothing has been *published* through this column yet (task QCE1 and QCE1.1 are
  * still in flight on this branch), so the backfill blanket-clears every row to
- * NULL rather than trying to infer which rows meant it and which didn't.
+ * NULL rather than trying to infer which rows meant it and which didn't. Rows can
+ * still exist with the old DEFAULT sitting in them, though — a catalog import
+ * writes `equipment_class_formula` directly and never touches this column, so an
+ * imported-but-not-yet-published row is exactly the "author declared nothing"
+ * case this migration exists to stop conflating with "the author said scalar".
+ *
+ * DROP NOT NULL has to run before the UPDATE, not after: the column is still
+ * NOT NULL at the point the UPDATE runs otherwise, and `SET result_kind = NULL`
+ * against a NOT NULL column is the constraint violation this migration exists to
+ * relieve everyone else of. Caught by real imported data on Railway's Development
+ * database, not by any test — every local run started from an empty table, where
+ * the wrong order has nothing to violate.
  */
 export class DeclaredKindIsOptional1758020000000 implements MigrationInterface {
   name = 'DeclaredKindIsOptional1758020000000';
 
   public async up(q: QueryRunner): Promise<void> {
+    await q.query(`ALTER TABLE "equipment_class_formula" ALTER COLUMN "result_kind" DROP NOT NULL`);
     await q.query(`UPDATE "equipment_class_formula" SET "result_kind" = NULL`);
     await q.query(`ALTER TABLE "equipment_class_formula" ALTER COLUMN "result_kind" DROP DEFAULT`);
-    await q.query(`ALTER TABLE "equipment_class_formula" ALTER COLUMN "result_kind" DROP NOT NULL`);
   }
 
   public async down(q: QueryRunner): Promise<void> {
