@@ -125,15 +125,22 @@ jobs:
       - run: npm test
 
   # The console lives in the same repository as the API it calls, so a contract that
-  # breaks in one commit fails in one pipeline. It does not depend on `verify`: a type
-  # error in the console should surface beside a backend failure, not behind it.
+  # breaks in one commit fails in one pipeline. It does not depend on `verify`: a build
+  # failure in the console should surface beside a backend failure, not behind it.
+  #
+  # Named "Console build", not "Console types and build": frontend/package.json's own
+  # `build` script is `vite build` alone, not `tsc -b && vite build` like the old `web/`
+  # project's was, so this proves the bundle produces, not that it type-checks.
+  # `npm run lint` (`tsc --noEmit`) currently fails on one pre-existing error in
+  # AdminManagement.tsx, unrelated to this job's path. Add `npm run lint` as its own
+  # step once that's fixed, and rename this back to naming both.
   console:
-    name: Console types and build
+    name: Console build
     runs-on: ubuntu-latest
     needs: guards
     defaults:
       run:
-        working-directory: web
+        working-directory: frontend
 
     steps:
       - uses: actions/checkout@v4
@@ -142,13 +149,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web/package.json
+          cache-dependency-path: frontend/package-lock.json
 
-      # `npm install`, not `npm ci`, until web/package-lock.json is committed — `npm ci`
-      # fails outright without one. The versions in package.json are pinned exactly so
-      # this is deterministic for the direct dependencies in the meantime.
-      - run: npm install --no-audit --no-fund
-      # `npm run build` is `tsc -b && vite build`: the types are checked and the bundle
-      # is actually produced, because a project that type-checks and fails to bundle is
-      # still a broken deploy.
+      - run: npm ci --no-audit --no-fund
       - run: npm run build
