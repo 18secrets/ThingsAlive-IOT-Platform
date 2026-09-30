@@ -105,26 +105,74 @@ describeDb('row-level security coverage', () => {
   };
 
   it('does not let one account\'s choice of code block another\'s', async () => {
-    const rows: { table: string; index: string; cols: string }[] = await ds.query(`
+    // What this asserts: every unique index on a tenant-owned table either includes
+    // tenant_id, or is a plain uuid primary key (which cannot collide between
+    // accounts by construction), or is named above with a reason a human wrote down.
+    // A unique index that fits none of those is a customer's ordinary choice —
+    // a code, a name — refused because a stranger used it first, on some other
+    // account entirely. That is what happened to equipment, once.
+    //
+    // Partitioned tables (`telemetry_reading`, `prediction`) are a fourth case, not
+    // a bug: Postgres requires the partition key in every unique index on a
+    // partitioned table, so their primary key is (id, <partition column>) whether
+    // or not tenancy has anything to do with it. That extra column is never a
+    // customer's choice — it is a timestamp the row already carries — so it
+    // introduces none of the collision risk this test exists to catch. Read from
+    // the catalog below rather than hardcoded by name, so the next partitioned
+    // table does not need this test edited to pass.
+    //
+    // Two levels of "not really a new index" fall out of partitioning and need the
+    // same treatment: a partition's own local primary key (e.g.
+    // telemetry_reading_2026_07_pkey) is Postgres's automatic physical copy of the
+    // parent's; and a partition's local copy of a named unique index (e.g.
+    // telemetry_reading_2026_07_imei_signal_source_timestamp_idx, the per-partition
+    // mirror of uq_telemetry_reading_dedupe) is the same thing again for a
+    // non-primary-key index. Both are resolved to their root — the parent table,
+    // the parent index — via pg_inherits, which Postgres itself uses to track
+    // exactly this relationship.
+    const rows: { table: string; index: string; cols: string; rootTable: string; rootIndex: string }[] =
+      await ds.query(`
       SELECT t.relname AS table, i.relname AS index,
-             array_to_string(array_agg(a.attname ORDER BY k.ord), ',') AS cols
+             array_to_string(array_agg(a.attname ORDER BY k.ord), ',') AS cols,
+             COALESCE(root_t.relname, t.relname) AS "rootTable",
+             COALESCE(root_i.relname, i.relname) AS "rootIndex"
         FROM pg_index x
         JOIN pg_class i ON i.oid = x.indexrelid
         JOIN pg_class t ON t.oid = x.indrelid
         JOIN pg_namespace n ON n.oid = t.relnamespace AND n.nspname = 'public'
+        LEFT JOIN pg_inherits th ON th.inhrelid = t.oid
+        LEFT JOIN pg_class root_t ON root_t.oid = th.inhparent
+        LEFT JOIN pg_inherits ih ON ih.inhrelid = i.oid
+        LEFT JOIN pg_class root_i ON root_i.oid = ih.inhparent
        CROSS JOIN LATERAL unnest(x.indkey) WITH ORDINALITY AS k(attnum, ord)
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
        WHERE x.indisunique
          AND EXISTS (SELECT 1 FROM pg_attribute ta
                       WHERE ta.attrelid = t.oid AND ta.attname = 'tenant_id' AND ta.attnum > 0)
-       GROUP BY 1, 2
+       GROUP BY 1, 2, 4, 5
       HAVING NOT ('tenant_id' = ANY (array_agg(a.attname)))`);
 
-    // A uuid primary key cannot collide between accounts; everything else has to say
-    // why it spans them.
+    // table -> its partition key column, for every table declared PARTITION BY.
+    // partattrs is an int2vector; cast to a real array to subscript it, and the
+    // cast keeps the vector's own 0-based indexing rather than Postgres arrays'
+    // usual 1-based default — [0] is the first (and here, only) partition column.
+    const partitionKeys: { table: string; column: string }[] = await ds.query(`
+      SELECT c.relname AS table, a.attname AS column
+        FROM pg_partitioned_table p
+        JOIN pg_class c ON c.oid = p.partrelid
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = (p.partattrs::int2[])[0]`);
+    const partitionKeyOf = new Map(partitionKeys.map((p) => [p.table, p.column]));
+
+    const isSurrogatePk = (r: (typeof rows)[number]) => {
+      if (!r.index.endsWith('_pkey')) return false;
+      if (r.cols === 'id') return true;
+      const partitionColumn = partitionKeyOf.get(r.rootTable);
+      return partitionColumn != null && r.cols === `id,${partitionColumn}`;
+    };
+
     const unexplained = rows
-      .filter((r) => !(r.index.endsWith('_pkey') && /^id(,occurred_at)?$/.test(r.cols)))
-      .filter((r) => !GLOBAL_UNIQUE[r.index])
+      .filter((r) => !isSurrogatePk(r))
+      .filter((r) => !GLOBAL_UNIQUE[r.index] && !GLOBAL_UNIQUE[r.rootIndex])
       .map((r) => `${r.index} (${r.cols})`);
     expect(unexplained).toEqual([]);
   });

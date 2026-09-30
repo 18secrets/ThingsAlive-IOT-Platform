@@ -20,6 +20,7 @@ import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
+import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
@@ -86,6 +87,7 @@ export class AppModule {
               SignalBindingModule,
               WorkModule,
               ShiftModule,
+              TelemetryPartitionModule,
               UtilizationModule,
               ServiceModule,
               DeviceHealthModule,

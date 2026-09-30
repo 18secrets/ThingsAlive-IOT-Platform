@@ -215,6 +215,15 @@ async function upsertAsset(m: EntityManager, asset: AssetSpec, now: Date): Promi
     where: { imei, signal: 'fuel_level_pct', sourceTimestamp: at },
   });
   if (!existing) {
+    // Demo history reaches back up to 400 days (task QPART1) — well outside
+    // whatever buffer the telemetry_reading migration built at deploy time. A real
+    // backfill would face the identical gap; this is that backfill's own case.
+    //
+    // A literal 'YYYY-MM-DD' string, not the Date itself: cast to ::date, a Date
+    // is interpreted in the session's timezone, which can silently roll it back
+    // to the previous month whenever `at` falls near midnight UTC on the 1st.
+    const atDate = `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}-${String(at.getUTCDate()).padStart(2, '0')}`;
+    await m.query(`SELECT ensure_telemetry_partition($1::date)`, [atDate]);
     await readings.save(readings.create({
       tenantId: TENANT, imei, signal: 'fuel_level_pct', value: 72, unit: '%',
       sourceTimestamp: at, receivedAt: at, source: 'simulated',
