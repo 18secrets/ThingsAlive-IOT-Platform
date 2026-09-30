@@ -124,6 +124,46 @@ describeDb('formula compiler: publish and migration', () => {
         /formula "raw_series": declared result_kind "scalar" does not match the inferred kind "series"/,
       );
     });
+
+    // Task QCE1.1: result_kind's DEFAULT 'scalar' (1758010000000) turned "nobody
+    // declared one" into "the author said scalar" — exactly what an imported
+    // formula row looks like (catalog-import-apply.service.ts never sets
+    // result_kind). `105 - coolant_temp_c`, the shipped template's own example, is
+    // the expression that surfaced this: literal-unit-polymorphic in "-", so it
+    // compiles, but its result is series-valued — which the old default refused.
+
+    it('an imported formula with no declared result_kind publishes, and the persisted '
+      + 'result_kind equals the inferred kind', async () => {
+      await seedDraft();
+      await ds.getRepository(EquipmentClassFormula).save(ds.getRepository(EquipmentClassFormula).create({
+        classSlug: CLASS_SLUG, classVersion: 1, formulaKey: 'coolant_margin_c', kind: 'empirical',
+        expression: '105 - coolant_temp_c', inputs: ['coolant_temp_c'], status: 'proposed',
+        // No resultKind — exactly what an imported row looks like before publish.
+      }));
+
+      const published = await authoring.publishClass(master, CLASS_SLUG);
+      expect(published.status).toBe('published');
+
+      const formula = await ds.getRepository(EquipmentClassFormula).findOneOrFail({
+        where: { classSlug: CLASS_SLUG, classVersion: 1, formulaKey: 'coolant_margin_c' },
+      });
+      expect(formula.resultKind).toBe('series');
+      expect(formula.resultUnit).toBe('degC');
+    });
+
+    it('an imported formula WITH a declared result_kind that disagrees with inference '
+      + 'still refuses to publish', async () => {
+      await seedDraft();
+      await ds.getRepository(EquipmentClassFormula).save(ds.getRepository(EquipmentClassFormula).create({
+        classSlug: CLASS_SLUG, classVersion: 1, formulaKey: 'coolant_margin_c', kind: 'empirical',
+        expression: '105 - coolant_temp_c', inputs: ['coolant_temp_c'], status: 'proposed',
+        resultKind: 'scalar', // declared, and wrong — this expression is series-valued.
+      }));
+
+      await expect(authoring.publishClass(master, CLASS_SLUG)).rejects.toThrow(
+        /formula "coolant_margin_c": declared result_kind "scalar" does not match the inferred kind "series"/,
+      );
+    });
   });
 
   describe('the migration', () => {
@@ -147,6 +187,24 @@ describeDb('formula compiler: publish and migration', () => {
             AND column_name = 'required_signals'`,
       );
       expect(reqSignalsAfter).toBe(0);
+
+      await ds.runMigrations({ transaction: 'all' });
+    });
+
+    it('DeclaredKindIsOptional1758020000000 has a down path that restores '
+      + 'NOT NULL DEFAULT \'scalar\' on result_kind, named explicitly', async () => {
+      const [{ isNullable: before }] = await ds.query(`
+        SELECT is_nullable AS "isNullable" FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'equipment_class_formula' AND column_name = 'result_kind'`);
+      expect(before).toBe('YES');
+
+      await undoMigrationNamed(ds, 'DeclaredKindIsOptional1758020000000');
+
+      const [{ isNullable: after, columnDefault }] = await ds.query(`
+        SELECT is_nullable AS "isNullable", column_default AS "columnDefault" FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'equipment_class_formula' AND column_name = 'result_kind'`);
+      expect(after).toBe('NO');
+      expect(columnDefault).toMatch(/scalar/);
 
       await ds.runMigrations({ transaction: 'all' });
     });

@@ -4,6 +4,7 @@ export type RawNode =
   | { type: 'number'; value: number; pos: number }
   | { type: 'signal'; name: string; pos: number }
   | { type: 'param'; name: string; pos: number }
+  | { type: 'formula_ref'; name: string; pos: number }
   | { type: 'unary'; op: '-'; operand: RawNode; pos: number }
   | { type: 'binary'; op: '+' | '-' | '*' | '/'; left: RawNode; right: RawNode; pos: number }
   | { type: 'call'; name: string; args: RawNode[]; pos: number };
@@ -14,7 +15,7 @@ export type RawNode =
 export const MAX_NODES = 200;
 export const MAX_DEPTH = 20;
 
-type TokenType = 'number' | 'ident' | 'param' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | 'eof';
+type TokenType = 'number' | 'ident' | 'param' | 'formularef' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | 'eof';
 interface Token { type: TokenType; text: string; pos: number }
 
 /**
@@ -23,14 +24,15 @@ interface Token { type: TokenType; text: string; pos: number }
  * spreadsheets, an untrusted input path, and a third-party parser is supply-chain
  * surface plus loss of control over refusal messages.
  *
- *   expression := term (('+' | '-') term)*
- *   term       := factor (('*' | '/') factor)*
- *   factor     := '-' factor | primary
- *   primary    := number | call | signal | param | '(' expression ')'
- *   call       := identifier '(' [ expression (',' expression)* ] ')'
- *   signal     := identifier
- *   param      := '@' identifier
- *   number     := digits [ '.' digits ]
+ *   expression  := term (('+' | '-') term)*
+ *   term        := factor (('*' | '/') factor)*
+ *   factor      := '-' factor | primary
+ *   primary     := number | call | signal | param | formula_ref | '(' expression ')'
+ *   call        := identifier '(' [ expression (',' expression)* ] ')'
+ *   signal      := identifier
+ *   param       := '@' identifier
+ *   formula_ref := '#' identifier
+ *   number      := digits [ '.' digits ]
  *
  * The tree this produces is data — plain objects, nothing callable. No `eval`, no
  * `new Function`, no `vm`, no template-string execution anywhere in this module or
@@ -107,6 +109,10 @@ export function parseExpression(source: string): RawNode {
       advance();
       return makeNode({ type: 'param', name: t.text, pos: t.pos }, depth);
     }
+    if (t.type === 'formularef') {
+      advance();
+      return makeNode({ type: 'formula_ref', name: t.text, pos: t.pos }, depth);
+    }
     if (t.type === 'ident') {
       advance();
       if (peek().type === '(') {
@@ -179,6 +185,17 @@ function tokenize(source: string): Token[] {
         throw new FormulaCompileError(`expected a parameter name after "@" at position ${start}.`);
       }
       tokens.push({ type: 'param', text: source.slice(identStart, i), pos: start });
+      continue;
+    }
+    if (c === '#') {
+      const start = i;
+      i += 1;
+      const identStart = i;
+      while (i < source.length && /[A-Za-z0-9_]/.test(source[i])) i += 1;
+      if (i === identStart) {
+        throw new FormulaCompileError(`expected a formula key after "#" at position ${start}.`);
+      }
+      tokens.push({ type: 'formularef', text: source.slice(identStart, i), pos: start });
       continue;
     }
     if (/[A-Za-z_]/.test(c)) {

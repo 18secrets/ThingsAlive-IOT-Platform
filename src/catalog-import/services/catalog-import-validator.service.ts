@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
-import { compileFormula, DeclaredSignal, FormulaCompileError } from '../../catalog/formula/formula-compiler';
+import { compileClassFormulas, DeclaredSignal } from '../../catalog/formula/formula-compiler';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
@@ -238,19 +238,37 @@ export class CatalogImportValidatorService {
       // only: nothing is written, and no declared result_kind/display_unit exists on
       // a workbook row to check against, so those two checks apply at publish only
       // (see CatalogAuthoringService.publishClass), not here.
+      //
+      // Compiled one class at a time, not row by row (task QCE1.1), so
+      // `#other_formula_key` resolves against the other formula rows in this same
+      // batch. Its siblings are the batch's own rows for that class, never the
+      // catalog's existing formulas: a batch that supplies any formula rows for a
+      // class replaces that class's formulas wholesale at apply time (see
+      // catalog-import-apply.service.ts), so an existing-catalog formula would not
+      // actually be present in the version this batch proposes.
+      const formulaRowsByClass = new Map<string, CatalogImportRow[]>();
       for (const r of candidates) {
         if (r.sheet !== 'formula' || !live(r)) continue;
         const slug = String(r.payload.class_slug);
-        try {
-          compileFormula({
+        const list = formulaRowsByClass.get(slug) ?? [];
+        list.push(r);
+        formulaRowsByClass.set(slug, list);
+      }
+      for (const [slug, formulaRows] of formulaRowsByClass) {
+        const results = compileClassFormulas({
+          classSlug: slug,
+          expectedSignals: declaredSignalsFor(slug),
+          formulas: formulaRows.map((r) => ({
             formulaKey: String(r.payload.formula_key ?? ''),
             expression: String(r.payload.expression ?? ''),
-            classSlug: slug,
-            expectedSignals: declaredSignalsFor(slug),
-          });
-        } catch (err) {
-          const reason = err instanceof FormulaCompileError ? err.message : `formula could not be compiled (${err}).`;
-          invalidate(r, `formula row ${r.rowNumber}: ${reason}`);
+          })),
+        });
+        for (const r of formulaRows) {
+          const key = String(r.payload.formula_key ?? '');
+          const result = results.get(key);
+          if (result?.status === 'error') {
+            invalidate(r, `formula row ${r.rowNumber}: ${result.error.message}`);
+          }
         }
       }
 

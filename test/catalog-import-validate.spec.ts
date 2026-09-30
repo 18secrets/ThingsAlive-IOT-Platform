@@ -250,11 +250,12 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       );
     });
 
-    // Formula-to-formula composability (an input naming another formula_key) is not
-    // part of the compiled grammar (task QCE1): an identifier resolves against
-    // expected_signals only. What the compiler does resolve against is the batch's
-    // own newly-declared signals, not only the existing catalog's.
-    it('resolves a formula against a signal declared earlier in the same batch, not just the existing catalog', async () => {
+    // Formula-to-formula composability is `#formula_key` (task QCE1.1), resolved
+    // against the batch's own formula rows for the class, not the existing
+    // catalog's — a batch supplying any formula rows for a class replaces that
+    // class's formulas wholesale (see class-content.ts), so an existing-catalog
+    // formula is not actually part of the version this batch proposes.
+    it('resolves a formula composed via #ref against another formula in the same batch', async () => {
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'signal', {
           class_slug: CLASS_SLUG, signal: 'exhaust_temp_c', unit: 'degC', required: 'TRUE',
@@ -263,10 +264,28 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
           class_slug: CLASS_SLUG, formula_key: 'exhaust_margin', kind: 'empirical',
           expression: 'max(exhaust_temp_c)', inputs: 'exhaust_temp_c', output_unit: 'degC', basis: '', references: '',
         });
+        addRow(wb, 'formula', {
+          class_slug: CLASS_SLUG, formula_key: 'exhaust_margin_pct', kind: 'empirical',
+          expression: '#exhaust_margin / 10', inputs: '', output_unit: 'degC', basis: '', references: '',
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const rows = (await rowsFor(id, 'formula')).filter((r) => [3, 4].includes(r.rowNumber));
+      expect(rows).toHaveLength(2);
+      for (const r of rows) expect(r.status).toBe('valid');
+    });
+
+    it('refuses a formula #ref to a key no formula row in this batch defines', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'formula', {
+          class_slug: CLASS_SLUG, formula_key: 'derived_formula', kind: 'empirical',
+          expression: '#does_not_exist + 1', inputs: '', output_unit: 'degC', basis: '', references: '',
+        });
       });
       const { id } = await parseAndValidate(buffer);
       const [row] = (await rowsFor(id, 'formula')).filter((r) => r.rowNumber === 3);
-      expect(row.status).toBe('valid');
+      expect(row.status).toBe('invalid');
+      expect(row.message).toMatch(/references formula "#does_not_exist", which does not exist in class/);
     });
 
     it('refuses a sensor_capability name that resolves to zero sensors', async () => {

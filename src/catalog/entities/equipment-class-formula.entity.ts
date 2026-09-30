@@ -89,8 +89,13 @@ export class EquipmentClassFormula {
   // formula whose declared result_kind or display_unit disagrees with what it
   // actually computes is refused, not silently trusted.
 
-  @Column({ name: 'result_kind', type: 'text', default: 'scalar' })
-  resultKind: FormulaResultKind;
+  /** Null until an author declares one, or the compiler backfills it at publish
+   * (task QCE1.1) — a DEFAULT here would turn "nobody said" into "somebody said
+   * scalar", and the compiler would refuse legitimate series-valued formulas for
+   * disagreeing with a value nobody actually declared. See
+   * `1758020000000-DeclaredKindIsOptional.ts`. */
+  @Column({ name: 'result_kind', type: 'text', nullable: true })
+  resultKind: FormulaResultKind | null;
 
   /** The unit the author intends. Null until somebody sets one — there is no unit
    * that is correct for an existing row by construction. */

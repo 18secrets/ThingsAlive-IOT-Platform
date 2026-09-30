@@ -200,3 +200,126 @@ Plus three that assert correct behaviour rather than refusal:
   names the formula and the reason.
 - Report back: the commit SHA, the test count before and after, and any refusal in the list
   above you could not implement, with the reason.
+
+---
+
+# QCE1.1 — literal units, and formula composition restored
+
+Branch: feature/calc-engine, after QCE1 (6608698).
+Append this task to docs/ai/tasks/calc-engine-prompts.md.
+Read CLAUDE.md first; every rule in it applies.
+
+Two corrections to QCE1. Both are errors in the QCE1 task spec, not in your
+implementation of it.
+
+---
+
+## Correction 1 — a numeric literal has no unit claim
+
+The QCE1 rule "a numeric literal is dimensionless" is correct for * and / and
+wrong for + and -.
+
+`105 - coolant_temp_c` is a legitimate KPI (headroom to limit) and refusing it
+produced a weaker shipped template example. `fraction_within(signal, 80, 100)`
+is the primary intended use of that operator and is currently impossible to
+express at all.
+
+New rule:
+
+- In + and -, a numeric literal is unit-polymorphic: it adopts the unit of the
+  other operand, and the result carries that unit.
+- In * and /, a numeric literal remains dimensionless, exactly as now.
+- fraction_within(series, lo, hi) accepts bounds that are either literals
+  (which adopt the series' unit) or expressions carrying the series' unit. An
+  expression carrying a different unit is still refused.
+- Two literals added together are dimensionless, as now.
+
+The refusal that must survive: + or - between two NAMED quantities with
+incompatible units, e.g. avg(power_mw) + avg(coolant_temp_c). A bare number
+never was one of those.
+
+Tests to change:
+
+- Refusal test 7 (+/- across different units): confirm it uses two signals, not
+  a signal and a literal. If it uses a literal, rewrite it to use two signals
+  with different units. The refusal must still fire.
+- Refusal test 12 (fraction_within bounds): rewrite so the mismatch comes from
+  a signal-bearing expression of the wrong unit. Literal bounds must now pass.
+- Add: `105 - coolant_temp_c` compiles, inferred unit degC.
+- Add: `fraction_within(x, 80, 100)` compiles with literal bounds.
+- Add: `avg(power_mw) + avg(coolant_temp_c)` is still refused.
+
+Restore the shipped template example in template-schema.ts to
+`105 - coolant_temp_c`. Test 17 then covers it permanently.
+
+---
+
+## Correction 2 — formula composition, restored explicitly
+
+QCE1's grammar removed a working feature: a formula referencing another
+formula's output within the same class. That was an omission in the task spec.
+It comes back, with its own syntax rather than the old overloaded bare
+identifier.
+
+Syntax: #formula_key — distinct from a signal (bare identifier) and a parameter
+(@name). Unambiguous, greppable, and the dependency is visible in the
+expression text.
+
+    primary     := number | call | signal | param | formula_ref | '(' expression ')'
+    formula_ref := '#' identifier
+
+Semantics:
+
+- A #ref resolves to another equipment_class_formula row in the SAME class and
+  version. Nothing cross-class, nothing cross-version.
+- Its kind and unit are the referenced formula's inferred kind and unit, which
+  the compiler already computes. Nothing new is inferred, it is reused.
+- Plan node kind is `formula_ref`, carrying the referenced formula_key. QCE2
+  decides at runtime whether to inline or memoise; this task does not.
+- required_signals is the TRANSITIVE closure — a composed formula requires
+  everything its references require. Per-widget readiness depends on this being
+  transitive, so it is not optional.
+- Record required_formulas alongside it, derived.
+
+Compilation order: build the dependency graph for the class's formulas and
+compile in topological order, so a referenced formula's unit and kind are known
+before a referencing one is compiled.
+
+New refusals, each with a test that attempts it:
+
+18. #ref to a formula key that does not exist in the class version.
+19. A dependency cycle — direct (a -> a) and indirect (a -> b -> a). The error
+    names the cycle.
+20. #ref whose referenced formula itself failed to compile — the error names
+    both.
+21. Composition depth beyond 5 levels; and the 200-node / depth-20 caps applied
+    to the EXPANDED expression, not just the written one. An untrusted
+    spreadsheet must not be able to build a 200-node bomb out of five 40-node
+    formulas.
+
+Restore the original test in test/catalog-import-validate.spec.ts that
+exercised formula-to-formula reference, rewritten to the #key syntax. Do not
+leave the substituted scenario in place as if nothing was lost.
+
+---
+
+## Not in this task
+
+- Template columns for result_kind / display_unit — these go into template v4
+  with Q08S s3 and QREC0. Refusals 8 and 9 remain publish-time only until then;
+  that is correct and deliberate.
+- Runtime evaluation of formula_ref nodes — QCE2.
+- Any change under frontend/.
+
+## Done when
+
+- npm run build clean; npm test green; report test count before and after,
+  measured the same way you measured QCE1 (stash back and run, not the summary
+  line).
+- Full migration chain from an empty database still clean. No new migration is
+  expected — if you find you need one, say why before adding it.
+- compiler_version bumped, since the emitted plan gains a node kind and the
+  unit rules changed. A plan compiled by the previous version must be
+  detectable.
+- Report back: commit SHA, test counts, and anything you could not implement
+  with the reason.
