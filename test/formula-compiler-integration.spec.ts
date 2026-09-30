@@ -208,5 +208,37 @@ describeDb('formula compiler: publish and migration', () => {
 
       await ds.runMigrations({ transaction: 'all' });
     });
+
+    // Caught on Railway's Development database, not by any test until now: every
+    // local run starts from an empty table, where `UPDATE ... SET result_kind =
+    // NULL` has nothing to violate even if it runs before `DROP NOT NULL` rather
+    // than after. A real imported-but-unpublished row - written under the old
+    // NOT NULL DEFAULT 'scalar', exactly like a catalog-import row is - has
+    // something to violate, and did.
+    it('DeclaredKindIsOptional1758020000000 runs forward cleanly over a row already '
+      + 'carrying the old NOT NULL DEFAULT, not just over an empty table', async () => {
+      await undoMigrationNamed(ds, 'DeclaredKindIsOptional1758020000000');
+      await seedDraft();
+
+      const formulas = ds.getRepository(EquipmentClassFormula);
+      const saved = await formulas.save(formulas.create({
+        classSlug: 'diesel-generator', classVersion: 1, formulaKey: 'pre_existing_row',
+        kind: 'empirical', expression: 'avg(coolant_temp_c)',
+        // resultKind deliberately omitted - the column's own NOT NULL DEFAULT
+        // 'scalar' fills it in, exactly as an imported row would have it.
+      }));
+      // TypeORM's own INSERT RETURNING does not repopulate every server-computed
+      // default onto the in-memory entity - re-fetch to see what Postgres actually
+      // stored, not what the JS object happened to be constructed with.
+      const before = await formulas.findOneByOrFail({ id: saved.id });
+      expect(before.resultKind).toBe('scalar');
+
+      // If this throws, the test fails with the real error - a generic
+      // "did not throw" assertion would only hide it.
+      await ds.runMigrations({ transaction: 'all' });
+
+      const after = await formulas.findOneByOrFail({ id: saved.id });
+      expect(after.resultKind).toBeNull();
+    });
   });
 });
