@@ -13,6 +13,18 @@ export interface IngestResult {
 }
 
 /**
+ * How far back an ingest will build a partition for, rather than refuse the
+ * reading (task QPART1). This bound does two jobs: it keeps a reconnecting
+ * logger's backlog and the legacy backfill (months, sometimes years, of real
+ * history) landing correctly, and it stops a device with a broken clock reporting
+ * the year 2000 from creating a few hundred empty partitions nobody asked for.
+ * `telemetry_reading` migrated on a 12-months-ahead, 2-months-behind buffer, and
+ * the daily maintenance task only ever extends forward — neither covers a reading
+ * dated further back than this on its own.
+ */
+export const MAX_BACKFILL_MONTHS = 24;
+
+/**
  * Ingest for readings, idempotent by design (task P1-44).
  *
  * The dedupe key is (imei, signal, source_timestamp) and it is enforced by the
@@ -57,11 +69,15 @@ export class TelemetryService {
       tenantByImei.set(row.imei, row.tenantId);
     }
 
-    const rows: Partial<TelemetryReading>[] = [];
+    const rejections = m.getRepository(ProjectionRejection);
+    const oldestAllowedMonth = new Date(Date.UTC(
+      receivedAt.getUTCFullYear(), receivedAt.getUTCMonth() - MAX_BACKFILL_MONTHS, 1,
+    ));
+
+    const rows: (Partial<TelemetryReading> & { sourceTimestamp: Date })[] = [];
     for (const r of envelope.readings) {
       const tenantId = tenantByImei.get(r.imei);
       if (!tenantId) {
-        const rejections = m.getRepository(ProjectionRejection);
         await rejections.save(
           rejections.create({
             sourceSystem: envelope.sourceSystem,
@@ -74,19 +90,54 @@ export class TelemetryService {
         result.rejected += 1;
         continue;
       }
+
+      const sourceTimestamp = new Date(r.sourceTimestamp);
+      if (sourceTimestamp < oldestAllowedMonth) {
+        await rejections.save(
+          rejections.create({
+            sourceSystem: envelope.sourceSystem,
+            kind: 'telemetry',
+            externalId: r.imei,
+            reason: `Reading for ${r.imei}/${r.signal} is dated ${sourceTimestamp.toISOString()}, `
+              + `more than ${MAX_BACKFILL_MONTHS} months before it arrived — refused rather than `
+              + 'building it a partition, since a value this old is more likely a clock fault '
+              + 'than a backfill.',
+            payload: r as unknown as Record<string, unknown>,
+          }),
+        );
+        result.rejected += 1;
+        continue;
+      }
+
       rows.push({
         tenantId,
         imei: r.imei,
         signal: r.signal,
         value: r.value,
         unit: r.unit ?? null,
-        sourceTimestamp: new Date(r.sourceTimestamp),
+        sourceTimestamp,
         receivedAt,
         source: envelope.source,
       });
     }
 
     if (!rows.length) return result;
+
+    // Forward is already covered by the migration's own buffer and the daily
+    // maintenance task; this is what makes an older month — a reconnecting
+    // logger's backlog, the legacy backfill — land correctly without waiting on
+    // either of those.
+    //
+    // A literal 'YYYY-MM-01' string, not a JS Date object: a Date cast to ::date
+    // is interpreted in the session's own timezone, and this table's session sets
+    // none — midnight UTC on the 1st becomes the last day of the *previous* month
+    // wherever the server's local zone sits behind UTC, silently building the wrong
+    // partition every time.
+    const months = new Set(rows.map((r) =>
+      `${r.sourceTimestamp.getUTCFullYear()}-${String(r.sourceTimestamp.getUTCMonth() + 1).padStart(2, '0')}-01`));
+    for (const month of months) {
+      await m.query(`SELECT ensure_telemetry_partition($1::date)`, [month]);
+    }
 
     const inserted = await m
       .createQueryBuilder()
