@@ -350,3 +350,181 @@ npm run build && npm run test:db, then stop. I commit.
 
 `signals`, `enables` and `inputs` are comma-separated. `required` is TRUE/FALSE.
 Anything generated elsewhere gets pasted into this shape — the template is the contract.
+
+---
+
+## Part 5 — QIMP4: unblock the import loop, and stop it damaging the library
+
+```
+QIMP4 — unblock the import loop, and stop it damaging the library
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/equipment-library-import-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b fix/import-loop`
+
+Migration timestamp above every migration on `main`, and above whatever
+`feature/telemetry-partitioning` took — check both.
+
+---
+
+## What happened
+
+The library team loaded nine class versions into Development. `source` and
+`import_batch_id` on `equipment_class_profile` say how each arrived:
+
+| class | version | source | batch | state |
+|---|---|---|---|---|
+| 1160-mt, crawler-crane-hyd, hs-8070-hd, pg-430-100 | 1 | excel-import | `285e4f77` | correct, 25–26 signals, 6–7 failure modes |
+| ex-1200v | 1 | excel-import | `285e4f77` | 25 signals, 6 failure modes |
+| **ex-1200v** | **2** | excel-import | **`285e4f77`** | 25 signals, **0 failure modes** |
+| diesel-generator | 1 | excel-import | `4e5f998b` | 1 signal — a separate, smaller upload |
+| **crane-400-kw** | **1 and 2** | **manual** | **NULL** | 1 signal, `{"unit":null,"signal":"temp"}`, scenario with `required_signals: []` |
+
+Three separate findings, not one:
+
+1. **`ex-1200v` v1 and v2 came from the same batch**, and v2 dropped every failure mode.
+   One apply produced two versions of one class and the second lost content. That is a
+   real apply-path bug and the reason §4's `content_regression` warning exists.
+2. **`crane-400-kw` is `source = 'manual'`** — written through the API, never through the
+   import. The API accepted a signal with a null unit and a scenario with no required
+   signals; the import validator would have refused both. **Two write paths, one
+   validator** — §5.
+3. The duplicate-detection bug is still real and still blocks the loop, but it did **not**
+   cause the low signal counts. Four classes in the same batch loaded correctly.
+
+Published versions are immutable, so none of this can be repaired — only superseded. And
+the team could not re-upload a corrected workbook, because the checksum constraint refuses
+a file it has already seen.
+
+Four fixes, and one that stops it happening silently again.
+
+---
+
+## 1. Duplicate detection is scoped to the class
+
+A signal row's identity is **`(class_slug, signal, component_scope)`** — the key template
+v3 was built around. `coolant_temperature` belongs on a diesel generator, an excavator and
+a compressor, and all three are correct.
+
+Find where the validator dedupes and scope it. Report which file and what it was keyed on.
+
+**Tests:**
+
+1. One workbook, three classes, all declaring `coolant_temperature` with the same unit →
+   **all three accepted**, each class ends with its own row.
+2. One workbook, one class, the same signal twice with the same `component_scope` →
+   the second is **rejected** as a duplicate. That check is still wanted.
+3. Same class, same signal, **different `component_scope`** → both accepted.
+
+## 2. The checksum constraint goes
+
+`catalog_import_batch.checksum_sha256` is unique, so a file cannot be staged twice. But
+the loop is **upload → read diff → fix → upload again**, and when the fix is outside the
+workbook — creating a missing sensor capability — the file is unchanged and the checksum
+is identical. Renaming does not help; the checksum is content.
+
+It was solving a problem the apply side already solves: identical content mints no new
+class version. Staging twice costs nothing and the diff is the real gate.
+
+- **Drop the unique constraint** in a migration.
+- Keep the checksum column — it is useful provenance.
+- The diff may *note* "identical to batch X staged 10 minutes ago". It must never refuse.
+
+**Test:** the same file staged twice produces two batches, both usable.
+
+## 3. Discard a batch
+
+```
+DELETE /api/v1/platform/catalog/imports/:id
+```
+
+Allowed only when the batch has **not been applied**. Deletes its rows and itself.
+Guarded by `catalog.write`.
+
+**Tests:** an un-applied batch is deleted; an applied batch is **refused** with a reason.
+
+## 4. The diff must report what a class is about to lose
+
+This is the fix that matters most. The import did not fail silently — it listed the
+rejects — but "some rows were rejected" and "this class is about to be published with 1 of
+its 26 signals" read identically, and nobody noticed for days.
+
+Add to the dry-run diff, **per class**:
+
+```
+{ classSlug, signalsInWorkbook, signalsToApply, rejectedRows,
+  previousPublishedVersion: { version, signalCount, failureModeCount } | null }
+```
+
+And two explicit warnings:
+
+- **`incomplete_class`** — `signalsToApply < signalsInWorkbook`. The workbook asked for
+  more than will be written.
+- **`content_regression`** — a previous published version of this class had more signals
+  or more failure modes than this one will. That is the `ex-1200v` case: 6 failure modes
+  became 0 and nothing said so.
+
+**Apply must refuse** when either warning is present, unless the caller passes
+`acknowledgeWarnings: true`. Not a UI checkbox to click past — a field the caller has to
+set deliberately, which appears in the audit trail.
+
+**Tests:**
+
+4. A workbook where one class's signals are rejected → diff carries `incomplete_class`
+   with both counts.
+5. Apply without `acknowledgeWarnings` on such a batch → **refused**, message names the
+   class and the counts.
+6. Apply with `acknowledgeWarnings: true` → succeeds.
+7. Re-uploading a class with fewer failure modes than its published version → diff carries
+   `content_regression` naming the previous version.
+
+## 5. One validator, both write paths
+
+`crane-400-kw` v1 and v2 are `source = 'manual'`, `import_batch_id = NULL`. They hold a
+signal `{"unit": null, "signal": "temp"}` and a scenario with `required_signals: []`.
+Neither would survive the import validator. The API authoring path has its own, weaker
+rules — so the import's rules are decoration: anything refused there can be written
+through the API instead.
+
+**Extract the content validation into one module and call it from both paths.** Report
+where the two sets of rules live today and what each enforced.
+
+Minimum the shared validator refuses, on **either** path:
+
+- a signal with a null or empty `unit`
+- a signal whose capability is not in the sensor catalog
+- a scenario with `required_signals: []`
+- a class published with zero signals
+
+**Tests:** each of the four, once through the import apply path and once through the API
+authoring endpoint — same refusal, same message shape. Eight tests, not four.
+
+## 6. Why did one batch mint two versions?
+
+Batch `285e4f77` produced `ex-1200v` v1 **and** v2. Find out how and say so in the report —
+whether the workbook held the class twice, or apply ran twice against one batch, or the
+version bump fires per sheet. Fix it if it is cheap and inside this task's surface;
+otherwise report it and I will scope it separately. **Do not widen the branch to chase it.**
+
+## 7. Out of scope
+
+- The missing-capability review flow — QIMP5.
+- Retire vs delete on sensor capabilities — QCAT2.
+- Repairing the damaged classes. That is content work: re-upload once this ships, which
+  mints new versions, then retire the broken ones. **Do not write a data migration to
+  patch published rows** — immutability is the rule that makes the catalogue trustworthy,
+  and a one-off exception is how it stops being one.
+- Anything under `frontend/`.
+
+## 8. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Report counts before and
+  after, measured by stashing back and running.
+- Full migration chain from an empty database, and the down path named explicitly with
+  `undoMigrationNamed`.
+- **Seed before you migrate** — the dropped constraint must be tested against a table that
+  already holds batches, not an empty one.
+- Report: commit SHA, test counts, the file and key the duplicate check was using before
+  the fix, where the two validators lived and what each enforced, the answer to §6, and
+  anything not implemented with the reason.
+```

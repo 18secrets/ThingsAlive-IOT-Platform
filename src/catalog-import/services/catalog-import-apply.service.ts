@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
@@ -8,7 +8,7 @@ import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
-  buildProposedClass, classesIdentical, loadCurrentClass, str, strOrNull,
+  ClassDiffWarning, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass, str, strOrNull,
 } from './class-content';
 
 const SOURCE = 'excel-import' as const;
@@ -40,14 +40,30 @@ const classSlugOf = (row: CatalogImportRow): string | undefined => {
 export class CatalogImportApplyService {
   constructor(private readonly ds: DataSource) {}
 
-  async apply(batchId: string, appliedBy: string): Promise<ApplySummary> {
+  async apply(batchId: string, appliedBy: string, acknowledgeWarnings = false): Promise<ApplySummary> {
     return this.ds.transaction(async (m) => {
-      const batchRepo = m.getRepository(CatalogImportBatch);
-      const batch = await batchRepo.findOneOrFail({ where: { id: batchId } });
+      // Locked for the rest of this transaction, not just read: two overlapping
+      // applies against the same batch would otherwise both pass the status check
+      // below before either commits — under READ COMMITTED, a statement inside an
+      // already-open transaction still sees whatever the *other* transaction has
+      // committed by the time that statement runs, not a snapshot frozen at BEGIN.
+      // A batch applied a moment apart rather than at the same instant is exactly
+      // how `ex-1200v` got a v1 and a v2 from one batch: the second call's own
+      // "is this validated" check passed against the pre-commit state, and by the
+      // time it read the class's current version, the first call had already
+      // written v1 and committed. The lock forces the second caller to wait for the
+      // first to finish and then read its result, not race it.
+      const batch = await m.getRepository(CatalogImportBatch)
+        .createQueryBuilder('batch')
+        .setLock('pessimistic_write')
+        .where('batch.id = :batchId', { batchId })
+        .getOne();
+      if (!batch) throw new NotFoundException(`No import batch "${batchId}".`);
       if (batch.status !== 'validated') {
         throw new BadRequestException(`Batch is "${batch.status}"; only a validated batch can be applied.`);
       }
 
+      const batchRepo = m.getRepository(CatalogImportBatch);
       const rowRepo = m.getRepository(CatalogImportRow);
       const rows = await rowRepo.find({ where: { batchId } });
       const validRows = rows.filter((r) => r.status === 'valid');
@@ -61,6 +77,30 @@ export class CatalogImportApplyService {
         const list = bySlug.get(slug) ?? [];
         list.push(r);
         bySlug.set(slug, list);
+      }
+
+      // The same computation the dry-run diff shows, so apply cannot refuse on a
+      // warning the diff never mentioned or write past one it did (task QIMP4).
+      // Checked before anything is written — a refusal that happened after half the
+      // batch was already applied would be the partial-write problem this whole
+      // service exists to avoid.
+      if (!acknowledgeWarnings) {
+        const problems: string[] = [];
+        for (const [slug, slugRows] of bySlug) {
+          const allForClass = rows.filter((r) => classSlugOf(r) === slug);
+          const { current, content: currentContent } = await loadCurrentClass(m, slug);
+          const entry = await computeClassDiffEntry(
+            m, slug, allForClass, slugRows, current, currentContent, 'create',
+          );
+          if (entry.warnings.length) {
+            problems.push(this.describeWarnings(slug, entry.warnings, entry));
+          }
+        }
+        if (problems.length) {
+          throw new BadRequestException(
+            `Refused: ${problems.join(' ')} Pass acknowledgeWarnings: true to apply anyway.`,
+          );
+        }
       }
 
       const classSummaries: Record<string, ClassApplyResult> = {};
@@ -116,6 +156,31 @@ export class CatalogImportApplyService {
 
       return summary;
     });
+  }
+
+  /** One sentence per warning, naming the class and the counts — not a generic
+   * "some content will be lost", which reads identically for every batch this
+   * ever fires on. */
+  private describeWarnings(
+    slug: string, warnings: ClassDiffWarning[],
+    entry: { signalsInWorkbook: number; signalsToApply: number; previousPublishedVersion: { version: number; signalCount: number; failureModeCount: number } | null },
+  ): string {
+    const parts: string[] = [];
+    if (warnings.includes('incomplete_class')) {
+      parts.push(
+        `"${slug}": the workbook asked for ${entry.signalsInWorkbook} signal(s) but only `
+          + `${entry.signalsToApply} would be written (incomplete_class).`,
+      );
+    }
+    if (warnings.includes('content_regression') && entry.previousPublishedVersion) {
+      parts.push(
+        `"${slug}": published v${entry.previousPublishedVersion.version} has `
+          + `${entry.previousPublishedVersion.signalCount} signal(s) and `
+          + `${entry.previousPublishedVersion.failureModeCount} failure mode(s); this batch would write fewer `
+          + '(content_regression).',
+      );
+    }
+    return parts.join(' ');
   }
 
   private async applyClass(

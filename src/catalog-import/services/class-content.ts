@@ -229,3 +229,88 @@ export function canonicalizeClass(content: ClassContent): string {
 export function classesIdentical(a: ClassContent, b: ClassContent): boolean {
   return canonicalizeClass(a) === canonicalizeClass(b);
 }
+
+export type ClassDiffWarning = 'incomplete_class' | 'content_regression';
+
+export interface PreviousPublishedVersion {
+  version: number;
+  signalCount: number;
+  failureModeCount: number;
+}
+
+export interface ClassDiffEntry {
+  slug: string;
+  action: 'create' | 'new_version' | 'unchanged';
+  countsBySheet: Record<string, number>;
+  signalsInWorkbook: number;
+  signalsToApply: number;
+  rejectedRows: number;
+  previousPublishedVersion: PreviousPublishedVersion | null;
+  warnings: ClassDiffWarning[];
+}
+
+/**
+ * What a class's dry-run diff says, and what apply refuses on — the same computation
+ * for both, so they cannot disagree about whether a batch is safe to write (task
+ * QIMP4). Neither reads a workbook file; both work from rows already staged.
+ *
+ * `signalsInWorkbook` counts every distinct signal name the workbook asked for on
+ * this class, valid or not — a row rejected for a bad unit is still something the
+ * author intended to declare. `signalsToApply` counts what would actually be
+ * written. The gap between them is `incomplete_class`: "some rows were rejected"
+ * and "this class is about to publish with 1 of its 26 signals" read identically
+ * unless the diff says so in numbers.
+ *
+ * `content_regression` compares against the class's last *published* version
+ * specifically, not merely its latest row (`loadCurrentClass` returns the latest
+ * version regardless of status) — a draft nobody published yet is not content this
+ * import would be destroying. This is the `ex-1200v` case: six failure modes in the
+ * published v1, none in the v2 this batch proposes, and nothing said so until now.
+ */
+export async function computeClassDiffEntry(
+  m: EntityManager,
+  slug: string,
+  allRowsForClass: CatalogImportRow[],
+  validRowsForClass: CatalogImportRow[],
+  current: EquipmentClassProfile | null,
+  currentContent: ClassContent,
+  action: ClassDiffEntry['action'],
+): Promise<ClassDiffEntry> {
+  const countsBySheet: Record<string, number> = {};
+  for (const r of validRowsForClass) countsBySheet[r.sheet] = (countsBySheet[r.sheet] ?? 0) + 1;
+
+  const signalsInWorkbook = new Set(
+    allRowsForClass.filter((r) => r.sheet === 'signal').map((r) => str(r.payload.signal)),
+  ).size;
+
+  const proposed = buildProposedClass(validRowsForClass, currentContent);
+  const signalsToApply = proposed.expectedSignals.length;
+  const rejectedRows = allRowsForClass.filter((r) => r.status === 'invalid').length;
+
+  // The class's own history, not `current` — a class only ever created as drafts
+  // has no published version to regress from, however many drafts it has been through.
+  const publishedRepo = m.getRepository(EquipmentClassProfile);
+  const lastPublished = await publishedRepo.findOne({
+    where: { slug, status: 'published' }, order: { version: 'DESC' },
+  });
+  const previousPublishedVersion: PreviousPublishedVersion | null = lastPublished ? {
+    version: lastPublished.version,
+    signalCount: lastPublished.expectedSignals.length,
+    failureModeCount: lastPublished.failureModes.length,
+  } : null;
+
+  const warnings: ClassDiffWarning[] = [];
+  if (signalsToApply < signalsInWorkbook) warnings.push('incomplete_class');
+  if (previousPublishedVersion) {
+    const proposedFailureModes = proposed.failureModes.length;
+    if (signalsToApply < previousPublishedVersion.signalCount
+      || proposedFailureModes < previousPublishedVersion.failureModeCount) {
+      warnings.push('content_regression');
+    }
+  }
+
+  return {
+    slug, action, countsBySheet, signalsInWorkbook, signalsToApply, rejectedRows,
+    previousPublishedVersion, warnings,
+  };
+}

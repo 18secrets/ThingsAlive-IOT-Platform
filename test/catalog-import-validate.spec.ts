@@ -7,6 +7,7 @@ import { mintPlatformToken } from '../src/platform/platform-token';
 import { EquipmentClassFormula } from '../src/catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile, ExpectedSignal } from '../src/catalog/entities/equipment-class-profile.entity';
 import { Sensor } from '../src/device-catalog/entities/sensor.entity';
+import { CatalogImportBatch } from '../src/catalog-import/entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../src/catalog-import/entities/catalog-import-row.entity';
 import { CatalogImportDiffService } from '../src/catalog-import/services/catalog-import-diff.service';
 import { CatalogImportValidatorService } from '../src/catalog-import/services/catalog-import-validator.service';
@@ -350,6 +351,26 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       }
     });
 
+    // Task QIMP4, finding 1: the duplicate check's key is (class_slug, signal,
+    // component_scope) — a signal name belongs to a class, not to the batch as a
+    // whole. `coolant_temperature` on a diesel generator, an excavator and a
+    // compressor are three different rows, not the same row three times.
+    it('accepts the same signal name declared by three different classes in one workbook', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        for (const slug of ['class-shared-a', 'class-shared-b', 'class-shared-c']) {
+          addRow(wb, 'equipment_class', {
+            slug, name: slug, description: '', category: '', service_interval_hours: '',
+          });
+          addRow(wb, 'signal', { class_slug: slug, signal: 'coolant_temperature', unit: 'degC', required: 'TRUE' });
+        }
+      });
+      const { id } = await parseAndValidate(buffer);
+      const rows = (await rowsFor(id, 'signal')).filter((r) =>
+        ['class-shared-a', 'class-shared-b', 'class-shared-c'].includes(String(r.payload.class_slug)));
+      expect(rows).toHaveLength(3);
+      for (const r of rows) expect(r.status).toBe('valid');
+    });
+
     it('a signal row with both min and max blank is valid: it declares no threshold', async () => {
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'signal', {
@@ -457,6 +478,46 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
         });
       }));
       expect((await diff.buildDiff(dirty.id)).partialApplyNote).toMatch(/1 row\(s\) are invalid.*would be skipped/i);
+    });
+
+    // Task QIMP4, finding 4: "some rows were rejected" and "this class is about to
+    // publish with 1 of its 26 signals" read identically unless the diff carries
+    // the actual numbers.
+    it('flags incomplete_class when some of a class\'s signal rows were rejected', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_g', unit: 'unitX', required: 'TRUE',
+          criticality: 'not-a-real-criticality', min_count: 1,
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const result = await diff.buildDiff(id);
+      const entry = result.classes.find((c) => c.slug === CLASS_SLUG)!;
+      expect(entry.warnings).toContain('incomplete_class');
+      expect(entry.signalsInWorkbook).toBe(2); // the template's own row, plus the rejected one
+      expect(entry.signalsToApply).toBe(1);
+    });
+
+    // The `ex-1200v` case: a previously published version had more content than
+    // this batch would write, and nothing said so until the diff carried the counts.
+    it('flags content_regression when the previous published version had more signals than this batch writes', async () => {
+      await seedClass(CLASS_SLUG, [
+        { signal: 'coolant_temp_c', unit: 'degC', required: true },
+        { signal: 'oil_pressure_kpa', unit: 'kPa', required: true },
+      ]);
+      const { id } = await parseAndValidate(await workbookBuffer()); // the template's one signal row
+      const result = await diff.buildDiff(id);
+      const entry = result.classes.find((c) => c.slug === CLASS_SLUG)!;
+      expect(entry.warnings).toContain('content_regression');
+      expect(entry.previousPublishedVersion).toMatchObject({ version: 1, signalCount: 2 });
+    });
+
+    it('notes rather than refuses when an earlier batch staged the identical bytes', async () => {
+      const buffer = await workbookBuffer();
+      const first = await parseAndValidate(buffer, 'first.xlsx');
+      const second = await parseAndValidate(buffer, 'second.xlsx');
+      const result = await diff.buildDiff(second.id);
+      expect(result.duplicateOfNote).toMatch(new RegExp(first.id));
     });
 
     it('writes nothing to the catalog tables', async () => {
@@ -568,6 +629,73 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       expect(await ds.getRepository(EquipmentClassProfile).count()).toBe(before);
       const [{ count }] = await owner.query(`SELECT count(*)::int FROM "equipment_class_sensor_requirement"`);
       expect(count).toBe(0);
+    });
+
+    // Task QIMP4, finding 3.
+    it('discards a batch that has not been applied', async () => {
+      const upload = await request(app.getHttpServer())
+        .post('/api/v1/platform/catalog/imports')
+        .set('Authorization', `Bearer ${bearer('master-admin')}`)
+        .attach('file', await workbookBuffer(), 'discard-me.xlsx');
+      const batchId = upload.body.id;
+
+      const del = await request(app.getHttpServer())
+        .delete(`/api/v1/platform/catalog/imports/${batchId}`)
+        .set('Authorization', `Bearer ${bearer('master-admin')}`);
+      expect(del.status).toBe(204);
+
+      expect(await ds.getRepository(CatalogImportBatch).findOne({ where: { id: batchId } })).toBeNull();
+      expect(await ds.getRepository(CatalogImportRow).find({ where: { batchId } })).toEqual([]);
+    });
+
+    it('refuses to discard a batch that has already been applied', async () => {
+      const upload = await request(app.getHttpServer())
+        .post('/api/v1/platform/catalog/imports')
+        .set('Authorization', `Bearer ${bearer('master-admin')}`)
+        .attach('file', await workbookBuffer(), 'apply-me.xlsx');
+      const batchId = upload.body.id;
+
+      const applyRes = await request(app.getHttpServer())
+        .post(`/api/v1/platform/catalog/imports/${batchId}/apply`)
+        .set('Authorization', `Bearer ${bearer('master-admin')}`);
+      expect(applyRes.status).toBe(201);
+
+      const del = await request(app.getHttpServer())
+        .delete(`/api/v1/platform/catalog/imports/${batchId}`)
+        .set('Authorization', `Bearer ${bearer('master-admin')}`);
+      expect(del.status).toBe(400);
+      expect(del.body.error.message).toMatch(/already been applied/);
+
+      expect(await ds.getRepository(CatalogImportBatch).findOne({ where: { id: batchId } })).not.toBeNull();
+    });
+
+    // Task QIMP4, finding 4: not a checkbox nobody remembers clicking past —
+    // acknowledgeWarnings is a field the caller sets deliberately.
+    it('refuses to apply an incomplete class unless acknowledgeWarnings is set, then succeeds when it is', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'new_signal_h', unit: 'unitX', required: 'TRUE',
+          criticality: 'not-a-real-criticality', min_count: 1,
+        });
+      });
+      const upload = await request(app.getHttpServer())
+        .post('/api/v1/platform/catalog/imports')
+        .set('Authorization', `Bearer ${bearer('master-admin')}`)
+        .attach('file', buffer, 'incomplete.xlsx');
+      const batchId = upload.body.id;
+
+      const refused = await request(app.getHttpServer())
+        .post(`/api/v1/platform/catalog/imports/${batchId}/apply`)
+        .set('Authorization', `Bearer ${bearer('master-admin')}`);
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.message).toMatch(new RegExp(CLASS_SLUG));
+      expect(refused.body.error.message).toMatch(/incomplete_class/);
+
+      const applied = await request(app.getHttpServer())
+        .post(`/api/v1/platform/catalog/imports/${batchId}/apply`)
+        .set('Authorization', `Bearer ${bearer('master-admin')}`)
+        .send({ acknowledgeWarnings: true });
+      expect(applied.status).toBe(201);
     });
   });
 });

@@ -1,5 +1,6 @@
 import {
-  BadRequestException, Controller, Get, Param, Post, StreamableFile, UploadedFile, UseInterceptors,
+  BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Post,
+  StreamableFile, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -68,11 +69,23 @@ export class CatalogImportController {
     return this.diff.buildDiff(id);
   }
 
+  @Delete('imports/:id')
+  @Requires('catalog.write')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Discard a batch that has not been applied' })
+  async discard(@Param('id') id: string): Promise<void> {
+    await this.diff.discard(id);
+  }
+
   @Post('imports/:id/apply')
   @Requires('catalog.write')
   @ApiOperation({ summary: 'Apply a validated batch: writes the catalog, versioned and provenanced' })
-  apply(@Param('id') id: string, @CurrentScope() scope: RequestScope) {
-    return this.applier.apply(id, scope.userId);
+  apply(
+    @Param('id') id: string,
+    @CurrentScope() scope: RequestScope,
+    @Body('acknowledgeWarnings') acknowledgeWarnings?: boolean,
+  ) {
+    return this.applier.apply(id, scope.userId, acknowledgeWarnings === true);
   }
 
   @Get('template')

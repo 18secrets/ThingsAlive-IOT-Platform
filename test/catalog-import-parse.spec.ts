@@ -193,11 +193,24 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(result.countsBySheet.equipment_class).toBe(2);
   });
 
-  it('refuses staging the same workbook twice, by checksum', async () => {
+  // Task QIMP4: the loop is upload -> read the diff -> fix -> upload again, and the
+  // fix is routinely outside the workbook (creating a missing sensor capability),
+  // so the file is byte-identical and the checksum does not change. Refusing a
+  // repeat was solving a problem the apply side already solves — identical content
+  // mints no new class version regardless of which batch it arrived in — at the
+  // cost of blocking the workflow this feature exists to support.
+  it('stages the same workbook twice, producing two usable batches', async () => {
     const buffer = await workbookBuffer();
-    await parser.parse(buffer, 'first.xlsx', 'deepak');
-    await expect(parser.parse(buffer, 'second.xlsx', 'deepak'))
-      .rejects.toThrow(/already been staged/);
+    const first = await parser.parse(buffer, 'first.xlsx', 'deepak');
+    const second = await parser.parse(buffer, 'second.xlsx', 'deepak');
+
+    expect(second.id).not.toBe(first.id);
+    expect(second.countsBySheet).toEqual(first.countsBySheet);
+
+    for (const id of [first.id, second.id]) {
+      const rows = await ds.getRepository(CatalogImportRow).find({ where: { batchId: id } });
+      expect(rows.length).toBeGreaterThan(0);
+    }
   });
 
   it('writes nothing to any catalog table', async () => {

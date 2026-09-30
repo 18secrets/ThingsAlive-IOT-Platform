@@ -9,6 +9,7 @@ import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
 import { validateParams } from '../../alert/services/alert-rules';
+import { validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals } from './content-validation';
 
 type ClassDraft = Partial<Pick<EquipmentClassProfile,
   'name' | 'description' | 'category' | 'expectedSignals' | 'failureModes' | 'defaultThresholds'>>;
@@ -53,6 +54,7 @@ export class CatalogAuthoringService {
     if (await this.classes.findOne({ where: { slug } })) {
       throw new BadRequestException(`Template "${slug}" already exists. Edit it to create a new version.`);
     }
+    this.requireSaneSignals(draft.expectedSignals ?? []);
     this.logger.log(`${scope.userId} created template class "${slug}".`);
     return this.classes.save(this.classes.create({
       slug, version: 1, status: 'draft', publishedAt: null,
@@ -74,6 +76,7 @@ export class CatalogAuthoringService {
   async editClass(scope: RequestScope, slug: string, draft: ClassDraft): Promise<EquipmentClassProfile> {
     const working = await this.workingClass(slug);
     Object.assign(working, draft);
+    if (draft.expectedSignals) this.requireSaneSignals(working.expectedSignals);
     this.logger.log(`${scope.userId} edited template class "${slug}" v${working.version}.`);
     return this.classes.save(working);
   }
@@ -93,10 +96,9 @@ export class CatalogAuthoringService {
   async publishClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
     const draft = await this.classes.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
     if (!draft) throw new NotFoundException(`No draft of "${slug}" to publish.`);
-    if (!draft.expectedSignals.length) {
-      // A class declaring no signals makes every scenario on it permanently blocked,
-      // and the blocker names signals the class never promised. Better to refuse.
-      throw new BadRequestException(`"${slug}" declares no expected signals; publishing it would help nobody.`);
+    const signalProblem = validateSignalCountForPublish(draft.expectedSignals);
+    if (signalProblem) {
+      throw new BadRequestException(`"${slug}" ${signalProblem}`);
     }
 
     const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
@@ -201,6 +203,8 @@ export class CatalogAuthoringService {
     const draft = await this.scenarios.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
     if (!draft) throw new NotFoundException(`No draft of "${slug}" to publish.`);
     await this.requireDeclaredSignals(draft.equipmentClassSlug, draft.requiredSignals);
+    const requiredProblem = validateScenarioRequiredSignals(draft.requiredSignals);
+    if (requiredProblem) throw new BadRequestException(`"${slug}": ${requiredProblem}`);
     draft.status = 'published';
     draft.publishedAt = new Date();
     this.logger.log(`${scope.userId} published template scenario "${slug}" v${draft.version}.`);
@@ -385,6 +389,17 @@ export class CatalogAuthoringService {
     if (draft.trigger === 'signal-threshold' && watched) {
       await this.requireDeclaredSignals(classSlug, [watched]);
     }
+  }
+
+  /**
+   * The same content rules the import path enforces (task QIMP4, `content-validation.ts`)
+   * — a signal with no unit or no catalogued capability is refused here exactly as it
+   * would be in a workbook, so a value the import would reject cannot be written
+   * through this door instead.
+   */
+  private requireSaneSignals(signals: ClassDraft['expectedSignals']): void {
+    const problems = validateSignals(signals ?? []);
+    if (problems.length) throw new BadRequestException(problems.join(' '));
   }
 
   /**
