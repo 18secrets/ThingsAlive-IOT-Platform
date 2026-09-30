@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
+import { slugify } from '../../catalog-import/services/sensor-review';
 
 export interface ResolvedMappedSensor {
   sensorId: string;
@@ -78,11 +79,30 @@ export class DeviceCatalogService {
     if (draft.categoryId) await this.requireCategory(draft.categoryId);
     return this.sensors.save(this.sensors.create({
       sensorName: draft.sensorName.trim(),
+      slug: await this.uniqueSlugFor(draft.sensorName),
       categoryId: draft.categoryId ?? null,
       description: draft.description ?? null,
       protocol: draft.protocol ?? null,
       parameterSpecs: draft.parameterSpecs ?? [],
     }));
+  }
+
+  /** The same derivation `sensor-review.ts` uses for a proposed sensor (task
+   * QIMP5) — this is the only other place a `sensor` row is ever created, and the
+   * two paths writing different slugs for the same name would be the exact
+   * problem `slug` exists to close. A collision gets a numeric suffix, same as the
+   * migration's one-time backfill. */
+  private async uniqueSlugFor(name: string): Promise<string> {
+    const base = slugify(name);
+    let candidate = base;
+    let suffix = 1;
+    // Vanishingly few sensors share a base slug; a loop beats a recursive query.
+    // eslint-disable-next-line no-await-in-loop
+    while (await this.sensors.findOne({ where: { slug: candidate } })) {
+      suffix += 1;
+      candidate = `${base}-${suffix}`;
+    }
+    return candidate;
   }
 
   async updateSensor(id: string, draft: SensorDraft): Promise<Sensor> {

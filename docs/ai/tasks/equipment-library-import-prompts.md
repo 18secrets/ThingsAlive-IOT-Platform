@@ -528,3 +528,178 @@ otherwise report it and I will scope it separately. **Do not widen the branch to
   the fix, where the two validators lived and what each enforced, the answer to §6, and
   anything not implemented with the reason.
 ```
+
+---
+
+## Part 6 — QIMP5: the sensor catalog — propose from the workbook, create on approval
+
+```
+QIMP5 — the sensor catalog: propose from the workbook, create on approval
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/equipment-library-import-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/import-sensor-review`
+
+Migration timestamp above every migration on `main` — `!41` and `!42` have both landed, so
+check rather than assume.
+
+---
+
+## What the diagnostic established
+
+- `sensor` holds **3 rows**. The workbook proposes roughly forty sensors that do not exist.
+- Every reject in both batches was `count === 0` — **not found**, never ambiguous.
+- `sensor_role_capability` is empty and unrelated to this check. Ignore it.
+- `duplicate_in_batch` fired on byte-identical rows: the author registered one physical
+  sensor's capability once per class, because `sensor_capability` is a **global** sheet and
+  nothing said so.
+
+Nothing was broken. **Nobody authored the sensor catalog**, and the import correctly refused
+to invent one. This task makes the workbook propose it and a master admin approve it.
+
+The refusal itself stays. A signal must resolve to a catalog entry or the platform has no
+normalised unit for it, and rule binding is by `(signal, unit)` — a name meaning °C on one
+class and °F on another silently unbinds every rule that touches it. Auto-creating from a
+workbook is exactly how that happens. **Review, not auto-create.**
+
+---
+
+## 1. Split the reject codes
+
+`"${name}" resolves to ${count} sensor(s)` covers not-found and ambiguous with one string.
+That single message cost us four days and two wrong diagnoses.
+
+- `sensor_not_found` — no match. Message names the sensor and says it can be proposed.
+- `sensor_ambiguous` — more than one match. Message lists every candidate's slug and unit.
+
+**Test:** each code fires on its own condition, and the ambiguous message names all
+candidates.
+
+## 2. Resolve by a stable key, not a display name
+
+Add `slug` to `sensor`: unique, lowercase, `[a-z0-9-]`. Backfill the three existing rows by
+slugifying their names — three rows, so do it in the migration and assert the count.
+
+Resolution order in the validator:
+
+1. `sensor_slug` if the row supplies one → exact match, no fallback.
+2. otherwise `sensor_name` → case-insensitive, whitespace-trimmed match, and the diff
+   carries a `name_matched` note saying which slug it resolved to.
+
+The `sensor_capability` sheet gains an **optional** `sensor_slug` column. Optional now;
+QREC0 bumps the template to v4 and makes it the primary. **Do not bump the template
+version in this task** — an optional added column does not need one.
+
+**Tests:** slug match; name match case- and whitespace-insensitively with the note; a slug
+that does not exist is `sensor_not_found` even when a name in the row would have matched.
+
+## 3. Identical global rows are a no-op
+
+On `sensor_capability` and any other global sheet:
+
+- **Identical** rows — same sensor, same `parameter_key`, same `canonical_unit`, same every
+  other field — collapse to one. The diff carries `deduplicated_rows` with the count and
+  the row numbers. **Not a rejection.**
+- **Conflicting** rows — same sensor and `parameter_key`, any field differing — are a hard
+  error, `conflicting_capability`, naming both rows and the fields that differ.
+
+**Tests:** four identical rows → one capability, `deduplicated_rows: 4`, nothing rejected;
+two rows differing only in `canonical_unit` → `conflicting_capability` naming both units.
+
+## 4. The diff proposes the missing sensors
+
+```
+proposedSensors: [
+  { slug, name, category, parameterKey, canonicalUnit,
+    proposedByRows: [...], usedByClasses: [...] }
+]
+```
+
+One entry per distinct sensor, not per row. A sensor used by six classes is one proposal
+listing six `usedByClasses`. `slug` is derived from the name when the row gives none —
+show the derived slug so the approver sees what will be created.
+
+`sensor_ambiguous` never becomes a proposal — an ambiguous name is a naming problem the
+author resolves, not something to create around.
+
+**Categories are proposable too.** `sensor_category` holds **3 rows**, and forty sensors
+across six equipment classes will not fit three categories. If an unlisted category were
+merely refused, the re-upload would stall at the same wall one step later.
+
+```
+proposedCategories: [ { slug, name, proposedBySensors: [...] } ]
+```
+
+A sensor whose category is proposed is itself still proposable; approving the sensor
+**requires** its category to be approved in the same call or to already exist, and the
+endpoint refuses the pair in the wrong order rather than creating an orphan.
+
+## 5. Create on approval
+
+```
+POST /api/v1/platform/catalog/imports/:id/sensors
+{ approveCategories: [ { slug } ... ],
+  approve:           [ { slug } ... ],
+  dismiss:           [ { slug } ... ] }
+```
+
+Categories are created first, in the same transaction, so one call can approve a category
+and the sensors that need it.
+
+- Guarded by **`catalog.write`**. State which capability you found this maps to and why.
+- Creates only slugs present in that batch's `proposedSensors`. Anything else is
+  **refused**, not ignored.
+- Idempotent — a sensor created between the diff and the approval is a no-op, not an error.
+  Two admins approving the same batch must not collide. Take a row lock on the batch, as
+  QIMP4 did on apply.
+- Records who approved or dismissed what, against the batch.
+- **Re-validates the batch and recomputes the diff.** The author does not re-upload. That is
+  the entire point of the task.
+
+## 6. Apply refuses while proposals are outstanding
+
+A batch with `proposedSensors` neither approved nor dismissed → apply is **refused**,
+message names the count and the classes affected.
+
+A dismissed proposal becomes an ordinary rejected row and feeds QIMP4's `incomplete_class`
+warning, which still requires `acknowledgeWarnings`. So a partial load now takes **two
+deliberate acts**.
+
+## 7. Tests
+
+1. A workbook naming three absent sensors → three `proposedSensors`, each listing every
+   class that used it.
+2. One sensor used by six classes → one proposal, six `usedByClasses`.
+3. Approve two of three → those two exist as `sensor` rows; the third is still outstanding.
+4. Apply with an outstanding proposal → **refused**, message names the classes.
+5. Dismiss the third, then apply → succeeds only with `acknowledgeWarnings`.
+6. Approval is idempotent; the same approval twice leaves one row.
+7. `approve` naming a slug not in this batch's proposals → **refused**.
+8. After approval the recomputed diff shows those signals applicable, **with no re-upload**.
+9. Two concurrent approvals of the same batch → one set of sensors, no error.
+10. A row naming a category the catalog lacks → a `proposedCategories` entry listing the
+    sensors that need it.
+11. Approving a sensor whose category is neither existing nor in `approveCategories` →
+    **refused**, no orphan created.
+12. One call approving a category and three sensors in it → all four exist, one
+    transaction.
+
+## 8. Out of scope
+
+- Retire vs delete on sensors — QCAT2.
+- Template v4 — QREC0. The added column is optional and unversioned.
+- Repairing the damaged classes. Re-upload mints new versions; the broken ones are retired.
+  **No data migration against published rows.**
+- Anything under `frontend/`. Report the endpoint and payload shapes the console needs; the
+  UI team builds the screen.
+
+## 9. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after,
+  measured by stashing back and running.
+- Full migration chain from empty, down path named with `undoMigrationNamed`.
+- **Seed before you migrate** — the `sensor.slug` backfill must be tested against a table
+  that already holds rows, including one whose name slugifies to a collision.
+- Report: commit SHA, test counts, which capability the `catalog.write` question resolved
+  to, and anything not implemented with the reason.
+```

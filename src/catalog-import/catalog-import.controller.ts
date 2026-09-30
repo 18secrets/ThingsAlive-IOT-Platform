@@ -9,6 +9,7 @@ import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { CatalogImportApplyService } from './services/catalog-import-apply.service';
 import { CatalogImportDiffService } from './services/catalog-import-diff.service';
+import { CatalogImportSensorReviewService, SensorReviewRequest } from './services/catalog-import-sensor-review.service';
 import { CatalogImportValidatorService } from './services/catalog-import-validator.service';
 import { CatalogTemplateService } from './services/catalog-template.service';
 import { CatalogImportRefusal, WorkbookParserService } from './services/workbook-parser.service';
@@ -30,6 +31,7 @@ export class CatalogImportController {
     private readonly diff: CatalogImportDiffService,
     private readonly templates: CatalogTemplateService,
     private readonly applier: CatalogImportApplyService,
+    private readonly sensorReview: CatalogImportSensorReviewService,
   ) {}
 
   @Post('imports')
@@ -86,6 +88,17 @@ export class CatalogImportController {
     @Body('acknowledgeWarnings') acknowledgeWarnings?: boolean,
   ) {
     return this.applier.apply(id, scope.userId, acknowledgeWarnings === true);
+  }
+
+  @Post('imports/:id/sensors')
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Approve or dismiss the sensors and categories a batch proposes; re-validates and returns the diff' })
+  reviewSensors(
+    @Param('id') id: string,
+    @CurrentScope() scope: RequestScope,
+    @Body() body: SensorReviewRequest,
+  ) {
+    return this.sensorReview.review(id, body, scope.userId);
   }
 
   @Get('template')

@@ -31,6 +31,13 @@ export class Sensor {
   @Column({ name: 'sensor_name', type: 'text' })
   sensorName: string;
 
+  /** The stable key the import path resolves against (task QIMP5) — `sensor_name` is
+   * a display string, and matching on it exactly is how the same physical sensor
+   * spelled two ways in two workbooks becomes two unrelated capabilities. */
+  @Column({ type: 'text' })
+  @Index('uq_sensor_slug', { unique: true })
+  slug: string;
+
   @Column({ name: 'category_id', type: 'uuid', nullable: true })
   @Index('ix_sensor_category')
   categoryId: string | null;

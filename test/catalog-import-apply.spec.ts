@@ -53,7 +53,9 @@ describeDb('catalog import: apply', () => {
         "sensor_role_capability", "equipment_class_profile", "sensor"
        RESTART IDENTITY CASCADE`,
     );
-    await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe' }));
+    await ds.getRepository(Sensor).save(
+      ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe', slug: 'coolant-temp-probe' }),
+    );
   });
 
   const workbookBuffer = async (generatedAt: Date, mutate?: (wb: Workbook) => void): Promise<Buffer> => {

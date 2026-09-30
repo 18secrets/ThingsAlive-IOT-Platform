@@ -154,12 +154,20 @@ export const CONTENT_SHEETS: SheetSchema[] = [
     entityKind: 'sensor_capability',
     columns: [
       { name: 'sensor_name', requiredCell: true },
+      // Optional, added by task QIMP5 — not a template version bump, because an
+      // optional column asks nothing of a workbook that predates it. sensor_slug
+      // resolves exactly, no fallback, once a sensor is catalogued; sensor_name
+      // stays the display string and the case/whitespace-insensitive fallback.
+      { name: 'sensor_slug', requiredCell: false },
+      // Optional, same reason: what a proposed sensor should be filed under. Blank
+      // is legal — the sensor is still proposable, uncategorised.
+      { name: 'category', requiredCell: false },
       { name: 'signal', requiredCell: true },
       { name: 'parameter_key', requiredCell: false },
       { name: 'canonical_unit', requiredCell: false },
     ],
     example: {
-      sensor_name: 'Coolant Temp Probe', signal: 'coolant_temp_c',
+      sensor_name: 'Coolant Temp Probe', sensor_slug: '', category: 'Engine', signal: 'coolant_temp_c',
       parameter_key: 'temperature', canonical_unit: 'degC',
     },
   },

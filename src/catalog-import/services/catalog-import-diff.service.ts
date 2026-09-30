@@ -5,6 +5,9 @@ import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
   ClassDiffEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass,
 } from './class-content';
+import {
+  DedupInfo, EMPTY_SENSOR_CAPABILITY_ANALYSIS, ProposedCategory, ProposedSensor, analyzeSensorCapability,
+} from './sensor-review';
 
 export type { ClassDiffEntry, ClassDiffWarning } from './class-content';
 export type ClassDiffAction = ClassDiffEntry['action'];
@@ -25,6 +28,13 @@ export interface CatalogImportDiff {
   /** Set when an earlier batch staged the identical bytes. A note, not a refusal —
    * see DropImportChecksumUnique1758040000000 for why staging twice is allowed. */
   duplicateOfNote: string | null;
+  /** Sensors the workbook references that do not exist in the catalog, one entry
+   * per distinct sensor, awaiting `POST .../sensors` (task QIMP5). */
+  proposedSensors: ProposedSensor[];
+  /** Categories those proposed sensors need that the catalog also lacks. */
+  proposedCategories: ProposedCategory[];
+  /** sensor_capability row groups collapsed as identical repeats, not rejected. */
+  deduplicatedRows: DedupInfo[];
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
@@ -123,6 +133,12 @@ export class CatalogImportDiffService {
     }
     classes.sort((a, b) => a.slug.localeCompare(b.slug));
 
+    const capabilityRows = rows.filter((r) => r.sheet === 'sensor_capability');
+    const signalRowsForUsage = rows.filter((r) => r.sheet === 'signal');
+    const sensorAnalysis = capabilityRows.length
+      ? await analyzeSensorCapability(this.ds.manager, capabilityRows, signalRowsForUsage)
+      : EMPTY_SENSOR_CAPABILITY_ANALYSIS;
+
     const rejectedRows: RejectedRow[] = [...invalidRows]
       .sort((a, b) => a.sheet.localeCompare(b.sheet) || a.rowNumber - b.rowNumber)
       .map((r) => ({ sheet: r.sheet, rowNumber: r.rowNumber, reason: r.message ?? 'Rejected.' }));
@@ -145,6 +161,9 @@ export class CatalogImportDiffService {
       rejectedRows,
       partialApplyNote,
       duplicateOfNote,
+      proposedSensors: sensorAnalysis.proposedSensors,
+      proposedCategories: sensorAnalysis.proposedCategories,
+      deduplicatedRows: sensorAnalysis.deduplicated,
     };
   }
 }

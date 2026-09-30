@@ -195,11 +195,11 @@ describeDb('signal binding: coverage, discovery, resolve', () => {
   describe('discovery', () => {
     it('returns matched, expected-not-mapped and mapped-not-expected as three distinct sets', async () => {
       const coolant = await owner.getRepository(Sensor).save(owner.getRepository(Sensor).create({
-        sensorName: 'Coolant Probe',
+        sensorName: 'Coolant Probe', slug: 'coolant-probe',
         parameterSpecs: [{ parameter: 'temperature', unit: 'degC', min: -20, max: 150, normalRange: '70-100' }],
       }));
       const oil = await owner.getRepository(Sensor).save(owner.getRepository(Sensor).create({
-        sensorName: 'Oil Pressure Probe',
+        sensorName: 'Oil Pressure Probe', slug: 'oil-pressure-probe',
         parameterSpecs: [{ parameter: 'pressure', unit: 'kPa', min: 0, max: 700, normalRange: '250-450' }],
       }));
       await owner.getRepository(SensorRoleCapability).save(owner.getRepository(SensorRoleCapability).create({

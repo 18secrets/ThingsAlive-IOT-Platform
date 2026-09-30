@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { compileClassFormulas, DeclaredSignal } from '../../catalog/formula/formula-compiler';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
-import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import { CRITICALITY_VALUES, ENABLES_VALUES, FORMULA_KIND_VALUES } from '../template-schema';
+import { analyzeSensorCapability } from './sensor-review';
 
 /**
  * Which column on a sheet carries its unit, wherever the sheet has one at all. Not
@@ -42,7 +42,9 @@ function duplicateKey(row: CatalogImportRow): string | null {
     case 'equipment_class': return `${p.slug}`;
     case 'signal': return `${p.class_slug}::${p.signal}::${p.component_scope}`;
     case 'failure_mode': return `${p.class_slug}::${p.code}`;
-    case 'sensor_capability': return `${p.sensor_name}::${p.signal}::${p.parameter_key}`;
+    // Not sensor_capability (task QIMP5): a global sheet's own repeats are
+    // identical-vs-conflicting, handled by analyzeSensorCapability, not this
+    // generic "any repeat is a rejection" check.
     case 'formula': return `${p.class_slug}::${p.formula_key}`;
     default: return null;
   }
@@ -69,6 +71,12 @@ export class CatalogImportValidatorService {
   async validate(batchId: string): Promise<void> {
     await this.ds.transaction(async (m) => {
       const rowRepo = m.getRepository(CatalogImportRow);
+      // Re-runnable (task QIMP5): approving a proposed sensor re-validates the same
+      // batch rather than asking for a re-upload, and a second call has to see every
+      // row fresh, not just the ones still 'parsed' from the first call. A shape
+      // rejection from the parser (QIMP1) is not reset — that row was never a
+      // candidate for this pass either time.
+      await rowRepo.update({ batchId, status: In(['valid', 'invalid']) }, { status: 'parsed', message: null });
       const rows = await rowRepo.find({ where: { batchId } });
       const candidates = rows.filter((r) => r.status === 'parsed');
       const live = (r: CatalogImportRow) => r.status === 'parsed';
@@ -273,26 +281,20 @@ export class CatalogImportValidatorService {
       }
 
       // -------------------------------------------------------- sensor_capability
-      const sensorNames = new Set(
-        candidates.filter((r) => r.sheet === 'sensor_capability' && live(r)).map((r) => String(r.payload.sensor_name)),
-      );
-      const sensors = sensorNames.size
-        ? await m.getRepository(Sensor).find({ where: { sensorName: In([...sensorNames]) } })
-        : [];
-      const sensorCountByName = new Map<string, number>();
-      for (const s of sensors) {
-        sensorCountByName.set(s.sensorName, (sensorCountByName.get(s.sensorName) ?? 0) + 1);
-      }
-      for (const r of candidates) {
-        if (r.sheet !== 'sensor_capability' || !live(r)) continue;
-        const name = String(r.payload.sensor_name);
-        const count = sensorCountByName.get(name) ?? 0;
-        if (count === 1) continue;
-        invalidate(
-          r,
-          `sensor_capability row ${r.rowNumber}: "${name}" resolves to ${count} sensor(s) in the catalog; `
-            + 'it must resolve to exactly one.',
-        );
+      // Task QIMP5: identical-vs-conflicting and not-found-vs-ambiguous, resolved by
+      // slug then name, in one shared pass — see sensor-review.ts for why the old
+      // single check (name-only, one message for two different failures) is gone.
+      const capabilityRows = candidates.filter((r) => r.sheet === 'sensor_capability' && live(r));
+      const signalRowsForUsage = rows.filter((r) => r.sheet === 'signal');
+      if (capabilityRows.length) {
+        const analysis = await analyzeSensorCapability(m, capabilityRows, signalRowsForUsage);
+        for (const res of analysis.resolutions) {
+          if (res.status === 'not_found' || res.status === 'ambiguous' || res.status === 'conflicting') {
+            invalidate(res.row, res.message!);
+          }
+          // 'ok' rows — including every row in an identical-duplicate group — are
+          // left 'parsed' and fall through to 'valid' below, same as any other row.
+        }
       }
 
       // ---------------------------------------------------------- threshold bounds

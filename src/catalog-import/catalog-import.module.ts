@@ -5,6 +5,7 @@ import { CatalogImportBatch } from './entities/catalog-import-batch.entity';
 import { CatalogImportRow } from './entities/catalog-import-row.entity';
 import { CatalogImportApplyService } from './services/catalog-import-apply.service';
 import { CatalogImportDiffService } from './services/catalog-import-diff.service';
+import { CatalogImportSensorReviewService } from './services/catalog-import-sensor-review.service';
 import { CatalogImportValidatorService } from './services/catalog-import-validator.service';
 import { CatalogTemplateService } from './services/catalog-template.service';
 import { WorkbookParserService } from './services/workbook-parser.service';
@@ -22,11 +23,11 @@ import { WorkbookParserService } from './services/workbook-parser.service';
   controllers: [CatalogImportController],
   providers: [
     WorkbookParserService, CatalogTemplateService, CatalogImportValidatorService,
-    CatalogImportDiffService, CatalogImportApplyService,
+    CatalogImportDiffService, CatalogImportApplyService, CatalogImportSensorReviewService,
   ],
   exports: [
     WorkbookParserService, CatalogTemplateService, CatalogImportValidatorService,
-    CatalogImportDiffService, CatalogImportApplyService,
+    CatalogImportDiffService, CatalogImportApplyService, CatalogImportSensorReviewService,
   ],
 })
 export class CatalogImportModule {}
