@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { compileClassFormulas } from '../formula/formula-compiler';
+import { EquipmentClassFormula } from '../entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
@@ -41,6 +43,7 @@ export class CatalogAuthoringService {
 
   constructor(
     @InjectRepository(EquipmentClassProfile) private readonly classes: Repository<EquipmentClassProfile>,
+    @InjectRepository(EquipmentClassFormula) private readonly formulas: Repository<EquipmentClassFormula>,
     @InjectRepository(ScenarioDefinition) private readonly scenarios: Repository<ScenarioDefinition>,
     @InjectRepository(SignalAlias) private readonly aliases: Repository<SignalAlias>,
     @InjectRepository(AlertRuleTemplate) private readonly alertTemplates: Repository<AlertRuleTemplate>,
@@ -75,6 +78,18 @@ export class CatalogAuthoringService {
     return this.classes.save(working);
   }
 
+  /**
+   * Publishing is the enforcement point for every formula on the class (task
+   * QCE1). Every formula for this version is compiled together (task QCE1.1),
+   * so `#other_formula_key` resolves within the class+version — a single formula
+   * that fails to compile blocks the whole publish, and so does any formula that
+   * depends on it, named individually and by reason, not just the first failure.
+   *
+   * `required_formulas` is computed by the compiler but not persisted: there is
+   * no column for it, and this task's own instructions say not to add one
+   * without saying why first (see the final report — folding it into
+   * compiled_plan would silently change that column's shape).
+   */
   async publishClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
     const draft = await this.classes.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
     if (!draft) throw new NotFoundException(`No draft of "${slug}" to publish.`);
@@ -83,10 +98,60 @@ export class CatalogAuthoringService {
       // and the blocker names signals the class never promised. Better to refuse.
       throw new BadRequestException(`"${slug}" declares no expected signals; publishing it would help nobody.`);
     }
-    draft.status = 'published';
-    draft.publishedAt = new Date();
-    this.logger.log(`${scope.userId} published template class "${slug}" v${draft.version}.`);
-    return this.classes.save(draft);
+
+    const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
+    const results = compileClassFormulas({
+      classSlug: slug,
+      expectedSignals: draft.expectedSignals.map((s) => ({ signal: s.signal, unit: s.unit })),
+      formulas: formulas.map((formula) => ({
+        formulaKey: formula.formulaKey,
+        expression: formula.expression,
+        declaredResultKind: formula.resultKind ?? undefined,
+        declaredDisplayUnit: formula.displayUnit,
+      })),
+    });
+
+    const failures: string[] = [];
+    for (const formula of formulas) {
+      const result = results.get(formula.formulaKey)!;
+      if (result.status === 'error') failures.push(result.error.message);
+    }
+    if (failures.length) {
+      throw new BadRequestException(
+        `Cannot publish "${slug}" v${draft.version}: ${failures.join('; ')}`,
+      );
+    }
+
+    return this.classes.manager.transaction(async (m) => {
+      const now = new Date();
+      for (const formula of formulas) {
+        const result = results.get(formula.formulaKey)!;
+        if (result.status !== 'ok') continue;
+        // required_formulas (task QCE1.1) is not persisted here — see the note on
+        // publishClass and the final report: it has no column of its own, and
+        // folding it into compiled_plan would change that column's shape out from
+        // under `equipment_class_formula`'s already-committed migration and its
+        // existing tests.
+        formula.compiledPlan = result.compiled.plan as unknown as Record<string, unknown>;
+        formula.compiledAt = now;
+        formula.compilerVersion = result.compiled.compilerVersion;
+        formula.resultUnit = result.compiled.resultUnit;
+        formula.requiredSignals = result.compiled.requiredSignals;
+        formula.requiredParameters = result.compiled.requiredParameters;
+        // Nobody declared one — the compiler's own inference is the only kind
+        // this formula has ever had, so that is what gets persisted.
+        if (formula.resultKind === null) formula.resultKind = result.compiled.resultKind;
+      }
+      if (formulas.length) await m.getRepository(EquipmentClassFormula).save(formulas);
+
+      draft.status = 'published';
+      draft.publishedAt = now;
+      this.logger.log(
+        `${scope.userId} published template class "${slug}" v${draft.version}`
+          + `${formulas.length ? ` (${formulas.length} formula(s) compiled)` : ''}.`,
+      );
+      return m.getRepository(EquipmentClassProfile).save(draft);
+    });
   }
 
   /**

@@ -4,6 +4,7 @@ import { AuditService } from '../src/audit/audit.service';
 import { PlatformAccessLog } from '../src/audit/platform-access-log.entity';
 import { capabilitiesFor } from '../src/auth/capabilities';
 import { RequestScope } from '../src/auth/types/request-scope';
+import { EquipmentClassFormula } from '../src/catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
@@ -53,6 +54,7 @@ describeDb('client-owned catalog', () => {
 
     authoring = new CatalogAuthoringService(
       ds.getRepository(EquipmentClassProfile),
+      ds.getRepository(EquipmentClassFormula),
       ds.getRepository(ScenarioDefinition),
       ds.getRepository(SignalAlias),
       ds.getRepository(AlertRuleTemplate),

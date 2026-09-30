@@ -234,35 +234,58 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       expect(row.message).toMatch(/"unit" is required/);
     });
 
-    it('refuses a formula input that names neither a declared signal nor another formula_key', async () => {
+    it('refuses a formula expression that references a signal the class never declares', async () => {
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'formula', {
           class_slug: CLASS_SLUG, formula_key: 'bad_formula', kind: 'empirical',
-          expression: 'x', inputs: 'totally_unknown_thing', output_unit: 'L', basis: '', references: '',
+          expression: 'avg(totally_unknown_thing)', inputs: 'totally_unknown_thing',
+          output_unit: 'L', basis: '', references: '',
         });
       });
       const { id } = await parseAndValidate(buffer);
       const [row] = (await rowsFor(id, 'formula')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/input "totally_unknown_thing" names neither/);
+      expect(row.message).toMatch(
+        /references "totally_unknown_thing", which is not one of class ".*"'s expected_signals/,
+      );
     });
 
-    it('resolves a formula input against a formula_key the catalog already has for the class', async () => {
-      // The formula row's FK needs (class_slug, class_version) to exist first.
-      await seedClass(CLASS_SLUG, [{ signal: 'coolant_temp_c', unit: 'degC', required: true }]);
-      await ds.getRepository(EquipmentClassFormula).save(ds.getRepository(EquipmentClassFormula).create({
-        classSlug: CLASS_SLUG, classVersion: 1, formulaKey: 'baseline_load', kind: 'empirical',
-        expression: 'rated_kw * 0.8', inputs: [], status: 'proposed',
-      }));
+    // Formula-to-formula composability is `#formula_key` (task QCE1.1), resolved
+    // against the batch's own formula rows for the class, not the existing
+    // catalog's — a batch supplying any formula rows for a class replaces that
+    // class's formulas wholesale (see class-content.ts), so an existing-catalog
+    // formula is not actually part of the version this batch proposes.
+    it('resolves a formula composed via #ref against another formula in the same batch', async () => {
+      const buffer = await workbookBuffer((wb) => {
+        addRow(wb, 'signal', {
+          class_slug: CLASS_SLUG, signal: 'exhaust_temp_c', unit: 'degC', required: 'TRUE',
+        });
+        addRow(wb, 'formula', {
+          class_slug: CLASS_SLUG, formula_key: 'exhaust_margin', kind: 'empirical',
+          expression: 'max(exhaust_temp_c)', inputs: 'exhaust_temp_c', output_unit: 'degC', basis: '', references: '',
+        });
+        addRow(wb, 'formula', {
+          class_slug: CLASS_SLUG, formula_key: 'exhaust_margin_pct', kind: 'empirical',
+          expression: '#exhaust_margin / 10', inputs: '', output_unit: 'degC', basis: '', references: '',
+        });
+      });
+      const { id } = await parseAndValidate(buffer);
+      const rows = (await rowsFor(id, 'formula')).filter((r) => [3, 4].includes(r.rowNumber));
+      expect(rows).toHaveLength(2);
+      for (const r of rows) expect(r.status).toBe('valid');
+    });
+
+    it('refuses a formula #ref to a key no formula row in this batch defines', async () => {
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'formula', {
-          class_slug: CLASS_SLUG, formula_key: 'derived_metric', kind: 'empirical',
-          expression: 'baseline_load * 2', inputs: 'baseline_load', output_unit: 'L', basis: '', references: '',
+          class_slug: CLASS_SLUG, formula_key: 'derived_formula', kind: 'empirical',
+          expression: '#does_not_exist + 1', inputs: '', output_unit: 'degC', basis: '', references: '',
         });
       });
       const { id } = await parseAndValidate(buffer);
       const [row] = (await rowsFor(id, 'formula')).filter((r) => r.rowNumber === 3);
-      expect(row.status).toBe('valid');
+      expect(row.status).toBe('invalid');
+      expect(row.message).toMatch(/references formula "#does_not_exist", which does not exist in class/);
     });
 
     it('refuses a sensor_capability name that resolves to zero sensors', async () => {

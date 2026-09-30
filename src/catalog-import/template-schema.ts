@@ -176,10 +176,12 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'basis', requiredCell: false },
       { name: 'references', requiredCell: false },
     ],
-    // inputs names a declared expected_signal ('coolant_temp_c') rather than a scalar
-    // parameter such as tank capacity: QIMP2 checks a formula's inputs against
-    // declared signals and other formula_keys, and the example workbook has to pass
-    // its own importer's validation, not just its parser.
+    // inputs names a declared expected_signal ('coolant_temp_c'), and `expression`
+    // is compiled for real by CatalogImportValidatorService (task QCE1's
+    // formula-compiler.ts) — the example workbook has to pass its own importer's
+    // validation, not just its parser. `105` is a numeric literal, unit-polymorphic
+    // in `+`/`-` (task QCE1.1): it adopts the degC series' unit rather than needing
+    // one of its own, so this compiles to degC.
     example: {
       class_slug: 'diesel-generator', formula_key: 'coolant_margin_c', kind: 'empirical',
       expression: '105 - coolant_temp_c', inputs: 'coolant_temp_c',
