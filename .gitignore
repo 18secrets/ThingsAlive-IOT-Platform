@@ -14,3 +14,10 @@ dist/
 # served from GET /platform/catalog/template — reproducible from template-schema.ts, so
 # a committed copy could silently disagree with the schema that generates it.
 equipment-library-template.xlsx
+
+# Something in the local toolchain regenerates this as a byte-identical mirror of
+# CLAUDE.md — untracked and harmless while the two agree, but a second copy of the
+# working rules that nobody maintains is exactly how a session ends up following
+# instructions that were changed a month ago. Deleted from git at 26758c3; ignored
+# here so it can't be committed back by accident.
+AGENTS.md
