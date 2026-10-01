@@ -73,7 +73,7 @@ describeDb('named formula binding: the Excel formula sheet', () => {
     // The template's own sensor_capability example names this sensor — seeded so
     // the plain template (test 11, and every test's untouched sensor_capability
     // row) validates cleanly, same baseline catalog-import-validate.spec.ts uses.
-    await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe' }));
+    await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe', slug: 'coolant-temp-probe' }));
   });
 
   const workbookBuffer = async (mutate?: (wb: Workbook) => void) => {
