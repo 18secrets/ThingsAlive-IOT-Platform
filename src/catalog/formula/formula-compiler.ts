@@ -22,12 +22,13 @@ export type ValueKind = 'scalar' | 'series';
  * self-describing without a second lookup against the registry. */
 export type PlanNode =
   | { type: 'const'; kind: 'scalar'; unit: string; value: number }
+  | { type: 'duration'; kind: 'scalar'; unit: string; hours: number }
   | { type: 'signal'; kind: 'series'; unit: string; name: string }
   | { type: 'param'; kind: 'scalar'; unit: string; name: string }
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
-  | { type: 'call'; kind: 'scalar'; unit: string; name: string; args: PlanNode[] };
+  | { type: 'call'; kind: ValueKind; unit: string; name: string; args: PlanNode[] };
 
 export interface DeclaredSignal {
   signal: string;
@@ -391,6 +392,9 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
     case 'number':
       return { type: 'const', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), value: node.value };
 
+    case 'duration':
+      return { type: 'duration', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), hours: node.hours };
+
     case 'param':
       return { type: 'param', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), name: node.name };
 
@@ -482,9 +486,13 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       const args = node.args.map((a) => infer(a, ctx));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
-        if (a.kind !== expected) {
+        // A duration literal reports kind:'scalar' (task QCE4) so it never widens
+        // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
+        // and `avg(90d)` are both wrong shapes, not merely wrong units.
+        const actual = a.type === 'duration' ? 'duration' : a.kind;
+        if (actual !== expected) {
           throw new FormulaCompileError(
-            `calls "${node.name}" with argument ${i + 1} as ${a.kind}; it takes ${expected}.`,
+            `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
           );
         }
       });
@@ -559,6 +567,7 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
       return { nodes: 1 + sib.expandedNodes, depth: 1 + sib.expandedDepth };
     }
     case 'const':
+    case 'duration':
     case 'signal':
     case 'param':
       return { nodes: 1, depth: 1 };
@@ -593,6 +602,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
       return 1 + sib.compositionDepth;
     }
     case 'const':
+    case 'duration':
     case 'signal':
     case 'param':
       return 0;

@@ -2,6 +2,7 @@ import { FormulaCompileError } from './errors';
 
 export type RawNode =
   | { type: 'number'; value: number; pos: number }
+  | { type: 'duration'; hours: number; pos: number }
   | { type: 'signal'; name: string; pos: number }
   | { type: 'param'; name: string; pos: number }
   | { type: 'formula_ref'; name: string; pos: number }
@@ -15,7 +16,7 @@ export type RawNode =
 export const MAX_NODES = 200;
 export const MAX_DEPTH = 20;
 
-type TokenType = 'number' | 'ident' | 'param' | 'formularef' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | 'eof';
+type TokenType = 'number' | 'duration' | 'ident' | 'param' | 'formularef' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | 'eof';
 interface Token { type: TokenType; text: string; pos: number }
 
 /**
@@ -27,12 +28,17 @@ interface Token { type: TokenType; text: string; pos: number }
  *   expression  := term (('+' | '-') term)*
  *   term        := factor (('*' | '/') factor)*
  *   factor      := '-' factor | primary
- *   primary     := number | call | signal | param | formula_ref | '(' expression ')'
+ *   primary     := number | duration | call | signal | param | formula_ref | '(' expression ')'
  *   call        := identifier '(' [ expression (',' expression)* ] ')'
  *   signal      := identifier
  *   param       := '@' identifier
  *   formula_ref := '#' identifier
  *   number      := digits [ '.' digits ]
+ *   duration    := digits [ '.' digits ] ( 'd' | 'h' )   -- e.g. 90d, 24h (task QCE4);
+ *                  spelled like `equipment_class_formula.aggregation_window`'s tokens
+ *                  (`24h`, `7d`, `30d`), the only other "window" vocabulary in the
+ *                  codebase, but this is new expression grammar — that column is
+ *                  formula-level metadata, never read by this parser before today.
  *
  * The tree this produces is data — plain objects, nothing callable. No `eval`, no
  * `new Function`, no `vm`, no template-string execution anywhere in this module or
@@ -105,6 +111,13 @@ export function parseExpression(source: string): RawNode {
       advance();
       return makeNode({ type: 'number', value: Number(t.text), pos: t.pos }, depth);
     }
+    if (t.type === 'duration') {
+      advance();
+      const suffix = t.text.slice(-1);
+      const magnitude = Number(t.text.slice(0, -1));
+      const hours = suffix === 'd' ? magnitude * 24 : magnitude;
+      return makeNode({ type: 'duration', hours, pos: t.pos }, depth);
+    }
     if (t.type === 'param') {
       advance();
       return makeNode({ type: 'param', name: t.text, pos: t.pos }, depth);
@@ -172,6 +185,15 @@ function tokenize(source: string): Token[] {
       if (source[i] === '.' && /[0-9]/.test(source[i + 1] ?? '')) {
         i += 1;
         while (i < source.length && /[0-9]/.test(source[i])) i += 1;
+      }
+      // A bare 'd'/'h' suffix not followed by a further identifier character is a
+      // duration literal (task QCE4); `90days` is not a duration misread as "90d" —
+      // it falls through to a number token followed by its own unrelated ident token,
+      // the same refusal this grammar already gave it.
+      if ((source[i] === 'd' || source[i] === 'h') && !/[A-Za-z0-9_]/.test(source[i + 1] ?? '')) {
+        i += 1;
+        tokens.push({ type: 'duration', text: source.slice(start, i), pos: start });
+        continue;
       }
       tokens.push({ type: 'number', text: source.slice(start, i), pos: start });
       continue;
