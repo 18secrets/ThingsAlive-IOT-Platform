@@ -533,3 +533,137 @@ does not.
 - **Seed before you migrate.**
 - Report: commit SHA, test counts, which of the seven seeded formulas compiled and which did
   not with the reason, and anything not implemented.
+
+# QCE4 — baseline operators
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/baseline-operators`
+
+Migration timestamp above everything on `main` — four branches landed, so check.
+
+Read `docs/ai/analysis/itdc-coverage-analysis.md` §2 and §3 before starting. They are now in
+the repo and they are the justification for this task.
+
+---
+
+## Why this is the highest-value task on the board
+
+Every logic column in ITDC's predictive-maintenance section is one of two shapes: a ratio
+normalised by load, or **a comparison against the machine's own recent history**.
+
+The first already works — a series-valued formula over the existing registry.
+
+The second does not. D34 compares a signal to a **fixed threshold**. Nothing in the stack can
+say "versus this machine's last 90 days". Four operators close that, and seven of the nine
+ITDC use cases stop needing a model and start needing a published KPI.
+
+No new rule kind. No new engine. Four entries in the existing registry.
+
+## 1. The operators
+
+```
+baseline_avg(series, window)      mean over a trailing window, EXCLUDING the current period
+baseline_sd(series, window)       standard deviation over the same window
+zscore(series, window)            (current − baseline_avg) / baseline_sd
+delta_ratio(series, w1, w2)       mean over w1 ÷ mean over w2
+```
+
+`delta_ratio` is the 7-day-versus-90-day shape ITDC uses repeatedly.
+
+**Units and kind, decided at compile time by the existing inference:**
+
+| operator | result unit | result kind |
+|---|---|---|
+| `baseline_avg` | same as input | series |
+| `baseline_sd` | same as input | series |
+| `zscore` | **dimensionless** | series |
+| `delta_ratio` | **dimensionless** | series |
+
+`zscore` and `delta_ratio` returning dimensionless is the part the compiler must get right —
+a ratio of two quantities in the same unit has no unit, and a threshold rule on a `zscore`
+must not be unit-checked against the source signal. Assert it.
+
+**`window` is a duration literal**, the same vocabulary the existing operators use for their
+windows. Do not invent a second duration syntax. If the current operators take window
+differently, match them and say so in the report.
+
+**The current period is excluded from the baseline.** A baseline that includes the reading
+being judged is partly a comparison against itself, and it damps exactly the excursion the
+KPI exists to find. This is the single easiest thing to get wrong here. Test it directly:
+a long flat history then one extreme reading — `baseline_avg` is unchanged by that reading,
+and `zscore` is large.
+
+## 2. `baseline_not_established` — the state, not a number
+
+A baseline computed over too little history is noise presented as authority. Same rule as
+D20's residual bands.
+
+**Below 14 days of history in the window, the operator does not return a number.** It yields
+the readiness state `baseline_not_established`, which is its own state — never `0`, never
+`null` silently, and never rendered as "normal".
+
+Readiness already has four states (`ready` / `blocked` / `not_configured` /
+`not_available`) with reasons (`unbound` / `stale` / `no_readings` / `mapping_required`).
+**Add `baseline_not_established` as a reason**, resolving to `not_available`. Do not invent
+a fifth state.
+
+The 14-day minimum is a platform default. Make it a named constant with the reasoning in a
+comment, not a literal scattered across four operators.
+
+**Tests:** 13 days of history → `baseline_not_established`; 15 days → a number; a KPI in that
+state renders as unavailable with the reason, and **a threshold rule on it does not fire**.
+That last one matters most — a rule that fires on a non-established baseline is worse than no
+rule.
+
+## 3. Dirty windows — a baseline learned during a fault encodes the fault as normal
+
+This is the defect I recorded against D20 and it applies identically here. If a machine was
+degrading through the baseline window, the baseline is the degraded behaviour, and the KPI
+reports "normal" for the rest of the machine's life.
+
+**Exclude from the baseline window any period with a raised alert on the same signal, or an
+open work order on the machine.**
+
+- If exclusion drops the remaining history below the 14-day minimum →
+  `baseline_not_established`. Correct, and better than a confident wrong number.
+- Report what the platform can actually see today. Alerts exist. **If work orders do not,
+  implement the alert exclusion, state plainly that the work-order half is not wired, and do
+  not stub it** — a stub that silently excludes nothing is worse than an absence that is
+  documented.
+
+**Tests:** a window containing a raised alert excludes that period, and the resulting
+baseline differs from the unexcluded one; exclusion that drops below the minimum yields
+`baseline_not_established`.
+
+## 4. Composition
+
+These are ordinary registry operators. They compose with everything QCE1 and QCE1.1 built —
+arithmetic, `#formula_key` composition, named formulas from QCE3.
+
+The ITDC cross-sensor risk score is arithmetic over several z-scores with a count of how many
+exceed 2. **Verify that composes today.** If it does not, report what blocks it rather than
+adding an operator to make it work.
+
+**Tests:** `zscore(...) > 2` compiles; a formula summing three z-scores compiles and is
+dimensionless; a named formula from QCE3 whose expression uses `zscore` publishes.
+
+## 5. Out of scope
+
+- Runtime execution — **QCE2**. This task is the registry, the inference and the readiness
+  state. If the operators cannot be exercised without QCE2, say so and test at the compile
+  and plan level only.
+- Categorical operators — **QCAT1**.
+- Authoring the ITDC KPIs as library content — that is content work for the library team once
+  this ships.
+- Anything under `frontend/`.
+
+## 6. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after,
+  measured on a throwaway commit or a second worktree — **not by stashing**.
+- Full migration chain from empty; down path named with `undoMigrationNamed`.
+- **Seed before you migrate.**
+- Report: commit SHA, test counts, how `window` is expressed and whether it matched the
+  existing operators, whether work-order exclusion was wirable, whether the cross-sensor risk
+  score composes today, and anything not implemented with the reason.
