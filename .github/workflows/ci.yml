@@ -122,6 +122,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run build
+      - run: npm run verify:migrations
       - run: npm test
 
   # The console lives in the same repository as the API it calls, so a contract that

@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../../catalog/entities/scenario-definition.entity';
 import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
 import { AlertRule } from '../../alert/entities/alert-rule.entity';
 import { withTenantId } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
+import { ClientFormula } from '../entities/client-formula.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
 import { alertRuleContentChecksum, classContentChecksum, scenarioContentChecksum } from './provenance';
 
@@ -14,6 +16,7 @@ export interface CopyResult {
   templateVersion: number;
   scenariosCopied: number;
   alertRulesCopied: number;
+  formulasCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -53,19 +56,35 @@ export class CopyOnGrantService {
 
     const scenarios = await this.latestPublishedScenarios(templateSlug);
     const alertTemplates = await this.latestPublishedAlertTemplates(templateSlug);
+    const formulas = await this.latestPublishedFormulas(templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
       const existing = await classes.findOne({ where: { tenantId, slug: template.slug } });
       if (existing) {
+        // Task QGRANT0 §4: re-grant was previously a silent no-op regardless of
+        // which version the tenant already held — including this case, where a
+        // newer class version has since been published and the tenant's copy is
+        // quietly stale. Made explicit: same version is still a no-op; a newer
+        // version is refused rather than silently skipped, because upgrading an
+        // existing copy (merging what the tenant customised against what changed)
+        // is a real feature this is not — that is QUPGRADE1's job.
+        if ((existing.templateVersion ?? 0) < template.version) {
+          throw new Error(
+            `Tenant ${tenantId} holds "${template.slug}" v${existing.templateVersion}, and v${template.version} `
+              + 'is now published. Upgrading an existing copy to a newer class version is not built here — '
+              + "that is QUPGRADE1's job. Nothing was changed.",
+          );
+        }
         this.logger.log(
-          `Tenant ${tenantId} already has "${template.slug}"; leaving their copy alone.`,
+          `Tenant ${tenantId} already has "${template.slug}" v${existing.templateVersion}; leaving their copy alone.`,
         );
         return {
           classSlug: existing.slug,
           templateVersion: existing.templateVersion ?? template.version,
           scenariosCopied: 0,
           alertRulesCopied: 0,
+          formulasCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -148,15 +167,61 @@ export class CopyOnGrantService {
         rulesCopied += 1;
       }
 
+      // Formulas (task QGRANT0) — copied as data, the same way `compiled_plan`
+      // already lived on the platform row: nothing here is a reference the
+      // tenant could resolve against `named_formula` later. Publishing a new
+      // named-formula version changes nothing already copied, for the same
+      // reason a template edit does not reach an existing `ClientEquipmentClass`.
+      const clientFormulas = m.getRepository(ClientFormula);
+      let formulasCopied = 0;
+      for (const f of formulas) {
+        const already = await clientFormulas.findOne({
+          where: { tenantId, clientEquipmentClassSlug: template.slug, formulaKey: f.formulaKey },
+        });
+        if (already) continue;
+        await clientFormulas.save(clientFormulas.create({
+          tenantId,
+          clientEquipmentClassSlug: template.slug,
+          formulaKey: f.formulaKey,
+          kind: f.kind,
+          expression: f.expression,
+          compiledPlan: f.compiledPlan,
+          compiledAt: f.compiledAt,
+          compilerVersion: f.compilerVersion,
+          resultUnit: f.resultUnit,
+          requiredSignals: f.requiredSignals,
+          requiredParameters: f.requiredParameters,
+          namedFormulaSlug: f.namedFormulaSlug,
+          namedFormulaVersion: f.namedFormulaVersion,
+          bindings: f.bindings,
+          resultKind: f.resultKind,
+          displayUnit: f.displayUnit,
+          displayFormat: f.displayFormat,
+          targetValue: f.targetValue,
+          targetMin: f.targetMin,
+          targetMax: f.targetMax,
+          targetDirection: f.targetDirection,
+          comparisonBasis: f.comparisonBasis,
+          aggregationWindow: f.aggregationWindow,
+          chartType: f.chartType,
+          templateVersion: template.version,
+          copiedAt: now,
+          status: 'active',
+          updatedBy: copiedBy,
+        }));
+        formulasCopied += 1;
+      }
+
       this.logger.log(
-        `Copied "${template.slug}" v${template.version}, ${copied} scenario(s) and `
-        + `${rulesCopied} alert rule(s) to tenant ${tenantId}.`,
+        `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
+        + `${rulesCopied} alert rule(s) and ${formulasCopied} formula(s) to tenant ${tenantId}.`,
       );
       return {
         classSlug: template.slug,
         templateVersion: template.version,
         scenariosCopied: copied,
         alertRulesCopied: rulesCopied,
+        formulasCopied,
         alreadyPresent: false,
       };
     });
@@ -183,6 +248,20 @@ export class CopyOnGrantService {
       if (!seen || row.version > seen.version) latest.set(row.slug, row);
     }
     return [...latest.values()];
+  }
+
+  /** Formulas belong to one specific (class_slug, class_version), unlike
+   * scenarios and alert templates which version independently — so this takes
+   * the exact version being granted, not "latest published" of its own. Only
+   * those the compiler actually produced a plan for: every formula under a
+   * published class version was compiled at that class's own publish, so this
+   * is a safety net, not a filter expected to exclude anything in practice. */
+  private async latestPublishedFormulas(classSlug: string, classVersion: number): Promise<EquipmentClassFormula[]> {
+    return this.ds.getRepository(EquipmentClassFormula).createQueryBuilder('f')
+      .where('f.class_slug = :classSlug', { classSlug })
+      .andWhere('f.class_version = :classVersion', { classVersion })
+      .andWhere('f.compiled_plan IS NOT NULL')
+      .getMany();
   }
 
   private async latestPublishedAlertTemplates(classSlug: string): Promise<AlertRuleTemplate[]> {
