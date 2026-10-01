@@ -18,6 +18,7 @@ import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-ent
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
+import { ClientFormula } from '../client-catalog/entities/client-formula.entity';
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
 import { Plant } from '../equipment/entities/plant.entity';
@@ -79,6 +80,7 @@ export const ENTITIES = [
   EquipmentProfile,
   ClientEquipmentClass,
   ClientScenario,
+  ClientFormula,
   EquipmentScenario,
   ScenarioActivationEvent,
   DomainEvent,
