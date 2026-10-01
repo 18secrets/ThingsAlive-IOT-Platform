@@ -14,6 +14,11 @@ Do not re-derive a decision that is already written down there.
 - Do not edit an existing test to make new code pass. If an existing test fails,
   stop and report it.
 - Do not change a migration that has already been committed. Add a new one.
+- Never `git stash drop` or `git stash clear`. A dropped stash is unrecoverable; if a
+  stash must be reapplied, use `git stash apply`, never `git stash pop`, so a conflict
+  mid-apply still leaves the stash intact. Measure a before/after baseline on a
+  throwaway commit or a second worktree, not by stashing — stashing ties the only copy
+  of in-progress work to a procedure with a lossy step.
 
 ## Style
 - Comments explain *why*, not what. Match the voice of
