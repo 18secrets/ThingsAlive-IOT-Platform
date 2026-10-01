@@ -276,6 +276,10 @@ export class CatalogImportApplyService {
           formulaKey: f.formulaKey, kind: f.kind, expression: f.expression, inputs: f.inputs,
           outputUnit: f.outputUnit, basis: f.basis,
           references: Array.isArray(f.references) ? f.references : [],
+          // Bind mode (task QCE3): written through as data, same as any other
+          // field. Substitution and compilation happen at publish, not here — a
+          // bind-mode row is as uncompiled at apply as an expression-mode one.
+          namedFormulaSlug: f.namedFormulaSlug, namedFormulaVersion: f.namedFormulaVersion, bindings: f.bindings,
           source: SOURCE, importBatchId: batch.id,
         })));
       }

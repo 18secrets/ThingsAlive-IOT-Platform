@@ -1,5 +1,6 @@
 import { EntityManager } from 'typeorm';
 import { EquipmentClassFormula, FormulaKind } from '../../catalog/entities/equipment-class-formula.entity';
+import { parseBindings } from '../../catalog/formula/named-formula-binding';
 import { EquipmentClassProfile, ExpectedSignal, FailureMode } from '../../catalog/entities/equipment-class-profile.entity';
 import {
   EquipmentClassSensorRequirement, SensorRequirementCriticality,
@@ -26,11 +27,18 @@ export interface SensorRequirementContent {
 export interface FormulaContent {
   formulaKey: string;
   kind: FormulaKind;
+  /** The role-named text as written for a bind-mode row, until publish substitutes
+   * the bound signals in and compiles it (task QCE3) — same lifecycle an
+   * expression-mode row already has: nothing is compiled before publish. */
   expression: string;
   inputs: string[];
   outputUnit: string | null;
   basis: string | null;
   references: unknown;
+  /** NULL on an expression-mode row. Set together with `bindings`, or not at all. */
+  namedFormulaSlug: string | null;
+  namedFormulaVersion: number | null;
+  bindings: { role: string; signal: string }[];
 }
 
 export interface ClassContent {
@@ -91,6 +99,7 @@ export async function loadCurrentClass(
       formulas: formulas.map((f) => ({
         formulaKey: f.formulaKey, kind: f.kind, expression: f.expression, inputs: f.inputs,
         outputUnit: f.outputUnit, basis: f.basis, references: f.references,
+        namedFormulaSlug: f.namedFormulaSlug, namedFormulaVersion: f.namedFormulaVersion, bindings: f.bindings,
       })),
     },
   };
@@ -178,6 +187,13 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
           expression: str(r.payload.expression), inputs: (r.payload.inputs as string[] | undefined) ?? [],
           outputUnit: strOrNull(r.payload.output_unit), basis: strOrNull(r.payload.basis),
           references: parseReferences(r.payload.references),
+          // Bind mode (task QCE3): carried through as data. Resolved against the
+          // named formula, substituted and compiled at publish, never here —
+          // buildProposedClass stays synchronous and makes no DB read, the same as
+          // every other field it assembles.
+          namedFormulaSlug: strOrNull(r.payload.named_formula),
+          namedFormulaVersion: num(r.payload.named_formula_version) ?? null,
+          bindings: parseBindings(str(r.payload.bindings)),
         }))
       : current.formulas,
   };

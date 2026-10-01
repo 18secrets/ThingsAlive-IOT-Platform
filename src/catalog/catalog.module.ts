@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
+import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { CatalogController } from './catalog.controller';
+import { NamedFormulaController } from './named-formula.controller';
 import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.entity';
 import { EquipmentClassFormula } from './entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
+import { NamedFormula } from './entities/named-formula.entity';
 import { ScenarioDefinition } from './entities/scenario-definition.entity';
 import { SignalAlias } from './entities/signal-alias.entity';
 import { AlertRuleTemplate } from './entities/alert-rule-template.entity';
@@ -12,6 +15,7 @@ import { ClientCatalogModule } from '../client-catalog/client-catalog.module';
 import { CatalogAuthoringService } from './services/catalog-authoring.service';
 import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
+import { NamedFormulaService } from './services/named-formula.service';
 import { RecommendationService } from './services/recommendation.service';
 
 /**
@@ -27,12 +31,12 @@ import { RecommendationService } from './services/recommendation.service';
   imports: [
     TypeOrmModule.forFeature([
       EquipmentClassProfile, EquipmentClassFormula, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
-      ClientCatalogEntitlement, EquipmentProfile,
+      ClientCatalogEntitlement, EquipmentProfile, NamedFormula, SensorRoleCapability,
     ]),
     ClientCatalogModule,
   ],
-  controllers: [CatalogController],
-  providers: [CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService],
-  exports: [CatalogService, RecommendationService],
+  controllers: [CatalogController, NamedFormulaController],
+  providers: [CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService],
+  exports: [CatalogService, RecommendationService, NamedFormulaService],
 })
 export class CatalogModule {}
