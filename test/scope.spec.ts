@@ -44,7 +44,7 @@ describeDb('tenant scope', () => {
     repo = new ScopedRepository<EquipmentProjection>(
       ds, EquipmentProjection, { equipmentColumn: 'externalId' }, audit,
     );
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 

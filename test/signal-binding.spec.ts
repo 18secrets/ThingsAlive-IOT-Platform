@@ -44,7 +44,7 @@ describeDb('signal bindings', () => {
        VALUES ($1, $2, 'CP-9', 'concrete-pump')`,
       [TENANT_A, SRC],
     );
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); });
 

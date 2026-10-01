@@ -22,7 +22,11 @@ describeDb('row-level security coverage', () => {
     ds = await createTestDataSource();
     await ds.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     await ds.runMigrations({ transaction: 'all' });
-  });
+    // The full migration chain from empty, same as every other describeDb file —
+    // no extra state built here. It outgrew Jest's 5s default hook timeout as the
+    // chain grew; every sibling file already carries this override, this one
+    // predates most of that growth and was never given one.
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); });
 
