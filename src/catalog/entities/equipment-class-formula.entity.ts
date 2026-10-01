@@ -84,6 +84,27 @@ export class EquipmentClassFormula {
   @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
   importBatchId: string | null;
 
+  // ------------------------------------------------------- named formula bind (QCE3)
+  // NULL on an expression-mode row — every row is exactly one of the two modes, and
+  // which one is which column is non-null, not a separate flag that could disagree
+  // with the data. Set together, or not at all; see named-formula-binding.ts.
+
+  /** Which named formula this row binds, and which published version — the
+   * reference is frozen at bind time (§5): publishing a new named-formula version
+   * changes nothing already published here. */
+  @Column({ name: 'named_formula_slug', type: 'text', nullable: true })
+  namedFormulaSlug: string | null;
+
+  @Column({ name: 'named_formula_version', type: 'int', nullable: true })
+  namedFormulaVersion: number | null;
+
+  /** `role -> signal`, resolved from the workbook's `role=signal; ...` cell. Kept as
+   * data, not re-derived from `expression`, so the binding this class actually used
+   * survives even though `expression` here holds the *substituted* text, not the
+   * role-named original. */
+  @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
+  bindings: { role: string; signal: string }[];
+
   // ------------------------------------------------------ KPI presentation (QCE1)
   // Author-declared, checked against the compiler's inference at publish — a
   // formula whose declared result_kind or display_unit disagrees with what it

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { compileClassFormulas, DeclaredSignal } from '../../catalog/formula/formula-compiler';
+import { BindingError, checkRolesBound, formulaMode, FormulaMode, parseBindings } from '../../catalog/formula/named-formula-binding';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
+import { NamedFormula } from '../../catalog/entities/named-formula.entity';
 import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
@@ -220,9 +222,67 @@ export class CatalogImportValidatorService {
         }
       }
 
+      // ------------------------------------------------- formula: bind mode (QCE3)
+      // Three of the five structural codes §3 names — mode conflict/missing, and
+      // naming a named formula that is not published or does not exist. The other
+      // two (unknown_role, unbound_role) need the named formula resolved first, so
+      // they are checked in the same pass once it has been. Dimension compatibility
+      // and suspicious_binding are not here — both need the class's own resolved
+      // signal units, known fully only at publish (CatalogAuthoringService.publishClass).
+      // Runs before the units check below: mode has to be decided before "is
+      // output_unit required" can be answered, and a mode failure must be this
+      // row's own message, not overwritten by a later, less specific one.
+      for (const r of candidates) {
+        if (r.sheet !== 'formula' || !live(r)) continue;
+        let mode: FormulaMode;
+        try {
+          mode = formulaMode({
+            expression: String(r.payload.expression ?? ''),
+            namedFormula: String(r.payload.named_formula ?? ''),
+          });
+        } catch (err) {
+          const e = err as BindingError;
+          invalidate(r, `formula row ${r.rowNumber}: ${e.message} (${e.code}).`);
+          continue;
+        }
+        if (mode !== 'bind') continue;
+
+        const slug = String(r.payload.named_formula);
+        const versionRaw = r.payload.named_formula_version;
+        const version = typeof versionRaw === 'string' && versionRaw.trim() ? Number(versionRaw) : undefined;
+        const named = version !== undefined
+          ? await m.getRepository(NamedFormula).findOne({ where: { slug, version, status: 'published' } })
+          : await m.getRepository(NamedFormula).findOne({
+            where: { slug, status: 'published' }, order: { version: 'DESC' },
+          });
+        if (!named) {
+          invalidate(
+            r,
+            `formula row ${r.rowNumber}: named formula "${slug}"`
+              + `${version !== undefined ? ` v${version}` : ''} is not published, or does not exist `
+              + '(named_formula_not_found).',
+          );
+          continue;
+        }
+
+        const bindings = parseBindings(String(r.payload.bindings ?? ''));
+        try {
+          checkRolesBound(named.inputs, bindings);
+        } catch (err) {
+          const e = err as BindingError;
+          invalidate(r, `formula row ${r.rowNumber}: ${e.message} (${e.code}).`);
+        }
+      }
+
       // ------------------------------------------------------------------- units
       for (const r of candidates) {
         if (!live(r)) continue;
+        // A bind-mode formula row's unit comes from the named formula it binds,
+        // resolved at class-publish time (task QCE3) — output_unit has nothing to
+        // say here and is not required the way an expression-mode row's is.
+        if (r.sheet === 'formula' && typeof r.payload.named_formula === 'string' && r.payload.named_formula.trim()) {
+          continue;
+        }
         const column = UNIT_COLUMN_BY_SHEET[r.sheet];
         if (!column) continue;
         const value = r.payload[column];
@@ -246,9 +306,14 @@ export class CatalogImportValidatorService {
       // class replaces that class's formulas wholesale at apply time (see
       // catalog-import-apply.service.ts), so an existing-catalog formula would not
       // actually be present in the version this batch proposes.
+      // Bind-mode rows (task QCE3) are excluded here — their real expression is
+      // not known until a signal stands in for each role, which the next block
+      // resolves. Compiling a blank `expression` here would refuse every bind-mode
+      // row as "the expression is empty", which is not what is wrong with it.
       const formulaRowsByClass = new Map<string, CatalogImportRow[]>();
       for (const r of candidates) {
         if (r.sheet !== 'formula' || !live(r)) continue;
+        if (typeof r.payload.named_formula === 'string' && r.payload.named_formula.trim()) continue;
         const slug = String(r.payload.class_slug);
         const list = formulaRowsByClass.get(slug) ?? [];
         list.push(r);

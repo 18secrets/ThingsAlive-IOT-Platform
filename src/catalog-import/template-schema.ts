@@ -170,11 +170,23 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'class_slug', requiredCell: true },
       { name: 'formula_key', requiredCell: true },
       { name: 'kind', requiredCell: true },
-      { name: 'expression', requiredCell: true },
+      // No longer requiredCell (task QCE3) — a bind-mode row leaves this blank and
+      // fills named_formula/named_formula_version/bindings instead. A row filling
+      // neither is formula_mode_missing; a row filling both is formula_mode_conflict
+      // — both are semantic checks (QIMP2), not a shape check this schema can make,
+      // because "required" here can only mean "always", and here it means "one of".
+      { name: 'expression', requiredCell: false },
       { name: 'inputs', requiredCell: false, multiValue: true },
       { name: 'output_unit', requiredCell: false },
       { name: 'basis', requiredCell: false },
       { name: 'references', requiredCell: false },
+      // Optional, added by task QCE3 — not a template version bump, same reasoning
+      // QIMP5's sensor_slug/category used: an optional column asks nothing of a
+      // workbook that predates it.
+      { name: 'named_formula', requiredCell: false },
+      { name: 'named_formula_version', requiredCell: false },
+      // "role=signal; role=signal" (task QCE3 §3).
+      { name: 'bindings', requiredCell: false },
     ],
     // inputs names a declared expected_signal ('coolant_temp_c'), and `expression`
     // is compiled for real by CatalogImportValidatorService (task QCE1's

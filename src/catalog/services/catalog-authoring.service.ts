@@ -1,13 +1,18 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { compileClassFormulas } from '../formula/formula-compiler';
+import {
+  checkDimensions, checkSuspiciousBindings, substituteExpression,
+} from '../formula/named-formula-binding';
 import { EquipmentClassFormula } from '../entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../entities/equipment-class-profile.entity';
+import { NamedFormula } from '../entities/named-formula.entity';
 import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
+import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
 import { validateParams } from '../../alert/services/alert-rules';
 import { validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals } from './content-validation';
 
@@ -48,6 +53,8 @@ export class CatalogAuthoringService {
     @InjectRepository(ScenarioDefinition) private readonly scenarios: Repository<ScenarioDefinition>,
     @InjectRepository(SignalAlias) private readonly aliases: Repository<SignalAlias>,
     @InjectRepository(AlertRuleTemplate) private readonly alertTemplates: Repository<AlertRuleTemplate>,
+    @InjectRepository(NamedFormula) private readonly namedFormulas: Repository<NamedFormula>,
+    @InjectRepository(SensorRoleCapability) private readonly capabilities: Repository<SensorRoleCapability>,
   ) {}
 
   async createClass(scope: RequestScope, slug: string, draft: ClassDraft): Promise<EquipmentClassProfile> {
@@ -93,7 +100,16 @@ export class CatalogAuthoringService {
    * without saying why first (see the final report — folding it into
    * compiled_plan would silently change that column's shape).
    */
-  async publishClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
+  /**
+   * `acknowledgeWarnings` (task QCE3, same audited-override shape QIMP4 established
+   * for `acknowledgeWarnings` on apply) covers exactly one thing: `suspicious_binding`
+   * — a bound signal whose catalogued capability disagrees with what the role expects
+   * to measure. A dimension mismatch is never covered by it; that is a plain input
+   * error, not a risk somebody can knowingly accept.
+   */
+  async publishClass(
+    scope: RequestScope, slug: string, acknowledgeWarnings = false,
+  ): Promise<EquipmentClassProfile> {
     const draft = await this.classes.findOne({ where: { slug, status: 'draft' }, order: { version: 'DESC' } });
     if (!draft) throw new NotFoundException(`No draft of "${slug}" to publish.`);
     const signalProblem = validateSignalCountForPublish(draft.expectedSignals);
@@ -102,6 +118,77 @@ export class CatalogAuthoringService {
     }
 
     const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
+    const signalUnits = new Map(draft.expectedSignals.map((s) => [s.signal, s.unit]));
+
+    // Bound formulas (task QCE3) are resolved before compiling: the named formula's
+    // role-named expression becomes the bound signal's own text, so downstream —
+    // the compiler, the stored `compiled_plan`, everything — treats it exactly like
+    // one an author typed by hand. Resolved here, not at apply, for the same reason
+    // an expression-mode formula is not compiled at apply either: a draft can sit
+    // unpublished indefinitely, and nothing about it should go stale while it does.
+    const dimensionProblems: string[] = [];
+    const suspiciousProblems: string[] = [];
+    for (const formula of formulas) {
+      if (!formula.namedFormulaSlug) continue;
+      const named = await this.namedFormulas.findOne({
+        where: {
+          slug: formula.namedFormulaSlug,
+          ...(formula.namedFormulaVersion != null ? { version: formula.namedFormulaVersion } : {}),
+          status: 'published',
+        },
+        order: { version: 'DESC' },
+      });
+      if (!named) {
+        // Already caught by the import validator for an Excel-sourced row; this is
+        // the safety net for any other path that could write a bind-mode row.
+        dimensionProblems.push(
+          `"${formula.formulaKey}": named formula "${formula.namedFormulaSlug}" is not published, or does not exist.`,
+        );
+        continue;
+      }
+
+      const mismatches = checkDimensions(named.inputs, formula.bindings, signalUnits);
+      for (const m of mismatches) {
+        dimensionProblems.push(
+          `"${formula.formulaKey}": role "${m.role}" expects "${m.expectedDimension}" but is bound to `
+            + `"${m.signal}" ("${m.actualUnit}").`,
+        );
+      }
+
+      const boundSignals = [...new Set(formula.bindings.map((b) => b.signal))];
+      const capabilityRows = boundSignals.length
+        ? await this.capabilities.find({ where: { measurementRole: In(boundSignals) } })
+        : [];
+      const parameterKeysBySignal = new Map<string, string[]>();
+      for (const row of capabilityRows) {
+        if (!row.parameterKey) continue;
+        const list = parameterKeysBySignal.get(row.measurementRole) ?? [];
+        list.push(row.parameterKey);
+        parameterKeysBySignal.set(row.measurementRole, list);
+      }
+      for (const s of checkSuspiciousBindings(named.inputs, formula.bindings, parameterKeysBySignal)) {
+        suspiciousProblems.push(
+          `"${formula.formulaKey}": role "${s.role}" expects one of [${s.expectedParameters.join(', ')}] but `
+            + `"${s.signal}" measures [${s.boundParameterKeys.join(', ')}] (suspicious_binding).`,
+        );
+      }
+
+      // Substituted now so the compile step below sees the same text the formula
+      // will actually run — a bound formula and the hand-written equivalent must
+      // produce an identical compiled_plan, which only holds if both are compiled
+      // from identical expression text.
+      formula.expression = substituteExpression(named.expression, formula.bindings);
+    }
+
+    if (dimensionProblems.length) {
+      throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${dimensionProblems.join(' ')}`);
+    }
+    if (suspiciousProblems.length && !acknowledgeWarnings) {
+      throw new BadRequestException(
+        `Refused: ${suspiciousProblems.join(' ')} Pass acknowledgeWarnings: true to publish anyway.`,
+      );
+    }
+
     const results = compileClassFormulas({
       classSlug: slug,
       expectedSignals: draft.expectedSignals.map((s) => ({ signal: s.signal, unit: s.unit })),

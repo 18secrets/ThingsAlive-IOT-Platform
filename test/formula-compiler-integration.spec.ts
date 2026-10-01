@@ -3,9 +3,11 @@ import { RequestScope } from '../src/auth/types/request-scope';
 import { AlertRuleTemplate } from '../src/catalog/entities/alert-rule-template.entity';
 import { EquipmentClassFormula } from '../src/catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { NamedFormula } from '../src/catalog/entities/named-formula.entity';
 import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { CatalogAuthoringService } from '../src/catalog/services/catalog-authoring.service';
+import { SensorRoleCapability } from '../src/device-catalog/entities/sensor-role-capability.entity';
 import { COMPILER_VERSION } from '../src/catalog/formula/formula-compiler';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
@@ -34,6 +36,8 @@ describeDb('formula compiler: publish and migration', () => {
       ds.getRepository(ScenarioDefinition),
       ds.getRepository(SignalAlias),
       ds.getRepository(AlertRuleTemplate),
+      ds.getRepository(NamedFormula),
+      ds.getRepository(SensorRoleCapability),
     );
   }, 30_000);
 
@@ -220,24 +224,28 @@ describeDb('formula compiler: publish and migration', () => {
       await undoMigrationNamed(ds, 'DeclaredKindIsOptional1758020000000');
       await seedDraft();
 
-      const formulas = ds.getRepository(EquipmentClassFormula);
-      const saved = await formulas.save(formulas.create({
-        classSlug: 'diesel-generator', classVersion: 1, formulaKey: 'pre_existing_row',
-        kind: 'empirical', expression: 'avg(coolant_temp_c)',
-        // resultKind deliberately omitted - the column's own NOT NULL DEFAULT
-        // 'scalar' fills it in, exactly as an imported row would have it.
-      }));
-      // TypeORM's own INSERT RETURNING does not repopulate every server-computed
-      // default onto the in-memory entity - re-fetch to see what Postgres actually
-      // stored, not what the JS object happened to be constructed with.
-      const before = await formulas.findOneByOrFail({ id: saved.id });
-      expect(before.resultKind).toBe('scalar');
+      // Raw SQL, not the TypeORM repository: the entity class now also declares
+      // QCE3's named_formula_slug/named_formula_version/bindings columns, which do
+      // not exist in the schema this far back — a repository insert or select would
+      // reach for them regardless of how far the schema has been unwound, because
+      // TypeORM builds its query from the entity's current shape, not the database's.
+      // The raw INSERT below writes exactly the columns this historical schema has.
+      const [{ id: formulaId }] = await ds.query(`
+        INSERT INTO equipment_class_formula (class_slug, class_version, formula_key, kind, expression)
+          VALUES ('diesel-generator', 1, 'pre_existing_row', 'empirical', 'avg(coolant_temp_c)')
+          RETURNING id`);
+      // resultKind deliberately left for the column's own NOT NULL DEFAULT 'scalar'
+      // to fill in, exactly as an imported row would have it.
+      const [{ result_kind: before }] = await ds.query(
+        `SELECT result_kind FROM equipment_class_formula WHERE id = $1`, [formulaId],
+      );
+      expect(before).toBe('scalar');
 
       // If this throws, the test fails with the real error - a generic
       // "did not throw" assertion would only hide it.
       await ds.runMigrations({ transaction: 'all' });
 
-      const after = await formulas.findOneByOrFail({ id: saved.id });
+      const after = await ds.getRepository(EquipmentClassFormula).findOneByOrFail({ id: formulaId });
       expect(after.resultKind).toBeNull();
     });
   });
