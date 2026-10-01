@@ -121,7 +121,7 @@ describeDb('equipment library structure', () => {
   describe('sensor_role_capability', () => {
     it('answers which catalogued sensor could satisfy a role', async () => {
       const [{ id: sensorId }] = await ds.query(
-        `INSERT INTO sensor (sensor_name) VALUES ('Coolant Temp Probe') RETURNING id`,
+        `INSERT INTO sensor (sensor_name, slug) VALUES ('Coolant Temp Probe', 'coolant-temp-probe') RETURNING id`,
       );
       await expect(
         ds.query(

@@ -21,6 +21,15 @@ Do not re-derive a decision that is already written down there.
   `test/signal-binding.spec.ts`.
 - A rule that protects data integrity belongs in the database, not only in a service.
   A service check loses to a concurrent write.
+- Any endpoint that mutates an import batch takes the batch row lock
+  (`.setLock('pessimistic_write')` on the `catalog_import_batch` row, inside the
+  transaction that does the writing) — not just the ones that apply it. QIMP4's apply
+  and QIMP5's sensor approval each raced two overlapping calls against the same batch
+  before this was caught; two is a pattern, not a coincidence.
+- Any endpoint documented as idempotent has a concurrent-call test — two calls fired
+  together (`Promise.allSettled`), asserting both settle without error and the write
+  happened once. QIMP5's approval race was found by writing that test, not by reading
+  the code; reading the code had already missed it once.
 - Tests assert a refusal by attempting the forbidden thing and expecting the database
   or the service to refuse it — not by asserting a constraint exists.
 - A migration's down-path test names its own migration. `undoLastMigration()` means

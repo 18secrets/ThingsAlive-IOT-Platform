@@ -50,6 +50,12 @@ describeDb('catalog capability split: write vs. publish', () => {
         "scenario_definition", "alert_rule_template"
        RESTART IDENTITY CASCADE`,
     );
+    // The template's own sensor_capability example names this sensor (task QIMP5) —
+    // seeded so uploadAndApply's plain, unmodified template has nothing outstanding
+    // to propose.
+    await owner.query(
+      `INSERT INTO "sensor" (sensor_name, slug) VALUES ('Coolant Temp Probe', 'coolant-temp-probe')`,
+    );
   });
 
   const bearer = (role: 'master-admin' | 'catalog-author') =>

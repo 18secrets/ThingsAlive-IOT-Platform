@@ -60,7 +60,9 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
     // default so the plain template validates cleanly; the "resolves to zero/several"
     // tests use a different sensor_name rather than un-seeding this one, so they do
     // not disturb every other test's baseline.
-    await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe' }));
+    await ds.getRepository(Sensor).save(
+      ds.getRepository(Sensor).create({ sensorName: 'Coolant Temp Probe', slug: 'coolant-temp-probe' }),
+    );
   });
 
   const seedClass = async (slug: string, expectedSignals: ExpectedSignal[]): Promise<void> => {
@@ -299,12 +301,16 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       const { id } = await parseAndValidate(buffer);
       const [row] = (await rowsFor(id, 'sensor_capability')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/resolves to 0 sensor\(s\)/);
+      expect(row.message).toMatch(/sensor_not_found/);
     });
 
     it('refuses a sensor_capability name that resolves to several sensors', async () => {
-      await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Ambiguous Probe' }));
-      await ds.getRepository(Sensor).save(ds.getRepository(Sensor).create({ sensorName: 'Ambiguous Probe' }));
+      await ds.getRepository(Sensor).save(
+        ds.getRepository(Sensor).create({ sensorName: 'Ambiguous Probe', slug: 'ambiguous-probe-a' }),
+      );
+      await ds.getRepository(Sensor).save(
+        ds.getRepository(Sensor).create({ sensorName: 'Ambiguous Probe', slug: 'ambiguous-probe-b' }),
+      );
       const buffer = await workbookBuffer((wb) => {
         addRow(wb, 'sensor_capability', {
           sensor_name: 'Ambiguous Probe', signal: 'coolant_temp_c',
@@ -314,7 +320,7 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       const { id } = await parseAndValidate(buffer);
       const [row] = (await rowsFor(id, 'sensor_capability')).filter((r) => r.rowNumber === 3);
       expect(row.status).toBe('invalid');
-      expect(row.message).toMatch(/resolves to 2 sensor\(s\)/);
+      expect(row.message).toMatch(/sensor_ambiguous/);
     });
 
     it('rejects duplicates within the batch, naming both row numbers', async () => {

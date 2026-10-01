@@ -3,13 +3,13 @@ import { DataSource, EntityManager } from 'typeorm';
 import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
-import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
   ClassDiffWarning, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass, str, strOrNull,
 } from './class-content';
+import { EMPTY_SENSOR_CAPABILITY_ANALYSIS, analyzeSensorCapability } from './sensor-review';
 
 const SOURCE = 'excel-import' as const;
 
@@ -103,21 +103,45 @@ export class CatalogImportApplyService {
         }
       }
 
+      // A proposed sensor or category neither approved nor dismissed blocks apply
+      // outright, acknowledgeWarnings or not (task QIMP5) — that flag is for content
+      // this batch would write; an outstanding proposal is content it cannot write
+      // yet, because the reference row it depends on does not exist.
+      const capabilityRowsAll = rows.filter((r) => r.sheet === 'sensor_capability');
+      const signalRowsAll = rows.filter((r) => r.sheet === 'signal');
+      const sensorAnalysis = capabilityRowsAll.length
+        ? await analyzeSensorCapability(m, capabilityRowsAll, signalRowsAll)
+        : EMPTY_SENSOR_CAPABILITY_ANALYSIS;
+      const decided = new Set(batch.sensorDecisions.map((d) => `${d.kind}::${d.slug}`));
+      const outstandingSensors = sensorAnalysis.proposedSensors.filter((p) => !decided.has(`sensor::${p.slug}`));
+      if (outstandingSensors.length) {
+        const classes = [...new Set(outstandingSensors.flatMap((p) => p.usedByClasses))].sort();
+        throw new BadRequestException(
+          `Refused: ${outstandingSensors.length} proposed sensor(s) are neither approved nor dismissed `
+            + `(affects: ${classes.join(', ') || 'no class yet'}). `
+            + 'Approve or dismiss them via POST .../sensors first.',
+        );
+      }
+
       const classSummaries: Record<string, ClassApplyResult> = {};
       for (const [slug, slugRows] of bySlug) {
         classSummaries[slug] = await this.applyClass(m, batch, slug, slugRows);
       }
 
-      // sensor_capability: class-agnostic, resolved by sensor name alone. Not
-      // versioned like a class, so re-applying an unchanged row has to be idempotent
-      // by lookup rather than by never reaching this code — `uq_sensor_role_capability`
-      // is a real unique index and a second insert would violate it outright.
+      // sensor_capability: class-agnostic, resolved by slug then name (task QIMP5).
+      // Not versioned like a class, so re-applying an unchanged row has to be
+      // idempotent by lookup rather than by never reaching this code —
+      // `uq_sensor_role_capability` is a real unique index and a second insert
+      // would violate it outright. Every row here already resolved 'ok' at the last
+      // validate() — a row that did not would still be 'invalid', not 'valid'.
+      const resolvedSensorByRowId = new Map(
+        sensorAnalysis.resolutions.filter((res) => res.status === 'ok').map((res) => [res.row.id, res.candidateSensor!]),
+      );
       const capRepo = m.getRepository(SensorRoleCapability);
       let capabilitiesCreated = 0;
       for (const r of validRows.filter((r) => r.sheet === 'sensor_capability')) {
-        const sensor = await m.getRepository(Sensor).findOneOrFail({
-          where: { sensorName: str(r.payload.sensor_name) },
-        });
+        const sensor = resolvedSensorByRowId.get(r.id);
+        if (!sensor) throw new Error(`sensor_capability row ${r.rowNumber} was valid but did not resolve a sensor.`);
         const measurementRole = str(r.payload.signal);
         const parameterKey = strOrNull(r.payload.parameter_key);
         const existingCap = await capRepo.findOne({ where: { sensorId: sensor.id, measurementRole, parameterKey } });

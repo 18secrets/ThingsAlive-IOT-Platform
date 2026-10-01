@@ -49,4 +49,18 @@ export class CatalogImportBatch {
 
   @Column({ name: 'applied_by', type: 'text', nullable: true })
   appliedBy: string | null;
+
+  /** Who approved or dismissed which proposed sensor or category, against this
+   * batch (task QIMP5) — the audit trail for a decision that creates reference
+   * data nobody re-uploads a workbook to undo. */
+  @Column({ name: 'sensor_decisions', type: 'jsonb', default: () => `'[]'::jsonb` })
+  sensorDecisions: SensorDecision[];
+}
+
+export interface SensorDecision {
+  kind: 'sensor' | 'category';
+  slug: string;
+  decision: 'approved' | 'dismissed';
+  by: string;
+  at: string;
 }
