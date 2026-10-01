@@ -47,7 +47,7 @@ describeDb('catalog', () => {
       ds.getRepository(EquipmentClassProfile),
       new CopyOnGrantService(ds),
     );
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); });
 

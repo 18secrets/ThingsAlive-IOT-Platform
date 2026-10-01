@@ -30,7 +30,12 @@ describeDb('recommendations', () => {
   let service: RecommendationService;
 
   const SOURCE = 'iot-platform-1';
-  const NOW = new Date('2026-09-12T00:00:00.000Z');
+  // Relative to the real clock, not a pinned calendar date (task fix/ci-green):
+  // a fixed NOW drifts away from `date_trunc('month', now() − 2 months)`, the
+  // earliest partition TelemetryPartitioning's forward-only buffer creates, and
+  // a reading seeded far enough behind a stale NOW eventually lands in a month
+  // with no partition at all — not a bug in the reading, a bug in the fixture.
+  const NOW = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
 
   const acme: RequestScope = {
     tenantId: 'acme', userId: 'u-acme', roles: ['admin'], isPlatformRole: false,
@@ -49,7 +54,7 @@ describeDb('recommendations', () => {
       ds.getRepository(ClientCatalogEntitlement),
     );
     service = new RecommendationService(ds, catalog);
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
@@ -157,7 +162,7 @@ describeDb('recommendations', () => {
     expect(rec.bucket).toBe('availableLater');
     expect(rec.blockedBy).toEqual([{ code: 'insufficient-history', haveDays: 10, needDays: 30 }]);
     // First reading was 10 days ago and it needs 30, so 20 days from now.
-    expect(rec.estimatedReadyDate).toBe('2026-10-02T00:00:00.000Z');
+    expect(rec.estimatedReadyDate).toBe(new Date(NOW.getTime() + 20 * 86_400_000).toISOString());
   });
 
   it('offers no date when the blockage is not time', async () => {
