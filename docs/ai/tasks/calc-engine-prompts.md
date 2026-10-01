@@ -323,3 +323,213 @@ leave the substituted scenario in place as if nothing was lost.
   detectable.
 - Report back: commit SHA, test counts, and anything you could not implement
   with the reason.
+
+---
+
+# QCE3 — the named formula catalogue
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/named-formulas`
+
+Migration timestamp above everything on `main` **and** above `1758060000000` from the
+sensor-review branch. Check both.
+
+---
+
+## 0. Before anything else — commit the architecture record
+
+Four documents are being handed to you alongside this prompt. Commit them under `docs/ai/`
+in the first commit on this branch, unmodified:
+
+```
+docs/ai/decisions/ai-layer-decisions.md
+docs/ai/analysis/itdc-coverage-analysis.md
+docs/ai/analysis/itdc-telemetry-usecases.md
+docs/ai/task-register.md
+```
+
+They are the reason you could not find "ITDC". From now on every task can be checked against
+them without asking.
+
+---
+
+## 1. The problem
+
+The formula registry is keyed `(classSlug, formulaKey, classVersion)`. A formula belongs to
+one class version and is invisible to every other class.
+
+`fuel_consumption / engine_runtime` is the same physics on an excavator, a crane and a
+generator. Today it is authored separately on each, by hand, in an expression column. Forty
+classes means forty transcriptions and no way to correct a mistake everywhere at once.
+
+**The split:** the *formula* is platform knowledge — physics, authored once, published,
+immutable. The *binding* of that formula to a class's actual signals is class content.
+Same principle as operators versus compositions: the physics is fixed vocabulary, the wiring
+is data.
+
+## 2. `named_formula` — platform-owned, versioned, immutable when published
+
+New table. No tenant column. Lifecycle `draft` → `published` exactly like
+`equipment_class_profile`, and published rows are never edited.
+
+```
+named_formula (
+  id, slug, version,
+  name, description, category,
+  expression            text   -- written against ROLE names, not signals
+  inputs                jsonb  -- see below
+  result_dimension      text
+  result_kind           text   -- 'scalar' | 'series'
+  status, published_at, created_by, updated_at,
+  UNIQUE (slug, version)
+)
+```
+
+`inputs` is an ordered array:
+
+```json
+[ { "role": "fuel_rate",    "dimension": "volume/time", "description": "..." },
+  { "role": "power_output", "dimension": "power",
+    "expected_parameters": ["engine_power", "shaft_power"] } ]
+```
+
+- `expression` is written against **roles**: `fuel_rate / power_output`. It is parsed and
+  type-checked by the existing QCE1 compiler at **publish** time, with each role treated as
+  a signal of its declared dimension. A formula that does not compile cannot be published.
+- `result_dimension` is **verified against** what the compiler infers, not trusted. A
+  mismatch refuses the publish and names both.
+- `expected_parameters` is **optional** and is a warning, not a constraint — see §4.
+
+`#formula_key` composition from QCE1.1 stays exactly as it is. That composes formulas within
+one class. This is across classes. Do not merge the two mechanisms.
+
+## 3. Binding — the Excel `formula` sheet gains a second mode
+
+Two modes, mutually exclusive, per row:
+
+| mode | columns filled |
+|---|---|
+| **expression** (today, unchanged) | `expression` |
+| **bind** (new) | `named_formula`, `named_formula_version`, `bindings` |
+
+`bindings` is `role=signal` pairs, semicolon-separated:
+`fuel_rate=fuel_consumption; power_output=engine_power`
+
+Refuse, with a distinct code each:
+
+- both `expression` and `named_formula` filled → `formula_mode_conflict`
+- neither filled → `formula_mode_missing`
+- a role in `bindings` that the named formula does not declare → `unknown_role`
+- a declared role absent from `bindings` → `unbound_role`, naming it
+- `named_formula` slug or version not found, or not `published` → `named_formula_not_found`
+
+The column is **optional** — existing workbooks keep working. **Do not bump the template
+version**; QREC0 owns the v4 bump.
+
+## 4. Unit checking at bind time, and the limit of it
+
+For each binding, the bound signal's unit must be dimensionally compatible with the role's
+declared `dimension`. Incompatible → **refuse at publish**, naming the role, the signal, the
+expected dimension and the actual unit.
+
+**And state the limit plainly, in the code comment and in the refusal message vocabulary.**
+Dimensional checking cannot catch a wrong signal of the right dimension. Coolant temperature
+and oil temperature are both `degC`; binding one where the other belongs passes every check
+and produces a plausible wrong number. This was recorded as a correction to D33 and it is
+the single most important thing to be honest about in this feature.
+
+Hence `expected_parameters`: when the role declares it and the bound signal's
+`parameter_key` is not in the list, emit **`suspicious_binding`** — a warning carrying the
+role, the bound signal and the expected list. Publish is refused unless the author passes
+`acknowledgeWarnings: true`, the same deliberate, audited override QIMP4 established. Not a
+refusal: the list cannot be exhaustive and a legitimate unusual binding must remain
+possible.
+
+## 5. Compilation and what gets stored
+
+At class publish, a bound formula compiles to the **same `compiled_plan` shape** an
+expression-mode formula produces — roles substituted for bound signals before compilation.
+Downstream, nothing knows the difference.
+
+Store the provenance on the class formula row: `named_formula_slug`,
+`named_formula_version`, `bindings`. So a published class records which physics it used and
+at which version, forever.
+
+**The reference is not live.** Publishing `v2` of a named formula changes nothing already
+published. Existing classes keep their compiled plan and their recorded `v1`. Moving a class
+to `v2` is a new class version, authored deliberately.
+
+**Tenant copies carry the compiled plan, not the reference.** Copy-on-grant (D04) already
+copies class content into the tenant; it copies the plan and the provenance fields as data.
+A tenant must never resolve a platform catalogue row at runtime.
+
+## 6. Endpoints
+
+```
+GET    /api/v1/platform/catalog/named-formulas            list, filter by status and category
+GET    /api/v1/platform/catalog/named-formulas/:slug      all versions
+POST   /api/v1/platform/catalog/named-formulas            create draft      catalog.write
+PATCH  /api/v1/platform/catalog/named-formulas/:slug/:v   edit draft only   catalog.write
+POST   /api/v1/platform/catalog/named-formulas/:slug/:v/publish              catalog.publish
+```
+
+The list endpoint is what the console's picker reads. Return `inputs` with it — the UI needs
+the roles to render the binding form.
+
+**Same validator, both paths.** A named formula created through the API goes through exactly
+the checks §2 describes. QIMP4 established this; do not open a second door.
+
+## 7. Seed content
+
+Seven published named formulas, in the migration, as real platform content — not fixtures:
+
+| slug | expression | result |
+|---|---|---|
+| `specific_fuel_consumption` | `fuel_rate / power_output` | volume/energy |
+| `fuel_per_hour` | `fuel_rate` aggregated | volume/time |
+| `load_factor` | `actual_power / rated_power` | ratio |
+| `temperature_rise` | `outlet_temp - inlet_temp` | temperature |
+| `pressure_differential` | `upstream_pressure - downstream_pressure` | pressure |
+| `duty_cycle` | `running_time / total_time` | ratio |
+| `co2_from_fuel` | `fuel_volume * emission_factor` | mass |
+
+These come straight from the ITDC coverage analysis you will have committed in §0 — read
+§2 of it before writing them. If any does not compile against the current operator
+vocabulary, **report it rather than inventing an operator**. QCE4 adds operators; this task
+does not.
+
+## 8. Tests
+
+1. A named formula whose expression does not compile cannot be published.
+2. `result_dimension` disagreeing with the inferred dimension refuses the publish, naming both.
+3. A published named formula cannot be edited; a draft can.
+4. Each of the five binding refusal codes in §3 fires on its own condition.
+5. A binding whose unit is dimensionally incompatible refuses the class publish.
+6. `suspicious_binding` fires when `parameter_key` is outside `expected_parameters`, class
+   publish is refused, and `acknowledgeWarnings: true` lets it through — all three asserted.
+7. A bound formula and the equivalent hand-written expression produce an **identical**
+   `compiled_plan`. This is the test that proves the feature adds no new semantics.
+8. Publishing `v2` of a named formula leaves an already-published class's plan and recorded
+   version untouched.
+9. Copy-on-grant carries the compiled plan and the provenance fields; the tenant copy
+   resolves nothing at runtime.
+10. All seven seeded formulas compile and publish in the migration.
+11. A workbook with no `named_formula` column loads unchanged.
+
+## 9. Out of scope
+
+- Runtime execution of the plan — **QCE2**.
+- Baseline operators (`baseline_avg`, `baseline_sd`, `zscore`, `delta_ratio`) — **QCE4**,
+  next. Do not add operators here, but do not design anything that makes adding them harder.
+- Template v4 — QREC0.
+- Anything under `frontend/`. Report the endpoint and payload shapes the picker needs.
+
+## 10. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after,
+  measured by stashing back and running.
+- Full migration chain from empty; down path named with `undoMigrationNamed`.
+- **Seed before you migrate.**
+- Report: commit SHA, test counts, which of the seven seeded formulas compiled and which did
+  not with the reason, and anything not implemented.

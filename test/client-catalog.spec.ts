@@ -6,10 +6,12 @@ import { capabilitiesFor } from '../src/auth/capabilities';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { EquipmentClassFormula } from '../src/catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { NamedFormula } from '../src/catalog/entities/named-formula.entity';
 import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../src/catalog/entities/alert-rule-template.entity';
 import { CatalogAuthoringService } from '../src/catalog/services/catalog-authoring.service';
+import { SensorRoleCapability } from '../src/device-catalog/entities/sensor-role-capability.entity';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { ClientCatalogService } from '../src/client-catalog/services/client-catalog.service';
 import { CopyOnGrantService } from '../src/client-catalog/services/copy-on-grant.service';
@@ -58,6 +60,8 @@ describeDb('client-owned catalog', () => {
       ds.getRepository(ScenarioDefinition),
       ds.getRepository(SignalAlias),
       ds.getRepository(AlertRuleTemplate),
+      ds.getRepository(NamedFormula),
+      ds.getRepository(SensorRoleCapability),
     );
     copies = new CopyOnGrantService(ds);
     client = new ClientCatalogService(ds, copies);

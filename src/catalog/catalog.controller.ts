@@ -95,6 +95,10 @@ export class AliasDto {
   @IsOptional() @IsString() note?: string;
 }
 
+export class PublishClassDto {
+  @IsOptional() @IsBoolean() acknowledgeWarnings?: boolean;
+}
+
 export class GrantEntitlementDto {
   @IsString() @IsNotEmpty()
   tenantId: string;
@@ -217,8 +221,10 @@ export class CatalogController {
   @Post('equipment-classes/:slug/publish')
   @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish the draft. Existing client copies are unaffected' })
-  publishClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
-    return this.authoring.publishClass(scope, slug);
+  publishClass(
+    @CurrentScope() scope: RequestScope, @Param('slug') slug: string, @Body() dto: PublishClassDto = {},
+  ) {
+    return this.authoring.publishClass(scope, slug, dto.acknowledgeWarnings ?? false);
   }
 
   @Post('equipment-classes/:slug/retire')
