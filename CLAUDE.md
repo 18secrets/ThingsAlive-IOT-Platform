@@ -20,6 +20,23 @@ Do not re-derive a decision that is already written down there.
   throwaway commit or a second worktree, not by stashing — stashing ties the only copy
   of in-progress work to a procedure with a lossy step.
 
+## Railway
+- Read-only by default. Querying status, logs, variables and deployments is always fine;
+  changing anything is not, unless a task grants an explicit, written, narrow exception —
+  and the exception is only as wide as it says, no wider.
+- Creating a service that does not yet exist, and setting its own variables, is safe by
+  construction: nothing that already works can break from something new appearing beside
+  it (QOPS2's precedent).
+- Changing a variable on an existing service is the one action that can break something
+  that already works for everyone. Do it only when a task names the exact service, the
+  exact variable, and a read-append-verify procedure — and run that procedure
+  programmatically (read into a variable, append, set, read back and diff), never by
+  hand-transcribing a value you read into a new command. A value you retype from memory
+  is indistinguishable from one you got wrong.
+- `railway up`, `railway redeploy`, `railway down` and `railway config migrate` are not
+  part of the read path. Do not run them without being told to — including against a
+  service you just created yourself, even mid-task when it would obviously help.
+
 ## Style
 - Comments explain *why*, not what. Match the voice of
   `src/database/migrations/1757960000000-SignalBindings.ts` and
