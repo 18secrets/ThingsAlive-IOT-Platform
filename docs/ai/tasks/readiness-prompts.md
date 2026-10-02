@@ -116,3 +116,28 @@ UI without it having to infer anything.
 - Report: commit SHA, test counts, where readiness is computed and whether it conflated the
   two reasons before, the boundary decision from test 6, whether copy-on-grant already
   carried the requirement table, and anything not implemented.
+
+---
+
+## Addendum (decided after implementation, 2026-10-02)
+
+**Copy-on-grant confirmed correct as excluded** — `equipment_profile.class_version` already
+pins which immutable platform row applies, which answers *which value applies*. It does not
+answer *can the tenant change it* — those are different questions, and the architect's
+correction is that the second one is a real, named gap rather than something copy-on-grant
+should have solved.
+
+**A tenant cannot override `stale_after_seconds` today, and that is a known limitation, not a
+design.** A site with a flaky link legitimately needs a longer threshold than the platform
+class declares, and the client owning their own configuration is a standing principle here
+(D31). Its home is **QPARAM1**: `stale_after_seconds` is a parameter, client → site →
+equipment, effective-dated, exactly the shape QPARAM1 exists for — not a second column on a
+platform-owned, version-pinned table. Deferred there explicitly, not left implicit.
+
+**`coverage()` must not reclassify on staleness — confirmed, not merely avoided.**
+`coverage()` answers a configuration question (is this requirement bound); staleness is a
+runtime condition. Merging them would flip a machine to "missing" because it sat switched off
+over a weekend, sending someone to re-bind signals that were never unbound. Annotating every
+requirement with `{staleAfterSeconds, lastReadingAt, secondsSinceLastReading}` is the right
+shape: the caller shows "bound, quiet for 3 days" without the platform claiming it is
+unconfigured.
