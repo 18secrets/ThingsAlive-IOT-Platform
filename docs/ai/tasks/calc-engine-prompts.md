@@ -818,3 +818,158 @@ shape — and it is mine to decide.
 - **Seed before you migrate.**
 - Report: commit SHA, test counts, the §7 numbers, the partition count from §3, which
   window alignments the plan supports, and anything not implemented with the reason.
+
+# QCE2.1 — `series` means a series
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/series-evaluation`
+
+Rebase onto whatever of `feature/calc-runtime` and `feature/signal-freshness` has not merged.
+Migration timestamp above everything on `main` if one is needed — probably none.
+
+---
+
+## Why
+
+QCE1 types a formula as `scalar` or `series` at compile time. QCE2 returns a number for
+both. The compiler declares a shape the runtime does not deliver, which is the same defect
+class we have spent the week removing — a declared state that is not honoured.
+
+It surfaces at QPAGE1: a chart widget asks for twelve hours and receives one point.
+
+**Two things were conflated when this was deferred.** A *bucketed series of the signal* is one
+SQL query with `date_trunc` — no materialisation, no caching, and it is what a chart needs. A
+*rolling baseline recomputed per bucket* is genuinely expensive. The first is this task. The
+second stays out.
+
+## 1. `series` returns points
+
+```ts
+value: number | { t: string, v: number | null }[] | null
+```
+
+- `resultKind: 'scalar'` → `number | null`, unchanged.
+- `resultKind: 'series'` → an array of points, ascending by `t`, `t` as ISO 8601 UTC.
+- **A plan declaring `series` that produces a scalar is a failure**, not a convention. Throw,
+  name the formula key, and test it. The whole point is that the declaration is honoured.
+
+**A bucket with no readings is a point with `v: null`, not a missing point and not 0.** A
+chart must be able to draw a gap. Omitting the bucket makes a gap look like compressed time;
+zero makes a silent machine look like a reading of zero. Same rule as everywhere else: the
+absence is represented, never substituted.
+
+## 2. Bucket size — one deterministic rule
+
+Target **roughly 120 points** per window, snapped to a human unit:
+
+```
+1m, 5m, 15m, 30m, 1h, 3h, 6h, 12h, 1d
+```
+
+Pick the smallest unit in that ladder that yields ≤ 200 buckets for the window. A 12-hour
+window gives 5-minute buckets (144); 7 days gives 1-hour (168); 30 days gives 6-hour (120).
+
+The plan may override with an explicit bucket. An override producing more than **1000**
+points is **refused**, naming the count — not truncated, because a silently truncated chart
+is a wrong chart.
+
+Put the ladder and the rule in one named function with the reasoning in a comment. It will be
+read by whoever wonders why their chart has the resolution it has.
+
+## 3. One query, bucketed in the database
+
+`date_trunc` or an equivalent, with `source_timestamp` bounded on both ends so partition
+pruning still works. **Not** fetching every reading and bucketing in Node — that moves a
+window of raw rows across the wire to throw most of them away.
+
+Report the partition count from `EXPLAIN` for a 12-hour bucketed query, as QCE2 did.
+
+Aggregation inside a bucket uses the plan's own operator: a plan whose outer operator is
+`avg` averages within each bucket, `max` takes the max. State what you do when the outer
+operator has no meaningful per-bucket reading — `last`, say — rather than guessing silently.
+
+## 4. Baseline operators stay single-valued
+
+`baseline_avg`, `baseline_sd`, `zscore`, `delta_ratio` return their value **at the window's
+latest instant**, as QCE2 built them. They are not recomputed per bucket in this task.
+
+**Document that in the envelope**, do not leave it to be inferred: a series plan whose outer
+operator is a baseline operator returns a one-point series with that instant's value, and
+says so. A caller charting it gets one point and knows why.
+
+Recomputing per bucket is a later task if anyone needs it. Nobody does yet.
+
+## 5. Alert-based dirty-window exclusion — the join, specified
+
+`baselineExcludedRanges` exists, is tested, and nothing calls it. Work-order exclusion is
+wired; alert exclusion is not, because the `alert_rule` scope join was not specified. It is
+here.
+
+A raised alert excludes its period from a baseline window when **both** hold:
+
+**a. The rule applies to this equipment**, by its `appliesTo` scope:
+
+| scope | applies when |
+|---|---|
+| `equipment` | the rule names this equipment |
+| `plant` | this equipment's current placement is in that plant |
+| `equipment-class` | this equipment's class matches |
+| `account` | always, within the tenant |
+
+**b. The rule's signal is the baseline's input signal.** A rule on oil pressure does **not**
+dirty a coolant-temperature baseline.
+
+Condition (b) is the one that matters. Without it, a single noisy alert anywhere on the
+account blanks every baseline on every machine, and the whole feature reads as broken.
+
+Exclusion is by the alert's raised-to-resolved interval. An alert still open at evaluation
+time excludes up to now. If exclusion drops the remaining history below QCE4's 14-day
+minimum, the result is `baseline_not_established` — already built, confirm it fires.
+
+**Tests:** each of the four scopes, one that excludes and one that does not; a rule on a
+different signal leaves the baseline unchanged; an open alert excludes to now; exclusion
+below the minimum yields `baseline_not_established`.
+
+## 6. Performance
+
+Measure and report, as QCE2 did:
+
+- one series KPI, 12-hour window, 5-minute buckets
+- twenty widgets for one machine, mixed scalar and series
+- the partition count
+
+QCE2 measured 40 ms for twenty scalars. If twenty mixed widgets exceed about two seconds,
+**stop and report the breakdown** rather than optimising. That is a design conversation.
+
+## 7. Out of scope
+
+- Caching or materialising. Measure first; QCE2's numbers say we do not need it.
+- Baselines per bucket (§4).
+- The page itself — QPAGE1.
+- Anything under `frontend/`. Report the response shape, including the null-point convention,
+  since the chart library has to handle it.
+
+## 8. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after, on
+  a throwaway commit or a second worktree — **not by stashing**.
+- Report: commit SHA, test counts, the §6 numbers, the partition count, the per-bucket
+  aggregation decision from §3, and anything not implemented with the reason.
+
+## Addendum — a test QCE2 signed off was proving the wrong thing
+
+`test/kpi-evaluation.spec.ts`'s "division by zero" test used
+`coolant_temp_c / (coolant_temp_c - coolant_temp_c)`. That expression is series-kind — a bare
+signal minus itself, divided — not scalar, because nothing in it reduces the window to one
+value. QCE2's runtime at the time only ever produced scalars, so the test passed, but it was
+exercising "a series plan silently coerced to one number", not "a scalar formula whose
+division is undefined" as its name claimed.
+
+§1's "declares series, throws if it can't deliver" check is exactly what turned this up: the
+corrected runtime refused the original expression outright, rather than quietly returning the
+same wrong-for-the-right-reason answer. Fixed the test's formula to
+`avg(coolant_temp_c) / (avg(coolant_temp_c) - avg(coolant_temp_c))` — genuinely scalar,
+dividing by zero for the same reason — and kept the original assertion (`undefined_result`).
+Recording this because a test we both signed off was quietly testing something adjacent to
+its name, and the only reason it surfaced now is that `series` started meaning `series`.

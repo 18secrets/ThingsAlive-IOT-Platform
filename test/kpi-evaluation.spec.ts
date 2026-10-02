@@ -158,16 +158,18 @@ describeDb('KPI runtime evaluator', () => {
     expect(envelope).toMatchObject({ readiness: 'not_available', reason: 'stale', value: null });
   });
 
-  it('6. division by zero is undefined_result, never Infinity or null-silently', async () => {
+  it('6. division by zero is undefined_result, never Infinity or null-silently (scalar-kind formula — '
+    + 'avg(...) on both sides makes the whole expression scalar, not series)', async () => {
     await seedClass(); await seedDevice(); await seedBinding();
     await runTenantSpanning(owner, 'test fixture', async (m) => {
       const zero = compileFormula({
-        formulaKey: 'zero_div', expression: 'coolant_temp_c / (coolant_temp_c - coolant_temp_c)',
+        formulaKey: 'zero_div', expression: 'avg(coolant_temp_c) / (avg(coolant_temp_c) - avg(coolant_temp_c))',
         classSlug: 'diesel-generator', expectedSignals: [{ signal: 'coolant_temp_c', unit: 'degC' }],
       });
+      expect(zero.resultKind).toBe('scalar');
       await m.getRepository(ClientFormula).save({
         tenantId: 'acme', clientEquipmentClassSlug: 'diesel-generator', formulaKey: 'zero_div',
-        kind: 'empirical', expression: 'coolant_temp_c / (coolant_temp_c - coolant_temp_c)',
+        kind: 'empirical', expression: 'avg(coolant_temp_c) / (avg(coolant_temp_c) - avg(coolant_temp_c))',
         compiledPlan: zero.plan as any,
         compiledAt: NOW, compilerVersion: zero.compilerVersion, resultUnit: zero.resultUnit,
         requiredSignals: zero.requiredSignals, requiredParameters: [], bindings: [],

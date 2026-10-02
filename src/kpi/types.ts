@@ -17,17 +17,33 @@ export interface Coverage {
   ratio: number;
 }
 
+/** One bucketed point (task QCE2.1 §1). `v: null` is a bucket with no readings
+ * in it — a gap the chart must be able to draw, never a missing point (which
+ * would make the gap look like compressed time) and never `0` (which would
+ * make a silent machine look like it reported zero). */
+export interface SeriesPoint {
+  t: string;
+  v: number | null;
+}
+
 /**
- * `value` is `number | null` only in this slice — never an array. A true
- * per-point rolling series (what a chart-type widget would draw for `zscore`
- * over a window) needs a materialised read path, which QCE2 explicitly scopes
- * out ("caching or materialising results"); `resultKind: 'series'` here means a
- * live value for a time-varying quantity, evaluated once at the window's latest
- * instant, not one value per reading. Reported, not silently narrowed.
+ * `resultKind: 'scalar'` → `value` is `number | null`. `resultKind: 'series'`
+ * → `value` is `SeriesPoint[] | null`, ascending by `t` (task QCE2.1). A plan
+ * declaring `series` that produces a bare scalar is a bug, not a convention —
+ * `KpiEvaluatorService` throws naming the formula key rather than silently
+ * returning a number where an array was promised.
+ *
+ * Baseline operators (`baseline_avg`/`baseline_sd`/`zscore`/`delta_ratio`) are
+ * not recomputed per bucket — they still return a single value, at the
+ * window's latest instant, exactly as QCE2 built them. Declared `series`
+ * because they are genuinely time-varying quantities, they come back as a
+ * **one-point array**, not a bare number: `[{ t: window.to, v }]`. `value` is
+ * therefore never a bare number for a `series`-kind formula, even when it only
+ * has one point to show.
  */
 export interface KpiEnvelope {
   formulaKey: string;
-  value: number | null;
+  value: number | SeriesPoint[] | null;
   unit: string;
   resultKind: 'scalar' | 'series';
   window: { from: string; to: string };

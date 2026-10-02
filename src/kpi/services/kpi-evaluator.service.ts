@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import {
-  ExcludedRange, openWorkOrderExcludedRanges, Reading,
+  alertExcludedRanges, ExcludedRange, openWorkOrderExcludedRanges, Reading,
 } from '../../catalog/formula/baseline-operators';
 import { ExecContext, lookupExecutor } from '../../catalog/formula/executor-registry';
 import { ArgKind, lookupOperator } from '../../catalog/formula/operator-registry';
@@ -15,8 +15,9 @@ import { withTenantSession } from '../../scope/tenant-session';
 import { SignalBindingService } from '../../signal-binding/services/signal-binding.service';
 import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
 import { WorkOrder } from '../../work/entities/work-order.entity';
-import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason } from '../types';
-import { TelemetryWindowReader } from './telemetry-window-reader';
+import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
+import { BucketAggregate, TelemetryWindowReader } from './telemetry-window-reader';
+import { MAX_BUCKETS_OVERRIDE, pickBucketSeconds } from './bucketing';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -42,7 +43,11 @@ interface PlanEvalContext {
   window: Window;
   signals: Map<string, SignalStatus>;
   siblings: Map<string, { plan: unknown }>;
-  excludedRanges: ExcludedRange[];
+  /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
+   * coolant-temperature baseline. Work-order ranges are machine-wide (no
+   * `signal` column on `work_order`) and already merged into every entry here;
+   * alert ranges are signal-specific and only merged into their own signal's. */
+  excludedRangesBySignal: Map<string, ExcludedRange[]>;
 }
 
 type EvalResult =
@@ -182,13 +187,25 @@ export class KpiEvaluatorService {
     const openOrders = await m.getRepository(WorkOrder).find({
       where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId },
     });
-    const excludedRanges = openWorkOrderExcludedRanges(
+    // Machine-wide (task QCE4's own finding: work_order has no signal column)
+    // — the same ranges apply to every signal's baseline.
+    const workOrderRanges = openWorkOrderExcludedRanges(
       openOrders.map((o) => ({
         status: o.status as 'created' | 'in-progress' | 'completed' | 'cancelled',
         startedAt: o.startedAt, createdAt: o.createdAt, endedAt: o.endedAt,
       })),
       at,
     );
+    // Signal-specific (task QCE2.1 §5) — only the signals a baseline operator
+    // actually reaches back for need this at all.
+    const baselineSignals = [...signalLookbackHours.entries()].filter(([, h]) => h > 0).map(([s]) => s);
+    const alertRangesBySignal = await this.loadAlertExcludedRangesBySignal(
+      m, tenantId, equipment, profile, baselineSignals, at,
+    );
+    const excludedRangesBySignal = new Map<string, ExcludedRange[]>();
+    for (const signal of allRequiredSignals) {
+      excludedRangesBySignal.set(signal, [...workOrderRanges, ...(alertRangesBySignal.get(signal) ?? [])]);
+    }
 
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
@@ -198,15 +215,74 @@ export class KpiEvaluatorService {
       ));
     }
 
-    return targets.map((target) => this.buildEnvelope(target, perTargetWindow.get(target.formulaKey) ?? null, {
-      signals, siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])), excludedRanges,
-    }));
+    return Promise.all(targets.map((target) => this.buildEnvelope(
+      target, perTargetWindow.get(target.formulaKey) ?? null,
+      { signals, siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])), excludedRangesBySignal },
+      m, tenantId, imeis,
+    )));
   }
 
-  private buildEnvelope(
+  /** Condition (a) of task QCE2.1 §5 — the same four-branch `appliesTo`
+   * predicate `AlertService.applicableTo` already uses (`alert.service.ts`),
+   * reused rather than reinvented. Condition (b) — the rule's signal must be
+   * the baseline's input signal — is the SQL filter on `params->>'signal'`
+   * below; without it, one noisy account-wide alert would dirty every
+   * baseline on every machine. */
+  private async loadAlertExcludedRangesBySignal(
+    m: EntityManager, tenantId: string, equipment: EquipmentRef, profile: EquipmentProfile,
+    signals: string[], at: Date,
+  ): Promise<Map<string, ExcludedRange[]>> {
+    const result = new Map<string, ExcludedRange[]>();
+    if (!signals.length) return result;
+
+    const rules: {
+      id: string; appliesTo: string; plantId: string | null;
+      sourceSystem: string | null; externalId: string | null;
+      equipmentClassSlug: string | null; signal: string;
+    }[] = await m.query(
+      `SELECT "id", "applies_to" AS "appliesTo", "plant_id" AS "plantId",
+              "source_system" AS "sourceSystem", "external_id" AS "externalId",
+              "equipment_class_slug" AS "equipmentClassSlug", "params"->>'signal' AS "signal"
+         FROM "alert_rule"
+        WHERE "tenant_id" = $1 AND "enabled" = true AND "params"->>'signal' = ANY($2::text[])`,
+      [tenantId, signals],
+    );
+
+    const applicable = rules.filter((r) => {
+      if (r.appliesTo === 'account') return true;
+      if (r.appliesTo === 'plant') return !!profile.plantId && r.plantId === profile.plantId;
+      if (r.appliesTo === 'equipment-class') {
+        return !!profile.equipmentClassSlug && r.equipmentClassSlug === profile.equipmentClassSlug;
+      }
+      return r.sourceSystem === equipment.sourceSystem && r.externalId === equipment.externalId;
+    });
+    if (!applicable.length) return result;
+
+    const ruleIds = applicable.map((r) => r.id);
+    const events: { ruleId: string; firedAt: Date; resolvedAt: Date | null }[] = await m.query(
+      `SELECT "rule_id" AS "ruleId", "fired_at" AS "firedAt", "resolved_at" AS "resolvedAt"
+         FROM "alert_event" WHERE "tenant_id" = $1 AND "rule_id" = ANY($2::uuid[])`,
+      [tenantId, ruleIds],
+    );
+
+    const ruleSignal = new Map(applicable.map((r) => [r.id, r.signal]));
+    const bySignal = new Map<string, { firedAt: Date; resolvedAt: Date | null }[]>();
+    for (const e of events) {
+      const signal = ruleSignal.get(e.ruleId);
+      if (!signal) continue;
+      const list = bySignal.get(signal) ?? [];
+      list.push({ firedAt: new Date(e.firedAt), resolvedAt: e.resolvedAt ? new Date(e.resolvedAt) : null });
+      bySignal.set(signal, list);
+    }
+    for (const [signal, spans] of bySignal) result.set(signal, alertExcludedRanges(spans, at));
+    return result;
+  }
+
+  private async buildEnvelope(
     formula: ClientFormula, window: Window | null,
-    ctxBase: { signals: Map<string, SignalStatus>; siblings: Map<string, { plan: unknown }>; excludedRanges: ExcludedRange[] },
-  ): KpiEnvelope {
+    ctxBase: { signals: Map<string, SignalStatus>; siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]> },
+    m: EntityManager, tenantId: string, imeis: string[],
+  ): Promise<KpiEnvelope> {
     const unit = formula.resultUnit ?? 'dimensionless';
     const resultKind = formula.resultKind ?? 'scalar';
 
@@ -249,16 +325,89 @@ export class KpiEvaluatorService {
       };
     }
 
-    const ctx: PlanEvalContext = { window, signals: ctxBase.signals, siblings: ctxBase.siblings, excludedRanges: ctxBase.excludedRanges };
+    const ctx: PlanEvalContext = {
+      window, signals: ctxBase.signals, siblings: ctxBase.siblings,
+      excludedRangesBySignal: ctxBase.excludedRangesBySignal,
+    };
+
+    if (resultKind === 'series') {
+      const points = await this.evaluateSeries(formula, ctx, m, tenantId, imeis);
+      if (points.ok === false) {
+        return { ...base, value: null, readiness: points.readiness, reason: points.reason, coverage };
+      }
+      return { ...base, value: points.value, readiness: 'ready', coverage };
+    }
+
     const result = evalNode(formula.compiledPlan, ctx);
     if (result.ok === false) {
       return {
         ...base, value: null, readiness: result.readiness, reason: result.reason, coverage,
       };
     }
+    // A `scalar`-declared plan is guaranteed a plain number by the type of
+    // `result.value` here; the mirror-image check (a `series` plan that
+    // produced a scalar) is `evaluateSeries`'s own job, below.
     return { ...base, value: result.value, readiness: 'ready', coverage };
   }
+
+  /**
+   * `resultKind: 'series'` evaluation (task QCE2.1 §1-4). A baseline-family
+   * root (`baseline_avg`/`baseline_sd`/`zscore`/`delta_ratio`) returns its
+   * existing single value as a **one-point array** — §4's documented
+   * exception, not a failure. Anything else is bucketed in the database
+   * (§2-3) and walked per bucket. A plan shape this cannot bucket (anything
+   * beyond a bare signal, a single reducer directly wrapping one signal, or
+   * `+`/`-`/`*`/`/`/unary-minus over two such shapes) throws, naming the
+   * formula key — reported as a scope limit, not guessed at.
+   */
+  private async evaluateSeries(
+    formula: ClientFormula, ctx: PlanEvalContext, m: EntityManager, tenantId: string, imeis: string[],
+  ): Promise<{ ok: true; value: SeriesPoint[] } | { ok: false; readiness: Readiness; reason?: Reason }> {
+    const plan = formula.compiledPlan as any;
+
+    if (plan.type === 'call' && BASELINE_OPERATOR_NAMES.has(plan.name)) {
+      const result = evalNode(plan, ctx);
+      if (result.ok === false) return result;
+      return { ok: true, value: [{ t: ctx.window.to.toISOString(), v: result.value }] };
+    }
+
+    const bucketPlan = planBucketShape(plan);
+    if (!bucketPlan) {
+      throw new Error(
+        `formula "${formula.formulaKey}": declares result_kind "series" with a plan shape series `
+          + 'bucketing does not support (only a bare signal, one reducer directly wrapping one signal, '
+          + 'or +/-/*// / unary-minus over such shapes) — QCE2.1 scopes this out rather than guessing.',
+      );
+    }
+
+    const signalsNeeded = [...bucketPlan.columnBySignal.keys()];
+    const bucketSeconds = pickBucketSeconds((ctx.window.to.getTime() - ctx.window.from.getTime()) / 1000);
+    const bucketed = await this.reader.readBucketed(
+      m, tenantId, imeis, signalsNeeded, bucketSeconds, ctx.window.from, ctx.window.to,
+    );
+    const byBucketBySignal = new Map<string, Map<number, BucketAggregate>>();
+    for (const [signal, rows] of bucketed) {
+      byBucketBySignal.set(signal, new Map(rows.map((r) => [r.bucket.getTime(), r])));
+    }
+
+    const points: SeriesPoint[] = [];
+    const startEpoch = Math.floor(ctx.window.from.getTime() / 1000 / bucketSeconds) * bucketSeconds;
+    const endEpoch = ctx.window.to.getTime() / 1000;
+    for (let epoch = startEpoch; epoch <= endEpoch; epoch += bucketSeconds) {
+      const bucketMs = epoch * 1000;
+      const v = evalBucketNode(bucketPlan.node, bucketMs, byBucketBySignal, bucketPlan.columnBySignal);
+      points.push({ t: new Date(bucketMs).toISOString(), v });
+    }
+    // A `series` plan is guaranteed an array here — never a bare number, even
+    // when the window is short enough to produce exactly one bucket.
+    return { ok: true, value: points };
+  }
 }
+
+/** Baseline operators are declared `series` (QCE4) because they are genuinely
+ * time-varying quantities, but are not recomputed per bucket (QCE2.1 §4) —
+ * they return their existing single value as a one-point array instead. */
+const BASELINE_OPERATOR_NAMES = new Set(['baseline_avg', 'baseline_sd', 'zscore', 'delta_ratio']);
 
 function zeroCoverage(): Coverage {
   return { expected: 0, actual: 0, ratio: 0 };
@@ -398,6 +547,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const seriesArgs: Reading[][] = [];
       const scalarArgs: number[] = [];
       const durationArgs: number[] = [];
+      let seriesArgSignal: string | null = null;
       for (let i = 0; i < node.args.length; i += 1) {
         const argNode = node.args[i];
         const kind: ArgKind = opEntry.argKinds[i];
@@ -410,14 +560,18 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
           if (sig.ok === false) return { ok: false, readiness: sig.readiness, reason: sig.reason };
           seriesArgs.push(sig.series);
+          seriesArgSignal = seriesArgSignal ?? argNode.name;
           continue;
         }
         const scalar = evalNode(argNode, ctx);
         if (scalar.ok === false) return scalar;
         scalarArgs.push(scalar.value);
       }
+      // Per-signal (task QCE2.1 §5) — a rule on a different signal must not
+      // dirty this one's baseline.
+      const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
-        windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges: ctx.excludedRanges,
+        windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
       if (result.ok === false) return { ok: false, readiness: 'not_available', reason: result.reason };
@@ -425,5 +579,92 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
     }
     default:
       throw new Error(`unrecognised plan node: ${JSON.stringify(node)}`);
+  }
+}
+
+type BucketColumn = 'avg' | 'min' | 'max' | 'sum' | 'count' | 'first' | 'last';
+
+/** Which per-bucket column answers each reducer (task QCE2.1 §3). `delta`,
+ * `integrate`, `rate` and `fraction_within` have no single column that
+ * reproduces them exactly within one bucket — `last` is the stated fallback
+ * ("say what you do... rather than guessing silently"), not a silent choice. */
+const OPERATOR_BUCKET_COLUMN: Partial<Record<string, BucketColumn>> = {
+  avg: 'avg', min: 'min', max: 'max', sum: 'sum', count: 'count', first: 'first', last: 'last',
+};
+
+interface BucketShape {
+  node: any;
+  columnBySignal: Map<string, BucketColumn>;
+}
+
+/**
+ * Validates that a `series`-kind plan is one of the shapes this task buckets
+ * (task QCE2.1 §3), and records which per-bucket column each signal needs.
+ * Supported: a bare signal; one reducer directly wrapping exactly one bare
+ * signal; `+`/`-`/`*`/`/` or unary-minus combining such shapes. Anything else
+ * (nested calls, `#formula_key` composition, a reducer over more than one
+ * signal) returns `null` — `evaluateSeries` throws rather than guess at it.
+ */
+function planBucketShape(node: any): BucketShape | null {
+  const columnBySignal = new Map<string, BucketColumn>();
+  const supported = (n: any): boolean => {
+    if (!n || typeof n !== 'object') return false;
+    switch (n.type) {
+      case 'signal':
+        if (!columnBySignal.has(n.name)) columnBySignal.set(n.name, 'last');
+        return true;
+      case 'unary':
+        return supported(n.operand);
+      case 'binary':
+        return supported(n.left) && supported(n.right);
+      case 'call': {
+        if (n.args.length !== 1 || n.args[0].type !== 'signal') return false;
+        columnBySignal.set(n.args[0].name, OPERATOR_BUCKET_COLUMN[n.name] ?? 'last');
+        return true;
+      }
+      default:
+        return false;
+    }
+  };
+  return supported(node) ? { node, columnBySignal } : null;
+}
+
+/**
+ * One bucket's value for a plan `planBucketShape` already approved. `null`
+ * propagates through arithmetic rather than being treated as 0 — a bucket
+ * missing one side of a ratio has no answer for that point, not a confident
+ * wrong one, same rule as everywhere else in this file.
+ */
+function evalBucketNode(
+  node: any, bucketMs: number, byBucketBySignal: Map<string, Map<number, BucketAggregate>>,
+  columnBySignal: Map<string, BucketColumn>,
+): number | null {
+  switch (node.type) {
+    case 'signal': {
+      const agg = byBucketBySignal.get(node.name)?.get(bucketMs);
+      if (!agg) return null;
+      return agg[columnBySignal.get(node.name) ?? 'last'];
+    }
+    case 'unary': {
+      const v = evalBucketNode(node.operand, bucketMs, byBucketBySignal, columnBySignal);
+      return v === null ? null : -v;
+    }
+    case 'binary': {
+      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal);
+      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal);
+      if (left === null || right === null) return null;
+      if (node.op === '/' && right === 0) return null;
+      return node.op === '+' ? left + right
+        : node.op === '-' ? left - right
+          : node.op === '*' ? left * right
+            : left / right;
+    }
+    case 'call': {
+      const agg = byBucketBySignal.get(node.args[0].name)?.get(bucketMs);
+      if (!agg) return null;
+      return agg[columnBySignal.get(node.args[0].name) ?? 'last'];
+    }
+    default:
+      return null;
   }
 }
