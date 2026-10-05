@@ -667,3 +667,154 @@ dimensionless; a named formula from QCE3 whose expression uses `zscore` publishe
 - Report: commit SHA, test counts, how `window` is expressed and whether it matched the
   existing operators, whether work-order exclusion was wirable, whether the cross-sensor risk
   score composes today, and anything not implemented with the reason.
+
+# QCE2 — the runtime evaluator
+
+Read `CLAUDE.md` first. Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/calc-runtime`
+
+Rebase onto `feature/baseline-operators` if QCE4 has not merged. Migration timestamp above
+everything on `main`.
+
+---
+
+## What this is
+
+QCE1 turns an expression into a `compiled_plan`. QCE3 lets that plan come from a named
+formula. QCE4 added baseline operators. **Nothing executes any of it.** Every KPI in the
+platform currently compiles and returns nothing.
+
+QCE2 executes a `compiled_plan` over a time window against `telemetry_reading` and returns
+a result. That is the whole task.
+
+## 1. The result is never a bare number
+
+This is the spine of the task and the thing to get right before anything else.
+
+Three times now the platform has had a defect of the same shape: an absence rendered as a
+value. D20's unlearned band reporting no anomalies. D28's replay passing vacuously with no
+history. QCE4's baseline over 13 days. Each time the fix was the same — **make the absence a
+state**.
+
+So the evaluator returns an envelope, always:
+
+```ts
+{
+  value: number | number[] | null,
+  unit: string,
+  resultKind: 'scalar' | 'series',
+  window: { from, to },
+  readiness: 'ready' | 'blocked' | 'not_configured' | 'not_available',
+  reason?: 'unbound' | 'stale' | 'no_readings' | 'mapping_required'
+         | 'baseline_not_established' | 'insufficient_coverage' | 'undefined_result',
+  coverage: { expected: number, actual: number, ratio: number }
+}
+```
+
+`value` is `null` whenever `readiness !== 'ready'`. **Never 0, never NaN, never an empty
+array standing in for "nothing happened".** A caller that ignores `readiness` and reads
+`value` gets `null` and fails loudly rather than rendering a confident wrong number.
+
+No endpoint, renderer or test may produce a number without its readiness. If that makes a
+signature awkward, the signature is wrong.
+
+## 2. Execution
+
+- One executor per operator, in a **closed registry** keyed the same way the compiler's
+  operator registry is. Never `eval`, never `new Function`.
+- **A test asserts every operator in the compiler registry has an executor**, and fails
+  naming any that does not. Same pattern as QGRANT0's inventory: adding an operator without
+  an executor must break the build, not production.
+- Plan nodes execute bottom-up. A `#formula_key` reference resolves to its own plan and
+  executes first; the compiler already refused cycles, so assume a DAG but **assert it**
+  rather than trusting it.
+- The declared result unit from the plan is carried onto the envelope. The evaluator does
+  **not** re-derive units — that was decided at compile time and re-deriving invites drift.
+
+## 3. Reading telemetry
+
+One query per `(imei, signal, window)`, never per reading. Bound `source_timestamp` on both
+ends so partition pruning works — QPART1 exists for this.
+
+**Report the plan.** Run `EXPLAIN` on the generated query for a 12-hour window and state how
+many partitions it touches. If it is all of them, the query is wrong and pruning is not
+happening; say so rather than shipping it.
+
+A plan referencing several signals reads them in one pass where the window is shared. Do not
+issue one round trip per signal per widget — the machine page (D29) renders many widgets and
+that is the shape that makes it slow.
+
+## 4. Windows, gaps and coverage
+
+**Windows are rolling from the evaluation instant** unless the plan declares calendar
+alignment. Say which the plan currently supports; do not invent a second mechanism.
+
+**Coverage is computed, not assumed.** Expected reading count comes from the signal's
+declared cadence; actual is what the window holds.
+
+- `coverage.ratio < 0.5` → `insufficient_coverage`, `value: null`. Make the threshold a
+  named constant with the reasoning beside it, not a literal.
+- No readings at all → `no_readings`. Distinct from thin coverage; the existing readiness
+  vocabulary already separates them and Q08S s3 relies on the distinction.
+- Latest reading older than the signal's `stale_after_seconds` → `stale`.
+
+**Gaps are not zeros.** A missing reading is absent, not a measurement of nothing. `avg`
+over a window with gaps averages what is there and reports coverage; it does not
+interpolate, and it does not treat a gap as 0. State in the code comment that no
+interpolation happens, because the next person will assume it does.
+
+## 5. Arithmetic that has no answer
+
+- Division by zero → `undefined_result`, `value: null`. Not `Infinity`, not `null` silently.
+- `baseline_sd` of a constant series is 0, so `zscore` divides by zero → `undefined_result`.
+  A perfectly steady signal is the common case on a healthy machine, so this will fire in
+  normal operation and must read as "no answer", never as an anomaly.
+- A series operator over an empty series → `no_readings`, not an empty array.
+
+**Tests for each**, and each must assert the reason code, not just that it did not crash.
+
+## 6. The endpoint
+
+```
+GET /api/v1/equipment/:sourceSystem/:externalId/kpis
+GET /api/v1/equipment/:sourceSystem/:externalId/kpis/:formulaKey?from=&to=
+```
+
+Tenant-scoped, under the tenant's own copies — never platform catalog rows. RLS applies;
+this reads `telemetry_reading` through the parent.
+
+The list endpoint returns every KPI the tenant's class copy declares, each with its
+envelope. **A KPI that is not ready still appears**, with its readiness and reason. The
+machine page must be able to show "not configured" next to a tile rather than omitting it —
+a missing tile is indistinguishable from a tile nobody authored.
+
+## 7. Performance
+
+Report, measured not estimated, against a seeded database:
+
+- one KPI over a 12-hour window
+- twenty KPIs for one machine, as the machine page would ask
+- the partition count from §3
+
+If twenty KPIs take more than about two seconds, stop and tell me the breakdown rather than
+optimising. That is a design conversation — caching, materialisation, or a different read
+shape — and it is mine to decide.
+
+## 8. Out of scope
+
+- Caching or materialising results. Evaluate on demand; measure first.
+- Scheduled evaluation and alert firing — the alert runner already exists and QALERT2 just
+  corrected it. Do not wire them together here.
+- The machine page itself — QPAGE1.
+- Anything under `frontend/`. Report the response shape.
+
+## 9. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after,
+  measured on a throwaway commit or a second worktree — **not by stashing**.
+- Full migration chain from empty if a migration is needed; down path named with
+  `undoMigrationNamed`.
+- **Seed before you migrate.**
+- Report: commit SHA, test counts, the §7 numbers, the partition count from §3, which
+  window alignments the plan supports, and anything not implemented with the reason.
