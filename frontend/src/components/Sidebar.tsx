@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Home,
-  Bell,
   UserCheck,
   Users,
   Settings,
@@ -9,7 +8,11 @@ import {
   Sparkles,
   UserCog,
   KeyRound,
-  Activity
+  Activity,
+  AlertTriangle,
+  GitBranch,
+  ClipboardList,
+  Receipt
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 
@@ -20,7 +23,7 @@ interface SidebarProps {
   clientName?: string;
   /** Client role only — resolved from the signed-in user's RoleDefinition at login. */
   allowedTabs?: NavigationTab[];
-  /** Client role only — Super Admins always see Client Users & Roles, regardless of allowedTabs. */
+  /** Client role only — a Super Admin sees every client page, regardless of allowedTabs. */
   isSuperAdmin?: boolean;
 }
 
@@ -28,17 +31,29 @@ interface SidebarProps {
 // hidden for now, by request.
 const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>(['dashboard', 'admin', 'settings']);
 
-// Client-side structural tabs a Super Admin always has, independent of
-// whatever pages their own role happens to grant — a role can't grant the
-// ability to manage roles.
-const SUPER_ADMIN_ONLY = new Set<NavigationTab>(['client-users', 'roles']);
+// Never shown under the client role, Super Admin or not — Platform Users is
+// a ThingsAlive-staff screen, not a client page at all.
+const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users']);
+
+// UI-only pages with no backend permission model yet — `allowedTabs` comes
+// from the real GET /me/permissions response (see AuthProvider.tsx), which
+// has no notion of these tabs, so no role record will ever grant them. Shown
+// to every client user unconditionally until a real endpoint exists to grant
+// them properly; move into the normal `allowedTabs` check once it does.
+const CLIENT_ALWAYS_VISIBLE = new Set<NavigationTab>(['alerts', 'scenarios', 'work-orders', 'cost-administration']);
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin }) => {
   const allNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'ai-onboarding', label: 'AI Onboarding', icon: Sparkles },
-    { id: 'alert-agent', label: 'Alert Agent', icon: Bell },
+    // 'alert-agent' is deliberately not in this list — it stays reachable by
+    // direct link (Alerts' "Create alert" / "Edit, assign" buttons navigate
+    // to it) but no longer has its own sidebar entry.
+    { id: 'alerts', label: 'Alerts', icon: AlertTriangle },
     { id: 'predictions', label: 'Live Predictions', icon: Activity },
+    { id: 'scenarios', label: 'Scenarios', icon: GitBranch },
+    { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
+    { id: 'cost-administration', label: 'Cost Administration', icon: Receipt },
     { id: 'admin', label: 'Administration', icon: UserCheck },
     { id: 'client-users', label: 'Client Users', icon: UserCog },
     { id: 'roles', label: 'Roles & Permissions', icon: KeyRound },
@@ -47,11 +62,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, role,
   ];
 
   const allowed = allowedTabs || [];
-  const navItems = allNavItems.filter((item) =>
-    role === 'master-admin'
-      ? MASTER_ADMIN_VISIBLE.has(item.id)
-      : (isSuperAdmin && SUPER_ADMIN_ONLY.has(item.id)) || allowed.includes(item.id)
-  );
+  const navItems = allNavItems.filter((item) => {
+    if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
+    if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
+    // A Super Admin gets every client page unconditionally. allowedTabs comes
+    // from the real backend (AuthProvider.tsx) and has no notion of the
+    // UI-only tabs in CLIENT_ALWAYS_VISIBLE, so "Super Admin sees everything"
+    // can't be left to depend on whatever that happens to return.
+    if (isSuperAdmin) return true;
+    return CLIENT_ALWAYS_VISIBLE.has(item.id) || allowed.includes(item.id);
+  });
 
   return (
     <aside 

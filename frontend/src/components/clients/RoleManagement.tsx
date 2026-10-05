@@ -7,7 +7,11 @@ const TAB_LABELS: Record<NavigationTab, string> = {
   dashboard: 'Dashboard',
   'ai-onboarding': 'AI Onboarding',
   'alert-agent': 'Alert Agent',
+  alerts: 'Alerts',
   predictions: 'Live Predictions',
+  scenarios: 'Scenarios',
+  'work-orders': 'Work Orders',
+  'cost-administration': 'Cost Administration',
   admin: 'Administration (Plants, Devices, Equipment)',
   settings: 'Settings',
   users: 'Users',
@@ -91,14 +95,21 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {role.allowedTabs.length === 0 ? (
+                {/* Only ever shows pages still in CLIENT_ASSIGNABLE_TABS — a role
+                    saved before a page was retired (e.g. 'alert-agent', which lost
+                    its sidebar entry) can still have it sitting in its stored
+                    allowedTabs; this keeps that stale grant from showing as if it
+                    still meant something. */}
+                {role.allowedTabs.filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab)).length === 0 ? (
                   <span className="text-[11px] text-slate-400 italic">No pages granted</span>
                 ) : (
-                  role.allowedTabs.map((tab) => (
-                    <span key={tab} className="px-2 py-0.5 text-[11px] bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
-                      {TAB_LABELS[tab as NavigationTab] ?? tab}
-                    </span>
-                  ))
+                  role.allowedTabs
+                    .filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab))
+                    .map((tab) => (
+                      <span key={tab} className="px-2 py-0.5 text-[11px] bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
+                        {TAB_LABELS[tab as NavigationTab] ?? tab}
+                      </span>
+                    ))
                 )}
               </div>
               <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -153,7 +164,11 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     if (!isOpen) return;
     setName(existingRole?.name ?? '');
     setBasedOnSlug(roles[0]?.slug ?? '');
-    setAllowedTabs((existingRole?.allowedTabs ?? []) as NavigationTab[]);
+    // Drop any stale grant for a page that's since lost its sidebar entry
+    // (e.g. 'alert-agent') — the checklist below only ever offers
+    // CLIENT_ASSIGNABLE_TABS, so an un-rendered stale tab would otherwise
+    // silently survive every future save of this role.
+    setAllowedTabs(((existingRole?.allowedTabs ?? []) as NavigationTab[]).filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab)));
     setError(undefined);
   }, [isOpen, existingRole, roles]);
 
@@ -198,15 +213,16 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40 shrink-0">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{isEditing ? 'Edit Role' : 'Add Role'}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="p-6 space-y-4 text-sm overflow-y-auto min-h-0">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Role Name <span className="text-rose-500">*</span></label>
             <input
@@ -264,8 +280,9 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
               <span>{error}</span>
             </div>
           )}
+          </div>
 
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
               Cancel
             </button>

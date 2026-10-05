@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
-import { ApiError, EquipmentClass, EquipmentClassInput, ExpectedSignal } from '../../lib/api';
+import { ApiError, EquipmentClass, EquipmentClassInput, ExpectedSignal, FailureMode } from '../../lib/api';
 
 interface AddCategoryModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const emptySignal = (): ExpectedSignal => ({ signal: '', unit: '', required: true });
+const emptyFailureMode = (): FailureMode => ({ code: '', name: '', symptom: '', signals: [] });
 
 export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingClass,
@@ -28,6 +29,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [signals, setSignals] = useState<ExpectedSignal[]>([emptySignal()]);
+  const [failureModes, setFailureModes] = useState<FailureMode[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -41,6 +43,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
     setCategory(existingClass?.category ?? '');
     setDescription(existingClass?.description ?? '');
     setSignals(existingClass?.expectedSignals?.length ? existingClass.expectedSignals : [emptySignal()]);
+    setFailureModes(existingClass?.failureModes?.length ? existingClass.failureModes : []);
     setError(undefined);
   }, [isOpen, existingClass, isEditing]);
 
@@ -57,6 +60,17 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   const addSignalRow = () => setSignals((prev) => [...prev, emptySignal()]);
   const removeSignalRow = (index: number) => setSignals((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
+  const updateFailureMode = (index: number, field: 'code' | 'name' | 'symptom', value: string) => {
+    setFailureModes((prev) => prev.map((f, i) => (i === index ? { ...f, [field]: value } : f)));
+  };
+  const toggleFailureModeSignal = (index: number, signal: string) => {
+    setFailureModes((prev) => prev.map((f, i) => (i === index
+      ? { ...f, signals: f.signals.includes(signal) ? f.signals.filter((s) => s !== signal) : [...f.signals, signal] }
+      : f)));
+  };
+  const addFailureModeRow = () => setFailureModes((prev) => [...prev, emptyFailureMode()]);
+  const removeFailureModeRow = (index: number) => setFailureModes((prev) => prev.filter((_, i) => i !== index));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalSlug = slug.trim();
@@ -66,6 +80,19 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
     const validSignals = signals
       .filter((s) => s.signal.trim())
       .map((s) => ({ signal: s.signal.trim(), unit: s.unit?.trim() || null, required: s.required }));
+    const validSignalNames = new Set(validSignals.map((s) => s.signal));
+
+    // A failure mode naming a signal the class does not have is a description
+    // nobody can act on (same rule seed-catalog.ts enforces on load) — dropped
+    // here rather than sent, in case a signal row was removed after being picked.
+    const validFailureModes = failureModes
+      .filter((f) => f.code.trim() && f.name.trim() && f.symptom.trim())
+      .map((f) => ({
+        code: f.code.trim(),
+        name: f.name.trim(),
+        symptom: f.symptom.trim(),
+        signals: f.signals.filter((s) => validSignalNames.has(s)),
+      }));
 
     setBusy(true);
     setError(undefined);
@@ -75,6 +102,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
         description: description.trim() || undefined,
         category: category.trim() || undefined,
         expectedSignals: validSignals,
+        failureModes: validFailureModes,
       };
       if (isEditing) {
         await onUpdate(finalSlug, input);
@@ -231,6 +259,77 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-white">Failure Modes</span>
+              <button
+                type="button"
+                onClick={addFailureModeRow}
+                className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add failure mode</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 -mt-1">
+              Optional, and never inferred from data — how a field technician would recognise this
+              failure, and which of the signals above move when it happens.
+            </p>
+
+            {failureModes.map((f, i) => (
+              <div key={i} className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
+                  <input
+                    type="text"
+                    value={f.code}
+                    onChange={(e) => updateFailureMode(i, 'code', e.target.value)}
+                    placeholder="code, e.g. overheat"
+                    className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 font-mono"
+                  />
+                  <input
+                    type="text"
+                    value={f.name}
+                    onChange={(e) => updateFailureMode(i, 'name', e.target.value)}
+                    placeholder="name, e.g. Coolant System Overheat"
+                    className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeFailureModeRow(i)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"
+                    title="Remove failure mode"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={f.symptom}
+                  onChange={(e) => updateFailureMode(i, 'symptom', e.target.value)}
+                  placeholder="symptom an operator would notice, e.g. Coolant temp climbs steadily under normal load"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
+                />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="text-[10px] text-slate-400">Signals that move:</span>
+                  {signals.filter((s) => s.signal.trim()).length === 0 && (
+                    <span className="text-[10px] text-slate-400 italic">Add an expected signal above first</span>
+                  )}
+                  {signals.filter((s) => s.signal.trim()).map((s) => (
+                    <label key={s.signal} className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={f.signals.includes(s.signal.trim())}
+                        onChange={() => toggleFailureModeSignal(i, s.signal.trim())}
+                        className="cursor-pointer"
+                      />
+                      <span className="font-mono">{s.signal.trim()}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
