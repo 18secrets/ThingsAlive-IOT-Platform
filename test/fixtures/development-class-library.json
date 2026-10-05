@@ -1,0 +1,1226 @@
+{
+  "capturedFrom": "Railway Development, equipment_class_profile, read-only SELECT",
+  "capturedAt": "2026-10-05",
+  "rows": [
+    {
+      "slug": "1160-mt",
+      "version": 1,
+      "status": "published",
+      "name": "1160MT",
+      "category": "Crawler Crane - Hyd",
+      "failure_modes": [
+        {
+          "code": "low_engine_oil_pressure",
+          "name": "Low Engine Oil Pressure",
+          "signals": [
+            "engine_oil_pressure",
+            "engine_rpm",
+            "engine_oil_temperature"
+          ],
+          "symptom": "Low engine oil pressure during engine operation indicates a lubrication-system risk"
+        },
+        {
+          "code": "load_moment_overload",
+          "name": "Crane Load-Moment Overload",
+          "signals": [
+            "crane_load",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Load moment reaches or exceeds the rated operating envelope for the selected configuration"
+        },
+        {
+          "code": "high_wind_lifting_risk",
+          "name": "High Wind During Lifting",
+          "signals": [
+            "wind_speed",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Elevated wind speed combined with significant load moment increases lateral and stability loading"
+        },
+        {
+          "code": "engine_overheat",
+          "name": "Engine Overheating",
+          "signals": [
+            "engine_coolant_temperature",
+            "engine_oil_temperature",
+            "coolant_pressure"
+          ],
+          "symptom": "Elevated engine coolant or oil temperature with reduced cooling margin"
+        },
+        {
+          "code": "air_intake_boost_fault",
+          "name": "Engine Air / Boost Fault",
+          "signals": [
+            "boost_pressure",
+            "intake_manifold_pressure",
+            "mass_air_flow",
+            "engine_load"
+          ],
+          "symptom": "Abnormal manifold, boost or mass-air-flow values under load indicate an intake or turbocharger issue"
+        },
+        {
+          "code": "fuel_system_degradation",
+          "name": "Fuel System Degradation",
+          "signals": [
+            "fuel_pressure",
+            "fuel_temperature",
+            "fuel_quality",
+            "fuel_consumption",
+            "engine_load"
+          ],
+          "symptom": "Abnormal fuel pressure, temperature or quality together with increased fuel consumption indicates possible fuel-system degradation"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "kg / tonne",
+          "signal": "crane_load",
+          "required": true
+        },
+        {
+          "unit": "% of rated capacity",
+          "signal": "load_moment",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "boom_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "slewing_angle",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "hook_height",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "working_radius",
+          "required": true
+        },
+        {
+          "unit": "km/h",
+          "signal": "wind_speed",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "crane-400-kw",
+      "version": 1,
+      "status": "published",
+      "name": "Crane 400 KW",
+      "category": "crane",
+      "failure_modes": [],
+      "expected_signals": [
+        {
+          "unit": null,
+          "signal": "temp",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "crane-400-kw",
+      "version": 2,
+      "status": "published",
+      "name": "Crane 400 KW",
+      "category": "crane",
+      "failure_modes": [],
+      "expected_signals": [
+        {
+          "unit": null,
+          "signal": "temp",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "crawler-crane-hyd",
+      "version": 1,
+      "status": "published",
+      "name": "CKL-1000i",
+      "category": "Crawler Crane - Hyd",
+      "failure_modes": [
+        {
+          "code": "load_moment_overload",
+          "name": "Crane Load-Moment Overload",
+          "signals": [
+            "crane_load",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Load moment reaches or exceeds the rated operating envelope for the selected configuration"
+        },
+        {
+          "code": "high_wind_lifting_risk",
+          "name": "High Wind During Lifting",
+          "signals": [
+            "wind_speed",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Elevated wind speed combined with significant load moment increases lateral and stability loading"
+        },
+        {
+          "code": "engine_overheat",
+          "name": "Engine Overheating",
+          "signals": [
+            "engine_coolant_temperature",
+            "engine_oil_temperature",
+            "coolant_pressure"
+          ],
+          "symptom": "Elevated engine coolant or oil temperature with reduced cooling margin"
+        },
+        {
+          "code": "low_engine_oil_pressure",
+          "name": "Low Engine Oil Pressure",
+          "signals": [
+            "engine_oil_pressure",
+            "engine_rpm",
+            "engine_oil_temperature"
+          ],
+          "symptom": "Low engine oil pressure during engine operation indicates a lubrication-system risk"
+        },
+        {
+          "code": "air_intake_boost_fault",
+          "name": "Engine Air / Boost Fault",
+          "signals": [
+            "boost_pressure",
+            "intake_manifold_pressure",
+            "mass_air_flow",
+            "engine_load"
+          ],
+          "symptom": "Abnormal manifold, boost or mass-air-flow values under load indicate an intake or turbocharger issue"
+        },
+        {
+          "code": "fuel_system_degradation",
+          "name": "Fuel System Degradation",
+          "signals": [
+            "fuel_pressure",
+            "fuel_temperature",
+            "fuel_quality",
+            "fuel_consumption",
+            "engine_load"
+          ],
+          "symptom": "Abnormal fuel pressure, temperature or quality together with increased fuel consumption indicates possible fuel-system degradation"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "kg / tonne",
+          "signal": "crane_load",
+          "required": true
+        },
+        {
+          "unit": "% of rated capacity",
+          "signal": "load_moment",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "boom_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "slewing_angle",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "hook_height",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "working_radius",
+          "required": true
+        },
+        {
+          "unit": "km/h",
+          "signal": "wind_speed",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "diesel-generator",
+      "version": 1,
+      "status": "published",
+      "name": "Diesel Generator",
+      "category": "power",
+      "failure_modes": [
+        {
+          "code": "overheat",
+          "name": "Overheating",
+          "signals": [
+            "coolant_temp_c",
+            "oil_pressure_kpa"
+          ],
+          "symptom": "High coolant temperature, reduced power"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "degC",
+          "signal": "coolant_temp_c",
+          "required": true,
+          "description": "Coolant temperature"
+        }
+      ]
+    },
+    {
+      "slug": "ex-1200v",
+      "version": 1,
+      "status": "retired",
+      "name": "EX 1200V",
+      "category": "Excavator",
+      "failure_modes": [
+        {
+          "code": "engine_overheat",
+          "name": "Engine Overheating",
+          "signals": [
+            "engine_coolant_temperature",
+            "engine_oil_temperature",
+            "coolant_pressure"
+          ],
+          "symptom": "Elevated engine coolant or oil temperature with reduced cooling margin"
+        },
+        {
+          "code": "low_engine_oil_pressure",
+          "name": "Low Engine Oil Pressure",
+          "signals": [
+            "engine_oil_pressure",
+            "engine_rpm",
+            "engine_oil_temperature"
+          ],
+          "symptom": "Engine oil pressure below the expected operating range, increasing risk of lubrication loss"
+        },
+        {
+          "code": "hydraulic_overpressure",
+          "name": "Hydraulic System Overpressure",
+          "signals": [
+            "hydraulic_pressure",
+            "engine_load",
+            "engine_torque"
+          ],
+          "symptom": "Hydraulic pressure approaching or exceeding the implement circuit limit during loaded operation"
+        },
+        {
+          "code": "air_intake_boost_fault",
+          "name": "Air Intake / Boost Fault",
+          "signals": [
+            "boost_pressure",
+            "intake_manifold_pressure",
+            "mass_air_flow",
+            "engine_load",
+            "intake_air_temperature"
+          ],
+          "symptom": "Abnormal boost or manifold pressure together with reduced air-flow indication under engine load"
+        },
+        {
+          "code": "fuel_system_degradation",
+          "name": "Fuel System Degradation",
+          "signals": [
+            "fuel_pressure",
+            "fuel_temperature",
+            "fuel_quality",
+            "fuel_consumption",
+            "engine_load"
+          ],
+          "symptom": "Abnormal fuel pressure, fuel temperature or fuel-quality indication accompanied by increased fuel consumption"
+        },
+        {
+          "code": "front_attachment_load_stress",
+          "name": "Front Attachment Hydraulic Load Stress",
+          "signals": [
+            "hydraulic_pressure",
+            "engine_load",
+            "boom_angle",
+            "arm_angle",
+            "bucket_angle"
+          ],
+          "symptom": "High hydraulic pressure and engine load during boom, arm and bucket movement can indicate excessive attachment loading"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "degC",
+          "signal": "coolant_temp",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "boom_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "arm_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "bucket_angle",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position",
+          "required": true
+        },
+        {
+          "unit": "bar",
+          "signal": "hydraulic_pressure",
+          "required": true
+        },
+        {
+          "unit": "count / enum",
+          "signal": "dig_load_dump_cycle",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "ex-1200v",
+      "version": 2,
+      "status": "retired",
+      "name": "EX 1200V",
+      "category": "Excavator",
+      "failure_modes": [],
+      "expected_signals": [
+        {
+          "unit": "degC",
+          "signal": "coolant_temp",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "boom_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "arm_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "bucket_angle",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position",
+          "required": true
+        },
+        {
+          "unit": "bar",
+          "signal": "hydraulic_pressure",
+          "required": true
+        },
+        {
+          "unit": "count / enum",
+          "signal": "dig_load_dump_cycle",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "hs-8070-hd",
+      "version": 1,
+      "status": "published",
+      "name": "HS 8070 HD",
+      "category": "Crawler Crane - Hyd",
+      "failure_modes": [
+        {
+          "code": "load_moment_overload",
+          "name": "Crane Load-Moment Overload",
+          "signals": [
+            "crane_load",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Load moment reaches or exceeds the rated operating envelope for the selected configuration"
+        },
+        {
+          "code": "high_wind_lifting_risk",
+          "name": "High Wind During Lifting",
+          "signals": [
+            "wind_speed",
+            "load_moment",
+            "working_radius",
+            "boom_angle"
+          ],
+          "symptom": "Elevated wind speed combined with significant load moment increases lateral and stability loading"
+        },
+        {
+          "code": "engine_overheat",
+          "name": "Engine Overheating",
+          "signals": [
+            "engine_coolant_temperature",
+            "engine_oil_temperature",
+            "coolant_pressure"
+          ],
+          "symptom": "Elevated engine coolant or oil temperature with reduced cooling margin"
+        },
+        {
+          "code": "low_engine_oil_pressure",
+          "name": "Low Engine Oil Pressure",
+          "signals": [
+            "engine_oil_pressure",
+            "engine_rpm",
+            "engine_oil_temperature"
+          ],
+          "symptom": "Low engine oil pressure during engine operation indicates a lubrication-system risk"
+        },
+        {
+          "code": "air_intake_boost_fault",
+          "name": "Engine Air / Boost Fault",
+          "signals": [
+            "boost_pressure",
+            "intake_manifold_pressure",
+            "mass_air_flow",
+            "engine_load"
+          ],
+          "symptom": "Abnormal manifold, boost or mass-air-flow values under load indicate an intake or turbocharger issue"
+        },
+        {
+          "code": "fuel_system_degradation",
+          "name": "Fuel System Degradation",
+          "signals": [
+            "fuel_pressure",
+            "fuel_temperature",
+            "fuel_quality",
+            "fuel_consumption",
+            "engine_load"
+          ],
+          "symptom": "Abnormal fuel pressure, temperature or quality together with increased fuel consumption indicates possible fuel-system degradation"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "kg / tonne",
+          "signal": "crane_load",
+          "required": true
+        },
+        {
+          "unit": "% of rated capacity",
+          "signal": "load_moment",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "boom_angle",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "slewing_angle",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "hook_height",
+          "required": true
+        },
+        {
+          "unit": "m",
+          "signal": "working_radius",
+          "required": true
+        },
+        {
+          "unit": "km/h",
+          "signal": "wind_speed",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "pg-430-100",
+      "version": 1,
+      "status": "published",
+      "name": "PG 430-100",
+      "category": "Ait Compressor",
+      "failure_modes": [
+        {
+          "code": "discharge_overpressure",
+          "name": "Compressor Discharge Overpressure",
+          "signals": [
+            "air_pressure",
+            "compressor_rpm",
+            "air_flow"
+          ],
+          "symptom": "Discharge pressure approaches or exceeds the 7 bar working-pressure specification for the PG 430-100 configuration"
+        },
+        {
+          "code": "compressor_overtemperature",
+          "name": "Compressor Overtemperature",
+          "signals": [
+            "compressor_temperature",
+            "air_pressure",
+            "air_flow",
+            "compressor_rpm"
+          ],
+          "symptom": "Compressor temperature rises abnormally while delivering air, indicating cooling or oil-system stress"
+        },
+        {
+          "code": "high_compressor_vibration",
+          "name": "High Compressor Vibration",
+          "signals": [
+            "compressor_vibration",
+            "compressor_rpm",
+            "air_pressure"
+          ],
+          "symptom": "Elevated RMS vibration indicates possible rotating-element, coupling, bearing or mounting degradation"
+        },
+        {
+          "code": "low_compressor_oil_pressure",
+          "name": "Low Compressor Oil Pressure",
+          "signals": [
+            "oil_pressure",
+            "compressor_rpm",
+            "compressor_temperature"
+          ],
+          "symptom": "Low compressor oil pressure can reduce lubrication and increase risk of screw-element or bearing damage"
+        },
+        {
+          "code": "low_air_delivery",
+          "name": "Low Air Delivery",
+          "signals": [
+            "air_flow",
+            "air_pressure",
+            "compressor_rpm"
+          ],
+          "symptom": "Air flow falls below expected delivery while pressure and compressor speed indicate active loaded operation"
+        },
+        {
+          "code": "engine_overheat",
+          "name": "Engine Overheating",
+          "signals": [
+            "engine_coolant_temperature",
+            "engine_oil_temperature",
+            "coolant_pressure"
+          ],
+          "symptom": "Elevated engine coolant or oil temperature with reduced cooling margin"
+        },
+        {
+          "code": "fuel_system_degradation",
+          "name": "Fuel System Degradation",
+          "signals": [
+            "fuel_pressure",
+            "fuel_temperature",
+            "fuel_quality_contamination",
+            "fuel_consumption",
+            "engine_load"
+          ],
+          "symptom": "Abnormal fuel pressure, temperature or quality can cause unstable engine operation and increased fuel consumption"
+        }
+      ],
+      "expected_signals": [
+        {
+          "unit": "bar",
+          "signal": "air_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "compressor_temperature",
+          "required": true
+        },
+        {
+          "unit": "m³/min",
+          "signal": "air_flow",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "compressor_rpm",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "mm/s (RMS)",
+          "signal": "compressor_vibration",
+          "required": true
+        },
+        {
+          "unit": "rpm",
+          "signal": "engine_rpm",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_coolant_temperature",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "engine_oil_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "engine_oil_pressure",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "coolant_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "intake_air_temperature",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "intake_manifold_pressure",
+          "required": true
+        },
+        {
+          "unit": "g/s",
+          "signal": "mass_air_flow",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "turbo_boost_pressure",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "engine_load",
+          "required": true
+        },
+        {
+          "unit": "Nm",
+          "signal": "engine_torque",
+          "required": true
+        },
+        {
+          "unit": "deg / rpm",
+          "signal": "crankshaft_position_seed",
+          "required": true
+        },
+        {
+          "unit": "deg",
+          "signal": "camshaft_position",
+          "required": true
+        },
+        {
+          "unit": "g (accel) / V",
+          "signal": "engine_knock",
+          "required": true
+        },
+        {
+          "unit": "%",
+          "signal": "fuel_level",
+          "required": true
+        },
+        {
+          "unit": "L/h",
+          "signal": "fuel_consumption",
+          "required": true
+        },
+        {
+          "unit": "kPa",
+          "signal": "fuel_pressure",
+          "required": true
+        },
+        {
+          "unit": "°C",
+          "signal": "fuel_temperature",
+          "required": true
+        },
+        {
+          "unit": "ppm / index",
+          "signal": "fuel_quality_contamination",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

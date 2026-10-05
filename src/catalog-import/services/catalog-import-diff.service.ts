@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
+import { TEMPLATE_VERSION, v4OnlyCapabilities } from '../template-schema';
 import {
   ClassDiffEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass,
 } from './class-content';
@@ -35,6 +36,9 @@ export interface CatalogImportDiff {
   proposedCategories: ProposedCategory[];
   /** sensor_capability row groups collapsed as identical repeats, not rejected. */
   deduplicatedRows: DedupInfo[];
+  /** Set for a workbook on an older template (task QREC0a): which capabilities of the
+   * current one it is not using. A note, not a refusal — v3 work in flight must load. */
+  templateVersionNote: string | null;
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
@@ -164,6 +168,10 @@ export class CatalogImportDiffService {
       proposedSensors: sensorAnalysis.proposedSensors,
       proposedCategories: sensorAnalysis.proposedCategories,
       deduplicatedRows: sensorAnalysis.deduplicated,
+      templateVersionNote: batch.templateVersion === TEMPLATE_VERSION
+        ? null
+        : `This workbook is template ${batch.templateVersion}; it loads with defaults and does not use these `
+          + `${TEMPLATE_VERSION} capabilities: ${v4OnlyCapabilities().join(', ')}.`,
     };
   }
 }

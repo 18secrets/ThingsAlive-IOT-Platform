@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  IsArray, IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
+  IsArray, IsBoolean, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
 } from 'class-validator';
+import { SEVERITY_VALUES } from '../catalog-import/template-schema';
+import { Severity } from '../common/severity';
 import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
@@ -25,6 +27,9 @@ export class FailureModeDto {
   @IsString() @IsNotEmpty() name: string;
   @IsString() @IsNotEmpty() symptom: string;
   @IsArray() @IsString({ each: true }) signals: string[];
+  /** Task QREC0a. Optional, and omitting it on an edit keeps the severity already
+   * held — it does not clear it. */
+  @IsOptional() @IsIn(SEVERITY_VALUES) severity?: Severity;
 }
 
 export class TemplateClassDto {
