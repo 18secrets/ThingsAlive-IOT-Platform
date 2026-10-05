@@ -8,8 +8,8 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
  * is no tenant column and no row-level security to enforce.
  *
  * No delete: a sensor may already reference a category by id, and removing the row
- * out from under it would leave a sensor pointing at nothing. Renaming is the only
- * edit this table supports.
+ * out from under it would leave a sensor pointing at nothing. Renaming and retiring
+ * (task QCAT2) are the edits this table supports.
  */
 @Entity('sensor_category')
 export class SensorCategory {
@@ -19,6 +19,16 @@ export class SensorCategory {
   @Column({ type: 'text' })
   @Index('uq_sensor_category_name', { unique: true })
   name: string;
+
+  /**
+   * Retired: no longer offered for new work, still resolving everywhere it is already
+   * used (task QCAT2, `1758100000000-SensorRetirement.ts`). Null is live.
+   */
+  @Column({ name: 'retired_at', type: 'timestamptz', nullable: true })
+  retiredAt: Date | null;
+
+  @Column({ name: 'retired_by', type: 'text', nullable: true })
+  retiredBy: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

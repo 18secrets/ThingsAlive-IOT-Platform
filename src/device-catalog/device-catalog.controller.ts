@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
+import { RequestScope } from '../auth/types/request-scope';
 import { DeviceCatalogService } from './services/device-catalog.service';
 
 export class CreateSensorCategoryDto {
@@ -67,9 +69,9 @@ export class DeviceCatalogController {
 
   @Get('categories')
   @Requires('device-catalog.read')
-  @ApiOperation({ summary: 'Sensor categories' })
-  listCategories() {
-    return this.catalog.listCategories();
+  @ApiOperation({ summary: 'Sensor categories — live only unless includeRetired=true' })
+  listCategories(@Query('includeRetired') includeRetired?: string) {
+    return this.catalog.listCategories(parseFlag(includeRetired, 'includeRetired'));
   }
 
   @Post('categories')
@@ -79,11 +81,27 @@ export class DeviceCatalogController {
     return this.catalog.createCategory(dto.name);
   }
 
+  @Post('categories/:id/retire')
+  @HttpCode(200)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Retire a category. Refused while a live sensor is in it, naming them' })
+  retireCategory(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.catalog.retireCategory(id, scope.userId);
+  }
+
+  @Post('categories/:id/unretire')
+  @HttpCode(200)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Return a retired category to use' })
+  unretireCategory(@Param('id') id: string) {
+    return this.catalog.unretireCategory(id);
+  }
+
   @Get('sensors')
   @Requires('device-catalog.read')
-  @ApiOperation({ summary: 'Every reference sensor' })
-  listSensors() {
-    return this.catalog.listSensors();
+  @ApiOperation({ summary: 'Reference sensors — live only unless includeRetired=true' })
+  listSensors(@Query('includeRetired') includeRetired?: string) {
+    return this.catalog.listSensors(parseFlag(includeRetired, 'includeRetired'));
   }
 
   @Post('sensors')
@@ -98,6 +116,22 @@ export class DeviceCatalogController {
   @ApiOperation({ summary: 'Edit a reference sensor' })
   updateSensor(@Param('id') id: string, @Body() dto: SensorDto) {
     return this.catalog.updateSensor(id, dto);
+  }
+
+  @Post('sensors/:id/retire')
+  @HttpCode(200)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Retire a sensor: hidden from pickers and new content, still resolving where already used' })
+  retireSensor(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.catalog.retireSensor(id, scope.userId);
+  }
+
+  @Post('sensors/:id/unretire')
+  @HttpCode(200)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Return a retired sensor to the picker. Refused if its category is retired' })
+  unretireSensor(@Param('id') id: string) {
+    return this.catalog.unretireSensor(id);
   }
 
   @Get('tool-mappings')
@@ -127,4 +161,14 @@ export class DeviceCatalogController {
   updateToolMapping(@Param('id') id: string, @Body() dto: ToolMappingDto) {
     return this.catalog.updateToolMapping(id, dto);
   }
+}
+
+/**
+ * `true` or `false`, nothing else. `?includeRetired=yes` silently meaning false would
+ * hide exactly the rows the caller asked to see.
+ */
+function parseFlag(raw: string | undefined, field: string): boolean {
+  if (raw === undefined || raw === '' || raw === 'false') return false;
+  if (raw === 'true') return true;
+  throw new BadRequestException(`${field} must be true or false, not "${raw}".`);
 }
