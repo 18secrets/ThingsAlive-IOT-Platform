@@ -49,4 +49,9 @@ export class EquipmentClassSensorRequirement {
 
   @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
   importBatchId: string | null;
+
+  /** Null means "use the platform default" (task Q08S s3) — never "never
+   * stale". See `resolveStaleAfterSeconds` in `signal-freshness.ts`. */
+  @Column({ name: 'stale_after_seconds', type: 'int', nullable: true })
+  staleAfterSeconds: number | null;
 }

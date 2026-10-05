@@ -124,16 +124,16 @@ describeDb('KPI runtime evaluator', () => {
     expect(envelope.reason).toBeUndefined();
   });
 
-  it('2. blocked/unbound: no device fitted at all', async () => {
+  it('2. not_configured/unbound: no device fitted at all', async () => {
     await seedClass();
     const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'avg_coolant', NOW);
-    expect(envelope).toMatchObject({ readiness: 'blocked', reason: 'unbound', value: null });
+    expect(envelope).toMatchObject({ readiness: 'not_configured', reason: 'unbound', value: null });
   });
 
-  it('3. blocked/unbound: device fitted but the signal was never bound', async () => {
+  it('3. not_configured/unbound: device fitted but the signal was never bound', async () => {
     await seedClass(); await seedDevice();
     const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'avg_coolant', NOW);
-    expect(envelope).toMatchObject({ readiness: 'blocked', reason: 'unbound', value: null });
+    expect(envelope).toMatchObject({ readiness: 'not_configured', reason: 'unbound', value: null });
   });
 
   it('4. not_available/no_readings: bound, but nothing has ever arrived', async () => {
@@ -145,6 +145,15 @@ describeDb('KPI runtime evaluator', () => {
   it('5. not_available/stale: bound, readings exist, but none recent', async () => {
     await seedClass(); await seedDevice(); await seedBinding();
     await seedReadings([{ hoursAgo: 20, value: 80 }]);
+    const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'avg_coolant', NOW);
+    expect(envelope).toMatchObject({ readiness: 'not_available', reason: 'stale', value: null });
+  });
+
+  it('5b. the last reading predates the read window entirely — still stale, not no_readings '
+    + '(Q08S s3: no_readings means never, not "none in this window")', async () => {
+    await seedClass(); await seedDevice(); await seedBinding();
+    // 24h aggregation window: this reading is 50 hours old, well outside it.
+    await seedReadings([{ hoursAgo: 50, value: 80 }]);
     const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'avg_coolant', NOW);
     expect(envelope).toMatchObject({ readiness: 'not_available', reason: 'stale', value: null });
   });
@@ -211,7 +220,7 @@ describeDb('KPI runtime evaluator', () => {
     await seedClass(); await seedDevice();
     const envelopes = await evaluator.evaluateAll(scope, EQUIPMENT, NOW);
     expect(envelopes).toHaveLength(1);
-    expect(envelopes[0]).toMatchObject({ formulaKey: 'avg_coolant', readiness: 'blocked', reason: 'unbound' });
+    expect(envelopes[0]).toMatchObject({ formulaKey: 'avg_coolant', readiness: 'not_configured', reason: 'unbound' });
   });
 
   it('9. §3: the batched query touches only the partitions the window needs, not every partition', async () => {

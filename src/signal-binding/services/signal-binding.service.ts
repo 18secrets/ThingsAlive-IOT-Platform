@@ -12,13 +12,16 @@ import { SensorMapProjection } from '../../projection/entities/sensor-map-projec
 import {
   SignalBindingDiscoveredBy, SignalBindingOrigin, SignalBindingVersion,
 } from '../entities/signal-binding-version.entity';
+import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
+import { resolveStaleAfterSeconds } from './signal-freshness';
 
 /**
- * The subset of the contract's `missing_inputs.reason` enum this task names. Only
- * `unbound` and `mapping_required` are ever produced by this slice — see
- * `coverage()`'s own comment for why `stale` and `no_readings` are declared but
- * unreachable until a telemetry-aware slice can tell "bound but silent" from
- * "nothing bound".
+ * The contract's `missing_inputs.reason` enum. `unbound` and `mapping_required`
+ * are still the only reasons `coverage()` itself produces — see its own
+ * comment (task Q08S s3) for why `stale`/`no_readings` stay out of its
+ * covered/missing classification. They are real now, just produced by
+ * `KpiEvaluatorService` instead, which is where a KPI's own readiness already
+ * depends on a specific signal having reported recently.
  */
 export type MissingReason = 'unbound' | 'mapping_required' | 'stale' | 'no_readings';
 
@@ -27,14 +30,23 @@ export interface EquipmentRef {
   externalId: string;
 }
 
-export interface CoveredRequirement {
+/** Per-signal freshness (task Q08S s3) — `lastReadingAt: null` is what makes
+ * `no_readings` legible to a caller without it having to infer anything from
+ * an absence. */
+export interface SignalFreshness {
+  staleAfterSeconds: number;
+  lastReadingAt: string | null;
+  secondsSinceLastReading: number | null;
+}
+
+export type CoveredRequirement = {
   measurementRole: string;
   componentScope: string;
   minCount: number;
   activeCount: number;
-}
+} & SignalFreshness;
 
-export interface MissingRequirement {
+export interface MissingRequirement extends SignalFreshness {
   measurementRole: string;
   componentScope: string;
   minCount: number;
@@ -104,6 +116,8 @@ export interface ProposeBindingInput {
  */
 @Injectable()
 export class SignalBindingService {
+  private readonly telemetryReader = new TelemetryWindowReader();
+
   constructor(private readonly ds: DataSource) {}
 
   // ------------------------------------------------------------------- coverage
@@ -139,6 +153,17 @@ export class SignalBindingService {
           },
         });
 
+        // Telemetry-aware now (task Q08S s3) — the "later slice" this service's
+        // own comments named below. Devices the same way `discover()` already
+        // finds them, so there is one device-resolution idea in this file, not two.
+        const devices = await m.getRepository(DeviceInventory).find({
+          where: { tenantId: scope.tenantId, equipmentExternalId: equipment.externalId },
+        });
+        const imeis = [...new Set(devices.map((d) => d.imei))];
+        const latestBySignal = await this.telemetryReader.latestPerSignal(
+          m, scope.tenantId, imeis, requirements.map((r) => r.measurementRole),
+        );
+
         for (const req of requirements) {
           const rows = await m.getRepository(SignalBindingVersion).find({
             where: {
@@ -150,10 +175,31 @@ export class SignalBindingService {
           const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
           const activeCount = activeNow.length;
 
+          const staleAfterSeconds = resolveStaleAfterSeconds(req);
+          const lastReadingAt = latestBySignal.get(req.measurementRole) ?? null;
+          const secondsSinceLastReading = lastReadingAt ? (at.getTime() - lastReadingAt.getTime()) / 1000 : null;
+          const freshness: SignalFreshness = {
+            staleAfterSeconds,
+            lastReadingAt: lastReadingAt ? lastReadingAt.toISOString() : null,
+            secondsSinceLastReading,
+          };
+
           if (activeCount >= req.minCount) {
+            // Annotated with freshness (task Q08S s3), not reclassified by it.
+            // `covered` stays a binding-count question, exactly as Q08S s2 built
+            // it — existing callers already rely on "enough bindings exist" being
+            // the whole of what `covered` means (see
+            // `test/signal-binding-coverage.spec.ts`'s own "reports a whole-
+            // machine requirement as covered", which asserts this against a
+            // binding with no telemetry seeded at all). Whether a currently-bound
+            // signal that has gone quiet should also move to `missing` here is a
+            // real open question — deliberately not decided unilaterally by
+            // editing those tests to seed telemetry they were never written to
+            // need. QCE2's `KpiEvaluatorService` is where staleness already gates
+            // whether a KPI reads `ready`.
             covered.push({
               measurementRole: req.measurementRole, componentScope: req.componentScope,
-              minCount: req.minCount, activeCount,
+              minCount: req.minCount, activeCount, ...freshness,
             });
             continue;
           }
@@ -161,16 +207,9 @@ export class SignalBindingService {
           // `activeCount === 0` covers two situations this slice cannot tell apart
           // through the contract's enum, and both are `unbound`: no row was ever
           // created, or an active primary row exists but no window it declares
-          // covers `at` (a closed validity window). Neither is `stale` — in the
-          // contract, `stale` means a binding exists AND the sensor has gone
-          // quiet, a telemetry-freshness fact this service never checks (it reads
-          // only `signal_binding_version`, never `telemetry_reading`). A closed
-          // window means nothing is bound at this instant, which is `unbound`'s
-          // literal meaning, not a data-freshness complaint. None of the other six
-          // reasons (mapping_required, no_primary_selected, calibration_expired,
-          // calibration_unknown, unit_unresolved, no_readings) fit it either, so
-          // `stale` joins `no_readings` as unreachable from this slice — both wait
-          // on a telemetry-aware slice to become producible.
+          // covers `at` (a closed validity window). A closed window means nothing
+          // is bound at this instant, which is `unbound`'s literal meaning, not a
+          // data-freshness complaint.
           //
           // `activeCount > 0` but still under `min_count` is real partial coverage
           // — at least one confirmed binding is in force, more mapping is what
@@ -179,7 +218,7 @@ export class SignalBindingService {
 
           missing.push({
             measurementRole: req.measurementRole, componentScope: req.componentScope,
-            minCount: req.minCount, activeCount, reason,
+            minCount: req.minCount, activeCount, reason, ...freshness,
           });
           for (const layer of req.enables) {
             const set = blockedByLayer.get(layer) ?? new Set<string>();

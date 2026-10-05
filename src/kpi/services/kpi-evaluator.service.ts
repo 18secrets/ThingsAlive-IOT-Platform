@@ -1,17 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import {
   ExcludedRange, openWorkOrderExcludedRanges, Reading,
 } from '../../catalog/formula/baseline-operators';
 import { ExecContext, lookupExecutor } from '../../catalog/formula/executor-registry';
 import { ArgKind, lookupOperator } from '../../catalog/formula/operator-registry';
+import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { ClientFormula } from '../../client-catalog/entities/client-formula.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
 import { SignalBindingService } from '../../signal-binding/services/signal-binding.service';
+import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
 import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason } from '../types';
 import { TelemetryWindowReader } from './telemetry-window-reader';
@@ -23,15 +25,6 @@ const DAY = 24 * HOUR;
  * trustworthy enough to show a number for. Named rather than left as a literal
  * so the next person reading a diff sees it change on purpose. */
 export const MIN_COVERAGE_RATIO = 0.5;
-
-/**
- * Platform default until Q08S s3 (not started as of this task) adds a real
- * per-signal `stale_after_seconds` column. §4's own wording assumes that column
- * already exists; it does not. 900s matches the figure already quoted for Q08S
- * s3 in the task register, so nothing here needs re-deciding when it lands —
- * only replacing. Reported as a judgment call, not silently assumed.
- */
-export const DEFAULT_STALE_AFTER_SECONDS = 900;
 
 /** Fallback only — `signal_binding_version.expected_period_seconds` (Q08S s1,
  * never read anywhere before this) is the real declared cadence when a binding
@@ -72,9 +65,9 @@ export class KpiEvaluatorService {
 
   async evaluateAll(scope: RequestScope, equipment: EquipmentRef, at: Date = new Date()): Promise<KpiEnvelope[]> {
     return withTenantSession(this.ds, scope, async (m) => {
-      const { formulas } = await this.loadFormulas(m, scope.tenantId, equipment);
+      const { formulas, profile } = await this.loadFormulas(m, scope.tenantId, equipment);
       if (!formulas.length) return [];
-      return this.evaluateBatch(m, scope.tenantId, equipment, formulas, formulas, at);
+      return this.evaluateBatch(m, scope.tenantId, equipment, profile, formulas, formulas, at);
     });
   }
 
@@ -83,11 +76,11 @@ export class KpiEvaluatorService {
     at: Date = new Date(), explicitWindow?: Window,
   ): Promise<KpiEnvelope> {
     return withTenantSession(this.ds, scope, async (m) => {
-      const { formulas } = await this.loadFormulas(m, scope.tenantId, equipment);
+      const { formulas, profile } = await this.loadFormulas(m, scope.tenantId, equipment);
       const target = formulas.find((f) => f.formulaKey === formulaKey);
       if (!target) throw new NotFoundException(`No KPI "${formulaKey}" on this equipment's class.`);
       const [envelope] = await this.evaluateBatch(
-        m, scope.tenantId, equipment, formulas, [target], at, explicitWindow,
+        m, scope.tenantId, equipment, profile, formulas, [target], at, explicitWindow,
       );
       return envelope;
     });
@@ -95,26 +88,26 @@ export class KpiEvaluatorService {
 
   private async loadFormulas(
     m: EntityManager, tenantId: string, equipment: EquipmentRef,
-  ): Promise<{ formulas: ClientFormula[] }> {
+  ): Promise<{ formulas: ClientFormula[]; profile: EquipmentProfile }> {
     const profile = await m.getRepository(EquipmentProfile).findOne({
       where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId },
     });
     if (!profile) throw new NotFoundException('No such equipment in this account.');
-    if (!profile.equipmentClassSlug) return { formulas: [] };
+    if (!profile.equipmentClassSlug) return { formulas: [], profile };
 
     const clientClass = await m.getRepository(ClientEquipmentClass).findOne({
       where: { tenantId, slug: profile.equipmentClassSlug },
     });
-    if (!clientClass) return { formulas: [] };
+    if (!clientClass) return { formulas: [], profile };
 
     const formulas = await m.getRepository(ClientFormula).find({
       where: { tenantId, clientEquipmentClassSlug: clientClass.slug, status: 'active' },
     });
-    return { formulas };
+    return { formulas, profile };
   }
 
   private async evaluateBatch(
-    m: EntityManager, tenantId: string, equipment: EquipmentRef,
+    m: EntityManager, tenantId: string, equipment: EquipmentRef, profile: EquipmentProfile,
     allFormulas: ClientFormula[], targets: ClientFormula[], at: Date, explicitWindow?: Window,
   ): Promise<KpiEnvelope[]> {
     const siblings = new Map(allFormulas.map((f) => [f.formulaKey, f]));
@@ -151,6 +144,29 @@ export class KpiEvaluatorService {
     const readTo = at;
 
     const seriesBySignal = await this.reader.read(m, tenantId, imeis, allRequiredSignals, readFrom, readTo);
+    // Unbounded on purpose (task Q08S s3) — `seriesBySignal` only ever holds
+    // what the window above asked for, so a reading older than its lower bound
+    // is invisible to it. Telling `stale` (readings exist, none recently) apart
+    // from `no_readings` (none ever) needs the single latest reading regardless
+    // of when, which this is and the window-bound read cannot be.
+    const latestEverBySignal = await this.reader.latestPerSignal(m, tenantId, imeis, allRequiredSignals);
+
+    // Per-signal staleness threshold: the class's own requirement row, pinned
+    // to the equipment's granted class_version — there is no tenant copy of
+    // `equipment_class_sensor_requirement` to read instead (see
+    // `signal-freshness.ts`).
+    const staleAfterSecondsBySignal = new Map<string, number>();
+    if (profile.equipmentClassSlug && profile.classVersion) {
+      const requirements = await m.getRepository(EquipmentClassSensorRequirement).find({
+        where: {
+          classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion, componentScope: '',
+          measurementRole: In(allRequiredSignals),
+        },
+      });
+      for (const req of requirements) {
+        staleAfterSecondsBySignal.set(req.measurementRole, resolveStaleAfterSeconds(req));
+      }
+    }
 
     const bindingStatus = new Map<string, number | null | undefined>();
     for (const signal of allRequiredSignals) {
@@ -176,7 +192,10 @@ export class KpiEvaluatorService {
 
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
-      signals.set(signal, resolveSignalStatus(signal, bindingStatus, seriesBySignal, at));
+      const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? DEFAULT_STALE_AFTER_SECONDS;
+      signals.set(signal, resolveSignalStatus(
+        signal, bindingStatus, seriesBySignal, latestEverBySignal, staleAfterSeconds, at,
+      ));
     }
 
     return targets.map((target) => this.buildEnvelope(target, perTargetWindow.get(target.formulaKey) ?? null, {
@@ -214,7 +233,7 @@ export class KpiEvaluatorService {
     for (const name of formula.requiredSignals) {
       const sig = ctxBase.signals.get(name);
       if (!sig) {
-        return { ...base, value: null, readiness: 'blocked', reason: 'unbound', coverage: zeroCoverage() };
+        return { ...base, value: null, readiness: 'not_configured', reason: 'unbound', coverage: zeroCoverage() };
       }
       if (sig.ok === false) {
         return {
@@ -258,19 +277,26 @@ function computeCoverage(requiredSignals: string[], signals: Map<string, SignalS
   return { expected, actual, ratio: expected > 0 ? Math.min(1, actual / expected) : 1 };
 }
 
+/**
+ * Readiness for `unbound` is `not_configured` (task Q08S s3's own table), not
+ * `blocked` — nothing has been wired yet, which is a configuration gap, not an
+ * active obstruction. `no_readings`/`stale` come from `latestEverBySignal`,
+ * unbounded on purpose: `seriesBySignal` only holds what the read window
+ * asked for, and a reading older than its lower bound would otherwise look
+ * identical to one that never existed.
+ */
 function resolveSignalStatus(
   name: string, bindingStatus: Map<string, number | null | undefined>,
-  seriesBySignal: Map<string, Reading[]>, at: Date,
+  seriesBySignal: Map<string, Reading[]>, latestEverBySignal: Map<string, Date>,
+  staleAfterSeconds: number, at: Date,
 ): SignalStatus {
   if (!bindingStatus.has(name) || bindingStatus.get(name) === undefined) {
-    return { ok: false, readiness: 'blocked', reason: 'unbound' };
+    return { ok: false, readiness: 'not_configured', reason: 'unbound' };
   }
+  const freshness = classifyFreshness(latestEverBySignal.get(name) ?? null, at, staleAfterSeconds);
+  if (freshness === 'no_readings') return { ok: false, readiness: 'not_available', reason: 'no_readings' };
+  if (freshness === 'stale') return { ok: false, readiness: 'not_available', reason: 'stale' };
   const series = seriesBySignal.get(name) ?? [];
-  if (!series.length) return { ok: false, readiness: 'not_available', reason: 'no_readings' };
-  const latest = series[series.length - 1].at;
-  if (at.getTime() - latest.getTime() > DEFAULT_STALE_AFTER_SECONDS * 1000) {
-    return { ok: false, readiness: 'not_available', reason: 'stale' };
-  }
   return { ok: true, series, expectedPeriodSeconds: bindingStatus.get(name) ?? null };
 }
 
@@ -333,7 +359,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       return { ok: false, readiness: 'not_configured' };
     case 'signal': {
       const sig = ctx.signals.get(node.name);
-      if (!sig) return { ok: false, readiness: 'blocked', reason: 'unbound' };
+      if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
       if (sig.ok === false) return { ok: false, readiness: sig.readiness, reason: sig.reason };
       const rows = sig.series.filter((r) => r.at >= ctx.window.from && r.at <= ctx.window.to);
       if (!rows.length) return { ok: false, readiness: 'not_available', reason: 'no_readings' };
@@ -381,7 +407,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
         }
         if (kind === 'series') {
           const sig = ctx.signals.get(argNode.name);
-          if (!sig) return { ok: false, readiness: 'blocked', reason: 'unbound' };
+          if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
           if (sig.ok === false) return { ok: false, readiness: sig.readiness, reason: sig.reason };
           seriesArgs.push(sig.series);
           continue;

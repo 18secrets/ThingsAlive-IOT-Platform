@@ -35,6 +35,31 @@ export class TelemetryWindowReader {
     return bySignal;
   }
 
+  /**
+   * The single latest reading per signal, unbounded on the early side (task
+   * Q08S s3) — deliberately not window-bound, which is what makes it able to
+   * tell `stale` (readings exist, none recently) apart from `no_readings`
+   * (none ever). `read()`'s window-bound query cannot answer this: a reading
+   * older than the window's lower bound is invisible to it, which is exactly
+   * the conflation this method exists to avoid. One `DISTINCT ON` per
+   * evaluation, not one per signal.
+   */
+  async latestPerSignal(
+    m: EntityManager, tenantId: string, imeis: string[], signals: string[],
+  ): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    if (!imeis.length || !signals.length) return result;
+    const rows: { signal: string; latest: Date }[] = await m.query(
+      `SELECT DISTINCT ON ("signal") "signal", "source_timestamp" AS latest
+         FROM "telemetry_reading"
+        WHERE "tenant_id" = $1 AND "imei" = ANY($2::text[]) AND "signal" = ANY($3::text[])
+        ORDER BY "signal", "source_timestamp" DESC`,
+      [tenantId, imeis, signals],
+    );
+    for (const r of rows) result.set(r.signal, new Date(r.latest));
+    return result;
+  }
+
   /** Runs `EXPLAIN` on the exact query `read()` issues and names which monthly
    * partitions it touched — reported in QCE2's §3, not assumed from the shape of
    * the SQL. A query that touches every partition is a pruning bug, not a detail
