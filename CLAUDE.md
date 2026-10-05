@@ -76,3 +76,49 @@ Do not re-derive a decision that is already written down there.
 - Opening the MR is fine; **merging is Deepak's**, always.
 - Measure baseline test counts on a throwaway commit or a second worktree, never by stashing.
   Never `git stash drop` or `git stash clear`; `apply`, not `pop`.
+
+## Two streams
+Two builders work at once. Stream A is the machine page (QREC0a → QREC0b → QPAGE1 → QREC0c).
+Stream B is independent backend work (QPARAM1, QAVAIL1, QCAT2, QCE5). Deepak is the only
+architect: design questions go to him, he owns `docs/ai/task-register.md`, and he merges
+every MR. Builders read the register and never edit it.
+
+- **Start from the repo, not a chat.** A task begins from `docs/ai/prompts/<TASK>-prompt.md`
+  on a freshly pulled `main`. Before building, read `docs/ai/schema-inventory.md` and check
+  that nothing the prompt specifies already exists.
+- **Ownership.** Only Stream A touches `src/catalog-import/**`, `template-schema.ts` and
+  `CLASS_CONTENT_INVENTORY`. Only Stream B touches `src/parameters/**`, `src/utilization/**`,
+  `src/shift/**` and `src/device-catalog/**`. Anything outside your stream goes back to
+  Deepak — decline it and report, even when it looks small.
+- **`kpi-evaluator.service.ts` is shared.** QPARAM1 merges first; Stream A rebases onto it.
+  Never have both streams open in that file at once.
+- **Assign the migration timestamp at rebase, never when the branch is cut.** The last step
+  before opening the MR: `git fetch && git rebase origin/main`, pick a timestamp above
+  everything on `main`, rename the file and its class, `npm run verify:migrations`,
+  `npm run test:db`. A timestamp picked early collides with the other stream's, and the
+  collision shows up as an out-of-order chain on a fresh database — in production, not in
+  tests. Never reuse a timestamp that has been pushed; never renumber one that has been
+  deployed. If two collide anyway, the second to merge renames and re-runs the chain from
+  empty.
+- **Shared files are append-only:** `package.json`'s `test:db`, `CLAUDE.md`, the operator
+  registry (entries alphabetical, never renumbered). A reordered file conflicts on every
+  line; an appended one on none. On a rebase conflict in one of them, keep both additions.
+  If it is not a clean "both added a line", stop and report.
+- **Regenerate `docs/ai/schema-inventory.md` at rebase,** after the other stream's merge.
+- **A conflict in the other stream's files: stop.** Report which files, which stream owns
+  them and what you were doing. Resolving someone else's file by guessing is how a
+  validator ends up with two sets of rules.
+- **The prompt disagrees with `main`: stop and report, do not reconcile.** A builder who
+  quietly bridges the gap produces a second way of doing the same thing.
+- **A passing test now fails: find out whether the test was right** — twice a test here
+  passed for the wrong reason. Fixtures may change; an assertion change is a behaviour
+  change and is said out loud.
+- **Green locally, red in CI:** replicate `.github/workflows/ci.yml`'s jobs locally against
+  a clean Postgres. Never merge past a red gate, and never force a redeploy past a deploy
+  stuck WAITING — find out why the suite did not run.
+- **Cadence.** Rebase daily. A branch lives 2 days at most — longer means the task should
+  have been split, and it is escalated, not nursed. Deepak merges one MR at a time; the
+  other stream rebases before the next.
+- **Baselines** are measured on a worktree off `origin/main`
+  (`git worktree add ../baseline origin/main`), reported before and after on the same base,
+  naming its SHA. A count against a different base is not a count.

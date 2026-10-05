@@ -103,7 +103,12 @@ downstream is worth starting before the compiler exists.
 | **QOPS1** | **Migrate Railway config to Infrastructure as Code.** `railway.json` / `railway.toml` are deprecated and **stop working 2026-12-01**. That file holds `preDeployCommand: npm run migration:run` and the "Wait for CI" gate — both safety mechanisms fail silently and simultaneously if it lapses. Run `railway config migrate`, review `.railway/railway.ts` by hand, confirm both survived, deploy once to prove it. **Deepak only — the CLI is read-only on Railway.** | **Not started — do before end of October** | — |
 | — | **Ops access established 2026-10-02.** Railway CLI v5.63.1 on the laptop with a project token, read-only. `railway status`, `railway logs --lines/--since/--filter`, `--build`, `--http --status`. Always pass `--lines` or `--since` — a bare `railway logs` streams and hangs the shell. Deploy evidence is now quoted from logs, not inferred from local runs. API URL: `https://api-development-154e.up.railway.app`. | — | — |
 | — | **Scheduler state confirmed.** `TELEMETRY_PARTITION_MAINTENANCE_ENABLED=true` and `SHIFT_RUNNER_ENABLED=true`, both on the **scheduler** service — the API correctly runs neither. Partition maintenance passes every 86400s. Shift runner ticks every 5 min and logs DEBUG whether or not work is found — 288 lines/day of noise, worth quietening later. | — | — |
-| **QCE2** | **Runtime evaluator** — execute `compiled_plan` over a window against partitioned telemetry. Result is always an envelope (value, unit, window, readiness, reason, coverage); `value` is `null` whenever readiness is not `ready` — never 0, never NaN. Closed executor registry with a test that every compiler operator has an executor. Coverage computed, gaps never zeros, division by zero is `undefined_result`. Tenant-scoped KPI endpoints. | **Next** | QCE1, QCE3, QCE4 |
+| **QCE2** | *(merged `!50`)* **Runtime evaluator** — execute `compiled_plan` over a window against partitioned telemetry. Result is always an envelope (value, unit, window, readiness, reason, coverage); `value` is `null` whenever readiness is not `ready` — never 0, never NaN. Closed executor registry with a test that every compiler operator has an executor. Coverage computed, gaps never zeros, division by zero is `undefined_result`. Tenant-scoped KPI endpoints. | **Complete** — `3dac0ad`, MR **!50**. test:db 261→272, suite 1015/1015 | QCE1, QCE3, QCE4 |
+| — | **Measured, so stop thinking about caching.** One KPI over 12 h: ~35 ms. Twenty KPIs for one machine: ~40 ms. A 12-hour query touches **one** partition via index scan. Nothing here needs materialising at this scale. | — | — |
+| — | **`expected_period_seconds` on `signal_binding_version`** had been written by Q08S s1 and never read by anything. QCE2 uses it as the declared-cadence source for coverage. Finding an unused column beats adding a second one that means the same thing. | — | — |
+| **QCE2.1** | **`series` means a series.** `resultKind: 'series'` returns bucketed `{t,v}[]`; a series plan that cannot be bucketed **throws**, naming the formula key. Empty bucket → `v: null`, never omitted, never 0. Deterministic bucket ladder (1m…1d) targeting ~120 points; an override above 1000 points is **refused**, not truncated. Alert-based dirty-window exclusion wired — a raised alert dirties a baseline only when the rule's scope covers the equipment **and** the rule's signal is the baseline's input signal. | **Complete** — `35ca9a9`, MR **!52**. test:db 280→296, suite 1044/1044 | QCE2 |
+| — | **A test was proving something adjacent to its name.** QCE2's divide-by-zero case used `coolant_temp_c/(x-x)`, which was accidentally series-kind and silently coerced to scalar. QCE2.1's "series that cannot be bucketed throws" caught it. Formula corrected, intent preserved. | — | — |
+| — | **Known limit:** `#formula_key` composition in series mode throws rather than guess at bucketing semantics. A composed named formula cannot be charted yet. A clear error beats a wrong chart; scope it when someone needs it. | — | — |
 | **QPARAM1** | Tenant parameters and cost profiles — **three client-owned scopes** (D39): client → site → equipment, effective-dated, per-field inheritance, source attribution, currency-conflict wipe, append-only. No platform scope; no platform read path. | Not started — prompt written, **hold until QCE1 merges** | QCE1 |
 | **QPART1** | Monthly partitioning of `telemetry_reading` | **Complete** — MR **!42** merged after !41. Full 45-migration chain clean from empty on merged `main`; test:db 192/192 | `1758030000000-TelemetryPartitioning` |
 
@@ -118,8 +123,13 @@ execution only.
 
 | | Task | Status | Needs |
 |---|---|---|---|
-| **Q08S s3** | **Telemetry freshness per signal.** `stale_after_seconds` on `equipment_class_sensor_requirement`, nullable, 900 s platform default. Resolution is the **tenant copy** then the default — never the platform class. Separates `no_readings` (never any reading) from `stale` (went quiet) — a commissioning task versus a maintenance call. Response gains `staleAfterSeconds`, `lastReadingAt`, `secondsSinceLastReading`. **No template bump** — v4 is QREC0's. | **Next after QCE2** — prompt reissued 2026-10-02 | — |
-| **QREC0** | **Library content structure** — KPI definitions, forecast declarations, workflow templates, failure modes, recommendations, **page layout**, the **site class** (D30 part 3), and **`equipment_class_visual` + per-signal anchors** with assets in object storage (D38). An anchor naming an undeclared signal is refused at publish. Template v4 sheets, **including the KPI presentation columns** (`result_kind`, `display_unit`, target, comparison basis, window, chart type) so authors can set them from Excel — until then compiler refusals 8 and 9 are publish-time only. Copy-on-grant. | Not started | Q08S s3, QCE1 |
+| **Q08S s3** | **Telemetry freshness per signal.** `stale_after_seconds` on `equipment_class_sensor_requirement`, nullable, 900 s platform default. Resolution is the **tenant copy** then the default — never the platform class. Separates `no_readings` (never any reading) from `stale` (went quiet) — a commissioning task versus a maintenance call. Response gains `staleAfterSeconds`, `lastReadingAt`, `secondsSinceLastReading`. **No template bump** — v4 is QREC0's. | **Complete** — `40a4144`, MR **!51**. test:db 272→280, suite 1023/1023 | `1758090000000-SignalFreshness` |
+| — | **Found a conflation in code I had just approved.** QCE2's `resolveSignalStatus()` only saw readings inside its read window, so a reading older than the window was indistinguishable from one that never existed — `stale` reported as `no_readings`. Fixed with an unbounded `latestPerSignal()`, decoupled from the value read. Test 5b pins it. | — | — |
+| — | **Decision: `coverage()` does not reclassify on staleness.** It answers a configuration question; staleness is a runtime condition. Conflating them flips a machine to "missing" because it sat switched off over a weekend. It now annotates every requirement with `staleAfterSeconds` / `lastReadingAt` / `secondsSinceLastReading` and leaves covered/missing alone. | — | — |
+| — | **Deferred to QPARAM1: a tenant cannot override `stale_after_seconds`.** Copy-on-grant correctly excludes the requirement table — version-pinning already answers *which value applies*. It does not answer *can the tenant change it*. Freshness is a parameter (client → site → equipment, effective-dated), not class content. | — | — |
+| **QREC0a** | **Content structure and template v4.** Failure modes and recommendations become **rows, not jsonb** — a recommendation must point at a failure mode, and the blob is why `ex-1200v` v2 shipped with `[]` unnoticed. KPI presentation metadata on `equipment_class_formula` (D30). Forecast declarations per signal, default **false** (D40's cost control). **Template v4 — the one bump**, carrying `sensor_slug` as primary, `stale_after_seconds`, forecast columns, QCE3's bind columns, the seven presentation columns, and two new sheets. v3 workbooks keep loading. | **Next** — prompt issued 2026-10-05 | QCE3, Q08S s3 |
+| **QREC0b** | **Page layout and the site class.** How a machine page is composed, widget order, and D30 part 3's site class as a first-class thing rather than a loose collection of machines. | Not started | QREC0a |
+| **QREC0c** | **Visuals.** `equipment_class_visual`, per-signal anchors, assets in object storage (D38), an anchor naming an undeclared signal refused at publish. **Deliberately last** — it touches storage infrastructure we have not built and is the piece most likely to stall; it must not be able to hold up the other two. | Not started | QREC0a |
 | **QPAGE1** | Composed page endpoint — `GET /api/equipment/:id/page` returning layout, widgets, bindings and **per-widget readiness** in four states (D29). Includes the **`list` twin** (readiness list, no picture, zero content) and the **`schematic` twin with its 2-D hotspot editor** — hotspots need placing, so the editor ships with them, not with Tier 1 (D38). | Not started | QREC0, QCE2, Q08S s3, QUI-WIDGETS |
 | **QUPGRADE1** | **Class version upgrade flow.** Origin classification (`inherited` / `customised` / `tenant_added`) on every tenant-copied content type; an explicit upgrade with a diff the tenant accepts; orphaned content preserved and labelled; `geometry_version` change marks customised anchors `needs_recheck`. **Not previously scheduled anywhere** — D39 assumed it was free and it is not. | Not started | QREC0 |
 | **QTWIN1** | The WebGL twin widget + **anchor-placement editor**. Model asset platform-owned and shared; anchors copied on grant then tenant-owned; a new tenant signal lands in an **unplaced tray**, never auto-assigned (D38/D39). | Not started | QPAGE1 |
@@ -225,13 +235,29 @@ vocabulary is named, and it is a day's work of cataloguing what the demo already
 
 ## 10. Next
 
-**As of 2026-10-02.** `main` carries, in order: QIMP5 → QALERT2 → QCE3 → QGRANT0 →
-fix/ci-green → QCE4. Deployed and verified on Railway: 48 migrations, three sensors slugged,
-seven named formulas published, import approval loop and formula catalogue serving at
-`https://api-development-154e.up.railway.app`.
+**As of 2026-10-05.** `main` carries, in order: QIMP5 → QALERT2 → QCE3 → QGRANT0 →
+fix/ci-green → QCE4 → QCE2 → Q08S s3 → QCE2.1, plus the `AGENTS.md` ignore (!39) and the
+local-dev note (!49). **The deterministic layer is complete end to end**: compile, bind,
+evaluate, bucket, and a readiness state for every absence.
 
-**In flight:** QCE2 (runtime evaluator). **Then:** Q08S s3 → QREC0 (to be split) → QPAGE1.
+Deployed at `https://api-development-154e.up.railway.app`.
+Preview UI at `https://frontend-preview-development.up.railway.app`.
+
+**In flight:** QREC0a (content structure, template v4).
+
+**Running in parallel:**
+
+| Who | What |
+|---|---|
+| Library team | load content via the runbook, then run `test-plan-development.md` — 48 cases, Swagger only, no console needed |
+| UI team | **!53** (`feature/clientflow`, Scenarios / Work Orders / Thing Detail) awaiting review; `feature/bulk-classes` still needs a rebase and the Catalog Import rework |
+| Deepak | protect `main` (two clicks, still outstanding); **QOPS1 before end of October** — `railway config migrate`, since `railway.json` stops working 2026-12-01 and takes `preDeployCommand` and the CI gate with it |
+
+**Then:** QREC0b → QPAGE1. QREC0c last by design. QCE5 (comparison operators, the one ITDC
+shape still missing) after the library is loaded.
+
+**Housekeeping:** MRs !23–!27 and !31 target superseded branch chains and have been open
+three weeks. Close them — they make the real queue unreadable.
 
 **This file is the authoritative register and lives at `docs/ai/task-register.md`.** Deepak
-maintains it; the CLI commits what he sends and does not edit it. A stale repo copy is how
-the CLI ends up reading September when it is October.
+maintains it; the CLI commits what he sends and does not edit it.
