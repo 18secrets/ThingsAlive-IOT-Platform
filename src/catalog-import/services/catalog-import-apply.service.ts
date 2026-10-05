@@ -7,6 +7,7 @@ import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-
 import {
   danglingRecommendations, insertClassContent, toFailureModeJsonb,
 } from '../../catalog/services/class-failure-modes';
+import { insertLayout } from '../../catalog/services/class-layout';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
@@ -290,6 +291,7 @@ export class CatalogImportApplyService {
         m, slug, targetClass.version, proposed.failureModes, proposed.recommendations,
         { source: SOURCE, importBatchId: batch.id },
       );
+      await insertLayout(m, slug, targetClass.version, proposed.layout, { source: SOURCE, importBatchId: batch.id });
 
       if (proposed.formulas.length) {
         await formulaRepo.save(proposed.formulas.map((f) => formulaRepo.create({
@@ -317,6 +319,7 @@ export class CatalogImportApplyService {
       // Only present when the batch carried the sheet — a v3 batch's summary keeps
       // exactly the keys it always had.
       if (bySheetCount('recommendation')) created.recommendation = bySheetCount('recommendation');
+      if (bySheetCount('layout')) created.layout = bySheetCount('layout');
       created.sensor_requirement = proposed.sensorRequirements.length;
       created.default_threshold = Object.keys(proposed.defaultThresholds).length;
       created.formula = bySheetCount('formula');

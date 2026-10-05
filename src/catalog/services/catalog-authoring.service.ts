@@ -19,6 +19,8 @@ import {
   ClassContentError, copyClassContent, danglingRecommendations, fromFailureModeJsonb, insertClassContent,
   loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
 } from './class-failure-modes';
+import { copyLayout, loadLayout, presentationOf } from './class-layout';
+import { layoutProblems } from '../layout/layout-rules';
 
 type ClassDraft = Partial<Pick<EquipmentClassProfile,
   'name' | 'description' | 'category' | 'expectedSignals' | 'failureModes' | 'defaultThresholds'>>;
@@ -103,7 +105,10 @@ export class CatalogAuthoringService {
       const saved = await m.getRepository(EquipmentClassProfile).save(working);
       // A fork starts as a copy of the version it came from (task QREC0a) — the
       // jsonb did this by riding on the profile row; rows only do it if asked.
-      if (forked) await copyClassContent(m, slug, working.version - 1, working.version);
+      if (forked) {
+        await copyClassContent(m, slug, working.version - 1, working.version);
+        await copyLayout(m, slug, working.version - 1, working.version);
+      }
       if (draft.failureModes) {
         try {
           await replaceDraftFailureModes(
@@ -256,6 +261,26 @@ export class CatalogAuthoringService {
       throw new BadRequestException(
         `Cannot publish "${slug}" v${draft.version}: ${failures.join('; ')}`,
       );
+    }
+
+    // The page layout (task QREC0b), checked against what the formulas just compiled
+    // to — a widget has to agree with its formula's presentation, and the compiled
+    // result_kind is only known from here on. No layout rows is valid: the page
+    // falls back to a computed one, and publishing is never gated on authoring it.
+    const layout = await loadLayout(this.classes.manager, slug, draft.version);
+    if (layout.length) {
+      const presentations = formulas.map((formula) => {
+        const result = results.get(formula.formulaKey)!;
+        const resultKind = formula.resultKind
+          ?? (result.status === 'ok' ? result.compiled.resultKind : null);
+        return presentationOf({ ...formula, resultKind });
+      });
+      const layoutIssues = layoutProblems(layout, {
+        scope: 'equipment', formulas: presentations, signals: draft.expectedSignals.map((s) => s.signal),
+      });
+      if (layoutIssues.length) {
+        throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${layoutIssues.join(' ')}`);
+      }
     }
 
     return this.classes.manager.transaction(async (m) => {

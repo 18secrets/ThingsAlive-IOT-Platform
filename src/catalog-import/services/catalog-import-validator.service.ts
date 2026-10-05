@@ -7,6 +7,8 @@ import { NamedFormula } from '../../catalog/entities/named-formula.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import { loadFailureModes } from '../../catalog/services/class-failure-modes';
+import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
+import { isWidgetType, WIDGET_SIZES, WIDGET_SPECS, WIDGET_TYPES } from '../../catalog/layout/widget-types';
 import {
   AGGREGATION_WINDOW_VALUES, CHART_TYPE_VALUES, COMPARISON_BASIS_VALUES, CRITICALITY_VALUES, ENABLES_VALUES,
   FORMULA_KIND_VALUES, SEVERITY_VALUES, TARGET_DIRECTION_VALUES, URGENCY_VALUES,
@@ -124,6 +126,23 @@ function formulaPresentationProblem(r: CatalogImportRow): string | null {
   return null;
 }
 
+/** A layout row's own shape (template v4, task QREC0b): the type is in the closed
+ * vocabulary and means something on an equipment page, the size is known, the
+ * position is a whole number, and bound_to is present exactly when the type binds. */
+function layoutRowShapeProblem(r: CatalogImportRow): string | null {
+  const type = cell(r, 'widget_type');
+  if (!isWidgetType(type)) return `widget type "${type}" is not in the widget vocabulary (${WIDGET_TYPES.join(', ')}).`;
+  const spec = WIDGET_SPECS[type];
+  if (!spec.scopes.includes('equipment')) return `"${type}" has no meaning on an equipment page.`;
+  const size = cell(r, 'size');
+  if (!(WIDGET_SIZES as readonly string[]).includes(size)) return `size "${size}" is not one of ${WIDGET_SIZES.join(', ')}.`;
+  if (!positiveInteger(cell(r, 'position'))) return '"position" must be a whole number above 0.';
+  const boundTo = cell(r, 'bound_to');
+  if (spec.binds === 'none' && boundTo) return `"${type}" binds to nothing, but bound_to is "${boundTo}".`;
+  if (spec.binds !== 'none' && !boundTo) return `"${type}" must be bound to a ${spec.binds}, and bound_to is blank.`;
+  return null;
+}
+
 /** The natural key duplicate rows within one batch collide on, per sheet. */
 function duplicateKey(row: CatalogImportRow): string | null {
   const p = row.payload;
@@ -136,6 +155,7 @@ function duplicateKey(row: CatalogImportRow): string | null {
     // generic "any repeat is a rejection" check.
     case 'formula': return `${p.class_slug}::${p.formula_key}`;
     case 'recommendation': return `${p.class_slug}::${p.failure_mode_code}::${p.action}`;
+    case 'layout': return `${p.class_slug}::${p.widget_key}`;
     default: return null;
   }
 }
@@ -324,10 +344,67 @@ export class CatalogImportValidatorService {
         } else if (r.sheet === 'recommendation') {
           const problem = recommendationShapeProblem(r);
           if (problem) invalidate(r, `recommendation row ${r.rowNumber}: ${problem}`);
+        } else if (r.sheet === 'layout') {
+          const problem = layoutRowShapeProblem(r);
+          if (problem) invalidate(r, `layout row ${r.rowNumber}: ${problem}`);
         }
         if (r.sheet === 'signal' && live(r)) {
           const problem = requirementSettingsProblem(r);
           if (problem) invalidate(r, `signal row ${r.rowNumber}: ${problem}`);
+        }
+      }
+
+      // ------------------------------------------------------- layout references
+      // Two widgets at one position, and a bound_to that names nothing the class
+      // version this batch would write declares (task QREC0b). Whether the widget
+      // agrees with its formula's presentation needs the compiled result_kind, so
+      // that is the publish check; this one gives the row number for the rest.
+      const layoutByClass = new Map<string, CatalogImportRow[]>();
+      for (const r of candidates) {
+        if (r.sheet !== 'layout' || !live(r)) continue;
+        const list = layoutByClass.get(String(r.payload.class_slug)) ?? [];
+        list.push(r);
+        layoutByClass.set(String(r.payload.class_slug), list);
+      }
+      for (const [slug, layoutRows] of layoutByClass) {
+        const byPosition = new Map<string, CatalogImportRow[]>();
+        for (const r of layoutRows) {
+          const list = byPosition.get(String(r.payload.position)) ?? [];
+          list.push(r);
+          byPosition.set(String(r.payload.position), list);
+        }
+        for (const [position, group] of byPosition) {
+          if (group.length < 2) continue;
+          const nums = group.map((r) => r.rowNumber).sort((a, b) => a - b);
+          for (const r of group) {
+            invalidate(r, `layout row ${r.rowNumber}: class "${slug}" has two widgets at position ${position} (rows ${nums.join(', ')}).`);
+          }
+        }
+
+        // The batch's own formula rows replace the class's wholesale at apply, so if
+        // it has any, they are the set; otherwise the current version's are inherited.
+        const batchFormulas = candidates.filter((r) => r.sheet === 'formula' && live(r) && r.payload.class_slug === slug)
+          .map((r) => String(r.payload.formula_key));
+        let formulaKeys = new Set(batchFormulas);
+        if (!batchFormulas.length) {
+          const latest = latestExisting(slug);
+          formulaKeys = new Set(latest
+            ? (await m.getRepository(EquipmentClassFormula).find({ where: { classSlug: slug, classVersion: latest.version } }))
+              .map((f) => f.formulaKey)
+            : []);
+        }
+        const signals = expectedSignalsFor(slug);
+        for (const r of layoutRows) {
+          if (!live(r)) continue;
+          const type = String(r.payload.widget_type);
+          const boundTo = String(r.payload.bound_to ?? '').trim();
+          if (!isWidgetType(type) || !boundTo) continue;
+          const binds = WIDGET_SPECS[type].binds;
+          if (binds === 'formula' && !formulaKeys.has(boundTo)) {
+            invalidate(r, `layout row ${r.rowNumber}: widget "${r.payload.widget_key}" is bound to formula "${boundTo}", which class "${slug}" does not declare.`);
+          } else if (binds === 'signal' && !signals.has(boundTo)) {
+            invalidate(r, `layout row ${r.rowNumber}: widget "${r.payload.widget_key}" is bound to signal "${boundTo}", which class "${slug}" does not declare.`);
+          }
         }
       }
 

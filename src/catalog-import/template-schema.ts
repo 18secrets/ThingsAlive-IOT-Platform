@@ -1,4 +1,5 @@
 import { RECOMMENDATION_URGENCY_VALUES } from '../catalog/entities/equipment-class-recommendation.entity';
+import { WIDGET_SIZES, WIDGET_TYPES } from '../catalog/layout/widget-types';
 
 /**
  * The one shape the template generator writes and the parser reads (task QIMP1).
@@ -197,6 +198,34 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       action: 'Check coolant level and clear the radiator fins', urgency: 'next_shift', estimated_hours: 1,
     },
   },
+  /**
+   * The machine page (task QREC0b) — added inside v4, not as a v5: QREC0a's bump has
+   * landed, the sheet is optional, and a workbook without it is unchanged in meaning
+   * (the class gets the computed fallback page). `since: 'v4'` still refuses it in a
+   * workbook stamped v3. Whether a widget agrees with its formula's presentation is
+   * checked at publish, once the formula is compiled; this sheet's own shape and its
+   * references are checked at validate.
+   */
+  {
+    sheet: 'layout',
+    entityKind: 'layout',
+    since: 'v4',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      { name: 'widget_key', requiredCell: true },
+      { name: 'widget_type', requiredCell: true },
+      { name: 'bound_to', requiredCell: false },
+      { name: 'title', requiredCell: false },
+      { name: 'position', requiredCell: true },
+      { name: 'size', requiredCell: true },
+    ],
+    // The example formula is a series with chart_type "line", so the chart is what it
+    // asks for; a kpi_number here would be refused at publish.
+    example: {
+      class_slug: 'diesel-generator', widget_key: 'coolant_margin', widget_type: 'kpi_chart',
+      bound_to: 'coolant_margin_c', title: 'Coolant margin', position: 1, size: 'large',
+    },
+  },
   {
     sheet: 'sensor_capability',
     entityKind: 'sensor_capability',
@@ -348,4 +377,6 @@ export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
   { field: 'formula.comparison_basis', values: COMPARISON_BASIS_VALUES },
   { field: 'formula.aggregation_window', values: AGGREGATION_WINDOW_VALUES },
   { field: 'formula.chart_type', values: CHART_TYPE_VALUES },
+  { field: 'layout.widget_type', values: [...WIDGET_TYPES] },
+  { field: 'layout.size', values: [...WIDGET_SIZES] },
 ];

@@ -7,7 +7,16 @@ import { ClientScenario } from '../entities/client-scenario.entity';
 import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
 import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
 import { fromFailureModeJsonb, severityGiven } from '../../catalog/services/class-failure-modes';
+import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
+import { ClientFormula } from '../entities/client-formula.entity';
+import { fallbackLayout, TenantLayoutWidget } from '../../catalog/layout/layout-rules';
+import { presentationOf } from '../../catalog/services/class-layout';
 import { CopyOnGrantService } from './copy-on-grant.service';
+
+const toTenantWidget = (r: ClientEquipmentClassLayout): TenantLayoutWidget => ({
+  widgetType: r.widgetType, widgetKey: r.widgetKey, boundTo: r.boundTo, title: r.title,
+  position: r.position, size: r.size, hidden: r.hidden, positionCustom: r.positionCustom,
+});
 import {
   Provenance, classContentChecksum, describeProvenance, scenarioContentChecksum,
 } from './provenance';
@@ -118,6 +127,85 @@ export class ClientCatalogService {
         severity: severityGiven(modes, f.code) ? f.severity : prior?.severity ?? null,
       });
     }));
+  }
+
+  /**
+   * The account's page layout for one class (task QREC0b). When the class was
+   * granted with no layout, the page is the computed fallback over the account's own
+   * formula copies, and says so — an editor has to know there are no rows to hide or
+   * reorder yet.
+   */
+  async layout(scope: RequestScope, slug: string): Promise<{ fallback: boolean; widgets: TenantLayoutWidget[] }> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      await this.requireClass(m, scope, slug);
+      const rows = await m.getRepository(ClientEquipmentClassLayout).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug }, order: { position: 'ASC' },
+      });
+      if (rows.length) {
+        return { fallback: false, widgets: rows.map(toTenantWidget) };
+      }
+      const formulas = await m.getRepository(ClientFormula).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, status: 'active' },
+      });
+      return {
+        fallback: true,
+        widgets: fallbackLayout(formulas.map(presentationOf)).map((w) => ({ ...w, hidden: false, positionCustom: false })),
+      };
+    });
+  }
+
+  async setWidgetHidden(scope: RequestScope, slug: string, widgetKey: string, hidden: boolean) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(ClientEquipmentClassLayout);
+      const row = await repo.findOne({ where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, widgetKey } });
+      if (!row) throw new NotFoundException(`No widget "${widgetKey}" on "${slug}" in this account.`);
+      row.hidden = hidden;
+      this.logger.log(`Tenant ${scope.tenantId} ${hidden ? 'hid' : 'showed'} "${widgetKey}" on "${slug}".`);
+      return toTenantWidget(await repo.save(row));
+    });
+  }
+
+  /**
+   * A reorder names every widget, in the order wanted — a permutation, not a patch, so
+   * there is no position left half-assigned. A widget that ends up somewhere other
+   * than where the class put it is marked custom, which is what a new class version
+   * respects instead of reverting (mergeTenantLayout).
+   */
+  async reorderLayout(scope: RequestScope, slug: string, widgetKeys: string[]) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(ClientEquipmentClassLayout);
+      const rows = await repo.find({ where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug } });
+      const have = new Set(rows.map((r) => r.widgetKey));
+      const given = new Set(widgetKeys);
+      const missing = [...have].filter((k) => !given.has(k));
+      const unknown = [...given].filter((k) => !have.has(k));
+      if (!rows.length || missing.length || unknown.length || given.size !== widgetKeys.length) {
+        throw new BadRequestException(
+          `A reorder names every widget on "${slug}" exactly once.`
+            + (missing.length ? ` Missing: ${missing.join(', ')}.` : '')
+            + (unknown.length ? ` Not on this page: ${unknown.join(', ')}.` : '')
+            + (given.size !== widgetKeys.length ? ' A widget is named twice.' : ''),
+        );
+      }
+      const byKey = new Map(rows.map((r) => [r.widgetKey, r]));
+      widgetKeys.forEach((key, i) => {
+        const row = byKey.get(key)!;
+        if (row.position !== i + 1) {
+          row.position = i + 1;
+          row.positionCustom = true;
+        }
+      });
+      // Saved in one transaction; uq_client_layout_position is deferred to commit, so
+      // a swap passing through a duplicate position mid-save is not refused.
+      await repo.save(rows);
+      this.logger.log(`Tenant ${scope.tenantId} reordered the "${slug}" page.`);
+      return rows.sort((a, b) => a.position - b.position).map(toTenantWidget);
+    });
+  }
+
+  private async requireClass(m: EntityManager, scope: RequestScope, slug: string): Promise<void> {
+    const found = await m.getRepository(ClientEquipmentClass).count({ where: { tenantId: scope.tenantId, slug } });
+    if (!found) throw new NotFoundException(`No equipment class "${slug}" in this account.`);
   }
 
   async scenarios(scope: RequestScope, classSlug?: string): Promise<ClientScenario[]> {

@@ -62,6 +62,9 @@ import { EquipmentClassFailureMode } from '../catalog/entities/equipment-class-f
 import { EquipmentClassRecommendation } from '../catalog/entities/equipment-class-recommendation.entity';
 import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
 import { ClientEquipmentClassRecommendation } from '../client-catalog/entities/client-equipment-class-recommendation.entity';
+import { EquipmentClassLayout } from '../catalog/entities/equipment-class-layout.entity';
+import { SiteClass, SiteClassLayout } from '../catalog/entities/site-class.entity';
+import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-equipment-class-layout.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema Ã¢â‚¬â€
@@ -134,6 +137,10 @@ export const ENTITIES = [
   EquipmentClassRecommendation,
   ClientEquipmentClassFailureMode,
   ClientEquipmentClassRecommendation,
+  EquipmentClassLayout,
+  ClientEquipmentClassLayout,
+  SiteClass,
+  SiteClassLayout,
 ];
 
 export interface DataSourceChoices {

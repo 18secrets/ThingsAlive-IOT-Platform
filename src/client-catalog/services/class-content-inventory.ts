@@ -43,6 +43,23 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   // client_equipment_class_recommendation.
   { table: 'equipment_class_failure_mode', disposition: 'copy' },
   { table: 'equipment_class_recommendation', disposition: 'copy' },
+  // Task QREC0b: the machine page. Copied to client_equipment_class_layout, where the
+  // tenant may hide a widget and reorder.
+  { table: 'equipment_class_layout', disposition: 'copy' },
+  // Not found by the audit query — site_class_layout keys on site_class_slug, not
+  // class_slug — and that is exactly the case this inventory exists for. QREC0b's
+  // prompt first listed it as `copy`; the audit is what showed nothing copies it.
+  // Recorded here as a decision rather than left silently absent.
+  {
+    table: 'site_class', disposition: 'exclude',
+    reason: 'platform-owned and read directly (resolveSiteClass); nothing grants a site class to a tenant, '
+      + 'so there is no copy to make — the same shape as causal_chain',
+  },
+  {
+    table: 'site_class_layout', disposition: 'exclude',
+    reason: 'the site page, read directly by (site_class_slug, class_version); a tenant hide/reorder for '
+      + 'site pages waits for QPAGE1, and a copy no code performs would be a claim, not a disposition',
+  },
 
   // Platform-wide specifications, read directly by (class_slug[, class_version])
   // at the point of use. Nothing about either varies per tenant, so there is
