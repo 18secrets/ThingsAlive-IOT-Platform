@@ -54,4 +54,15 @@ export class EquipmentClassSensorRequirement {
    * stale". See `resolveStaleAfterSeconds` in `signal-freshness.ts`. */
   @Column({ name: 'stale_after_seconds', type: 'int', nullable: true })
   staleAfterSeconds: number | null;
+
+  /** D40: whether this signal is worth forecasting. False unless an author says so —
+   * this flag, not the model, is what keeps QML1 affordable (task QREC0a; the
+   * arithmetic is in the column comment, `1758100000000-LibraryContent.ts`). */
+  @Column({ name: 'forecast_enabled', type: 'boolean', default: false })
+  forecastEnabled: boolean;
+
+  /** Only with forecastEnabled — a horizon on a signal nobody forecasts is refused by
+   * `ck_sensor_requirement_forecast_horizon`. */
+  @Column({ name: 'forecast_horizon_hours', type: 'int', nullable: true })
+  forecastHorizonHours: number | null;
 }

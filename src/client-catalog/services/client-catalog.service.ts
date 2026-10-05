@@ -4,6 +4,9 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
+import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
+import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
+import { fromFailureModeJsonb, severityGiven } from '../../catalog/services/class-failure-modes';
 import { CopyOnGrantService } from './copy-on-grant.service';
 import {
   Provenance, classContentChecksum, describeProvenance, scenarioContentChecksum,
@@ -73,8 +76,48 @@ export class ClientCatalogService {
       // would make the divergence signal say whatever they wanted it to say.
       Object.assign(row, edit, { updatedBy: scope.userId });
       this.logger.log(`Tenant ${scope.tenantId} edited class "${slug}" (by ${scope.userId}).`);
-      return repo.save(row);
+      const saved = await repo.save(row);
+      if (edit.failureModes) await this.replaceFailureModes(m, scope.tenantId, slug, edit.failureModes);
+      return saved;
     });
+  }
+
+  /**
+   * The rows are what is read (task QREC0a); the jsonb edit above is still applied,
+   * deprecated, so the two never disagree. A failure mode one of the tenant's own
+   * recommendations still points at cannot be removed — refused naming both, rather
+   * than left to the foreign key's constraint name.
+   */
+  private async replaceFailureModes(
+    m: EntityManager, tenantId: string, slug: string, modes: ClientEquipmentClass['failureModes'],
+  ): Promise<void> {
+    const repo = m.getRepository(ClientEquipmentClassFailureMode);
+    const existing = await repo.find({ where: { tenantId, clientEquipmentClassSlug: slug } });
+    const wanted = new Map(fromFailureModeJsonb(modes).map((f) => [f.code, f]));
+    const removed = existing.filter((r) => !wanted.has(r.code));
+    if (removed.length) {
+      const recs = await m.getRepository(ClientEquipmentClassRecommendation).find({
+        where: { tenantId, clientEquipmentClassSlug: slug },
+      });
+      const blocked = recs.filter((r) => removed.some((f) => f.code === r.failureModeCode));
+      if (blocked.length) {
+        throw new BadRequestException(
+          blocked.map((r) => `Recommendation "${r.action}" points at failure mode "${r.failureModeCode}"`).join('; ')
+            + '. Remove or repoint the recommendation before removing the failure mode.',
+        );
+      }
+      await repo.remove(removed);
+    }
+    const byCode = new Map(existing.map((r) => [r.code, r]));
+    await repo.save([...wanted.values()].map((f) => {
+      const prior = byCode.get(f.code);
+      return repo.create({
+        ...(prior ?? { tenantId, clientEquipmentClassSlug: slug }), ...f,
+        // The edit speaks the jsonb shape, which has no severity: an edit that does
+        // not mention one keeps the copied one rather than erasing it.
+        severity: severityGiven(modes, f.code) ? f.severity : prior?.severity ?? null,
+      });
+    }));
   }
 
   async scenarios(scope: RequestScope, classSlug?: string): Promise<ClientScenario[]> {
