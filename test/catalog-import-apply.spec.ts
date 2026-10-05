@@ -101,7 +101,8 @@ describeDb('catalog import: apply', () => {
     ]);
     expect(cls.failureModes).toEqual([{
       code: 'overheat', name: 'Overheating', symptom: 'High coolant temperature, reduced power',
-      signals: ['coolant_temp_c', 'oil_pressure_kpa'],
+      // One signal since template v4 (QREC0a) — see template-schema.ts.
+      signals: ['coolant_temp_c'],
     }]);
     expect(cls.defaultThresholds).toEqual({ coolant_temp_c: { max: 105, unit: 'degC', severity: 'critical' } });
 

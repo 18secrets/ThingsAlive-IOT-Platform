@@ -38,6 +38,11 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   },
   // Fixed by this task (QGRANT0 §1) — the gap that started the audit.
   { table: 'equipment_class_formula', disposition: 'copy' },
+  // Task QREC0a: what was the profile's failure_modes jsonb, and the recommendations
+  // that point at it. Copied to client_equipment_class_failure_mode and
+  // client_equipment_class_recommendation.
+  { table: 'equipment_class_failure_mode', disposition: 'copy' },
+  { table: 'equipment_class_recommendation', disposition: 'copy' },
 
   // Platform-wide specifications, read directly by (class_slug[, class_version])
   // at the point of use. Nothing about either varies per tenant, so there is

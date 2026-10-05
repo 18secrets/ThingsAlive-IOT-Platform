@@ -4,7 +4,7 @@ import { Workbook, Worksheet } from 'exceljs';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow, CatalogImportRowStatus } from '../entities/catalog-import-row.entity';
-import { CONTENT_SHEETS, META_SHEET, SheetSchema, TEMPLATE_VERSION } from '../template-schema';
+import { ACCEPTED_TEMPLATE_VERSIONS, CONTENT_SHEETS, META_SHEET, SheetSchema, TEMPLATE_VERSION } from '../template-schema';
 
 /** A whole-workbook refusal: the file never resolves to a batch or any staged row. */
 export class CatalogImportRefusal extends Error {}
@@ -53,7 +53,7 @@ export class WorkbookParserService {
     await workbook.xlsx.load(buffer as any);
 
     const templateVersion = this.readMeta(workbook);
-    const staged = this.readContentSheets(workbook);
+    const staged = this.readContentSheets(workbook, templateVersion);
 
     return this.ds.transaction(async (m) => {
       const batchRepo = m.getRepository(CatalogImportBatch);
@@ -86,22 +86,34 @@ export class WorkbookParserService {
     const dataRow = sheet.getRow(2);
     const idx = colIndexByName.get('template_version');
     const templateVersion = idx ? cellToString(dataRow.getCell(idx).value) : '';
-    if (templateVersion !== TEMPLATE_VERSION) {
+    // v3 is still read (task QREC0a): v4 only added optional columns and one sheet,
+    // so nothing a v3 column says has changed meaning. v1 and v2 are still refused.
+    if (!ACCEPTED_TEMPLATE_VERSIONS.includes(templateVersion)) {
       throw new CatalogImportRefusal(
-        `Unknown template_version "${templateVersion || '(blank)'}". This importer reads "${TEMPLATE_VERSION}".`,
+        `Unknown template_version "${templateVersion || '(blank)'}". This importer reads "${TEMPLATE_VERSION}"`
+          + ` (and ${ACCEPTED_TEMPLATE_VERSIONS.filter((v) => v !== TEMPLATE_VERSION).map((v) => `"${v}"`).join(', ')}).`,
       );
     }
     return templateVersion;
   }
 
-  private readContentSheets(workbook: Workbook): StagedRow[] {
+  private readContentSheets(workbook: Workbook, templateVersion: string): StagedRow[] {
     const staged: StagedRow[] = [];
 
     for (const schema of CONTENT_SHEETS) {
       const sheet = workbook.getWorksheet(schema.sheet);
       if (!sheet) continue; // a sheet with nothing to say for it is not an error
 
-      const colIndexByName = this.readHeader(sheet, schema);
+      // A v3 workbook with a v4 sheet or column is claiming a shape it does not
+      // have — refused whole, the same as any other header that is not the template's.
+      if (schema.since && templateVersion !== schema.since) {
+        throw new CatalogImportRefusal(
+          `Sheet "${schema.sheet}" is a ${schema.since} sheet, but this workbook declares template_version `
+            + `"${templateVersion}".`,
+        );
+      }
+
+      const colIndexByName = this.readHeader(sheet, schema, templateVersion);
       const lastRowNumber = sheet.lastRow?.number ?? 1;
 
       for (let rowNumber = 2; rowNumber <= lastRowNumber; rowNumber += 1) {
@@ -157,14 +169,23 @@ export class WorkbookParserService {
    * the column nobody put in the header. A missing optional column is fine; its cells
    * simply read as blank.
    */
-  private readHeader(sheet: Worksheet, schema: Pick<SheetSchema, 'sheet' | 'columns'>): Map<string, number> {
-    const known = new Set(schema.columns.map((c) => c.name));
+  private readHeader(
+    sheet: Worksheet, schema: Pick<SheetSchema, 'sheet' | 'columns'>, templateVersion = TEMPLATE_VERSION,
+  ): Map<string, number> {
+    const known = new Map(schema.columns.map((c) => [c.name, c]));
     const colIndexByName = new Map<string, number>();
     sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
       const name = cellToString(cell.value);
       if (!name) return;
-      if (!known.has(name)) {
+      const col = known.get(name);
+      if (!col) {
         throw new CatalogImportRefusal(`Unknown column "${name}" in sheet "${schema.sheet}".`);
+      }
+      if (col.since && col.since !== templateVersion) {
+        throw new CatalogImportRefusal(
+          `Column "${name}" in sheet "${schema.sheet}" is a ${col.since} column, but this workbook declares `
+            + `template_version "${templateVersion}".`,
+        );
       }
       colIndexByName.set(name, colNumber);
     });

@@ -61,6 +61,10 @@ export class EquipmentClassProfile {
   /**
    * Written by someone who knows the machines (task P1-02), not inferred from data.
    * A failure mode nobody in the field recognises produces alerts nobody acts on.
+   *
+   * Deprecated by task QREC0a: still written, never read. `equipment_class_failure_mode`
+   * is the source — a recommendation needs a row to point at. Kept until QREC0c so a
+   * conversion that turns out wrong has a way back.
    */
   @Column({ name: 'failure_modes', type: 'jsonb', default: () => `'[]'::jsonb` })
   failureModes: FailureMode[];

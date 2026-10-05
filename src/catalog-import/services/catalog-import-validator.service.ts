@@ -6,7 +6,11 @@ import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-pr
 import { NamedFormula } from '../../catalog/entities/named-formula.entity';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
-import { CRITICALITY_VALUES, ENABLES_VALUES, FORMULA_KIND_VALUES } from '../template-schema';
+import { loadFailureModes } from '../../catalog/services/class-failure-modes';
+import {
+  AGGREGATION_WINDOW_VALUES, CHART_TYPE_VALUES, COMPARISON_BASIS_VALUES, CRITICALITY_VALUES, ENABLES_VALUES,
+  FORMULA_KIND_VALUES, SEVERITY_VALUES, TARGET_DIRECTION_VALUES, URGENCY_VALUES,
+} from '../template-schema';
 import { analyzeSensorCapability } from './sensor-review';
 
 /**
@@ -37,6 +41,89 @@ const classSlugOf = (row: CatalogImportRow): string | undefined => {
   return typeof v === 'string' && v ? v : undefined;
 };
 
+const cell = (row: CatalogImportRow, column: string): string => {
+  const v = row.payload[column];
+  return typeof v === 'string' ? v.trim() : '';
+};
+
+const positiveInteger = (value: string): boolean => /^\d+$/.test(value) && Number(value) > 0;
+
+/**
+ * stale_after_seconds and the forecast declaration (template v4, task QREC0a) are
+ * settings on the sensor_requirement row, and a signal row with a blank criticality
+ * writes no requirement row (class-content.ts) — so the setting would land nowhere.
+ * Refused, naming the row, because a setting that silently writes nowhere is worse
+ * than a refusal.
+ */
+function requirementSettingsProblem(r: CatalogImportRow): string | null {
+  const stale = cell(r, 'stale_after_seconds');
+  const horizon = cell(r, 'forecast_horizon_hours');
+  const forecast = r.payload.forecast_enabled === true;
+  const set = [stale && 'stale_after_seconds', forecast && 'forecast_enabled', horizon && 'forecast_horizon_hours']
+    .filter(Boolean) as string[];
+  if (set.length && !cell(r, 'criticality')) {
+    return `${set.map((c) => `"${c}"`).join(', ')} ${set.length > 1 ? 'are' : 'is'} set, but "criticality" is blank, `
+      + 'so this row writes no sensor requirement for the setting to live on.';
+  }
+  if (stale && !positiveInteger(stale)) return `"stale_after_seconds" must be a whole number of seconds above 0.`;
+  if (horizon && !forecast) {
+    return '"forecast_horizon_hours" is set but "forecast_enabled" is not — a horizon on a signal nobody forecasts '
+      + 'does nothing.';
+  }
+  if (horizon && !positiveInteger(horizon)) return `"forecast_horizon_hours" must be a whole number of hours above 0.`;
+  return null;
+}
+
+/** No snake_case rule on `code` here, for the reason in
+ * 1758100000000-LibraryContent.ts: the seeded catalog's own codes are not snake_case. */
+function failureModeProblem(r: CatalogImportRow): string | null {
+  const severity = cell(r, 'severity');
+  if (severity && !SEVERITY_VALUES.includes(severity)) return `"${severity}" is not a valid severity.`;
+  return null;
+}
+
+function recommendationShapeProblem(r: CatalogImportRow): string | null {
+  const urgency = cell(r, 'urgency');
+  if (!URGENCY_VALUES.includes(urgency)) {
+    return `"${urgency}" is not a valid urgency (${URGENCY_VALUES.join(', ')}).`;
+  }
+  const hours = cell(r, 'estimated_hours');
+  if (hours && !(Number.isFinite(Number(hours)) && Number(hours) >= 0)) {
+    return `"estimated_hours" must be a number of hours, 0 or more.`;
+  }
+  return null;
+}
+
+/**
+ * The KPI presentation columns (template v4) against the CHECK constraints QCE1
+ * already put on equipment_class_formula — restated so the author gets a row number
+ * and a sentence instead of a constraint name at apply. aggregation_window in
+ * particular: a window QCE2's evaluator would reject is refused here, not
+ * discovered on a page.
+ */
+function formulaPresentationProblem(r: CatalogImportRow): string | null {
+  const enums: [string, string[]][] = [
+    ['target_direction', TARGET_DIRECTION_VALUES], ['comparison_basis', COMPARISON_BASIS_VALUES],
+    ['aggregation_window', AGGREGATION_WINDOW_VALUES], ['chart_type', CHART_TYPE_VALUES],
+  ];
+  for (const [column, values] of enums) {
+    const v = cell(r, column);
+    if (v && !values.includes(v)) return `"${v}" is not a valid ${column} (${values.join(', ')}).`;
+  }
+  for (const column of ['target_value', 'target_min', 'target_max']) {
+    const v = cell(r, column);
+    if (v && !Number.isFinite(Number(v))) return `"${column}" must be a number.`;
+  }
+  const direction = cell(r, 'target_direction');
+  if (direction === 'band' && (!cell(r, 'target_min') || !cell(r, 'target_max'))) {
+    return 'target_direction "band" needs both "target_min" and "target_max".';
+  }
+  if ((direction === 'higher_better' || direction === 'lower_better') && !cell(r, 'target_value')) {
+    return `target_direction "${direction}" needs a "target_value" to be ${direction === 'higher_better' ? 'above' : 'below'}.`;
+  }
+  return null;
+}
+
 /** The natural key duplicate rows within one batch collide on, per sheet. */
 function duplicateKey(row: CatalogImportRow): string | null {
   const p = row.payload;
@@ -48,6 +135,7 @@ function duplicateKey(row: CatalogImportRow): string | null {
     // identical-vs-conflicting, handled by analyzeSensorCapability, not this
     // generic "any repeat is a rejection" check.
     case 'formula': return `${p.class_slug}::${p.formula_key}`;
+    case 'recommendation': return `${p.class_slug}::${p.failure_mode_code}::${p.action}`;
     default: return null;
   }
 }
@@ -226,7 +314,58 @@ export class CatalogImportValidatorService {
           const kind = r.payload.kind;
           if (!FORMULA_KIND_VALUES.includes(kind as string)) {
             invalidate(r, `formula row ${r.rowNumber}: "${kind}" is not a valid kind.`);
+            continue;
           }
+          const problem = formulaPresentationProblem(r);
+          if (problem) invalidate(r, `formula row ${r.rowNumber}: ${problem}`);
+        } else if (r.sheet === 'failure_mode') {
+          const problem = failureModeProblem(r);
+          if (problem) invalidate(r, `failure_mode row ${r.rowNumber}: ${problem}`);
+        } else if (r.sheet === 'recommendation') {
+          const problem = recommendationShapeProblem(r);
+          if (problem) invalidate(r, `recommendation row ${r.rowNumber}: ${problem}`);
+        }
+        if (r.sheet === 'signal' && live(r)) {
+          const problem = requirementSettingsProblem(r);
+          if (problem) invalidate(r, `signal row ${r.rowNumber}: ${problem}`);
+        }
+      }
+
+      // ------------------------------------------- recommendation -> failure mode
+      // Must name a failure mode on the same class version — the version this batch
+      // would write. If the batch carries any valid failure_mode rows for the class,
+      // those replace the class's failure modes wholesale at apply, so they are the
+      // set; otherwise the class's current failure modes are inherited, so those are.
+      // Refused here, naming both, so the person gets a row number; the foreign key
+      // behind it would refuse the same thing with only a constraint name.
+      const batchModeCodes = new Map<string, Set<string>>();
+      for (const r of candidates) {
+        if (r.sheet !== 'failure_mode' || !live(r)) continue;
+        const slug = String(r.payload.class_slug);
+        const set = batchModeCodes.get(slug) ?? new Set<string>();
+        set.add(String(r.payload.code));
+        batchModeCodes.set(slug, set);
+      }
+      const catalogModeCodes = new Map<string, Set<string>>();
+      for (const r of candidates) {
+        if (r.sheet !== 'recommendation' || !live(r)) continue;
+        const slug = String(r.payload.class_slug);
+        let codes = batchModeCodes.get(slug);
+        if (!codes) {
+          if (!catalogModeCodes.has(slug)) {
+            const latest = latestExisting(slug);
+            const modes = latest ? await loadFailureModes(m, slug, latest.version) : [];
+            catalogModeCodes.set(slug, new Set(modes.map((f) => f.code)));
+          }
+          codes = catalogModeCodes.get(slug)!;
+        }
+        const code = String(r.payload.failure_mode_code);
+        if (!codes.has(code)) {
+          invalidate(
+            r,
+            `recommendation row ${r.rowNumber}: "${r.payload.action}" names failure mode "${code}", which class `
+              + `"${slug}" does not have in the version this batch would write.`,
+          );
         }
       }
 
@@ -331,9 +470,15 @@ export class CatalogImportValidatorService {
         const results = compileClassFormulas({
           classSlug: slug,
           expectedSignals: declaredSignalsFor(slug),
+          // A v4 row can declare display_unit and chart_type (task QREC0a), so both
+          // are checked against the compiler's inference here — at the row, with its
+          // number — and again at publish. A blank cell, and every v3 row, declares
+          // nothing and is checked against nothing.
           formulas: formulaRows.map((r) => ({
             formulaKey: String(r.payload.formula_key ?? ''),
             expression: String(r.payload.expression ?? ''),
+            declaredDisplayUnit: (r.payload.display_unit as string | undefined)?.trim() || null,
+            declaredChartType: (r.payload.chart_type as string | undefined)?.trim() || null,
           })),
         });
         for (const r of formulaRows) {

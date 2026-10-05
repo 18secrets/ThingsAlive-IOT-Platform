@@ -9,6 +9,11 @@ import { withTenantId } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientFormula } from '../entities/client-formula.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
+import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
+import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
+import {
+  loadFailureModes, loadRecommendations, toFailureModeJsonb,
+} from '../../catalog/services/class-failure-modes';
 import { alertRuleContentChecksum, classContentChecksum, scenarioContentChecksum } from './provenance';
 
 export interface CopyResult {
@@ -17,6 +22,8 @@ export interface CopyResult {
   scenariosCopied: number;
   alertRulesCopied: number;
   formulasCopied: number;
+  failureModesCopied: number;
+  recommendationsCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -57,6 +64,9 @@ export class CopyOnGrantService {
     const scenarios = await this.latestPublishedScenarios(templateSlug);
     const alertTemplates = await this.latestPublishedAlertTemplates(templateSlug);
     const formulas = await this.latestPublishedFormulas(templateSlug, template.version);
+    // Rows, never the deprecated jsonb (task QREC0a) — the same version being granted.
+    const failureModes = await loadFailureModes(this.ds.manager, templateSlug, template.version);
+    const recommendations = await loadRecommendations(this.ds.manager, templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
@@ -85,6 +95,8 @@ export class CopyOnGrantService {
           scenariosCopied: 0,
           alertRulesCopied: 0,
           formulasCopied: 0,
+          failureModesCopied: 0,
+          recommendationsCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -96,11 +108,17 @@ export class CopyOnGrantService {
         description: template.description,
         category: template.category,
         expectedSignals: template.expectedSignals,
-        failureModes: template.failureModes,
+        // Deprecated, still populated (task QREC0a) — from the rows, so the jsonb and
+        // client_equipment_class_failure_mode cannot start out disagreeing.
+        failureModes: toFailureModeJsonb(failureModes),
         defaultThresholds: template.defaultThresholds,
         templateSlug: template.slug,
         templateVersion: template.version,
-        templateChecksum: classContentChecksum(template),
+        // Hashed over what this copy actually holds, not the template's own jsonb —
+        // the rows come back ordered by code, which need not be the jsonb's order,
+        // and a checksum taken over one and compared against the other would call
+        // every copy edited the moment it was written.
+        templateChecksum: classContentChecksum({ ...template, failureModes: toFailureModeJsonb(failureModes) }),
         copiedAt: now,
         status: 'active',
         updatedBy: copiedBy,
@@ -212,9 +230,29 @@ export class CopyOnGrantService {
         formulasCopied += 1;
       }
 
+      // Failure modes, then the recommendations that point at them (task QREC0a) —
+      // in that order because the tenant copy carries the same foreign key the
+      // platform row does. Copied whole: this branch only runs for a class the
+      // tenant did not already hold, so there is no earlier copy to merge with.
+      const clientModes = m.getRepository(ClientEquipmentClassFailureMode);
+      if (failureModes.length) {
+        await clientModes.save(failureModes.map((f) => clientModes.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...f,
+          templateVersion: template.version, copiedAt: now,
+        })));
+      }
+      const clientRecommendations = m.getRepository(ClientEquipmentClassRecommendation);
+      if (recommendations.length) {
+        await clientRecommendations.save(recommendations.map((r) => clientRecommendations.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...r,
+          templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
       this.logger.log(
         `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
-        + `${rulesCopied} alert rule(s) and ${formulasCopied} formula(s) to tenant ${tenantId}.`,
+        + `${rulesCopied} alert rule(s), ${formulasCopied} formula(s), ${failureModes.length} failure mode(s) `
+        + `and ${recommendations.length} recommendation(s) to tenant ${tenantId}.`,
       );
       return {
         classSlug: template.slug,
@@ -222,6 +260,8 @@ export class CopyOnGrantService {
         scenariosCopied: copied,
         alertRulesCopied: rulesCopied,
         formulasCopied,
+        failureModesCopied: failureModes.length,
+        recommendationsCopied: recommendations.length,
         alreadyPresent: false,
       };
     });

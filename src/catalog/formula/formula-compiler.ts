@@ -46,6 +46,9 @@ export interface FormulaInput {
    * where `equipment_class_formula.result_kind` / `display_unit` do. */
   declaredResultKind?: ValueKind;
   declaredDisplayUnit?: string | null;
+  /** Checked against the inferred kind (task QREC0a): `line` plots a value over
+   * time, and a scalar has no time axis to plot. */
+  declaredChartType?: string | null;
 }
 
 export interface CompiledFormula {
@@ -82,6 +85,7 @@ export interface CompileFormulaInput {
   expectedSignals: DeclaredSignal[];
   declaredResultKind?: ValueKind;
   declaredDisplayUnit?: string | null;
+  declaredChartType?: string | null;
   /** Other formulas in the same class+version, for `#ref` resolution. Omit if this
    * formula has none — a `#ref` with no siblings supplied is refused as unknown,
    * same as a `#ref` to a key genuinely absent from the class. */
@@ -237,6 +241,7 @@ export function compileFormula(input: CompileFormulaInput): CompiledFormula {
         expression: input.expression,
         declaredResultKind: input.declaredResultKind,
         declaredDisplayUnit: input.declaredDisplayUnit,
+        declaredChartType: input.declaredChartType,
       },
     ],
   });
@@ -272,9 +277,17 @@ function compileOne(f: FormulaInput, raw: RawNode, ctx: InferContext): InternalC
       if (!unitsEqual(inferredUnit, declaredUnit)) {
         throw new FormulaCompileError(
           `formula "${f.formulaKey}": declared display_unit "${f.declaredDisplayUnit}" `
-            + `does not match the inferred unit "${plan.unit}".`,
+            + `does not match the inferred unit "${plan.unit}". No unit conversion exists in the `
+            + 'platform (QCE3: a dimension is its unit), so display_unit must equal the compiled unit.',
         );
       }
+    }
+
+    if (f.declaredChartType === 'line' && plan.kind === 'scalar') {
+      throw new FormulaCompileError(
+        `formula "${f.formulaKey}": chart_type "line" plots a value over time, but this formula is `
+          + 'scalar — one number, no time axis. Use "number" or "gauge".',
+      );
     }
 
     const expansion = computeExpansion(plan, ctx.resolved);
