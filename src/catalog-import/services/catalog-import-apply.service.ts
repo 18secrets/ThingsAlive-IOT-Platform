@@ -1,3 +1,4 @@
+import { retiredSignalProblems, rethrowSensorContentError } from '../../device-catalog/services/sensor-retirement';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
@@ -69,6 +70,11 @@ export class CatalogImportApplyService {
       const validRows = rows.filter((r) => r.status === 'valid');
       const invalidRows = rows.filter((r) => r.status === 'invalid');
 
+      const signalProblems = await retiredSignalProblems(m, validRows.filter((r) => r.sheet === 'signal').map((r) => ({
+        signal: String(r.payload.signal ?? ''), unit: String(r.payload.unit ?? ''),
+      })));
+      if (signalProblems.length) throw new BadRequestException(signalProblems.join(' '));
+
       const bySlug = new Map<string, CatalogImportRow[]>();
       for (const r of validRows) {
         if (r.sheet === 'sensor_capability') continue;
@@ -112,6 +118,8 @@ export class CatalogImportApplyService {
       const sensorAnalysis = capabilityRowsAll.length
         ? await analyzeSensorCapability(m, capabilityRowsAll, signalRowsAll)
         : EMPTY_SENSOR_CAPABILITY_ANALYSIS;
+      const retired = sensorAnalysis.resolutions.filter((r) => r.status === 'retired' && r.row.status === 'valid');
+      if (retired.length) throw new BadRequestException(retired.map((r) => r.message).join(' '));
       const decided = new Set(batch.sensorDecisions.map((d) => `${d.kind}::${d.slug}`));
       const outstandingSensors = sensorAnalysis.proposedSensors.filter((p) => !decided.has(`sensor::${p.slug}`));
       if (outstandingSensors.length) {
@@ -179,7 +187,7 @@ export class CatalogImportApplyService {
       await batchRepo.save(batch);
 
       return summary;
-    });
+    }).catch(rethrowSensorContentError);
   }
 
   /** One sentence per warning, naming the class and the counts — not a generic

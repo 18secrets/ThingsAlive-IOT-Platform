@@ -868,3 +868,62 @@ stays through edits. §5 tests 1, 2 (for tool mappings and capability rows), 5 a
 **Choices made:** re-creating a retired category's name is refused ("un-retire it instead") rather
 than handing back the retired row; `includeRetired` accepts `true`/`false` only; retire and
 un-retire are idempotent and keep the original who-and-when (concurrent-call test included).
+
+
+## QCAT2 completion (2026-10-05) — authorized to resolve the open implementation choices
+
+The user explicitly directed implementation without waiting for Deepak. This supersedes
+Stream A ownership restrictions for the retirement integration in `catalog-import` and
+`catalog`. No frontend, production data, or deployment changes are included.
+
+Decisions implemented:
+
+- Explicit workbook sensor references resolve by the existing slug/name rules, then reject
+  retired sensors with `sensor_retired`, their name and retirement date. Dependent signal
+  rows are invalidated too. Retired entries are not proposed as replacement sensors.
+- API class signals resolve through `sensor_role_capability.measurement_role`, with matching
+  canonical unit (or a legacy null capability unit). If all matching sensors are retired,
+  new use is refused. A live alternative is sufficient. Signals with no capability mapping
+  remain supported: requiring a fully populated catalog is a separate compatibility change.
+- Existing published classes and tenant copies remain untouched. Draft edits preserve
+  unchanged roles; creating a new version or publishing rechecks all its signals.
+- Apply rechecks retirement after validation. The same database function validates API and
+  workbook signals. Triggers hold sensor row locks until content writes commit, preventing
+  retirement from slipping between validation and insertion. Existing mapping references
+  remain valid; new mappings and capability relationships require a live sensor.
+- DELETE `/api/v1/device-catalog/sensors/:id` and `/categories/:id` return 204 on success,
+  404 if absent, or 400 with each failing reference count. Both require
+  `device-catalog.write`, matching the existing reference-data administration routes.
+- Deletion is conservative: capability rows count as references, even without a class.
+  Therefore the capability FK's cascade cannot silently remove them through this API.
+  Class and tenant-copy counts include every version/status via measurement-role matches.
+  Other checks cover sensor instances, binding versions, JSON tool mappings, and import
+  approval provenance. Categories count all sensors, including retired ones, and approvals.
+- Correction to the earlier reference inventory: `catalog_import_batch.sensor_decisions`
+  records **slugs**, not sensor IDs. Deletion checks approved decisions by slug. Staging
+  workbook text and `target_ref` are import history, not a live sensor FK.
+- A narrow database deletion function counts across tenants using a function-local
+  `ta.bypass` setting, restores caller settings automatically, and exposes no tenant rows.
+  Only `ta_app` is granted EXECUTE; it still has no direct sensor/category DELETE grant.
+  JSON writers are serialized against deletion; reference triggers reject missing sensors
+  or approval targets when a waiting writer resumes. Locks can briefly delay catalog writes.
+
+Reference inventory: searched entity/service sensor ID/slug fields and inspected migration
+FK definitions. Covered tables: `sensor`, `sensor_category`, `sensor_role_capability`,
+`sensor_instance`, `signal_binding_version`, `equipment_class_profile`,
+`client_equipment_class`, `tool_mapping`, and `catalog_import_batch`.
+
+New migration: `1758110000000-SensorContentGuards`; previous committed migrations unchanged.
+New tests: `test/sensor-content-guards.spec.ts`, included in `test:db`.
+Development duplicate counts and QCE5 content verification still require actual Development
+access/content; no counts or equipment parameter values have been invented.
+
+Verification: isolated baseline snapshot `94c1890` passed 1,059 tests. Completed branch
+passes 1,085 tests across 73 suites; `test:db` passes 337 tests across 29 suites (26 new
+cases), with no skips. Build, TypeScript lint, migration source/compiled count, and
+`git diff --check` pass. Tests used disposable local PostgreSQL 14. Full migration chain
+runs from empty; the new migration's named rollback/reapply test preserves seeded rows.
+Deterministic races observe the competing connection waiting on a database lock before
+releasing the first transaction, including an in-flight approval versus deletion.
+Fetched `origin/main` remains `b1d20b8`; `1758110000000` is above its newest migration
+(`1758090000000`) and this branch's existing retirement migration (`1758100000000`).

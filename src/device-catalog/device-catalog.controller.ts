@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested,
@@ -132,6 +132,22 @@ export class DeviceCatalogController {
   @ApiOperation({ summary: 'Return a retired sensor to the picker. Refused if its category is retired' })
   unretireSensor(@Param('id') id: string) {
     return this.catalog.unretireSensor(id);
+  }
+
+  @Delete('sensors/:id')
+  @HttpCode(204)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Delete an unused sensor; refuses with reference counts' })
+  deleteSensor(@Param('id') id: string) {
+    return this.catalog.deleteSensor(id);
+  }
+
+  @Delete('categories/:id')
+  @HttpCode(204)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Delete an empty, unreferenced sensor category' })
+  deleteCategory(@Param('id') id: string) {
+    return this.catalog.deleteCategory(id);
   }
 
   @Get('tool-mappings')

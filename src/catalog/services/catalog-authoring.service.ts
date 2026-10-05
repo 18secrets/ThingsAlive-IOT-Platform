@@ -1,3 +1,4 @@
+import { retiredSignalProblems, rethrowSensorContentError } from '../../device-catalog/services/sensor-retirement';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -61,9 +62,9 @@ export class CatalogAuthoringService {
     if (await this.classes.findOne({ where: { slug } })) {
       throw new BadRequestException(`Template "${slug}" already exists. Edit it to create a new version.`);
     }
-    this.requireSaneSignals(draft.expectedSignals ?? []);
+    await this.requireSaneSignals(draft.expectedSignals ?? []);
     this.logger.log(`${scope.userId} created template class "${slug}".`);
-    return this.classes.save(this.classes.create({
+    return this.saveClass(this.classes.create({
       slug, version: 1, status: 'draft', publishedAt: null,
       name: draft.name ?? slug,
       description: draft.description ?? null,
@@ -82,10 +83,11 @@ export class CatalogAuthoringService {
    */
   async editClass(scope: RequestScope, slug: string, draft: ClassDraft): Promise<EquipmentClassProfile> {
     const working = await this.workingClass(slug);
+    const previous = working.id ? working.expectedSignals : [];
     Object.assign(working, draft);
-    if (draft.expectedSignals) this.requireSaneSignals(working.expectedSignals);
+    await this.requireSaneSignals(working.expectedSignals, previous);
     this.logger.log(`${scope.userId} edited template class "${slug}" v${working.version}.`);
-    return this.classes.save(working);
+    return this.saveClass(working);
   }
 
   /**
@@ -116,6 +118,8 @@ export class CatalogAuthoringService {
     if (signalProblem) {
       throw new BadRequestException(`"${slug}" ${signalProblem}`);
     }
+
+    await this.requireSaneSignals(draft.expectedSignals);
 
     const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
     const signalUnits = new Map(draft.expectedSignals.map((s) => [s.signal, s.unit]));
@@ -240,7 +244,7 @@ export class CatalogAuthoringService {
           + `${formulas.length ? ` (${formulas.length} formula(s) compiled)` : ''}.`,
       );
       return m.getRepository(EquipmentClassProfile).save(draft);
-    });
+    }).catch(rethrowSensorContentError);
   }
 
   /**
@@ -478,14 +482,18 @@ export class CatalogAuthoringService {
     }
   }
 
-  /**
-   * The same content rules the import path enforces (task QIMP4, `content-validation.ts`)
-   * — a signal with no unit or no catalogued capability is refused here exactly as it
-   * would be in a workbook, so a value the import would reject cannot be written
-   * through this door instead.
-   */
-  private requireSaneSignals(signals: ClassDraft['expectedSignals']): void {
-    const problems = validateSignals(signals ?? []);
+  private async saveClass(row: EquipmentClassProfile): Promise<EquipmentClassProfile> {
+    try { return await this.classes.save(row); }
+    catch (error) { return rethrowSensorContentError(error); }
+  }
+
+  /** Existing draft roles remain editable; a new version or publish rechecks all
+   * roles. Uncatalogued legacy roles remain supported on both authoring paths. */
+  private async requireSaneSignals(
+    signals: ClassDraft['expectedSignals'], previous: NonNullable<ClassDraft['expectedSignals']> = [],
+  ): Promise<void> {
+    const added = (signals ?? []).filter((s) => !previous.some((p) => p.signal === s.signal && p.unit === s.unit));
+    const problems = [...validateSignals(signals ?? []), ...await retiredSignalProblems(this.classes.manager, added)];
     if (problems.length) throw new BadRequestException(problems.join(' '));
   }
 

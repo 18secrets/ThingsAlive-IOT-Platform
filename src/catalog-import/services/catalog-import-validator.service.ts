@@ -1,3 +1,4 @@
+import { retiredSignalProblems } from '../../device-catalog/services/sensor-retirement';
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { compileClassFormulas, DeclaredSignal } from '../../catalog/formula/formula-compiler';
@@ -354,12 +355,24 @@ export class CatalogImportValidatorService {
       if (capabilityRows.length) {
         const analysis = await analyzeSensorCapability(m, capabilityRows, signalRowsForUsage);
         for (const res of analysis.resolutions) {
-          if (res.status === 'not_found' || res.status === 'ambiguous' || res.status === 'conflicting') {
+          if (res.status !== 'ok') {
             invalidate(res.row, res.message!);
+            if (res.status === 'retired') {
+              for (const signalRow of signalRowsForUsage) {
+                if (signalRow.payload.signal === res.row.payload.signal) invalidate(signalRow, res.message!);
+              }
+            }
           }
           // 'ok' rows — including every row in an identical-duplicate group — are
           // left 'parsed' and fall through to 'valid' below, same as any other row.
         }
+      }
+
+      for (const r of candidates.filter((r) => r.sheet === 'signal' && live(r))) {
+        const problems = await retiredSignalProblems(m, [{
+          signal: String(r.payload.signal ?? ''), unit: String(r.payload.unit ?? ''),
+        }]);
+        if (problems.length) invalidate(r, problems.join(' '));
       }
 
       // ---------------------------------------------------------- threshold bounds

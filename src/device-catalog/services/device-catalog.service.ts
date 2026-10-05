@@ -91,6 +91,23 @@ export class DeviceCatalogService {
     return this.unretire(this.categories, 'sensor_category', 'category', id);
   }
 
+  async deleteSensor(id: string): Promise<void> {
+    return this.deleteUnused(id, false);
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    return this.deleteUnused(id, true);
+  }
+
+  private async deleteUnused(id: string, category: boolean): Promise<void> {
+    const label = category ? 'category' : 'sensor';
+    if (!UUID.test(id)) throw new NotFoundException(`No ${label} "${id}".`);
+    const [result] = await this.translateRefusal(() => this.sensors.query(
+      'SELECT delete_unused_sensor($1::uuid, $2::boolean) AS deleted', [id, category],
+    ));
+    if (!result.deleted) throw new NotFoundException(`No ${label} "${id}".`);
+  }
+
   // ---- Sensors ----------------------------------------------------------------------
 
   /**
@@ -157,7 +174,7 @@ export class DeviceCatalogService {
     try {
       return await fn();
     } catch (err) {
-      if (err instanceof QueryFailedError && /\(ck_sensor_category_(live|retire_empty)\)/.test(err.message)) {
+      if (err instanceof QueryFailedError && /\((ck_sensor_category_(live|retire_empty)|sensor_referenced|sensor_retired|sensor_reference)\)/.test(err.message)) {
         throw new BadRequestException(err.message);
       }
       if (err instanceof QueryFailedError && /invalid input syntax for type uuid/.test(err.message)) {
