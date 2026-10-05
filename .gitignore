@@ -6,6 +6,8 @@ dist/
 .devdata/
 
 # Environment — never commit a real value. See .env.example.
+# .env.test (DB_* for the isolated test database, see test/db.ts) is covered
+# by .env.* below — load it instead of .env for every test run from now on.
 .env
 .env.*
 !.env.example

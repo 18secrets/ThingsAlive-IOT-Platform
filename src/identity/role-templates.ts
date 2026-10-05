@@ -1,5 +1,6 @@
 import { Capability } from '../auth/capabilities';
 import { ScopeShape } from './entities/tenant-role.entity';
+import { TENANT_ASSIGNABLE_PAGES } from './pages';
 
 export interface RoleTemplate {
   slug: string;
@@ -37,7 +38,12 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'device.read', 'device.claim',
       'equipment-template.read', 'device-catalog.read',
     ],
-    allowedTabs: ['dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'settings'],
+    // The account's own administrator gets every page the console has, not a
+    // curated subset — "CEO/Manager" is this account's Super Admin (holds
+    // user.manage + role.manage, see AuthProvider.tsx's isSuperAdmin check on
+    // the frontend), and nothing should be hidden from the person who can
+    // already grant it to everyone else.
+    allowedTabs: [...TENANT_ASSIGNABLE_PAGES],
   },
   {
     slug: 'site-manager',
@@ -53,7 +59,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'device.read', 'device.claim',
       'equipment-template.read', 'device-catalog.read',
     ],
-    allowedTabs: ['dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'settings'],
+    allowedTabs: ['dashboard', 'ai-onboarding', 'predictions', 'admin', 'settings'],
   },
   {
     slug: 'operator',
@@ -67,7 +73,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'prediction.read', 'utilization.read', 'device.read',
       'equipment-template.read', 'device-catalog.read',
     ],
-    allowedTabs: ['dashboard', 'alert-agent', 'settings'],
+    allowedTabs: ['dashboard', 'settings'],
   },
 ];
 

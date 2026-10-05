@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { WorkflowSpec } from '../utils/workflowParser';
 import { AlertAgentView } from '../components/views/AlertAgentView';
@@ -7,15 +8,30 @@ import { WorkflowEditor } from '../components/alerts/WorkflowEditor';
 
 type View = 'list' | 'assistant' | 'workflow';
 
+interface AlertAgentNavState {
+  /** Set by Alerts' "Create alert" button (assistant) or a RuleCard's
+   *  "Edit / assign" (workflow, with workflowSpec already filled in). */
+  view?: 'assistant' | 'workflow';
+  workflowSpec?: WorkflowSpec;
+  /** Where this flow actually started — e.g. "/alerts", "/predictions", or a
+   *  Thing detail page — and so where its back arrow should return, since
+   *  neither flow passes through Alert Agent's own list. */
+  backTo?: string;
+}
+
 export const AlertAgentPage: React.FC = () => {
-  const [view, setView] = useState<View>('list');
-  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSpec | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navState = location.state as AlertAgentNavState | null;
+  const backTo = navState?.backTo;
+  const [view, setView] = useState<View>(navState?.view ?? 'list');
+  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSpec | null>(navState?.workflowSpec ?? null);
 
   usePageHeader(
     view === 'assistant'
-      ? { title: 'AI Assistant', aiIndicator: true, onBack: () => setView('list') }
+      ? { title: 'AI Assistant', aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('list') }
       : view === 'workflow'
-        ? { title: 'Work Flow', aiIndicator: true, onBack: () => setView('assistant') }
+        ? { title: 'Work Flow', aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('assistant') }
         : { title: 'Alert Agent', subtitle: 'Automated Dispatch' },
   );
 
@@ -26,8 +42,7 @@ export const AlertAgentPage: React.FC = () => {
     return (
       <WorkflowEditor
         spec={activeWorkflow}
-        onBack={() => setView('assistant')}
-        onDeploy={() => setView('list')}
+        onDeploy={() => (backTo ? navigate(backTo) : setView('list'))}
       />
     );
   }

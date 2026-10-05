@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { NavigationTab } from '../types';
 import { useAuth } from '../lib/AuthProvider';
@@ -14,10 +14,17 @@ interface ShellProps {
   onSidebarNavigate?: () => void;
 }
 
-function tabFromPath(pathname: string): NavigationTab {
+function tabFromPath(pathname: string, state: unknown): NavigationTab {
   const first = pathname.split('/')[1];
+  // Reached from Alerts/Predictions/Scenarios/a Thing detail page (Create
+  // alert, or a RuleCard's Edit/assign — see RuleBuilderPage.tsx and
+  // AlertAgentPage.tsx's nav state). Neither alert-agent nor rule-builder has
+  // its own sidebar entry, so highlight whichever tab this flow started from.
+  const backTo = (state as { backTo?: string } | null)?.backTo;
+  if ((first === 'alert-agent' || first === 'rule-builder') && backTo) return tabFromPath(backTo, null);
   const known: NavigationTab[] = [
-    'dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'client-users', 'roles', 'users', 'settings',
+    'dashboard', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
+    'admin', 'client-users', 'roles', 'users', 'settings',
   ];
   return (known as string[]).includes(first) ? (first as NavigationTab) : 'dashboard';
 }
@@ -29,7 +36,11 @@ function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeade
     case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
     case 'ai-onboarding': return { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' };
     case 'alert-agent': return { title: 'Alert Agent', subtitle: 'Automated Dispatch' };
+    case 'alerts': return { title: 'Alerts', subtitle: 'Fleet Attention Feed' };
     case 'predictions': return { title: 'Live Predictions', subtitle: 'Automated Dispatch' };
+    case 'scenarios': return { title: 'Scenarios', subtitle: 'Monitoring Workflows' };
+    case 'work-orders': return { title: 'Work Orders', subtitle: 'Maintenance Tasks' };
+    case 'cost-administration': return { title: 'Cost Administration', subtitle: 'Fuel & Maintenance Rates' };
     case 'users': return { title: 'User Management', subtitle: 'Access & Permissions' };
     case 'client-users': return { title: 'Client Users', subtitle: 'People & Access' };
     case 'roles': return { title: 'Roles & Permissions', subtitle: 'Page Access Control' };
@@ -40,20 +51,51 @@ function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeade
   }
 }
 
+const THEME_KEY = 'ta_theme';
+
+// Falls back to the OS preference on a first visit, then whatever the
+// person last chose via the header toggle.
+function initialDarkMode(): boolean {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+  } catch {
+    // localStorage unavailable (private browsing, etc.) — fall through to OS preference.
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+}
+
 export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(initialDarkMode);
   const override = usePageHeaderValue();
+  const mainRef = useRef<HTMLElement>(null);
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
+    try {
+      localStorage.setItem(THEME_KEY, isDarkMode ? 'dark' : 'light');
+    } catch {
+      // Nothing to do if storage is unavailable — the toggle still works for this session.
+    }
   }, [isDarkMode]);
+
+  // <Outlet/> only swaps the page content, not the scrollable <main> itself,
+  // so without this a new page inherits whatever scroll position the last
+  // one was left at instead of opening at the top. Keyed on location.key
+  // (unique per navigate() call) rather than pathname, so it also resets for
+  // same-path navigations with new state — e.g. RuleCard's "Edit / assign"
+  // opening a different rule while already on /rule-builder.
+  React.useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.key]);
 
   if (!authUser) return null; // RequireAuth guarantees this never renders signed out.
 
-  const currentTab = tabFromPath(location.pathname);
+  const currentTab = tabFromPath(location.pathname, location.state);
   const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin');
 
   const goToTab = (tab: NavigationTab) => {
@@ -90,7 +132,7 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
           onLogout={signOut}
         />
 
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F4F7FB] dark:bg-slate-950">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F4F7FB] dark:bg-slate-950">
           <div className="max-w-7xl mx-auto space-y-6">
             <Outlet />
           </div>

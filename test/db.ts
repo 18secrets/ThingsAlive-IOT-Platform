@@ -16,6 +16,21 @@ export const TEST_DB = {
   DB_DATABASE: process.env.DB_DATABASE ?? 'ta2_test',
 };
 
+// beforeAll in these specs runs `DROP SCHEMA public CASCADE` against whatever
+// this resolves to — catastrophic against anything but a disposable test
+// database. The fallback above is safe, but DB_DATABASE is sourced straight
+// from the environment, and loading the real app .env (DB_DATABASE=ta2)
+// before a test run silently overrides that fallback with the real dev
+// database. This happened once already. A database tests are allowed to drop
+// has "test" in its name — that is the whole guard, and it is non-negotiable.
+if (!/test/i.test(TEST_DB.DB_DATABASE)) {
+  throw new Error(
+    `Refusing to run database tests against "${TEST_DB.DB_DATABASE}" — its name doesn't contain `
+    + '"test", so it doesn\'t look disposable. Load .env.test (DB_DATABASE=ta2_test), not .env, '
+    + 'before running test:db.',
+  );
+}
+
 /**
  * Database tests need a real Postgres and are skipped without one, loudly enough
  * that a green run cannot be mistaken for a complete one. CI always sets DB_HOST.

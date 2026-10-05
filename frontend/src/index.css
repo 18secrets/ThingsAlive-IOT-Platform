@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Opts every `dark:` utility into the header's light/dark toggle (a `.dark`
+ * class on <html>, set in Shell.tsx) instead of Tailwind v4's own default of
+ * following `prefers-color-scheme` only. Without this, the toggle has no
+ * effect — see the same note that used to live on the React Flow rules below. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -78,13 +84,10 @@
 
 /*
  * React Flow (Work Flow canvas) — restyle default chrome to match the app's
- * slate/sky palette in both themes. This app's dark mode (see every `dark:`
- * Tailwind utility elsewhere) is driven by `prefers-color-scheme`, not by the
- * `.dark` class the header's light/dark toggle sets on <html> — this project's
- * Tailwind v4 setup never opts into the class strategy, so that toggle is
- * currently a no-op everywhere. These rules key off the same media query so
- * the canvas actually matches the rest of the app instead of only reacting to
- * that dead toggle.
+ * slate/sky palette in both themes, keyed off the same `.dark` class as every
+ * `dark:` Tailwind utility elsewhere (see the `@custom-variant dark` above),
+ * so the canvas follows the header's light/dark toggle instead of the OS
+ * theme.
  */
 .react-flow {
   background-color: #FFFFFF;
@@ -130,7 +133,7 @@
   overflow: hidden;
 }
 
-@media (prefers-color-scheme: dark) {
+.dark {
   .react-flow {
     background-color: #0F172A; /* slate-900 */
   }

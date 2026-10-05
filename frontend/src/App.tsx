@@ -52,7 +52,13 @@ import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
+import { AlertsPage } from './pages/AlertsPage';
+import { ThingDetailPage } from './pages/ThingDetailPage';
+import { RuleBuilderPage } from './pages/RuleBuilderPage';
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
+import { ScenariosPage } from './pages/ScenariosPage';
+import { WorkOrdersPage } from './pages/WorkOrdersPage';
+import { CostAdministrationPage } from './pages/CostAdministrationPage';
 import { UsersPage } from './pages/UsersPage';
 import { ClientUsersPage } from './pages/ClientUsersPage';
 import { RolesPage } from './pages/RolesPage';
@@ -1199,6 +1205,7 @@ function AppData() {
               />
             }
           />
+          <Route path="dashboard/:thingId" element={<ThingDetailPage />} />
 
           <Route path="admin">
             <Route index element={<AdminIndexRedirect />} />
@@ -1392,7 +1399,12 @@ function AppData() {
           />
 
           <Route path="alert-agent" element={<AlertAgentPage />} />
+          <Route path="rule-builder" element={<RuleBuilderPage />} />
+          <Route path="alerts" element={<AlertsPage />} />
           <Route path="predictions" element={<LivePredictionsPage />} />
+          <Route path="scenarios" element={<ScenariosPage />} />
+          <Route path="work-orders" element={<WorkOrdersPage />} />
+          <Route path="cost-administration" element={<CostAdministrationPage />} />
 
           <Route
             path="users"

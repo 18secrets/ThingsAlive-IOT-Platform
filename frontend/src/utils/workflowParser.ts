@@ -26,6 +26,8 @@ export interface WorkflowSpec {
   logic: 'AND' | 'OR';
   actions: WorkflowActionType[];
   sourcePrompt?: string;
+  /** FleetThing.id (see data/fleetMockData.ts) this alert applies to. */
+  equipmentId?: string;
 }
 
 // Filler and imperative words that are never a sensor name themselves —

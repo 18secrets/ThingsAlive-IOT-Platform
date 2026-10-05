@@ -1,10 +1,9 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ClientAccount, DeviceItem, EquipmentItem, OnboardingSessionItem, TemplateAlertRule } from '../types';
 import { EquipmentTemplate, Sensor } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { MasterAdminDashboard } from '../components/dashboard/MasterAdminDashboard';
-import { ClientFleetDashboard } from '../components/dashboard/ClientFleetDashboard';
+import { EnterpriseCommandCenter } from '../components/dashboard/EnterpriseCommandCenter';
 
 interface DashboardPageProps {
   clients: ClientAccount[];
@@ -26,7 +25,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   alertRules, myAlertRules, realSensors,
 }) => {
   const { authUser } = useAuth();
-  const navigate = useNavigate();
   if (!authUser) return null;
 
   if (authUser.role === 'master-admin') {
@@ -40,20 +38,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     );
   }
 
-  // Same screen as "Prediction" — a fleet overview by equipment class, not a
-  // separate concept. Doubles as the entry point into the client's own
-  // Equipment Templates (their own classes are clickable; the Master Library
-  // is reference-only here, same as on the Equipment Templates tab itself).
-  return (
-    <ClientFleetDashboard
-      masterTemplates={masterEquipmentTemplates}
-      myTemplates={myEquipmentTemplates}
-      templateSensorLinks={templateSensorLinks}
-      myTemplateSensorLinks={myTemplateSensorLinks}
-      alertRules={alertRules}
-      myAlertRules={myAlertRules}
-      allSensors={realSensors}
-      onOpenTemplate={(templateId) => navigate(`/admin/equipment-template/${templateId}`)}
-    />
-  );
+  // UI-only mock fleet view (see src/data/fleetMockData.ts) — not yet backed
+  // by the real equipment-template props this page still receives for the
+  // master-admin branch above.
+  return <EnterpriseCommandCenter />;
 };

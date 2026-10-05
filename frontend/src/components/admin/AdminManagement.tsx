@@ -214,13 +214,16 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
   // same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping and
-  // Devices are hidden for now too, by request — re-enable later. Equipment
-  // Classes is Master Admin's own screen (catalog.write, Things Alive only)
-  // and belongs in this branch, not the client one.
+  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping,
+  // Devices and Equipment Templates are hidden for now too, by request —
+  // re-enable later. Equipment Classes is Master Admin's own screen
+  // (catalog.write, Things Alive only) and belongs in this branch, not the
+  // client one.
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
-    : allSubTabs.filter((tab) => !['plant', 'equipment', 'industry', 'tool-mapping', 'devices'].includes(tab.id));
+    : allSubTabs.filter((tab) => (
+      !['plant', 'equipment', 'industry', 'tool-mapping', 'devices', 'equipment-template'].includes(tab.id)
+    ));
 
   return (
     <div id="admin-module" className="space-y-5">

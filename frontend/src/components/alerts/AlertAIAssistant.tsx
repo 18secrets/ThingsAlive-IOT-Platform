@@ -15,6 +15,7 @@ import {
   Wind,
 } from 'lucide-react';
 import { WorkflowSpec, parsePromptToWorkflow, hasConcreteConditions, mentionsSensorKeyword } from '../../utils/workflowParser';
+import { FLEET } from '../../data/fleetMockData';
 
 interface AlertAIAssistantProps {
   onGenerate: (spec: WorkflowSpec) => void;
@@ -184,11 +185,14 @@ const ItemCard: React.FC<{ item: CardItem; tag: string; tagClass: string; button
 
 export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }) => {
   const [prompt, setPrompt] = useState('');
+  const [equipmentId, setEquipmentId] = useState('');
   const [phase, setPhase] = useState<'suggest' | 'clarifying'>('suggest');
   const [searchTerm, setSearchTerm] = useState('');
+  const canAct = !!equipmentId;
 
   const runPrompt = (text: string, name?: string) => {
-    const spec = parsePromptToWorkflow(text, name);
+    if (!canAct) return;
+    const spec = { ...parsePromptToWorkflow(text, name), equipmentId };
     if (hasConcreteConditions(spec)) {
       onGenerate(spec);
     } else {
@@ -204,7 +208,8 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   };
 
   const handleCreateCustom = () => {
-    onGenerate(parsePromptToWorkflow('', `Workflow_draft-${Date.now()}`));
+    if (!canAct) return;
+    onGenerate({ ...parsePromptToWorkflow('', `Workflow_draft-${Date.now()}`), equipmentId });
   };
 
   const steps = useMemo(() => {
@@ -239,11 +244,29 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         <button
           type="button"
           onClick={handleCreateCustom}
-          className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
+          disabled={!canAct}
+          className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Create Custom
         </button>
+      </div>
+
+      {/* Equipment — required before any draft can be generated; this alert
+          always applies to exactly one Thing. */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 max-w-sm">
+        <label className="block space-y-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Equipment</span>
+          <select
+            value={equipmentId}
+            onChange={(e) => setEquipmentId(e.target.value)}
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 transition-colors"
+          >
+            <option value="">Select equipment…</option>
+            {FLEET.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+          </select>
+        </label>
+        {!canAct && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">Select a Thing before describing or generating an alert.</p>}
       </div>
 
       {/* AI Prompt + Right Panel */}
@@ -276,7 +299,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={!prompt.trim()}
+              disabled={!prompt.trim() || !canAct}
               className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -291,11 +314,12 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
               Quick Try Examples
             </div>
-            <div className="space-y-3 overflow-y-auto max-h-72 pr-1 -mr-1">
+            <div className={`space-y-3 overflow-y-auto max-h-72 pr-1 -mr-1 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
               {QUICK_EXAMPLES.map((ex) => (
                 <button
                   key={ex.text}
                   type="button"
+                  disabled={!canAct}
                   onClick={() => runPrompt(ex.text)}
                   className="w-full text-left p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50/50 dark:hover:bg-sky-950/20 transition-colors cursor-pointer"
                 >
@@ -380,7 +404,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       {filteredDrafts.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Drafts</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
             {filteredDrafts.map((d) => (
               <ItemCard
                 key={d.id}

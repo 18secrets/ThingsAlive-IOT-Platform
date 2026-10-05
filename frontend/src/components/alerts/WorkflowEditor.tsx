@@ -17,6 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { WorkflowSpec, WorkflowOperator, WorkflowActionType } from '../../utils/workflowParser';
+import { FLEET } from '../../data/fleetMockData';
 import { WorkflowFlowNode } from './workflow/WorkflowFlowNode';
 import {
   specToFlow,
@@ -31,7 +32,6 @@ import {
 
 interface WorkflowEditorProps {
   spec: WorkflowSpec;
-  onBack: () => void;
   onDeploy: (spec: WorkflowSpec) => void;
 }
 
@@ -41,8 +41,9 @@ const paletteItemByKey = new Map<string, PaletteItem>(
   PALETTE_SECTIONS.flatMap((section) => section.items).map((item) => [`${item.kind}:${item.label}`, item]),
 );
 
-const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onBack, onDeploy }) => {
+const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) => {
   const [workflowName, setWorkflowName] = useState(spec.name);
+  const [equipmentId, setEquipmentId] = useState(spec.equipmentId ?? '');
   const [statusNote, setStatusNote] = useState<{ message: string; tone: 'ok' | 'error' } | null>(null);
   const [paletteSearch, setPaletteSearch] = useState('');
 
@@ -93,12 +94,16 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onBack, onDe
   };
 
   const handleDeploy = () => {
+    if (!equipmentId) {
+      flash('Select the equipment this alert applies to', 'error');
+      return;
+    }
     const result = validateWorkflow(nodes);
     if (!result.ok) {
       flash(result.message, 'error');
       return;
     }
-    onDeploy(flowToSpec(nodes, workflowName));
+    onDeploy({ ...flowToSpec(nodes, workflowName), equipmentId });
   };
 
   const filteredSections = PALETTE_SECTIONS.map((section) => ({
@@ -110,12 +115,22 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onBack, onDe
     <div id="workflow-editor-view" className="space-y-4">
       {/* Toolbar */}
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <input
-          type="text"
-          value={workflowName}
-          onChange={(e) => setWorkflowName(e.target.value)}
-          className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-w-[260px]"
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="text"
+            value={workflowName}
+            onChange={(e) => setWorkflowName(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-w-[260px]"
+          />
+          <select
+            value={equipmentId}
+            onChange={(e) => setEquipmentId(e.target.value)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-w-[220px]"
+          >
+            <option value="">Select equipment…</option>
+            {FLEET.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+          </select>
+        </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           {statusNote && (
@@ -223,14 +238,6 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onBack, onDe
           </ReactFlow>
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={onBack}
-        className="text-xs text-slate-500 dark:text-slate-400 underline hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-      >
-        ← Back to AI Assistant
-      </button>
     </div>
   );
 };

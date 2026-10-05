@@ -2,19 +2,30 @@ export type NavigationTab =
   | 'dashboard'
   | 'ai-onboarding'
   | 'alert-agent'
+  | 'alerts'
   | 'predictions'
+  | 'scenarios'
+  | 'work-orders'
+  | 'cost-administration'
   | 'admin'
   | 'users'
   | 'settings'
   | 'client-users'
   | 'roles';
 
-// Pages a client's Super Admin can grant to a role. 'client-users' and 'roles'
-// are deliberately excluded — those are structural Super Admin capabilities,
-// never assignable to a custom role (a role can't grant the ability to manage
-// roles). 'users' (Platform Users) and 'administrator' are ThingsAlive-side
-// screens and never apply to a client role either.
-export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = ['dashboard', 'ai-onboarding', 'alert-agent', 'predictions', 'admin', 'settings'];
+// Pages a client's Super Admin can grant to a role — kept in lockstep with
+// the client sidebar (see Sidebar.tsx's allNavItems): if it's not a page a
+// client user can actually land on, it has no business being offered here.
+// 'alert-agent' is deliberately excluded — it has no sidebar entry any more
+// (see Sidebar.tsx), so granting it would offer a page nobody can navigate
+// to. 'client-users' and 'roles' are excluded for a different reason — those
+// are structural Super Admin capabilities, never assignable to a custom role
+// (a role can't grant the ability to manage roles). 'users' (Platform Users)
+// and 'administrator' are ThingsAlive-side screens and never apply to a
+// client role either.
+export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = [
+  'dashboard', 'ai-onboarding', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
+];
 
 export type UserRole = 'master-admin' | 'client';
 
