@@ -11,6 +11,9 @@ import { ClientFormula } from '../entities/client-formula.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
 import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
 import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
+import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
+import { loadLayout } from '../../catalog/services/class-layout';
+import { WidgetSize, WidgetType } from '../../catalog/layout/widget-types';
 import {
   loadFailureModes, loadRecommendations, toFailureModeJsonb,
 } from '../../catalog/services/class-failure-modes';
@@ -24,6 +27,7 @@ export interface CopyResult {
   formulasCopied: number;
   failureModesCopied: number;
   recommendationsCopied: number;
+  layoutWidgetsCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -67,6 +71,7 @@ export class CopyOnGrantService {
     // Rows, never the deprecated jsonb (task QREC0a) — the same version being granted.
     const failureModes = await loadFailureModes(this.ds.manager, templateSlug, template.version);
     const recommendations = await loadRecommendations(this.ds.manager, templateSlug, template.version);
+    const layout = await loadLayout(this.ds.manager, templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
@@ -97,6 +102,7 @@ export class CopyOnGrantService {
           formulasCopied: 0,
           failureModesCopied: 0,
           recommendationsCopied: 0,
+          layoutWidgetsCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -249,6 +255,18 @@ export class CopyOnGrantService {
         })));
       }
 
+      // The page layout (task QREC0b), as the class authored it: nothing hidden, no
+      // position customised. A class with no layout copies nothing, and the tenant's
+      // page is the same computed fallback the platform's would be.
+      const clientLayout = m.getRepository(ClientEquipmentClassLayout);
+      if (layout.length) {
+        await clientLayout.save(layout.map((w) => clientLayout.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...w,
+          widgetType: w.widgetType as WidgetType, size: w.size as WidgetSize,
+          hidden: false, positionCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
       this.logger.log(
         `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
         + `${rulesCopied} alert rule(s), ${formulasCopied} formula(s), ${failureModes.length} failure mode(s) `
@@ -262,6 +280,7 @@ export class CopyOnGrantService {
         formulasCopied,
         failureModesCopied: failureModes.length,
         recommendationsCopied: recommendations.length,
+        layoutWidgetsCopied: layout.length,
         alreadyPresent: false,
       };
     });

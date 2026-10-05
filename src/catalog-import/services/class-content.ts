@@ -13,6 +13,8 @@ import {
   FailureModeContent, RecommendationContent, loadFailureModes, loadRecommendations,
 } from '../../catalog/services/class-failure-modes';
 import { Severity } from '../../common/severity';
+import { loadLayout } from '../../catalog/services/class-layout';
+import { LayoutWidget } from '../../catalog/layout/layout-rules';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 
 export interface ThresholdEntry {
@@ -75,6 +77,8 @@ export interface ClassContent {
   defaultThresholds: Record<string, ThresholdEntry>;
   sensorRequirements: SensorRequirementContent[];
   formulas: FormulaContent[];
+  /** The machine page (task QREC0b). Empty is valid — the computed fallback applies. */
+  layout: LayoutWidget[];
 }
 
 export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -88,7 +92,7 @@ export const num = (v: unknown): number | undefined => {
 const emptyContent = (slug: string): ClassContent => ({
   name: slug, description: null, category: null, serviceIntervalHours: null,
   expectedSignals: [], failureModes: [], recommendations: [], defaultThresholds: {}, sensorRequirements: [],
-  formulas: [],
+  formulas: [], layout: [],
 });
 
 /**
@@ -103,13 +107,14 @@ export async function loadCurrentClass(
   });
   if (!current) return { current: null, content: emptyContent(slug) };
 
-  const [reqs, formulas, failureModes, recommendations] = await Promise.all([
+  const [reqs, formulas, failureModes, recommendations, layout] = await Promise.all([
     m.getRepository(EquipmentClassSensorRequirement).find({
       where: { classSlug: slug, classVersion: current.version },
     }),
     m.getRepository(EquipmentClassFormula).find({ where: { classSlug: slug, classVersion: current.version } }),
     loadFailureModes(m, slug, current.version),
     loadRecommendations(m, slug, current.version),
+    loadLayout(m, slug, current.version),
   ]);
 
   return {
@@ -133,6 +138,7 @@ export async function loadCurrentClass(
         targetDirection: f.targetDirection, comparisonBasis: f.comparisonBasis,
         aggregationWindow: f.aggregationWindow, chartType: f.chartType,
       })),
+      layout,
     },
   };
 }
@@ -156,6 +162,7 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
   const signalRows = byS('signal');
   const modeRows = byS('failure_mode');
   const recommendationRows = byS('recommendation');
+  const layoutRows = byS('layout');
   const formulaRows = byS('formula');
 
   const reqRows = signalRows.filter((r) => strOrNull(r.payload.criticality));
@@ -253,6 +260,15 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
           chartType: (strOrNull(r.payload.chart_type) ?? 'none') as FormulaChartType,
         }))
       : current.formulas,
+    // Same inheritance as every other sheet: no layout rows means "this workbook says
+    // nothing about the page", not "clear it".
+    layout: layoutRows.length
+      ? layoutRows.map((r) => ({
+          widgetType: str(r.payload.widget_type), widgetKey: str(r.payload.widget_key),
+          boundTo: strOrNull(r.payload.bound_to), title: strOrNull(r.payload.title),
+          position: num(r.payload.position) ?? 0, size: str(r.payload.size),
+        }))
+      : current.layout,
   };
 }
 
@@ -301,6 +317,7 @@ export function canonicalizeClass(content: ClassContent): string {
     serviceIntervalHours: content.serviceIntervalHours,
     expectedSignals: signals, failureModes: modes, recommendations, defaultThresholds: thresholds,
     sensorRequirements: reqs, formulas,
+    layout: [...content.layout].sort((a, b) => a.widgetKey.localeCompare(b.widgetKey)),
   });
 }
 

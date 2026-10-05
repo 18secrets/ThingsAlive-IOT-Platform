@@ -428,9 +428,9 @@ describeDb('catalog import: validation, dry-run diff, endpoints', () => {
       // sensor_capability is never nested under a class: it has no class_slug of its
       // own (a sensor is device-catalog reference data, not tied to one class), so it
       // is reported separately, in sensorCapabilities below.
-      // recommendation: template v4 (QREC0a).
+      // recommendation: template v4 (QREC0a); layout: added inside v4 (QREC0b).
       expect(entry.countsBySheet).toEqual({
-        equipment_class: 1, signal: 1, failure_mode: 1, recommendation: 1, formula: 1,
+        equipment_class: 1, signal: 1, failure_mode: 1, recommendation: 1, layout: 1, formula: 1,
       });
       expect(result.sensorCapabilities).toEqual({ valid: 1, invalid: 0 });
     });

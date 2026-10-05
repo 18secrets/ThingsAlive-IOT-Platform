@@ -67,6 +67,15 @@ export class Plant {
   @Column({ name: 'external_id', type: 'text', nullable: true })
   externalId: string | null;
 
+  /** Which site class this plant's page is (task QREC0b). Both NULL means the platform
+   * default — see `resolveSiteClass`. Never required: an existing plant has no basis
+   * for choosing one. */
+  @Column({ name: 'site_class_slug', type: 'text', nullable: true })
+  siteClassSlug: string | null;
+
+  @Column({ name: 'site_class_version', type: 'int', nullable: true })
+  siteClassVersion: number | null;
+
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;
 
