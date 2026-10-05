@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { UtilizationShift } from './entities/utilization-shift.entity';
+import { AvailabilityService } from './services/availability.service';
 import { UtilizationService } from './services/utilization.service';
 import { UtilizationController } from './utilization.controller';
 
@@ -15,7 +16,7 @@ import { UtilizationController } from './utilization.controller';
 @Module({
   imports: [TypeOrmModule.forFeature([UtilizationShift, EquipmentProfile])],
   controllers: [UtilizationController],
-  providers: [UtilizationService],
+  providers: [UtilizationService, AvailabilityService],
   exports: [UtilizationService],
 })
 export class UtilizationModule {}

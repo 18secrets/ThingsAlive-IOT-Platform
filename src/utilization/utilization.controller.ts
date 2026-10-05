@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { AvailabilityService } from './services/availability.service';
 import { GroupBy, UtilizationService } from './services/utilization.service';
 
 const GROUPS: GroupBy[] = ['equipment', 'plant', 'date', 'shift'];
@@ -19,7 +20,10 @@ const GROUPS: GroupBy[] = ['equipment', 'plant', 'date', 'shift'];
 @ApiTags('Utilization')
 @Controller('utilization')
 export class UtilizationController {
-  constructor(private readonly utilization: UtilizationService) {}
+  constructor(
+    private readonly utilization: UtilizationService,
+    private readonly availability: AvailabilityService,
+  ) {}
 
   @Get('summary')
   @Requires('utilization.read')
@@ -59,6 +63,47 @@ export class UtilizationController {
       { from: parseDate(from, 'from'), to: parseDate(to, 'to') },
     );
   }
+
+  @Get('availability')
+  @Requires('utilization.read')
+  @ApiOperation({ summary: 'Availability across the fleet: uptime against scheduled shift hours. Not OEE' })
+  fleetAvailability(
+    @CurrentScope() scope: RequestScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.availability.forFleet(scope, parsePeriod(from, to));
+  }
+
+  @Get('availability/:sourceSystem/:externalId')
+  @Requires('utilization.read')
+  @ApiOperation({ summary: 'Availability for one machine: uptime against scheduled shift hours. Not OEE' })
+  equipmentAvailability(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.availability.forEquipment(
+      scope, { sourceSystem, externalId }, parsePeriod(from, to),
+    );
+  }
+}
+
+/**
+ * Availability is a ratio over a period, so the period is required.
+ *
+ * Utilization's summary can default to "everything", because summed hours over
+ * everything still mean something. Availability over an unstated period would be
+ * scheduled hours since the first shift was defined, which nobody asked for.
+ */
+function parsePeriod(from: string | undefined, to: string | undefined): { from: Date; to: Date } {
+  const start = parseDate(from, 'from');
+  const end = parseDate(to, 'to');
+  if (!start || !end) throw new BadRequestException('from and to are both required.');
+  if (end <= start) throw new BadRequestException('to must be after from.');
+  return { from: start, to: end };
 }
 
 /**
