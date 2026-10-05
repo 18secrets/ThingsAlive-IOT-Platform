@@ -4,6 +4,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -13,6 +15,32 @@ import { CatalogImportSensorReviewService, SensorReviewRequest } from './service
 import { CatalogImportValidatorService } from './services/catalog-import-validator.service';
 import { CatalogTemplateService } from './services/catalog-template.service';
 import { CatalogImportRefusal, WorkbookParserService } from './services/workbook-parser.service';
+
+export class SlugRefDto {
+  @IsString() @IsNotEmpty() slug: string;
+}
+
+/**
+ * The sensor-review body as a class, not the service's interface (task QFIX-SENSORS).
+ *
+ * Typed as `SensorReviewRequest` — an interface, so `Object` at runtime — the global
+ * ValidationPipe skipped this body entirely. Under Express 5 an empty POST, or one
+ * without `Content-Type: application/json`, leaves `req.body` undefined rather than
+ * `{}`, and that undefined reached the service and 500'd on a dereference. A class
+ * gives the pipe something to check: an unknown field (a typo'd `approveCategory`)
+ * is refused by `forbidNonWhitelisted` instead of silently doing nothing, and an entry
+ * without a slug is refused naming the array and index (`approve.0.slug`).
+ */
+export class SensorReviewDto implements SensorReviewRequest {
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SlugRefDto)
+  approveCategories?: SlugRefDto[];
+
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SlugRefDto)
+  approve?: SlugRefDto[];
+
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SlugRefDto)
+  dismiss?: SlugRefDto[];
+}
 
 /**
  * The Excel catalog import, over HTTP (tasks QIMP2, QIMP3).
@@ -96,8 +124,18 @@ export class CatalogImportController {
   reviewSensors(
     @Param('id') id: string,
     @CurrentScope() scope: RequestScope,
-    @Body() body: SensorReviewRequest,
+    @Body() body: SensorReviewDto,
   ) {
+    // An approval call that decides nothing is a mistake, not a no-op — and it is
+    // what a missing body arrives as once the pipe has turned it into `{}`.
+    const decisions = (body?.approveCategories?.length ?? 0) + (body?.approve?.length ?? 0)
+      + (body?.dismiss?.length ?? 0);
+    if (!decisions) {
+      throw new BadRequestException(
+        'Name at least one of "approveCategories", "approve" or "dismiss", each a non-empty array of '
+          + '{ "slug": ... } — and send it as JSON (Content-Type: application/json).',
+      );
+    }
     return this.sensorReview.review(id, body, scope.userId);
   }
 
