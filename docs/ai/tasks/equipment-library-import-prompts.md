@@ -816,3 +816,227 @@ This is a small fix with an important finding attached. The finding is the deliv
 ```
 
 **Found (2026-10-05):** cause 3 of §1. The controller binding was correct; the body was typed as an interface, so the global ValidationPipe skipped it, and under Express 5 an empty or non-JSON POST leaves `req.body` undefined. Reproduced: the new HTTP spec returns 500 against the old controller.
+
+---
+
+# QCAT2 — retire versus delete on sensors and categories
+
+Read `CLAUDE.md` first. Commit this prompt to `docs/ai/prompts/` before writing code.
+Append the task to `docs/ai/tasks/equipment-library-import-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/sensor-retire`
+
+**Stream B.** Touches `src/device-catalog` only. **Do not touch** `src/catalog-import/`,
+`template-schema.ts` or `CLASS_CONTENT_INVENTORY` — Stream A owns those. Migration timestamp
+**at rebase time**.
+
+---
+
+## 0. Why
+
+Reported by the library team: there is no way to remove a sensor from the list. They are
+right that something is missing and wrong about what it is.
+
+**A hard delete is not the answer.** Published class versions are immutable and they
+reference sensors. Deleting a referenced sensor breaks content that cannot be repaired — only
+superseded. So the control that is missing is **retire**.
+
+QIMP5 created roughly forty sensors through workbook approval. Some of those were typos or
+duplicates, and they are now in every picker with no way to get them out.
+
+## 1. Two actions, different rules
+
+| Action | Effect | Allowed when |
+|---|---|---|
+| **Retire** | no longer offered in pickers or accepted on new content; **every existing reference keeps working** | always |
+| **Delete** | row removed | **only** when nothing references it — no class content at any version, no tenant copy, no binding |
+
+A retired sensor still resolves in old class versions, still renders on a machine that uses
+it, and simply stops appearing where new content is authored. That is what the team actually
+needs: stop a mistake spreading without breaking what already uses it.
+
+## 2. Schema
+
+```sql
+sensor            ADD COLUMN retired_at timestamptz NULL, retired_by text NULL
+sensor_category   ADD COLUMN retired_at timestamptz NULL, retired_by text NULL
+```
+
+Nullable. **No status enum** — a timestamp answers "is it retired" and "when" in one column,
+and the existing catalog tables use the same shape.
+
+## 3. Behaviour
+
+**Retired sensors:**
+
+- excluded from `GET /device-catalog/sensors` by default; included with `?includeRetired=true`
+- **refused** when a workbook or an API call references them on **new** content, naming the
+  sensor and when it was retired
+- still resolve for already-published content, every version, unchanged
+- still resolve for tenant copies
+
+**A category cannot be retired while a non-retired sensor is in it.** Refuse, naming the
+sensors. Otherwise a live sensor sits in a category nobody can see.
+
+**Un-retiring is allowed** — clear `retired_at`. Retiring is a correction, and corrections
+have their own mistakes.
+
+## 4. Delete — guarded, and the guard is the feature
+
+```
+DELETE /api/v1/device-catalog/sensors/:id
+DELETE /api/v1/device-catalog/categories/:id
+```
+
+Refused unless **all** hold, and the refusal **names which check failed and how many rows**:
+
+1. no `equipment_class_profile` at any version declares a signal resolving to it
+2. no `client_equipment_class` tenant copy does
+3. no `signal_binding_version` references it
+4. for a category: no sensor is in it, retired or not
+
+"Nothing references it" must be **measured**, not assumed. Report in the task which tables you
+checked and how you found them — if the reference graph is wider than these four, say so
+rather than shipping a delete that misses one.
+
+Guarded by `catalog.write`. Deleting published-adjacent content is not an author-only act;
+state which capability you found and used.
+
+## 5. Tests
+
+1. Retire a sensor → absent from the default list, present with `includeRetired=true`.
+2. A published class version referencing a retired sensor still resolves it, unchanged.
+3. A **new** workbook row referencing a retired sensor → refused, naming it and the date.
+4. The API authoring path refuses it too — **same validator, both paths**, as QIMP4 established.
+5. Un-retire → it returns to the picker.
+6. Retire a category holding a live sensor → refused, naming the sensors.
+7. Delete an unreferenced sensor → succeeds.
+8. Delete a sensor referenced by a published class → refused, naming the check and the count.
+9. Delete a sensor referenced **only by a tenant copy** → refused. This is the one that will
+   be missed; write it deliberately.
+10. Delete a category holding a retired sensor → refused.
+
+## 6. Out of scope
+
+- Merging two duplicate sensors into one. That is content surgery over published versions and
+  needs its own decision — report how many obvious duplicates exist in Development, do not fix
+  them.
+- Retiring an equipment class — that already exists.
+- Anything under `frontend/`. Report the response shapes and the `includeRetired` flag.
+
+## 7. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after on a
+  **worktree off `origin/main`**, naming the base SHA.
+- Migration timestamp assigned **at rebase**; chain clean from empty; down path named.
+- **Seed before you migrate** — the retire tests need sensors that existed beforehand.
+- Report: commit SHA, test counts with base SHA, which tables you checked for references and
+  how you enumerated them, how many duplicate-looking sensors exist in Development, and
+  anything not implemented.
+
+---
+
+## Addendum (2026-10-05) — what shipped, and what waits on a decision
+
+**Shipped, all inside `src/device-catalog`** (migration `1758100000000-SensorRetirement`):
+`retired_at` / `retired_by` on `sensor` and `sensor_category`;
+`POST /device-catalog/sensors/:id/retire|unretire` and `POST /device-catalog/categories/:id/retire|unretire`,
+guarded by `device-catalog.write` — the capability that already gates every sensor write in this
+controller; `GET /device-catalog/sensors|categories?includeRetired=true`, live-only by default.
+The category rule is two triggers with a `FOR SHARE` lock, so it holds under concurrent writes —
+proven by two deterministic race tests that fail when the lock is removed. Tool mappings are
+"new content" inside this module and refuse a newly added retired sensor; one already on a mapping
+stays through edits. §5 tests 1, 2 (for tool mappings and capability rows), 5 and 6 are covered.
+
+**Not shipped — each needs Deepak:**
+
+1. **§5 test 3, the workbook path.** Resolution lives in `src/catalog-import/services/sensor-review.ts`
+   (`analyzeSensorCapability`), which is Stream A's. Until it changes, a workbook can still name a
+   retired sensor. The refusal is ready for it: `retiredSensorProblem()` in
+   `src/device-catalog/services/sensor-retirement.ts` returns the message, or null for a live sensor.
+2. **§5 test 4, "same validator, both paths".** The premise does not hold: the API authoring path
+   never consults the sensor catalog. `src/catalog/services/content-validation.ts` records that this
+   was tried in QIMP4, broke 37 tests, and was left as a decision. Adding it now is that decision.
+3. **§4 delete.** The reference graph is wider than the four checks, measured on a database migrated
+   from empty (`pg_constraint` for foreign keys, `information_schema.columns` for sensor-named
+   columns):
+
+   | Reference | Kind | In the four checks? |
+   |---|---|---|
+   | `sensor.category_id → sensor_category` | FK | check 4 |
+   | `sensor_instance.sensor_id → sensor` | FK, no cascade — blocks a delete | no |
+   | `signal_binding_version.sensor_instance_id` | via `sensor_instance` | check 3 |
+   | `sensor_role_capability.sensor_id → sensor` | FK, **ON DELETE CASCADE** — a delete silently takes these | no |
+   | `tool_mapping.mapped_sensors` | ids in jsonb, no FK | no |
+   | `catalog_import_batch.sensor_decisions` | approval record in jsonb, no FK | no |
+
+   Checks 1 and 2 have nothing stored to test: class versions and tenant copies hold signal names
+   as strings. The only path from a class to a sensor is signal → measurement role →
+   `sensor_role_capability` → sensor, and that capability row is the sensor's own. What "a class
+   references this sensor" means has to be decided before a delete can check it.
+4. **Duplicate-looking sensors in Development** — not counted; needs read access to that database.
+   `SELECT lower(regexp_replace(sensor_name, '[^a-z0-9]', '', 'gi')) k, count(*), string_agg(slug, ', ')
+   FROM sensor GROUP BY 1 HAVING count(*) > 1;` answers it, read-only.
+
+**Choices made:** re-creating a retired category's name is refused ("un-retire it instead") rather
+than handing back the retired row; `includeRetired` accepts `true`/`false` only; retire and
+un-retire are idempotent and keep the original who-and-when (concurrent-call test included).
+
+
+## QCAT2 completion (2026-10-05) — authorized to resolve the open implementation choices
+
+The user explicitly directed implementation without waiting for Deepak. This supersedes
+Stream A ownership restrictions for the retirement integration in `catalog-import` and
+`catalog`. No frontend, production data, or deployment changes are included.
+
+Decisions implemented:
+
+- Explicit workbook sensor references resolve by the existing slug/name rules, then reject
+  retired sensors with `sensor_retired`, their name and retirement date. Dependent signal
+  rows are invalidated too. Retired entries are not proposed as replacement sensors.
+- API class signals resolve through `sensor_role_capability.measurement_role`, with matching
+  canonical unit (or a legacy null capability unit). If all matching sensors are retired,
+  new use is refused. A live alternative is sufficient. Signals with no capability mapping
+  remain supported: requiring a fully populated catalog is a separate compatibility change.
+- Existing published classes and tenant copies remain untouched. Draft edits preserve
+  unchanged roles; creating a new version or publishing rechecks all its signals.
+- Apply rechecks retirement after validation. The same database function validates API and
+  workbook signals. Triggers hold sensor row locks until content writes commit, preventing
+  retirement from slipping between validation and insertion. Existing mapping references
+  remain valid; new mappings and capability relationships require a live sensor.
+- DELETE `/api/v1/device-catalog/sensors/:id` and `/categories/:id` return 204 on success,
+  404 if absent, or 400 with each failing reference count. Both require
+  `device-catalog.write`, matching the existing reference-data administration routes.
+- Deletion is conservative: capability rows count as references, even without a class.
+  Therefore the capability FK's cascade cannot silently remove them through this API.
+  Class and tenant-copy counts include every version/status via measurement-role matches.
+  Other checks cover sensor instances, binding versions, JSON tool mappings, and import
+  approval provenance. Categories count all sensors, including retired ones, and approvals.
+- Correction to the earlier reference inventory: `catalog_import_batch.sensor_decisions`
+  records **slugs**, not sensor IDs. Deletion checks approved decisions by slug. Staging
+  workbook text and `target_ref` are import history, not a live sensor FK.
+- A narrow database deletion function counts across tenants using a function-local
+  `ta.bypass` setting, restores caller settings automatically, and exposes no tenant rows.
+  Only `ta_app` is granted EXECUTE; it still has no direct sensor/category DELETE grant.
+  JSON writers are serialized against deletion; reference triggers reject missing sensors
+  or approval targets when a waiting writer resumes. Locks can briefly delay catalog writes.
+
+Reference inventory: searched entity/service sensor ID/slug fields and inspected migration
+FK definitions. Covered tables: `sensor`, `sensor_category`, `sensor_role_capability`,
+`sensor_instance`, `signal_binding_version`, `equipment_class_profile`,
+`client_equipment_class`, `tool_mapping`, and `catalog_import_batch`.
+
+New migration: `1758110000000-SensorContentGuards`; previous committed migrations unchanged.
+New tests: `test/sensor-content-guards.spec.ts`, included in `test:db`.
+Development duplicate counts and QCE5 content verification still require actual Development
+access/content; no counts or equipment parameter values have been invented.
+
+Verification: isolated baseline snapshot `94c1890` passed 1,059 tests. Completed branch
+passes 1,085 tests across 73 suites; `test:db` passes 337 tests across 29 suites (26 new
+cases), with no skips. Build, TypeScript lint, migration source/compiled count, and
+`git diff --check` pass. Tests used disposable local PostgreSQL 14. Full migration chain
+runs from empty; the new migration's named rollback/reapply test preserves seeded rows.
+Deterministic races observe the competing connection waiting on a database lock before
+releasing the first transaction, including an in-flight approval versus deletion.
+Fetched `origin/main` remains `b1d20b8`; `1758110000000` is above its newest migration
+(`1758090000000`) and this branch's existing retirement migration (`1758100000000`).

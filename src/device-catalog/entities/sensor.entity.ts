@@ -20,8 +20,9 @@ export interface SensorParameterSpec {
  * entitled to.
  *
  * No delete: a Tool Mapping stores a sensor's id, and removing the row out from
- * under a mapping would leave it pointing at nothing. Editing in place is enough —
- * this is reference data corrected over time, not content that ships to a customer.
+ * under a mapping would leave it pointing at nothing. Editing in place corrects it;
+ * retiring (task QCAT2) takes a mistake out of circulation without breaking whatever
+ * already points at it.
  */
 @Entity('sensor')
 export class Sensor {
@@ -50,6 +51,16 @@ export class Sensor {
 
   @Column({ name: 'parameter_specs', type: 'jsonb', default: () => `'[]'::jsonb` })
   parameterSpecs: SensorParameterSpec[];
+
+  /**
+   * Retired: no longer offered for new work, still resolving everywhere it is already
+   * used (task QCAT2, `1758410000000-SensorRetirement.ts`). Null is live.
+   */
+  @Column({ name: 'retired_at', type: 'timestamptz', nullable: true })
+  retiredAt: Date | null;
+
+  @Column({ name: 'retired_by', type: 'text', nullable: true })
+  retiredBy: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

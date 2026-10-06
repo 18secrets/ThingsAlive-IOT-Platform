@@ -2,6 +2,7 @@ import { EntityManager, In } from 'typeorm';
 import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import { SensorCategory } from '../../device-catalog/entities/sensor-category.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
+import { retiredSensorProblem } from '../../device-catalog/services/sensor-retirement';
 import { str, strOrNull } from './class-content';
 
 /** Falls back to 'sensor' rather than an empty string — a name that is entirely
@@ -46,7 +47,7 @@ export interface ProposedCategory {
 
 export interface RowResolution {
   row: CatalogImportRow;
-  status: 'ok' | 'not_found' | 'ambiguous' | 'conflicting';
+  status: 'ok' | 'not_found' | 'ambiguous' | 'conflicting' | 'retired';
   message?: string;
   candidateSensor?: Sensor;
   nameMatchedSlug?: string;
@@ -200,9 +201,10 @@ export async function analyzeSensorCapability(
 
     for (const r of group.rows) {
       if (resolved.status === 'ok') {
-        resolutions.push({
-          row: r, status: 'ok', candidateSensor: resolved.sensor, nameMatchedSlug: resolved.nameMatchedSlug,
-        });
+        const problem = retiredSensorProblem(resolved.sensor!);
+        resolutions.push(problem
+          ? { row: r, status: 'retired', message: problem }
+          : { row: r, status: 'ok', candidateSensor: resolved.sensor, nameMatchedSlug: resolved.nameMatchedSlug });
       } else if (resolved.status === 'ambiguous') {
         const named = resolved.candidates!.map((c) => `${c.slug} (${c.sensorName})`).join(', ');
         resolutions.push({
