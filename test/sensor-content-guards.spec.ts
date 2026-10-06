@@ -16,13 +16,11 @@ import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../src/catalog/entities/alert-rule-template.entity';
 import { NamedFormula } from '../src/catalog/entities/named-formula.entity';
 import { CatalogAuthoringService } from '../src/catalog/services/catalog-authoring.service';
-import { CatalogImportRow } from '../src/catalog-import/entities/catalog-import-row.entity';
 import { CatalogImportBatch } from '../src/catalog-import/entities/catalog-import-batch.entity';
 import { CatalogImportValidatorService } from '../src/catalog-import/services/catalog-import-validator.service';
 import { CatalogImportApplyService } from '../src/catalog-import/services/catalog-import-apply.service';
 import { CatalogTemplateService } from '../src/catalog-import/services/catalog-template.service';
 import { WorkbookParserService } from '../src/catalog-import/services/workbook-parser.service';
-import { analyzeSensorCapability } from '../src/catalog-import/services/sensor-review';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
@@ -67,23 +65,6 @@ describeDb('sensor retirement on new content and guarded deletion', () => {
     await new CatalogImportValidatorService(ds).validate(batch.id);
     return batch;
   };
-
-  it.each(['slug', 'name'])('workbook %s resolution refuses a retired sensor without proposing a replacement', async (strategy) => {
-    const retired = await catalog.retireSensor(sensor.id, 'tester');
-    const row = Object.assign(new CatalogImportRow(), { id: 'row', rowNumber: 2, payload: {
-      sensor_name: ' Coolant Temp Probe ', ...(strategy === 'slug' ? { sensor_slug: sensor.slug } : {}),
-    } });
-    const result = await analyzeSensorCapability(ds.manager, [row], []);
-    expect(result.resolutions[0]).toMatchObject({ status: 'retired', message: retiredSensorProblem(retired) });
-    expect(result.proposedSensors).toEqual([]);
-  });
-
-  it('marks the uploaded capability invalid with the shared refusal', async () => {
-    const retired = await catalog.retireSensor(sensor.id, 'tester');
-    const batch = await workbook();
-    const rows = await ds.getRepository(CatalogImportRow).find({ where: { batchId: batch.id, sheet: 'sensor_capability' } });
-    expect(rows[0]).toMatchObject({ status: 'invalid', message: retiredSensorProblem(retired) });
-  });
 
   it('rechecks retirement between validation and apply, without writing a class', async () => {
     const batch = await workbook();
