@@ -519,14 +519,6 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       const args = node.args.map((a) => infer(a, ctx));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
-        // `count(x > 2)` counts every reading, above 2 or not — a 0/1 series still has
-        // one point per reading. Refused rather than returning a confident wrong count.
-        if (expected === 'series' && a.type === 'compare') {
-          throw new FormulaCompileError(
-            `calls "${node.name}" over a comparison; it would reduce the 0/1 points, not count the ones `
-              + 'that hold. Use count_exceeding(series, threshold) to count readings above a threshold.',
-          );
-        }
         // A duration literal reports kind:'scalar' (task QCE4) so it never widens
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
@@ -536,6 +528,7 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
           );
         }
+        if (expected === 'series' && a.type !== 'signal') throw seriesInputRefusal(node.name, a);
       });
 
       if (node.name === 'count_exceeding') {
@@ -572,6 +565,32 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       throw new FormulaCompileError(`unrecognised node: ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+/**
+ * A series argument must be a signal, by name (task QCE5 follow-up). The evaluator
+ * feeds an operator a signal's raw readings and nothing else; a computed series —
+ * `avg(zscore(x, 20d))`, `avg(a * b)`, `avg(#other)` — compiled, then read at runtime
+ * as a signal with no name and reported `unbound`, which sends somebody to wire a
+ * sensor that is already wired. There is no honest runtime meaning to give it: the
+ * baseline family is single-valued at the window's end, not one value per reading,
+ * and two signals' readings do not share timestamps to combine point by point.
+ */
+function seriesInputRefusal(operator: string, arg: PlanNode): FormulaCompileError {
+  if (arg.type === 'compare') {
+    // `count(x > 2)` would count every reading, above 2 or not.
+    return new FormulaCompileError(
+      `calls "${operator}" over a comparison; it would reduce the 0/1 points, not count the ones that `
+        + 'hold. Use count_exceeding(series, threshold) to count readings above a threshold.',
+    );
+  }
+  const what = arg.type === 'formula_ref' ? `another formula ("#${arg.formulaKey}")`
+    : arg.type === 'call' ? `the output of "${arg.name}"`
+      : 'a computed expression';
+  return new FormulaCompileError(
+    `calls "${operator}" over ${what}; "${operator}" reads a signal's own readings, so its series `
+      + 'argument must be a signal by name. Apply the operator to each signal, then combine the results.',
+  );
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
