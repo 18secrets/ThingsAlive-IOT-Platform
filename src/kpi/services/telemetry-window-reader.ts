@@ -13,6 +13,30 @@ export interface BucketAggregate {
 }
 
 /**
+ * One device's tenure on one signal of one machine: the binding's IMEI, over the
+ * binding's validity window `[from, to)` (task QFIX-DEVICES). A reading counts for this
+ * machine only inside its segment — the device was somewhere else before and after.
+ */
+export interface TelemetrySegment {
+  signal: string;
+  imei: string;
+  from: Date;
+  /** Null: still bound. */
+  to: Date | null;
+}
+
+const segmentParams = (segments: TelemetrySegment[]) => [
+  segments.map((s) => s.signal), segments.map((s) => s.imei),
+  segments.map((s) => s.from), segments.map((s) => s.to),
+];
+
+/** The segments joined as a set, so one query reads every (signal, device, window). */
+const SEGMENTS_JOIN = `
+  JOIN unnest($2::text[], $3::text[], $4::timestamptz[], $5::timestamptz[]) AS seg(signal, imei, seg_from, seg_to)
+    ON r."signal" = seg.signal AND r."imei" = seg.imei
+   AND r."source_timestamp" >= seg.seg_from AND (seg.seg_to IS NULL OR r."source_timestamp" < seg.seg_to)`;
+
+/**
  * One query per `(imei[], signal[], window)`, never per signal (task QCE2 §3) —
  * a plan referencing several signals, or a page asking for twenty KPIs, shares
  * this single round trip rather than issuing one per widget.
@@ -110,6 +134,87 @@ export class TelemetryWindowReader {
       sum: string; count: string; first: string; last: string;
     }[] = await m.query(
       TelemetryWindowReader.BUCKETED_QUERY, [tenantId, imeis, signals, bucketSeconds, from, to],
+    );
+    for (const r of rows) {
+      const list = bySignal.get(r.signal) ?? [];
+      list.push({
+        bucket: new Date(r.bucket), avg: Number(r.avg), min: Number(r.min), max: Number(r.max),
+        sum: Number(r.sum), count: Number(r.count), first: Number(r.first), last: Number(r.last),
+      });
+      bySignal.set(r.signal, list);
+    }
+    return bySignal;
+  }
+
+  // ------------------------------------------------- by binding (QFIX-DEVICES)
+  // The same three reads, keyed by the signal's bindings instead of a device list.
+  // A device list answers "which devices are on this machine now"; a binding answers
+  // "which device produced this signal on this machine, and when" — the only form
+  // that attributes history correctly when a device moves between machines.
+  // `source_timestamp` stays bound on both ends of the outer scan, so pruning fires.
+
+  async readSegments(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[], from: Date, to: Date,
+  ): Promise<Map<string, Reading[]>> {
+    const bySignal = new Map<string, Reading[]>();
+    if (!segments.length) return bySignal;
+    const rows: { signal: string; value: string; at: Date }[] = await m.query(
+      `SELECT r."signal", r."value", r."source_timestamp" AS at
+         FROM "telemetry_reading" r ${SEGMENTS_JOIN}
+        WHERE r."tenant_id" = $1 AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
+        ORDER BY r."signal", r."source_timestamp" ASC`,
+      [tenantId, ...segmentParams(segments), from, to],
+    );
+    for (const r of rows) {
+      const list = bySignal.get(r.signal) ?? [];
+      list.push({ at: new Date(r.at), value: Number(r.value) });
+      bySignal.set(r.signal, list);
+    }
+    return bySignal;
+  }
+
+  /** The latest reading per signal that this machine's bindings account for, up to
+   * `at` — bounded below by the earliest binding, because a device's readings from
+   * before it was fitted here belong to the machine it was on then. */
+  async latestPerSignalInSegments(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[], at: Date,
+  ): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    if (!segments.length) return result;
+    const earliest = new Date(Math.min(...segments.map((s) => s.from.getTime())));
+    const rows: { signal: string; latest: Date }[] = await m.query(
+      `SELECT DISTINCT ON (r."signal") r."signal", r."source_timestamp" AS latest
+         FROM "telemetry_reading" r ${SEGMENTS_JOIN}
+        WHERE r."tenant_id" = $1 AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
+        ORDER BY r."signal", r."source_timestamp" DESC`,
+      [tenantId, ...segmentParams(segments), earliest, at],
+    );
+    for (const r of rows) result.set(r.signal, new Date(r.latest));
+    return result;
+  }
+
+  async readBucketedSegments(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[],
+    bucketSeconds: number, from: Date, to: Date,
+  ): Promise<Map<string, BucketAggregate[]>> {
+    const bySignal = new Map<string, BucketAggregate[]>();
+    if (!segments.length) return bySignal;
+    const rows: {
+      signal: string; bucket: Date; avg: string; min: string; max: string;
+      sum: string; count: string; first: string; last: string;
+    }[] = await m.query(
+      `SELECT r."signal",
+              to_timestamp(floor(extract(epoch from r."source_timestamp") / $8::double precision) * $8::double precision)
+                AS bucket,
+              avg(r."value") AS avg, min(r."value") AS min, max(r."value") AS max, sum(r."value") AS sum,
+              count(*) AS count,
+              (array_agg(r."value" ORDER BY r."source_timestamp" ASC))[1] AS first,
+              (array_agg(r."value" ORDER BY r."source_timestamp" DESC))[1] AS last
+         FROM "telemetry_reading" r ${SEGMENTS_JOIN}
+        WHERE r."tenant_id" = $1 AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
+        GROUP BY r."signal", bucket
+        ORDER BY r."signal", bucket ASC`,
+      [tenantId, ...segmentParams(segments), from, to, bucketSeconds],
     );
     for (const r of rows) {
       const list = bySignal.get(r.signal) ?? [];

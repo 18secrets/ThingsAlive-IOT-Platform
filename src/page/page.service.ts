@@ -24,11 +24,10 @@ import { pickBucketSeconds } from '../kpi/services/bucketing';
 import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
-import { DeviceProjection } from '../projection/entities/device-projection.entity';
 import { withTenantSession } from '../scope/tenant-session';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { classifyFreshness } from '../signal-binding/services/signal-freshness';
-import { SignalBindingService } from '../signal-binding/services/signal-binding.service';
+import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import {
   AlertRow, FailureModeRow, FailureModeStatus, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
@@ -322,24 +321,32 @@ export class PageService {
     if (!signals.length) return result;
 
     return withTenantSession(this.ds, scope, async (m) => {
-      const devices = await m.getRepository(DeviceProjection).find({
-        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, equipmentExternalId: ref.externalId },
-      });
-      const imeis = [...new Set(devices.map((d) => d.imei))];
-      if (!imeis.length) {
-        for (const s of signals) result.set(s, { ok: false, readiness: 'not_configured', reason: 'no_device' });
-        return result;
+      const from = new Date(at.getTime() - SIGNAL_CHART_WINDOW_MS);
+      // The device behind each signal is the binding's, over the chart's window
+      // (task QFIX-DEVICES) — the same source the KPI widgets and coverage read, so
+      // the chart cannot show readings for a signal the page calls unbound, or none
+      // for one it calls ready.
+      const segments = overlapping(
+        await bindingSegments(m, scope.tenantId, ref, signals, { by: 'signalKey', componentId: '' }), from, at,
+      );
+      const bound = new Set(segments.map((s) => s.signal));
+      for (const s of signals) {
+        if (!bound.has(s)) result.set(s, { ok: false, readiness: 'not_configured', reason: 'unbound' });
       }
+      if (!segments.length) return result;
       const units = new Map<string, string | null>();
       if (classSlug) {
         const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
         for (const s of cls?.expectedSignals ?? []) units.set(s.signal, s.unit);
       }
-      const from = new Date(at.getTime() - SIGNAL_CHART_WINDOW_MS);
       const bucketSeconds = pickBucketSeconds(SIGNAL_CHART_WINDOW_MS / 1000);
-      const bucketed = await this.reader.readBucketed(m, scope.tenantId, imeis, signals, bucketSeconds, from, at);
+      const bucketed = await this.reader.readBucketedSegments(
+        m, scope.tenantId, segments.map(({ signal, imei, from: f, to }) => ({ signal, imei, from: f, to })),
+        bucketSeconds, from, at,
+      );
 
       for (const signal of signals) {
+        if (!bound.has(signal)) continue;
         const rows = bucketed.get(signal) ?? [];
         if (!rows.length) {
           result.set(signal, { ok: false, readiness: 'not_available', reason: 'no_readings' });

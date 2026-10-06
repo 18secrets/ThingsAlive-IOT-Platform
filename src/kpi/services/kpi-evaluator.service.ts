@@ -11,13 +11,12 @@ import { ClientEquipmentClass } from '../../client-catalog/entities/client-equip
 import { ClientFormula } from '../../client-catalog/entities/client-formula.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
-import { SignalBindingService } from '../../signal-binding/services/signal-binding.service';
+import { BindingSegment, bindingSegments, overlapping, SignalBindingService } from '../../signal-binding/services/signal-binding.service';
 import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
 import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
-import { BucketAggregate, TelemetryWindowReader } from './telemetry-window-reader';
+import { BucketAggregate, TelemetrySegment, TelemetryWindowReader } from './telemetry-window-reader';
 import { MAX_BUCKETS_OVERRIDE, pickBucketSeconds } from './bucketing';
 
 const HOUR = 3_600_000;
@@ -136,10 +135,6 @@ export class KpiEvaluatorService {
     }
 
     const allRequiredSignals = [...new Set(targets.flatMap((t) => t.requiredSignals))];
-    const devices = await m.getRepository(DeviceProjection).find({
-      where: { tenantId, sourceSystem: equipment.sourceSystem, equipmentExternalId: equipment.externalId },
-    });
-    const imeis = [...new Set(devices.map((d) => d.imei))];
 
     // One read covering every target: from the earliest (display-or-lookback)
     // start to the latest display end, across the whole batch.
@@ -152,13 +147,27 @@ export class KpiEvaluatorService {
     const readFrom = starts.length ? new Date(Math.min(...starts.map((d) => d.getTime()))) : at;
     const readTo = at;
 
-    const seriesBySignal = await this.reader.read(m, tenantId, imeis, allRequiredSignals, readFrom, readTo);
-    // Unbounded on purpose (task Q08S s3) — `seriesBySignal` only ever holds
-    // what the window above asked for, so a reading older than its lower bound
-    // is invisible to it. Telling `stale` (readings exist, none recently) apart
-    // from `no_readings` (none ever) needs the single latest reading regardless
-    // of when, which this is and the window-bound read cannot be.
-    const latestEverBySignal = await this.reader.latestPerSignal(m, tenantId, imeis, allRequiredSignals);
+    // Which device produced each signal on this machine, and when: the bindings
+    // (task QFIX-DEVICES). Not `device_projection` — that is where 1.0 thinks a
+    // device is, and coverage reading `device_inventory` while this read the
+    // projection is how one page showed a KPI ready beside its signal reporting no
+    // readings. A reading counts only inside the segment of the binding that put
+    // that device on this machine, so a device that moved is attributed correctly
+    // on both sides of the move.
+    const segments = await bindingSegments(m, tenantId, equipment, allRequiredSignals, { by: 'signalKey', componentId: '' });
+    const toTelemetry = (list: BindingSegment[]): TelemetrySegment[] =>
+      list.map(({ signal, imei, from, to }) => ({ signal, imei, from, to }));
+    const readSegmentsInWindow = toTelemetry(overlapping(segments, readFrom, readTo));
+
+    const seriesBySignal = await this.reader.readSegments(m, tenantId, readSegmentsInWindow, readFrom, readTo);
+    // Unbounded on the early side on purpose (task Q08S s3) — `seriesBySignal`
+    // only holds what the window above asked for, so telling `stale` (readings
+    // exist, none recently) apart from `no_readings` (none ever) needs the latest
+    // reading regardless of when. "Ever" now means "ever on this machine": bounded
+    // by the bindings, not by the device's whole life.
+    const latestEverBySignal = await this.reader.latestPerSignalInSegments(
+      m, tenantId, toTelemetry(segments.filter((s) => s.from <= at)), at,
+    );
 
     // Client parameters (task QPARAM1 §4), one read for the whole batch, at the
     // window's end — a fuel price that changed mid-month applies from when it was
@@ -191,15 +200,20 @@ export class KpiEvaluatorService {
       }
     }
 
+    // Bound for this evaluation when a binding was in force at some point in the
+    // display window — not only at its end. A device moved off this machine mid-
+    // window still produced the first part of it here (task QFIX-DEVICES §2, case 4);
+    // a binding that closed before the window began is `unbound`, never a read from
+    // a device that has since left. The declared expected-period is the most recent
+    // binding's (signal_binding_version.expected_period_seconds, Q08S s1).
+    const displayFroms = targets.map((t) => perTargetWindow.get(t.formulaKey)?.from.getTime() ?? at.getTime());
+    const boundFrom = new Date(Math.min(at.getTime(), ...displayFroms));
     const bindingStatus = new Map<string, number | null | undefined>();
     for (const signal of allRequiredSignals) {
-      const binding = imeis.length
-        ? await this.signalBindings.resolveBinding(tenantId, equipment, signal, '', at)
-        : null;
-      // undefined = unbound; null | number = bound, with or without a declared
-      // expected-period (signal_binding_version.expected_period_seconds, set
-      // by Q08S s1 and unread anywhere before this).
-      bindingStatus.set(signal, binding ? binding.expectedPeriodSeconds : undefined);
+      const inForce = overlapping(segments.filter((s) => s.signal === signal), boundFrom, at)
+        .sort((a, b) => b.from.getTime() - a.from.getTime());
+      // undefined = unbound; null | number = bound, with or without a declared period.
+      bindingStatus.set(signal, inForce.length ? inForce[0].expectedPeriodSeconds : undefined);
     }
 
     const openOrders = await m.getRepository(WorkOrder).find({
@@ -239,7 +253,7 @@ export class KpiEvaluatorService {
         signals, parameters, excludedRangesBySignal,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
-      m, tenantId, imeis,
+      m, tenantId, toTelemetry(segments),
     )));
   }
 
@@ -305,7 +319,7 @@ export class KpiEvaluatorService {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
     },
-    m: EntityManager, tenantId: string, imeis: string[],
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<KpiEnvelope> {
     const unit = formula.resultUnit ?? 'dimensionless';
     const resultKind = formula.resultKind ?? 'scalar';
@@ -362,7 +376,7 @@ export class KpiEvaluatorService {
     };
 
     if (resultKind === 'series') {
-      const points = await this.evaluateSeries(formula, ctx, m, tenantId, imeis);
+      const points = await this.evaluateSeries(formula, ctx, m, tenantId, segments);
       if (points.ok === false) {
         return { ...base, value: null, readiness: points.readiness, reason: points.reason, coverage };
       }
@@ -392,7 +406,7 @@ export class KpiEvaluatorService {
    * formula key — reported as a scope limit, not guessed at.
    */
   private async evaluateSeries(
-    formula: ClientFormula, ctx: PlanEvalContext, m: EntityManager, tenantId: string, imeis: string[],
+    formula: ClientFormula, ctx: PlanEvalContext, m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<{ ok: true; value: SeriesPoint[] } | { ok: false; readiness: Readiness; reason?: Reason }> {
     const plan = formula.compiledPlan as any;
 
@@ -412,10 +426,10 @@ export class KpiEvaluatorService {
       );
     }
 
-    const signalsNeeded = [...bucketPlan.columnBySignal.keys()];
     const bucketSeconds = pickBucketSeconds((ctx.window.to.getTime() - ctx.window.from.getTime()) / 1000);
-    const bucketed = await this.reader.readBucketed(
-      m, tenantId, imeis, signalsNeeded, bucketSeconds, ctx.window.from, ctx.window.to,
+    const bucketed = await this.reader.readBucketedSegments(
+      m, tenantId, segments.filter((seg) => bucketPlan.columnBySignal.has(seg.signal)),
+      bucketSeconds, ctx.window.from, ctx.window.to,
     );
     const byBucketBySignal = new Map<string, Map<number, BucketAggregate>>();
     for (const [signal, rows] of bucketed) {
