@@ -9,8 +9,9 @@ export { FormulaCompileError } from './errors';
  * plan compiled by an older compiler is detectable rather than silently trusted.
  * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition.
  * qce5.0.0: the `compare` node and `count_exceeding`.
- * qcat1.0.0: the `state` node and the categorical operators. */
-export const COMPILER_VERSION = 'qcat1.0.0';
+ * qcat1.0.0: the `state` node and the categorical operators.
+ * qgeo1.0.0: the site-boundary operators. */
+export const COMPILER_VERSION = 'qgeo1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -555,6 +556,14 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
         }
         if (expected === 'series' && a.type !== 'signal') throw seriesInputRefusal(node.name, a);
       });
+
+      // Latitude and longitude are one position, so they share a unit (task QGEO1).
+      if (entry.needsSiteBoundary
+        && !unitsEqual(parseUnitStringFromRendered(args[0].unit), parseUnitStringFromRendered(args[1].unit))) {
+        throw new FormulaCompileError(
+          `calls "${node.name}" with "${args[0].unit}" and "${args[1].unit}"; latitude and longitude share a unit.`,
+        );
+      }
 
       if (node.name === 'count_exceeding') {
         const threshold = args[1];
