@@ -20,7 +20,6 @@ import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
 import { CategoryView } from './CategoryView';
 import { EquipmentTemplateView } from './EquipmentTemplateView';
-import { ClientEquipmentTemplateView } from './ClientEquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
 import { DeviceManagement } from '../devices/DeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
@@ -123,7 +122,7 @@ interface AdminManagementProps {
   restrictToClientAdmin?: boolean;
 }
 
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'equipment-template'];
+const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
 
 export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensors,
@@ -214,11 +213,15 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
   // same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping,
-  // Devices and Equipment Templates are hidden for now too, by request —
-  // re-enable later. Equipment Classes is Master Admin's own screen
-  // (catalog.write, Things Alive only) and belongs in this branch, not the
-  // client one.
+  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping and
+  // Devices are hidden for now too, by request — re-enable later. Equipment
+  // Classes is Master Admin's own screen (catalog.write, Things Alive only)
+  // and belongs in this branch, not the client one.
+  //
+  // Equipment Templates is removed from the client tab bar entirely (by
+  // request) — a client no longer has a "my templates" entry point in
+  // Administration. Master Admin's own Equipment Templates tab stays hidden
+  // too, as it already was (see the filter below), independent of this.
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
@@ -298,23 +301,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             sensorCounts={templateSensorCounts}
             alertCounts={templateAlertCounts}
             kpiCounts={templateKpiCounts}
-          />
-        )}
-
-        {restrictToClientAdmin && activeSubTab === 'equipment-template' && (
-          <ClientEquipmentTemplateView
-            masterTemplates={equipmentTemplates}
-            myTemplates={myEquipmentTemplates}
-            myTemplatesError={myEquipmentTemplatesError}
-            onCreateMyTemplate={onCreateMyEquipmentTemplate}
-            onUpdateMyTemplate={onUpdateMyEquipmentTemplate}
-            onOpenMyTemplate={onOpenMyEquipmentTemplate}
-            mySensorCounts={myTemplateSensorCounts}
-            myAlertCounts={myTemplateAlertCounts}
-            myKpiCounts={myTemplateKpiCounts}
-            masterSensorCounts={templateSensorCounts}
-            masterAlertCounts={templateAlertCounts}
-            masterKpiCounts={templateKpiCounts}
           />
         )}
 

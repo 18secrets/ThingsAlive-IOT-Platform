@@ -61,14 +61,14 @@ export const WorkOrdersPage: React.FC = () => {
 
   return (
     <div id="work-orders-view" className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Work Orders</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Saved in this browser · communications not sent</p>
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold">Work Orders</h2>
+          <p className="text-sm text-sky-100">Saved in this browser · communications not sent</p>
         </div>
         <button
           onClick={() => setView('create')}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-white text-sky-700 hover:bg-sky-50 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" /> Create work order
         </button>
