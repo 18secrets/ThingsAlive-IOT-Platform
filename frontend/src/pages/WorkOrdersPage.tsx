@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, ClipboardList, ArrowLeft } from 'lucide-react';
+import { Plus, ClipboardList } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { MOCK_WORK_ORDERS, MockWorkOrder, WorkOrderPriority, WorkOrderStatus } from '../data/clientOpsMockData';
 import { FLEET, excursionsFor, findThing, isBreaching } from '../data/fleetMockData';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
+import { Modal } from '../components/common/Modal';
 
 const STATUS_OPTIONS: WorkOrderStatus[] = ['Open', 'In Progress', 'On Hold', 'Completed', 'Cancelled'];
 const STATUS_STYLE: Record<WorkOrderStatus, string> = {
@@ -29,18 +30,12 @@ const AUTO_ORDERS: MockWorkOrder[] = FLEET.filter(isBreaching).map((t) => ({
   notes: `SYNTHETIC: ${excursionsFor(t)} running-hour samples exceeded the assumed ${t.coolantLimitC} °C coolant limit. Review before action.`,
 }));
 
-type View = 'list' | 'create';
-
 export const WorkOrdersPage: React.FC = () => {
-  const [view, setView] = useState<View>('list');
-  usePageHeader(
-    view === 'create'
-      ? { title: 'Create Work Order', subtitle: 'New Maintenance Task' }
-      : { title: 'Work Orders', subtitle: 'Maintenance Tasks' },
-  );
+  usePageHeader({ title: 'Work Orders', subtitle: 'Maintenance Tasks' });
   const [orders, setOrders] = useState<MockWorkOrder[]>([...AUTO_ORDERS, ...MOCK_WORK_ORDERS]);
   const [scope, setScope] = useState(DEFAULT_FLEET_SCOPE);
   const [selectedId, setSelectedId] = useState('all');
+  const [creating, setCreating] = useState(false);
 
   const matching = useMemo(() => matchingFleet(FLEET, scope), [scope]);
   const matchingIds = useMemo(() => new Set(matching.map((t) => t.id)), [matching]);
@@ -52,11 +47,7 @@ export const WorkOrdersPage: React.FC = () => {
 
   function createOrder(order: Omit<MockWorkOrder, 'id' | 'createdAt'>) {
     setOrders((current) => [{ ...order, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current]);
-    setView('list');
-  }
-
-  if (view === 'create') {
-    return <CreateWorkOrderForm onCancel={() => setView('list')} onCreate={createOrder} />;
+    setCreating(false);
   }
 
   return (
@@ -67,7 +58,7 @@ export const WorkOrdersPage: React.FC = () => {
           <p className="text-sm text-sky-100">Saved in this browser · communications not sent</p>
         </div>
         <button
-          onClick={() => setView('create')}
+          onClick={() => setCreating(true)}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-white text-sky-700 hover:bg-sky-50 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" /> Create work order
@@ -107,6 +98,10 @@ export const WorkOrdersPage: React.FC = () => {
           })}
         </div>
       )}
+
+      <Modal isOpen={creating} onClose={() => setCreating(false)} title="Create work order" subtitle="New Maintenance Task" maxWidth="max-w-xl">
+        <CreateWorkOrderForm onCancel={() => setCreating(false)} onCreate={createOrder} />
+      </Modal>
     </div>
   );
 };
@@ -122,50 +117,48 @@ const CreateWorkOrderForm: React.FC<{
   const [notes, setNotes] = useState('');
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <button onClick={onCancel} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
-        <ArrowLeft className="w-4 h-4" /> Back to work orders
-      </button>
-
-      <form
-        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4 shadow-xs"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!title.trim() || !equipmentCode.trim()) return;
-          onCreate({ title: title.trim(), equipmentCode: equipmentCode.trim(), equipmentName: equipmentName.trim() || equipmentCode.trim(), status: 'Open', priority, channel: 'Things Service', contact: '', notes: notes.trim() || undefined });
-        }}
-      >
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!title.trim() || !equipmentCode.trim()) return;
+        onCreate({ title: title.trim(), equipmentCode: equipmentCode.trim(), equipmentName: equipmentName.trim() || equipmentCode.trim(), status: 'Open', priority, channel: 'Things Service', contact: '', notes: notes.trim() || undefined });
+      }}
+    >
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Task</span>
+        <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Inspect coolant sensor" />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Task</span>
-          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Inspect coolant sensor" />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment code</span>
-            <input required value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. 4100460" />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment name</span>
-            <input value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Diesel Generator Set 320 kVA" />
-          </label>
-        </div>
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Priority</span>
-          <select value={priority} onChange={(e) => setPriority(e.target.value as WorkOrderPriority)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm">
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
-          </select>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment code</span>
+          <input required value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. 4100460" />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes</span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment name</span>
+          <input value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Diesel Generator Set 320 kVA" />
         </label>
-        <div className="flex items-center gap-2 pt-2">
-          <button type="submit" className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">Create work order</button>
-          <button type="button" onClick={onCancel} className="px-3.5 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Priority</span>
+        <select value={priority} onChange={(e) => setPriority(e.target.value as WorkOrderPriority)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm">
+          <option value="Low">Low</option>
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes</span>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+      </label>
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          Cancel
+        </button>
+        <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
+          Create work order
+        </button>
+      </div>
+    </form>
   );
 };

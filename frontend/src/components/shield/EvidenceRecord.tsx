@@ -47,14 +47,13 @@ export const EvidenceRecordForm: React.FC<{
 
   return (
     <form
-      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3"
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (!title.trim()) return;
         onSave({ title: title.trim(), reference: reference.trim(), owner: owner.trim(), dueDate, result, findings: findings.trim(), reviewer: reviewer.trim(), recordedBy: recordedBy.trim() });
       }}
     >
-      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Evidence record</h4>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Record title</span>
         <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
@@ -89,9 +88,13 @@ export const EvidenceRecordForm: React.FC<{
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Recorded by</span>
         <input value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
       </label>
-      <div className="flex flex-col gap-2 pt-1">
-        <button type="submit" className="w-full px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">Save reviewed evidence</button>
-        <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          Cancel
+        </button>
+        <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
+          Save reviewed evidence
+        </button>
       </div>
     </form>
   );
