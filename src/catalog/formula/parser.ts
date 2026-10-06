@@ -8,7 +8,13 @@ export type RawNode =
   | { type: 'formula_ref'; name: string; pos: number }
   | { type: 'unary'; op: '-'; operand: RawNode; pos: number }
   | { type: 'binary'; op: '+' | '-' | '*' | '/'; left: RawNode; right: RawNode; pos: number }
+  | { type: 'compare'; op: CompareOp; left: RawNode; right: RawNode; pos: number }
   | { type: 'call'; name: string; args: RawNode[]; pos: number };
+
+/** Ordering only (task QCE5). No `==`/`!=`: equality between two continuous
+ * measurements is a coincidence, and state codes are categorical signals (QCAT1). */
+export type CompareOp = '>' | '>=' | '<' | '<=';
+const COMPARE_OPS: readonly string[] = ['>', '>=', '<', '<='];
 
 /** A guard on an untrusted input path (task QCE1): formulas arrive from uploaded
  * spreadsheets, and a parser with no limit on its own output size is a denial of
@@ -16,7 +22,9 @@ export type RawNode =
 export const MAX_NODES = 200;
 export const MAX_DEPTH = 20;
 
-type TokenType = 'number' | 'duration' | 'ident' | 'param' | 'formularef' | '+' | '-' | '*' | '/' | '(' | ')' | ',' | 'eof';
+type TokenType =
+  | 'number' | 'duration' | 'ident' | 'param' | 'formularef'
+  | '+' | '-' | '*' | '/' | '>' | '>=' | '<' | '<=' | '(' | ')' | ',' | 'eof';
 interface Token { type: TokenType; text: string; pos: number }
 
 /**
@@ -25,11 +33,13 @@ interface Token { type: TokenType; text: string; pos: number }
  * spreadsheets, an untrusted input path, and a third-party parser is supply-chain
  * surface plus loss of control over refusal messages.
  *
+ *   comparison  := expression [ ('>' | '>=' | '<' | '<=') expression ]   -- task QCE5;
+ *                  non-associative: `a < b < c` is refused, since it reads as a range
  *   expression  := term (('+' | '-') term)*
  *   term        := factor (('*' | '/') factor)*
  *   factor      := '-' factor | primary
- *   primary     := number | duration | call | signal | param | formula_ref | '(' expression ')'
- *   call        := identifier '(' [ expression (',' expression)* ] ')'
+ *   primary     := number | duration | call | signal | param | formula_ref | '(' comparison ')'
+ *   call        := identifier '(' [ comparison (',' comparison)* ] ')'
  *   signal      := identifier
  *   param       := '@' identifier
  *   formula_ref := '#' identifier
@@ -71,6 +81,21 @@ export function parseExpression(source: string): RawNode {
       throw new FormulaCompileError(`expression exceeds depth ${MAX_DEPTH}.`);
     }
     return node;
+  }
+
+  function parseComparison(depth: number): RawNode {
+    const left = parseExpr(depth);
+    const t = peek();
+    if (!COMPARE_OPS.includes(t.type)) return left;
+    advance();
+    const right = parseExpr(depth + 1);
+    const next = peek();
+    if (COMPARE_OPS.includes(next.type)) {
+      throw new FormulaCompileError(
+        `comparisons do not chain ("${next.text}" at position ${next.pos}); write each one separately.`,
+      );
+    }
+    return makeNode({ type: 'compare', op: t.type as CompareOp, left, right, pos: t.pos }, depth);
   }
 
   function parseExpr(depth: number): RawNode {
@@ -132,10 +157,10 @@ export function parseExpression(source: string): RawNode {
         advance();
         const args: RawNode[] = [];
         if (peek().type !== ')') {
-          args.push(parseExpr(depth + 1));
+          args.push(parseComparison(depth + 1));
           while (peek().type === ',') {
             advance();
-            args.push(parseExpr(depth + 1));
+            args.push(parseComparison(depth + 1));
           }
         }
         expect(')');
@@ -145,7 +170,7 @@ export function parseExpression(source: string): RawNode {
     }
     if (t.type === '(') {
       advance();
-      const inner = parseExpr(depth + 1);
+      const inner = parseComparison(depth + 1);
       expect(')');
       return inner;
     }
@@ -155,7 +180,7 @@ export function parseExpression(source: string): RawNode {
   if (peek().type === 'eof') {
     throw new FormulaCompileError('the expression is empty.');
   }
-  const root = parseExpr(1);
+  const root = parseComparison(1);
   const trailing = peek();
   if (trailing.type !== 'eof') {
     throw new FormulaCompileError(`unexpected ${describeToken(trailing)} at position ${trailing.pos}.`);
@@ -174,6 +199,18 @@ function tokenize(source: string): Token[] {
   while (i < source.length) {
     const c = source[i];
     if (/\s/.test(c)) { i += 1; continue; }
+    if ((c === '=' || c === '!') && source[i + 1] === '=') {
+      throw new FormulaCompileError(
+        `"${c}=" at position ${i}: there is no equality comparison — measurements are compared by `
+          + 'order (>, >=, <, <=); state codes are categorical signals.',
+      );
+    }
+    if (c === '>' || c === '<') {
+      const op = source[i + 1] === '=' ? `${c}=` : c;
+      tokens.push({ type: op as TokenType, text: op, pos: i });
+      i += op.length;
+      continue;
+    }
     if (c === '+' || c === '-' || c === '*' || c === '/' || c === '(' || c === ')' || c === ',') {
       tokens.push({ type: c as TokenType, text: c, pos: i });
       i += 1;

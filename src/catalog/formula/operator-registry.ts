@@ -80,6 +80,14 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
     name: 'delta_ratio', argKinds: ['series', 'duration', 'duration'], resultKind: 'series',
     unitRule: () => DIMENSIONLESS,
   },
+
+  // ------------------------------------------------------------- QCE5
+  // Readings strictly above a threshold — the `>` of a comparison, as a count. What
+  // "how many times did coolant run over 105" needs, which `count(x > 105)` cannot say.
+  count_exceeding: {
+    name: 'count_exceeding', argKinds: ['series', 'scalar'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS,
+  },
 });
 
 function unaryAggregate(name: string): OperatorEntry {
