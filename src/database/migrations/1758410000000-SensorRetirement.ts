@@ -22,8 +22,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * row, and the category side's BEFORE UPDATE already holds that row exclusively, so
  * whichever commits second re-reads the first's write and is refused.
  */
-export class SensorRetirement1758300000000 implements MigrationInterface {
-  name = 'SensorRetirement1758300000000';
+export class SensorRetirement1758410000000 implements MigrationInterface {
+  name = 'SensorRetirement1758410000000';
 
   public async up(q: QueryRunner): Promise<void> {
     for (const table of ['sensor', 'sensor_category']) {

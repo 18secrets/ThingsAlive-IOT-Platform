@@ -327,7 +327,7 @@ describeDb('sensor retirement on new content and guarded deletion', () => {
   it('migration reverts by name and reapplies over existing content', async () => {
     await capability();
     await author.createClass(master, 'existing', { expectedSignals: signals });
-    await undoMigrationNamed(owner, 'SensorContentGuards1758310000000');
+    await undoMigrationNamed(owner, 'SensorContentGuards1758420000000');
     expect((await owner.query("SELECT to_regprocedure('delete_unused_sensor(uuid,boolean)') AS fn"))[0].fn).toBeNull();
     await owner.runMigrations({ transaction: 'all' });
     expect(await ds.getRepository(EquipmentClassProfile).count()).toBe(1);

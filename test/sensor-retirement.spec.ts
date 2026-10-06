@@ -8,7 +8,7 @@ import { DeviceCatalogService } from '../src/device-catalog/services/device-cata
 import { retiredSensorProblem } from '../src/device-catalog/services/sensor-retirement';
 import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
-const MIGRATION = 'SensorRetirement1758300000000';
+const MIGRATION = 'SensorRetirement1758410000000';
 
 describe('sensor retirement (pure)', () => {
   it('names the sensor, its slug and the day it was retired', () => {
