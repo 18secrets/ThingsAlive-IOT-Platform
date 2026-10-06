@@ -189,6 +189,11 @@ Recorded so nobody rediscovers them as gaps.
   during this phase.**
 - **Incident entity** — see §4.
 - **QTWIN1** — the 3-D twin. Tier 0, the schematic, is built.
+- **QFIX-BASELINE** — the 30-day baseline mixes running and parked hours, so σ is inflated by
+  the gap between two populations and every machine swings ±1.5σ daily. **Found by QSEED1**;
+  no test could have caught it while Development had no telemetry. Specified in
+  `docs/ai/prompts/QFIX-BASELINE-prompt.md`. Until it ships, baseline KPIs are documented to
+  testers as a **known defect** — not as expected behaviour.
 - **QFIX-DEVICES-2** — prediction and baseline still read `device_projection`.
 - **QONBOARD1** — bulk-registering a 1.0 fleet from the projection.
 - **QTX1** — producers sharing one transaction. Forced by machine count on a site page, not
