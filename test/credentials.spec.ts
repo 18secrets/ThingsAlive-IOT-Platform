@@ -177,10 +177,19 @@ describeDb('credentials', () => {
     beforeEach(async () => { await accept(); });
 
     it('gives the same answer for a wrong password and an address nobody has', async () => {
-      const wrong = credentials.signIn('dana@acme.test', 'not the password', {}, NOW);
-      const missing = credentials.signIn('nobody@acme.test', PASSWORD, {}, NOW);
-      await expect(wrong).rejects.toThrow('Email or password is incorrect.');
-      await expect(missing).rejects.toThrow('Email or password is incorrect.');
+      // Settled together (task QFIX-FLAKY). Awaiting the two one after the other left
+      // the second's rejection unobserved while the first was pending — whenever it
+      // rejected first, that surfaced as an unhandled rejection and failed the test in
+      // CI. The assertion is unchanged: both refused, with the same words.
+      const [wrong, missing] = await Promise.allSettled([
+        credentials.signIn('dana@acme.test', 'not the password', {}, NOW),
+        credentials.signIn('nobody@acme.test', PASSWORD, {}, NOW),
+      ]);
+      for (const outcome of [wrong, missing]) {
+        expect(outcome.status).toBe('rejected');
+        expect((outcome as PromiseRejectedResult).reason).toBeInstanceOf(UnauthorizedException);
+        expect((outcome as PromiseRejectedResult).reason.message).toBe('Email or password is incorrect.');
+      }
     });
 
     it('records the attempt for an address nobody has, which is the useful row', async () => {
