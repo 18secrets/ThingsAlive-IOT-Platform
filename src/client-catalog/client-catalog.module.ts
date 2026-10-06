@@ -8,6 +8,8 @@ import { ClientCatalogService } from './services/client-catalog.service';
 import { CopyOnGrantService } from './services/copy-on-grant.service';
 import { ClientVisualService } from './services/client-visual.service';
 import { ClientVisualController } from './client-visual.controller';
+import { ClassUpgradeController } from './class-upgrade.controller';
+import { ClassUpgradeService } from './services/class-upgrade.service';
 
 /**
  * The client's own copies. Registered separately from the catalog module because the
@@ -16,8 +18,8 @@ import { ClientVisualController } from './client-visual.controller';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ClientEquipmentClass, ClientScenario, ClientFormula])],
-  controllers: [ClientCatalogController, ClientVisualController],
-  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService],
+  controllers: [ClientCatalogController, ClientVisualController, ClassUpgradeController],
+  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService, ClassUpgradeService],
   exports: [ClientCatalogService, CopyOnGrantService],
 })
 export class ClientCatalogModule {}
