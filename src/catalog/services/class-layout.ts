@@ -74,18 +74,32 @@ export async function resolveSiteClass(
   return latest;
 }
 
-export async function siteLayout(m: EntityManager, site: Pick<SiteClass, 'slug' | 'version'>): Promise<LayoutWidget[]> {
+export type SiteLayoutWidget = LayoutWidget & { aggregate: string | null };
+
+export async function siteLayout(m: EntityManager, site: Pick<SiteClass, 'slug' | 'version'>): Promise<SiteLayoutWidget[]> {
   const rows = await m.getRepository(SiteClassLayout).find({
     where: { siteClassSlug: site.slug, classVersion: site.version }, order: { position: 'ASC' },
   });
-  return rows.map(toWidget);
+  return rows.map((r) => ({ ...toWidget(r), aggregate: r.aggregate }));
 }
 
-/** A site page is checked against the same vocabulary, in site scope. A site class
- * declares no formulas or signals of its own (aggregation is QPAGE1's), so any
- * binding widget on one is refused as unbound for now. */
-export const siteLayoutProblems = (widgets: LayoutWidget[]): string[] =>
-  layoutProblems(widgets, { scope: 'site', formulas: [], signals: [] });
+/**
+ * A site page against the same vocabulary, in site scope (task QPAGE1 §3). A site
+ * class declares no formulas of its own — a bound KPI names a formula key that its
+ * member machines' classes may or may not declare, which is decided per machine when
+ * the page is served, not here. What is checked here is what the database also
+ * enforces: a bound widget declares its aggregation, an unbound one does not.
+ */
+export function siteLayoutProblems(widgets: SiteLayoutWidget[]): string[] {
+  const unbound = widgets.filter((w) => !w.boundTo);
+  const problems = layoutProblems(unbound, { scope: 'site', formulas: [], signals: [] });
+  for (const w of widgets) {
+    const at = `widget "${w.widgetKey}"`;
+    if (w.boundTo && !w.aggregate) problems.push(`${at} is bound to "${w.boundTo}" but declares no aggregate.`);
+    if (!w.boundTo && w.aggregate) problems.push(`${at} declares aggregate "${w.aggregate}" but is bound to nothing.`);
+  }
+  return problems;
+}
 
 const toWidget = (r: Pick<EquipmentClassLayout,
   'widgetType' | 'widgetKey' | 'boundTo' | 'title' | 'position' | 'size'>): LayoutWidget => ({

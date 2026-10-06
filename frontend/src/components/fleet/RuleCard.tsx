@@ -5,10 +5,10 @@ import { ConfiguredRule } from '../../data/configuredRulesMockData';
 import { findThing } from '../../data/fleetMockData';
 
 // Read-only summary card for a configured rule. "Edit / assign" opens this
-// rule in RuleBuilderPage's form + simulate/confirm flow — the same place a
-// new rule is created — with its back arrow returning here rather than to
-// Alert Agent's own list, which this flow never visits.
-export const RuleCard: React.FC<{ rule: ConfiguredRule; backTo: string }> = ({ rule, backTo }) => {
+// rule in RuleBuilderModal's form + simulate/confirm flow — the same modal a
+// new rule is created in — by calling back into the page that rendered this
+// card, which owns that modal's open/closed state.
+export const RuleCard: React.FC<{ rule: ConfiguredRule; onEdit: (rule: ConfiguredRule) => void }> = ({ rule, onEdit }) => {
   const navigate = useNavigate();
   const thing = findThing(rule.equipmentId);
 
@@ -35,7 +35,7 @@ export const RuleCard: React.FC<{ rule: ConfiguredRule; backTo: string }> = ({ r
 
       <div className="flex items-center gap-3 pt-1">
         <button
-          onClick={() => navigate('/rule-builder', { state: { rule, backTo } })}
+          onClick={() => onEdit(rule)}
           className="inline-flex items-center gap-1 text-[12px] font-medium text-sky-700 dark:text-sky-400 hover:underline"
         >
           <Pencil className="w-3 h-3" /> Edit / assign
