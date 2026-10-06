@@ -87,9 +87,15 @@ export const DEMO_SIGNALS: DemoSignal[] = [
   { signal: 'engine_load', unit: '%', criticality: 'recommended', description: 'Engine load, percent of rated.' },
 ];
 
-/** One reading every ten minutes: inside the duty cycle's carry window, so a running
- * engine reads as continuously running rather than flickering between samples. */
-const STALE_AFTER_SECONDS = 3600;
+/**
+ * Cadence and staleness from one number. The platform has no class-level cadence field:
+ * cadence lives on each binding (`expected_period_seconds`), staleness on each requirement
+ * (`stale_after_seconds`, else the 900 s default) — two columns that nothing ties
+ * together. EX-04 reads `stale` only if they line up, so both derive from `STEP_MS` here:
+ * a signal is stale after six missed readings.
+ */
+export const CADENCE_SECONDS = STEP_MS / 1000;
+export const STALE_AFTER_SECONDS = 6 * CADENCE_SECONDS;
 const COOLANT_MAX = 105;
 
 export type MachineState = 'healthy' | 'trending' | 'breaching' | 'quiet' | 'new' | 'partly_unbound';
@@ -109,12 +115,14 @@ export const DEMO_MACHINES: DemoMachine[] = [
   {
     externalId: 'EX-01', name: 'EX-01 Healthy', state: 'healthy', historyDays: 90, endDaysAgo: 0, unbound: [],
     expect: 'Everything ready. KPIs inside target; availability high (a two-hour stop every Wednesday afternoon); no alerts. '
-      + 'The baseline charts swing about ±1.5σ every day — the 30-day baseline mixes running and parked hours — and stay inside ±2.5σ.',
+      + 'KNOWN DEFECT (QFIX-BASELINE): the baseline charts swing about ±1.5σ every day on every machine, this one '
+      + 'included — the 30-day baseline mixes running and parked hours. Report it if you see it; it is not expected behaviour.',
   },
   {
     externalId: 'EX-02', name: 'EX-02 Trending', state: 'trending', historyDays: 90, endDaysAgo: 0, unbound: [],
     expect: 'Ready. Coolant drifts up by about 14 °C over the last 10 days, still under the 105 °C bound; '
-      + 'its coolant-vs-baseline chart rides visibly higher than EX-01\'s during running hours; no alert.',
+      + 'its coolant-vs-baseline chart rides higher than EX-01\'s during running hours, though the gap is smaller '
+      + 'than it should be until QFIX-BASELINE (known defect); no alert.',
   },
   {
     externalId: 'EX-03', name: 'EX-03 Breaching', state: 'breaching', historyDays: 90, endDaysAgo: 0, unbound: [],
@@ -370,7 +378,7 @@ async function seedSiteAndMachines(ds: DataSource, now: Date): Promise<void> {
           tenantId: DEMO_TENANT, sourceSystem: DEMO_SOURCE, externalId: machine.externalId,
           signalKey: s.signal, measurementRole: s.signal, componentId: '', origin: 'physical' as const,
           imei, channel: s.signal, sensorInstanceId: null, canonicalUnit: s.unit, sourceUnit: null,
-          validFrom: commissionedAt, validTo: null, expectedPeriodSeconds: STEP_MS / 1000,
+          validFrom: commissionedAt, validTo: null, expectedPeriodSeconds: CADENCE_SECONDS,
           isPrimary: true, status: 'active' as const, discoveredFrom: null, discoveredBy: 'manual' as const,
           approvedBy: SEEDER, approvedAt: commissionedAt,
         })),

@@ -7,7 +7,8 @@ import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-p
 import { EntitlementService } from '../src/catalog/services/entitlement.service';
 import { CopyOnGrantService } from '../src/client-catalog/services/copy-on-grant.service';
 import {
-  countDemoRows, DEMO_CLASS, DEMO_MACHINES, DEMO_SOURCE, DEMO_TENANT, resetDemo, seedDemo,
+  CADENCE_SECONDS, countDemoRows, DEMO_CLASS, DEMO_MACHINES, DEMO_SOURCE, DEMO_TENANT, resetDemo, seedDemo,
+  STALE_AFTER_SECONDS,
 } from '../src/database/seeds/seed-demo';
 import { KpiEvaluatorService } from '../src/kpi/services/kpi-evaluator.service';
 import { KpiEnvelope } from '../src/kpi/types';
@@ -92,6 +93,27 @@ describeDb('seed:demo', () => {
     expect(await owner.query(`SELECT count(*)::int AS n FROM tenant WHERE tenant_id = $1`, [DEMO_TENANT])).toEqual([{ n: 1 }]);
   });
 
+  it('every signal declares the 10-minute cadence, and staleness is six missed readings of it', async () => {
+    expect(CADENCE_SECONDS).toBe(600);
+    const periods = await owner.query(
+      `SELECT DISTINCT expected_period_seconds AS p FROM signal_binding_version WHERE tenant_id = $1`, [DEMO_TENANT],
+    );
+    expect(periods).toEqual([{ p: CADENCE_SECONDS }]);
+    const stale = await owner.query(
+      `SELECT DISTINCT stale_after_seconds AS s FROM equipment_class_sensor_requirement WHERE class_slug = $1`, [DEMO_CLASS],
+    );
+    expect(stale).toEqual([{ s: STALE_AFTER_SECONDS }]);
+    expect(STALE_AFTER_SECONDS).toBe(6 * CADENCE_SECONDS);
+    // And the telemetry really arrives at that cadence.
+    const [{ gap }] = await owner.query(
+      `SELECT EXTRACT(EPOCH FROM max(d))::int AS gap FROM (
+         SELECT source_timestamp - lag(source_timestamp) OVER (ORDER BY source_timestamp) AS d
+           FROM telemetry_reading WHERE tenant_id = $1 AND imei LIKE '%0100' AND signal = 'engine_coolant_temperature') g`,
+      [DEMO_TENANT],
+    );
+    expect(gap).toBe(CADENCE_SECONDS);
+  });
+
   // ============================================================ the six states
   it('EX-01 healthy: every KPI ready, every required signal covered, availability high, no alert', async () => {
     const envelopes = await kpis('EX-01');
@@ -100,17 +122,23 @@ describeDb('seed:demo', () => {
     // zero and this `undefined_result`.
     const z = recentMean(envelopes.get('coolant_vs_baseline')!);
     expect(Number.isFinite(z)).toBe(true);
-    // Within the normal band, not near zero: the 30-day baseline mixes running hours
-    // with parked ones, so a running engine mid-shift sits around +1.5σ and a parked
-    // one at night around −1.5σ. That daily swing is honest arithmetic, and the demo's
-    // "what to expect" says so.
-    expect(Math.abs(z)).toBeLessThan(2.5);
+    // Whether z sits where a healthy machine's should is the pending test below.
     expect((await bindings.coverage(demo, ref('EX-01'), NOW)).missing).toEqual([]);
     const avail = await availability.forEquipment(demo, ref('EX-01'), { from: new Date(NOW.getTime() - 7 * 86_400_000), to: NOW });
     expect(avail.readiness).toBe('ready');
     expect(avail.availability).toBeGreaterThan(0.8);
     expect(avail.availability).toBeLessThan(1);
     expect(await openAlertsOn('EX-01')).toEqual([]);
+  });
+
+  // PENDING against QFIX-BASELINE (docs/ai/prompts/QFIX-BASELINE-prompt.md). The assertion
+  // is right and the code is wrong: the 30-day baseline mixes running and parked hours —
+  // two populations — so σ is inflated by the gap between them and a healthy engine
+  // mid-shift reads about +1.6σ (measured: 1.58). Not loosened to go green; un-skipped
+  // by QFIX-BASELINE, whose test 9 requires it.
+  it.skip('EX-01 healthy: no daily baseline excursion [pending QFIX-BASELINE: the baseline mixes running and parked hours, so a healthy engine reads ±1.5σ daily]', async () => {
+    const z = recentMean((await kpis('EX-01')).get('coolant_vs_baseline')!);
+    expect(Math.abs(z)).toBeLessThan(1.5);
   });
 
   it('EX-02 trending: ready, coolant well above its own baseline, under the bound, no alert', async () => {
