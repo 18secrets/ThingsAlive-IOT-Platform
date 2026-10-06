@@ -50,6 +50,15 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   // class_slug — and that is exactly the case this inventory exists for. QREC0b's
   // prompt first listed it as `copy`; the audit is what showed nothing copies it.
   // Recorded here as a decision rather than left silently absent.
+  // Task QREC0c: the visual's anchors are rows and the tenant's to move — copied to
+  // client_equipment_class_visual_anchor. The visual itself is not copied: the image
+  // is platform-owned and shared, so bandwidth stays flat and the cache stays warm.
+  { table: 'equipment_class_visual_anchor', disposition: 'copy' },
+  {
+    table: 'equipment_class_visual', disposition: 'exclude',
+    reason: 'the image is platform-owned and shared by every tenant with the class — a tenant reads this '
+      + 'row and the one object it names, never a copy of the bytes; only its anchors are copied',
+  },
   {
     table: 'site_class', disposition: 'exclude',
     reason: 'platform-owned and read directly (resolveSiteClass); nothing grants a site class to a tenant, '

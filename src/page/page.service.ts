@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ASSET_STORAGE, AssetStorage } from '../assets/asset-storage';
+import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual.entity';
+import { unplacedSignals } from '../catalog/visual/anchor-rules';
+import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
+import { toTenantAnchor } from '../client-catalog/services/client-visual.service';
 import { DataSource, In } from 'typeorm';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
@@ -82,6 +87,7 @@ export class PageService {
     private readonly workOrders: WorkOrderService,
     private readonly service: ServiceForecastService,
     private readonly clientCatalog: ClientCatalogService,
+    @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
   ) {}
 
   // ================================================================ machine page
@@ -100,13 +106,21 @@ export class PageService {
     const has = (...types: WidgetType[]) => visible.some((w) => types.includes(w.widgetType as WidgetType));
     const classSlug = profile.equipmentClassSlug;
 
+    // The schematic's picture and this account's markers, first: its anchors decide
+    // which signals the one bucketed read below has to cover.
+    const schematic = has('schematic') && classSlug ? await this.schematicSource(scope, classSlug) : null;
+    const chartSignals = [...new Set([
+      ...visible.filter((w) => w.widgetType === 'signal_chart' && w.boundTo).map((w) => w.boundTo!),
+      ...(schematic?.anchors.map((a) => a.signal) ?? []),
+    ])];
+
     // One call per producer, each only if some widget needs it.
     const [envelopes, formulas, chartData, coverage, openAlerts, openWork, forecast, modes, recommendations] =
       await Promise.all([
         has('kpi_number', 'kpi_gauge', 'kpi_chart') ? this.kpis.evaluateAll(scope, ref, at) : Promise.resolve(null),
         has('kpi_number', 'kpi_gauge', 'kpi_chart') && classSlug ? this.clientFormulas(scope, classSlug) : Promise.resolve([]),
-        has('signal_chart') ? this.signalCharts(scope, ref, classSlug, visible, at) : Promise.resolve(null),
-        has('readiness_list') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
+        chartSignals.length ? this.signalCharts(scope, ref, classSlug, chartSignals, at) : Promise.resolve(null),
+        has('readiness_list', 'schematic') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
         has('alert_list', 'failure_modes') ? this.openAlerts(scope, [ref]) : Promise.resolve(null),
         has('work_order_list') ? this.openWorkOrders(scope, [ref]) : Promise.resolve(null),
         has('service_due') ? this.service.fleetForecast(scope, at) : Promise.resolve(null),
@@ -117,7 +131,7 @@ export class PageService {
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
     const formulaByKey = new Map<string, ClientFormula>((formulas as ClientFormula[]).map((f) => [f.formulaKey, f]));
 
-    const widgets = visible.map((w): PageWidget => {
+    const widgets = await Promise.all(visible.map(async (w): Promise<PageWidget> => {
       const h = header(w);
       switch (w.widgetType as WidgetType) {
         case 'kpi_number': case 'kpi_gauge': case 'kpi_chart':
@@ -167,14 +181,13 @@ export class PageService {
         }
 
         case 'schematic':
-          // QREC0c supplies the asset; until then the slot says so.
-          return unfilled(h, 'not_available', 'no_visual');
+          return this.schematicWidget(h, schematic, coverage, chartData, at);
 
         case 'machine_list':
         default:
           return unfilled(h, 'not_available', 'not_on_this_page');
       }
-    });
+    }));
 
     return {
       equipment: {
@@ -219,15 +232,92 @@ export class PageService {
     return filled(h, data);
   }
 
+  /** The platform image for the version this account's copy came from, and this
+   * account's own anchors. Null when the account does not hold the class. */
+  private async schematicSource(scope: RequestScope, classSlug: string) {
+    const found = await withTenantSession(this.ds, scope, async (m) => {
+      const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
+      if (!cls) return null;
+      const rows = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug }, order: { signal: 'ASC' },
+      });
+      return { cls, anchors: rows.map(toTenantAnchor) };
+    });
+    if (!found) return null;
+    const visual = found.cls.templateSlug && found.cls.templateVersion != null
+      ? await this.ds.getRepository(EquipmentClassVisual).findOne({
+        where: { classSlug: found.cls.templateSlug, classVersion: found.cls.templateVersion },
+      })
+      : null;
+    return {
+      visual, anchors: found.anchors,
+      declared: found.cls.expectedSignals.map((s) => s.signal),
+      units: new Map(found.cls.expectedSignals.map((s) => [s.signal, s.unit])),
+    };
+  }
+
+  /**
+   * The schematic (task QREC0c §5). Anchors render per machine: each marker carries
+   * the readiness the rest of the page uses, from coverage, and its value from the
+   * same bucketed read the signal charts use — the newest non-empty bucket's `last`.
+   * Nothing here decides readiness or computes a value. An anchor for a sensor this
+   * machine does not have stays on the image, with its unbound readiness: hiding it
+   * would make a fitted sensor and an unfitted one look the same.
+   *
+   * Four different states, because they are four different problems: no visual, an
+   * upload never confirmed, storage not configured, and ready.
+   */
+  private async schematicWidget(
+    h: Header,
+    source: Awaited<ReturnType<PageService['schematicSource']>>,
+    coverage: Awaited<ReturnType<SignalBindingService['coverage']>> | null,
+    charts: Awaited<ReturnType<PageService['signalCharts']>> | null,
+    at: Date,
+  ): Promise<PageWidget> {
+    if (!source?.visual) return unfilled(h, 'not_available', 'no_visual');
+    if (!source.visual.assetKey) return unfilled(h, 'not_available', 'upload_pending');
+    if (!this.storage.configured) return unfilled(h, 'not_available', 'assets_unavailable');
+
+    // Worst readiness per signal across its components — a composite machine's
+    // marker is only as ready as its least-ready probe.
+    const bySignal = new Map<string, { readiness: PageReadiness; reason: string | null }>();
+    for (const row of coverage ? readinessRows(coverage, at) : []) {
+      const seen = bySignal.get(row.signal);
+      if (!seen || READINESS_SEVERITY[row.readiness] > READINESS_SEVERITY[seen.readiness]) {
+        bySignal.set(row.signal, { readiness: row.readiness, reason: row.reason });
+      }
+    }
+    // A signal the class does not require has no coverage row, so nothing can say it is ready.
+    const readinessOf = (signal: string) => bySignal.get(signal) ?? { readiness: 'not_configured' as const, reason: 'not_required' };
+
+    const anchors = source.anchors.map((a) => {
+      const r = readinessOf(a.signal);
+      const chart = charts?.get(a.signal);
+      return {
+        signal: a.signal, hotspotX: a.hotspotX, hotspotY: a.hotspotY, label: a.label,
+        readiness: r.readiness, reason: r.reason,
+        value: r.readiness === 'ready' && chart?.ok ? chart.latest : null,
+        unit: source.units.get(a.signal) ?? null,
+      };
+    });
+    const unplaced = unplacedSignals(source.declared, source.anchors).map((signal) => ({ signal, ...readinessOf(signal) }));
+
+    return filled(h, {
+      imageUrl: await this.storage.readUrl(source.visual.assetKey),
+      width: source.visual.widthPx, height: source.visual.heightPx,
+      anchors, unplacedSignals: unplaced,
+    });
+  }
+
   /** Every signal chart on the page in one bucketed read (QCE2.1's reader), drawn on
    * the same bucket ladder the evaluator uses: an empty bucket is `v: null`, never
    * omitted and never 0. The bucket's own `avg` is the value — the reader computes
-   * all seven aggregates and the caller picks one. */
+   * all seven aggregates and the caller picks one. The same read gives the schematic
+   * its values: `latest` is the newest non-empty bucket's `last`. */
   private async signalCharts(
-    scope: RequestScope, ref: EquipmentRef, classSlug: string | null, widgets: LayoutWidget[], at: Date,
+    scope: RequestScope, ref: EquipmentRef, classSlug: string | null, signals: string[], at: Date,
   ) {
-    const signals = [...new Set(widgets.filter((w) => w.widgetType === 'signal_chart' && w.boundTo).map((w) => w.boundTo!))];
-    const result = new Map<string, { ok: true; data: { signal: string; unit: string | null; points: { t: string; v: number | null }[] } }
+    const result = new Map<string, { ok: true; latest: number; data: { signal: string; unit: string | null; points: { t: string; v: number | null }[] } }
       | { ok: false; readiness: Exclude<PageReadiness, 'ready'>; reason: string }>();
     if (!signals.length) return result;
 
@@ -261,7 +351,8 @@ export class PageService {
         for (let epoch = start; epoch <= at.getTime() / 1000; epoch += bucketSeconds) {
           points.push({ t: new Date(epoch * 1000).toISOString(), v: byBucket.get(epoch * 1000) ?? null });
         }
-        result.set(signal, { ok: true, data: { signal, unit: units.get(signal) ?? null, points } });
+        const newest = rows.reduce((a, b) => (b.bucket.getTime() > a.bucket.getTime() ? b : a));
+        result.set(signal, { ok: true, latest: newest.last, data: { signal, unit: units.get(signal) ?? null, points } });
       }
       return result;
     });

@@ -21,7 +21,7 @@ export const WIDGET_PRODUCERS: Readonly<Record<WidgetType, string>> = Object.fre
   failure_modes: 'client_equipment_class_failure_mode (QREC0a), status via AlertService.listEvents',
   recommendations: 'client_equipment_class_recommendation (QREC0a)',
   machine_list: 'SignalBindingService.coverage per machine, AlertService.listEvents',
-  schematic: 'none until QREC0c',
+  schematic: 'equipment_class_visual + the tenant\'s anchors (QREC0c); readiness via coverage, values via readBucketed',
 });
 
 export type PageReadiness = Readiness;
@@ -87,9 +87,22 @@ export interface SiteKpiData {
   excluded: { notDeclared: number; notReady: number };
 }
 
+/** The schematic (task QREC0c §5). Anchors render per machine; every marker carries the
+ * page's own readiness, and a value only when that readiness is ready. */
+export interface SchematicData {
+  imageUrl: string;
+  width: number | null;
+  height: number | null;
+  anchors: {
+    signal: string; hotspotX: number; hotspotY: number; label: string | null;
+    readiness: PageReadiness; reason: string | null; value: number | null; unit: string | null;
+  }[];
+  unplacedSignals: { signal: string; readiness: PageReadiness; reason: string | null }[];
+}
+
 export type WidgetData =
   | KpiWidgetData | SignalChartData | ReadinessRow[] | AlertRow[] | WorkOrderRow[] | ServiceDueData
-  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData;
+  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData | SchematicData;
 
 export interface PageWidget {
   widgetKey: string;
