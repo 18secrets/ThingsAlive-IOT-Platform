@@ -11,12 +11,22 @@
  * granted independently of what it can already do.
  */
 export const TENANT_ASSIGNABLE_PAGES = [
-  'dashboard', 'ai-onboarding', 'predictions', 'admin', 'settings',
-  // UI-only pages (no dedicated API yet): the frontend shows these to every
-  // client user unconditionally today, but they're listed here too so a role
-  // can already name them without the save being rejected, once per-role
-  // gating for them is wired up on the frontend side.
-  'alerts', 'scenarios', 'work-orders', 'cost-administration',
+  "dashboard",
+  "things-care",
+  "things-shield",
+  "incident-management",
+  "production-monitoring",
+  "ai-onboarding",
+  "predictions",
+  "admin",
+  "settings",
+  // UI-only pages (no dedicated API yet): listed here so a role can already
+  // name them without the save being rejected. Sidebar.tsx gates each one
+  // purely on whether it's in the signed-in user's allowedTabs.
+  "alerts",
+  "scenarios",
+  "work-orders",
+  "cost-administration",
 ] as const;
 // 'alert-agent' used to be here too — removed along with its sidebar entry
 // (frontend's Sidebar.tsx); granting it would otherwise look like it does

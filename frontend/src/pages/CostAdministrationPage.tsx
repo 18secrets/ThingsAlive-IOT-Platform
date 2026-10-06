@@ -50,9 +50,9 @@ export const CostAdministrationPage: React.FC = () => {
 
   return (
     <div id="cost-administration-view" className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Cost Administration</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">From machine signals to your next best action.</p>
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
+        <h2 className="text-xl font-bold">Cost Administration</h2>
+        <p className="text-sm text-sky-100">From machine signals to your next best action.</p>
       </div>
 
       <FleetFilters scope={scope} onChange={setScope} things={matching} selectedId={selectedId} onSelectId={(id) => { setSelectedId(id); if (form.scope === 'equipment' && id !== 'all') update({ target: id }); }} />

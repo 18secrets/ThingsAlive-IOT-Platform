@@ -4,7 +4,19 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
+import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
+import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
+import { fromFailureModeJsonb, severityGiven } from '../../catalog/services/class-failure-modes';
+import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
+import { ClientFormula } from '../entities/client-formula.entity';
+import { fallbackLayout, TenantLayoutWidget } from '../../catalog/layout/layout-rules';
+import { presentationOf } from '../../catalog/services/class-layout';
 import { CopyOnGrantService } from './copy-on-grant.service';
+
+const toTenantWidget = (r: ClientEquipmentClassLayout): TenantLayoutWidget => ({
+  widgetType: r.widgetType, widgetKey: r.widgetKey, boundTo: r.boundTo, title: r.title,
+  position: r.position, size: r.size, hidden: r.hidden, positionCustom: r.positionCustom,
+});
 import {
   Provenance, classContentChecksum, describeProvenance, scenarioContentChecksum,
 } from './provenance';
@@ -73,8 +85,127 @@ export class ClientCatalogService {
       // would make the divergence signal say whatever they wanted it to say.
       Object.assign(row, edit, { updatedBy: scope.userId });
       this.logger.log(`Tenant ${scope.tenantId} edited class "${slug}" (by ${scope.userId}).`);
-      return repo.save(row);
+      const saved = await repo.save(row);
+      if (edit.failureModes) await this.replaceFailureModes(m, scope.tenantId, slug, edit.failureModes);
+      return saved;
     });
+  }
+
+  /**
+   * The rows are what is read (task QREC0a); the jsonb edit above is still applied,
+   * deprecated, so the two never disagree. A failure mode one of the tenant's own
+   * recommendations still points at cannot be removed — refused naming both, rather
+   * than left to the foreign key's constraint name.
+   */
+  private async replaceFailureModes(
+    m: EntityManager, tenantId: string, slug: string, modes: ClientEquipmentClass['failureModes'],
+  ): Promise<void> {
+    const repo = m.getRepository(ClientEquipmentClassFailureMode);
+    const existing = await repo.find({ where: { tenantId, clientEquipmentClassSlug: slug } });
+    const wanted = new Map(fromFailureModeJsonb(modes).map((f) => [f.code, f]));
+    const removed = existing.filter((r) => !wanted.has(r.code));
+    if (removed.length) {
+      const recs = await m.getRepository(ClientEquipmentClassRecommendation).find({
+        where: { tenantId, clientEquipmentClassSlug: slug },
+      });
+      const blocked = recs.filter((r) => removed.some((f) => f.code === r.failureModeCode));
+      if (blocked.length) {
+        throw new BadRequestException(
+          blocked.map((r) => `Recommendation "${r.action}" points at failure mode "${r.failureModeCode}"`).join('; ')
+            + '. Remove or repoint the recommendation before removing the failure mode.',
+        );
+      }
+      await repo.remove(removed);
+    }
+    const byCode = new Map(existing.map((r) => [r.code, r]));
+    await repo.save([...wanted.values()].map((f) => {
+      const prior = byCode.get(f.code);
+      return repo.create({
+        ...(prior ?? { tenantId, clientEquipmentClassSlug: slug }), ...f,
+        // The edit speaks the jsonb shape, which has no severity: an edit that does
+        // not mention one keeps the copied one rather than erasing it.
+        severity: severityGiven(modes, f.code) ? f.severity : prior?.severity ?? null,
+      });
+    }));
+  }
+
+  /**
+   * The account's page layout for one class (task QREC0b). When the class was
+   * granted with no layout, the page is the computed fallback over the account's own
+   * formula copies, and says so — an editor has to know there are no rows to hide or
+   * reorder yet.
+   */
+  async layout(scope: RequestScope, slug: string): Promise<{ fallback: boolean; widgets: TenantLayoutWidget[] }> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      await this.requireClass(m, scope, slug);
+      const rows = await m.getRepository(ClientEquipmentClassLayout).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug }, order: { position: 'ASC' },
+      });
+      if (rows.length) {
+        return { fallback: false, widgets: rows.map(toTenantWidget) };
+      }
+      const formulas = await m.getRepository(ClientFormula).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, status: 'active' },
+      });
+      return {
+        fallback: true,
+        widgets: fallbackLayout(formulas.map(presentationOf)).map((w) => ({ ...w, hidden: false, positionCustom: false })),
+      };
+    });
+  }
+
+  async setWidgetHidden(scope: RequestScope, slug: string, widgetKey: string, hidden: boolean) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(ClientEquipmentClassLayout);
+      const row = await repo.findOne({ where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, widgetKey } });
+      if (!row) throw new NotFoundException(`No widget "${widgetKey}" on "${slug}" in this account.`);
+      row.hidden = hidden;
+      this.logger.log(`Tenant ${scope.tenantId} ${hidden ? 'hid' : 'showed'} "${widgetKey}" on "${slug}".`);
+      return toTenantWidget(await repo.save(row));
+    });
+  }
+
+  /**
+   * A reorder names every widget, in the order wanted — a permutation, not a patch, so
+   * there is no position left half-assigned. A widget that ends up somewhere other
+   * than where the class put it is marked custom, which is what a new class version
+   * respects instead of reverting (mergeTenantLayout).
+   */
+  async reorderLayout(scope: RequestScope, slug: string, widgetKeys: string[]) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(ClientEquipmentClassLayout);
+      const rows = await repo.find({ where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug } });
+      const have = new Set(rows.map((r) => r.widgetKey));
+      const given = new Set(widgetKeys);
+      const missing = [...have].filter((k) => !given.has(k));
+      const unknown = [...given].filter((k) => !have.has(k));
+      if (!rows.length || missing.length || unknown.length || given.size !== widgetKeys.length) {
+        throw new BadRequestException(
+          `A reorder names every widget on "${slug}" exactly once.`
+            + (missing.length ? ` Missing: ${missing.join(', ')}.` : '')
+            + (unknown.length ? ` Not on this page: ${unknown.join(', ')}.` : '')
+            + (given.size !== widgetKeys.length ? ' A widget is named twice.' : ''),
+        );
+      }
+      const byKey = new Map(rows.map((r) => [r.widgetKey, r]));
+      widgetKeys.forEach((key, i) => {
+        const row = byKey.get(key)!;
+        if (row.position !== i + 1) {
+          row.position = i + 1;
+          row.positionCustom = true;
+        }
+      });
+      // Saved in one transaction; uq_client_layout_position is deferred to commit, so
+      // a swap passing through a duplicate position mid-save is not refused.
+      await repo.save(rows);
+      this.logger.log(`Tenant ${scope.tenantId} reordered the "${slug}" page.`);
+      return rows.sort((a, b) => a.position - b.position).map(toTenantWidget);
+    });
+  }
+
+  private async requireClass(m: EntityManager, scope: RequestScope, slug: string): Promise<void> {
+    const found = await m.getRepository(ClientEquipmentClass).count({ where: { tenantId: scope.tenantId, slug } });
+    if (!found) throw new NotFoundException(`No equipment class "${slug}" in this account.`);
   }
 
   async scenarios(scope: RequestScope, classSlug?: string): Promise<ClientScenario[]> {

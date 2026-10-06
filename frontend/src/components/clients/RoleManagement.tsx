@@ -5,6 +5,10 @@ import { ApiError, RoleInput, RolePatchInput, TenantRole, TenantUser } from '../
 
 const TAB_LABELS: Record<NavigationTab, string> = {
   dashboard: 'Dashboard',
+  'things-care': 'ThingsCare',
+  'things-shield': 'ThingsShield',
+  'incident-management': 'Incident Management',
+  'production-monitoring': 'Production Monitoring',
   'ai-onboarding': 'AI Onboarding',
   'alert-agent': 'Alert Agent',
   alerts: 'Alerts',

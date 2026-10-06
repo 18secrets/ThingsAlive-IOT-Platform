@@ -54,6 +54,13 @@ import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ThingDetailPage } from './pages/ThingDetailPage';
+import { ThingsCarePage } from './pages/ThingsCarePage';
+import { ThingsCareDetailPage } from './pages/ThingsCareDetailPage';
+import { ThingsShieldPage } from './pages/ThingsShieldPage';
+import { ThingsShieldDetailPage } from './pages/ThingsShieldDetailPage';
+import { IncidentManagementPage } from './pages/IncidentManagementPage';
+import { ProductionMonitoringPage } from './pages/ProductionMonitoringPage';
+import { ProductionMonitoringDetailPage } from './pages/ProductionMonitoringDetailPage';
 import { RuleBuilderPage } from './pages/RuleBuilderPage';
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
 import { ScenariosPage } from './pages/ScenariosPage';
@@ -1258,14 +1265,15 @@ function AppData() {
             />
             <Route
               path="equipment-template/:templateId"
-              element={
+              element={authUser?.role === 'client' ? (
+                // Equipment Templates was removed from the client's Administration
+                // tab bar (see AdminManagement.tsx's CLIENT_VISIBLE_ADMIN_SUBTABS) —
+                // this route has no tab-bar entry point any more, but stayed directly
+                // navigable by URL until now. A client landing here (bookmark, back
+                // button) goes to their Administration default instead.
+                <Navigate to="/admin/plant" replace />
+              ) : (
                 <EquipmentTemplateDetailPage
-                  // A client can only ever reach this route for one of their own
-                  // templates (the master library has no "Configure" link for
-                  // them) — so which data source feeds this page is decided once,
-                  // here, by role, rather than threading role checks through the
-                  // page itself.
-                  //
                   // Alert rules, KPI formulas and predictive rules are different
                   // from sensors/the template itself: Master Admin's rules are the
                   // account's defaults and stay visible (read-only) to every
@@ -1274,22 +1282,21 @@ function AppData() {
                   // only when signed in as a client) are always passed down. A
                   // client's own create/update/delete only ever touches `myX`;
                   // Master Admin's own create/update/delete only ever touches `x`.
-                  isClientView={authUser?.role === 'client'}
-                  // A client reaches this route either for one of their own invented
-                  // templates, or for a Master Library class they opened to layer their
-                  // own alerts/KPIs/predictive rules on top of — so both lists are
-                  // searched, master's real template id included.
-                  templates={authUser?.role === 'client' ? [...equipmentTemplates, ...myEquipmentTemplates] : equipmentTemplates}
+                  isClientView={false}
+                  // This branch only ever renders for Master Admin now — a client is
+                  // redirected above before reaching this element — so every prop
+                  // below is Master Admin's own data/handlers, not the client's.
+                  templates={equipmentTemplates}
                   allSensors={realSensors}
                   sensorCategories={sensorCategories}
-                  templateSensorLinks={authUser?.role === 'client' ? myTemplateSensorLinks : templateSensorLinks}
-                  onAttachSensor={authUser?.role === 'client' ? handleAttachMyTemplateSensor : handleAttachTemplateSensor}
-                  onDetachSensor={authUser?.role === 'client' ? handleDetachMyTemplateSensor : handleDetachTemplateSensor}
+                  templateSensorLinks={templateSensorLinks}
+                  onAttachSensor={handleAttachTemplateSensor}
+                  onDetachSensor={handleDetachTemplateSensor}
                   alertRules={alertRules}
                   onCreateAlertRule={handleCreateAlertRule}
                   onUpdateAlertRule={handleUpdateAlertRule}
                   onDeleteAlertRule={handleDeleteAlertRule}
-                  myAlertRules={authUser?.role === 'client' ? myAlertRules : undefined}
+                  myAlertRules={undefined}
                   onCreateMyAlertRule={handleCreateMyAlertRule}
                   onUpdateMyAlertRule={handleUpdateMyAlertRule}
                   onDeleteMyAlertRule={handleDeleteMyAlertRule}
@@ -1297,7 +1304,7 @@ function AppData() {
                   onCreateKpiFormula={handleCreateKpiFormula}
                   onUpdateKpiFormula={handleUpdateKpiFormula}
                   onDeleteKpiFormula={handleDeleteKpiFormula}
-                  myKpiFormulas={authUser?.role === 'client' ? myKpiFormulas : undefined}
+                  myKpiFormulas={undefined}
                   onCreateMyKpiFormula={handleCreateMyKpiFormula}
                   onUpdateMyKpiFormula={handleUpdateMyKpiFormula}
                   onDeleteMyKpiFormula={handleDeleteMyKpiFormula}
@@ -1305,12 +1312,12 @@ function AppData() {
                   onCreatePredictiveRule={handleCreatePredictiveRule}
                   onUpdatePredictiveRule={handleUpdatePredictiveRule}
                   onDeletePredictiveRule={handleDeletePredictiveRule}
-                  myPredictiveRules={authUser?.role === 'client' ? myPredictiveRules : undefined}
+                  myPredictiveRules={undefined}
                   onCreateMyPredictiveRule={handleCreateMyPredictiveRule}
                   onUpdateMyPredictiveRule={handleUpdateMyPredictiveRule}
                   onDeleteMyPredictiveRule={handleDeleteMyPredictiveRule}
                 />
-              }
+              )}
             />
             <Route
               path=":subTab"
@@ -1398,6 +1405,13 @@ function AppData() {
             }
           />
 
+          <Route path="things-care" element={<ThingsCarePage />} />
+          <Route path="things-care/:thingId" element={<ThingsCareDetailPage />} />
+          <Route path="things-shield" element={<ThingsShieldPage />} />
+          <Route path="things-shield/:thingId" element={<ThingsShieldDetailPage />} />
+          <Route path="incident-management" element={<IncidentManagementPage />} />
+          <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
+          <Route path="production-monitoring/:thingId" element={<ProductionMonitoringDetailPage />} />
           <Route path="alert-agent" element={<AlertAgentPage />} />
           <Route path="rule-builder" element={<RuleBuilderPage />} />
           <Route path="alerts" element={<AlertsPage />} />

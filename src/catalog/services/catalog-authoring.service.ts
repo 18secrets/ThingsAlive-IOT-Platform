@@ -15,6 +15,12 @@ import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
 import { validateParams } from '../../alert/services/alert-rules';
 import { validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals } from './content-validation';
+import {
+  ClassContentError, copyClassContent, danglingRecommendations, fromFailureModeJsonb, insertClassContent,
+  loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
+} from './class-failure-modes';
+import { copyLayout, loadLayout, presentationOf } from './class-layout';
+import { layoutProblems } from '../layout/layout-rules';
 
 type ClassDraft = Partial<Pick<EquipmentClassProfile,
   'name' | 'description' | 'category' | 'expectedSignals' | 'failureModes' | 'defaultThresholds'>>;
@@ -63,15 +69,24 @@ export class CatalogAuthoringService {
     }
     this.requireSaneSignals(draft.expectedSignals ?? []);
     this.logger.log(`${scope.userId} created template class "${slug}".`);
-    return this.classes.save(this.classes.create({
-      slug, version: 1, status: 'draft', publishedAt: null,
-      name: draft.name ?? slug,
-      description: draft.description ?? null,
-      category: draft.category ?? null,
-      expectedSignals: draft.expectedSignals ?? [],
-      failureModes: draft.failureModes ?? [],
-      defaultThresholds: draft.defaultThresholds ?? {},
-    }));
+    // The jsonb is still written (deprecated, task QREC0a); the rows are what is read.
+    // Through `this.classes.manager` rather than an injected repository, so every
+    // existing caller that constructs this service keeps working unchanged.
+    return this.classes.manager.transaction(async (m) => {
+      const saved = await m.getRepository(EquipmentClassProfile).save(this.classes.create({
+        slug, version: 1, status: 'draft', publishedAt: null,
+        name: draft.name ?? slug,
+        description: draft.description ?? null,
+        category: draft.category ?? null,
+        expectedSignals: draft.expectedSignals ?? [],
+        failureModes: draft.failureModes ?? [],
+        defaultThresholds: draft.defaultThresholds ?? {},
+      }));
+      await insertClassContent(
+        m, slug, 1, fromFailureModeJsonb(draft.failureModes ?? []), [], { source: 'manual', importBatchId: null },
+      );
+      return saved;
+    });
   }
 
   /**
@@ -82,10 +97,30 @@ export class CatalogAuthoringService {
    */
   async editClass(scope: RequestScope, slug: string, draft: ClassDraft): Promise<EquipmentClassProfile> {
     const working = await this.workingClass(slug);
+    const forked = !working.id;
     Object.assign(working, draft);
     if (draft.expectedSignals) this.requireSaneSignals(working.expectedSignals);
     this.logger.log(`${scope.userId} edited template class "${slug}" v${working.version}.`);
-    return this.classes.save(working);
+    return this.classes.manager.transaction(async (m) => {
+      const saved = await m.getRepository(EquipmentClassProfile).save(working);
+      // A fork starts as a copy of the version it came from (task QREC0a) — the
+      // jsonb did this by riding on the profile row; rows only do it if asked.
+      if (forked) {
+        await copyClassContent(m, slug, working.version - 1, working.version);
+        await copyLayout(m, slug, working.version - 1, working.version);
+      }
+      if (draft.failureModes) {
+        try {
+          await replaceDraftFailureModes(
+            m, slug, working.version, draft.failureModes, { source: 'manual', importBatchId: null },
+          );
+        } catch (err) {
+          if (err instanceof ClassContentError) throw new BadRequestException(err.message);
+          throw err;
+        }
+      }
+      return saved;
+    });
   }
 
   /**
@@ -115,6 +150,22 @@ export class CatalogAuthoringService {
     const signalProblem = validateSignalCountForPublish(draft.expectedSignals);
     if (signalProblem) {
       throw new BadRequestException(`"${slug}" ${signalProblem}`);
+    }
+
+    // Content that references something absent is a defect, not a draft (task
+    // QREC0a). The recommendation check cannot fire through any path that writes
+    // rows today — the foreign key refuses a dangling one at insert — and is kept as
+    // the net for one that someday might, saying both names rather than a constraint's.
+    const [failureModes, recommendations] = await Promise.all([
+      loadFailureModes(this.classes.manager, slug, draft.version),
+      loadRecommendations(this.classes.manager, slug, draft.version),
+    ]);
+    const contentProblems = [
+      ...undeclaredFailureModeSignals(failureModes, draft.expectedSignals.map((s) => s.signal)),
+      ...danglingRecommendations(recommendations, failureModes),
+    ];
+    if (contentProblems.length) {
+      throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${contentProblems.join(' ')}`);
     }
 
     const formulas = await this.formulas.find({ where: { classSlug: slug, classVersion: draft.version } });
@@ -197,6 +248,7 @@ export class CatalogAuthoringService {
         expression: formula.expression,
         declaredResultKind: formula.resultKind ?? undefined,
         declaredDisplayUnit: formula.displayUnit,
+        declaredChartType: formula.chartType,
       })),
     });
 
@@ -209,6 +261,26 @@ export class CatalogAuthoringService {
       throw new BadRequestException(
         `Cannot publish "${slug}" v${draft.version}: ${failures.join('; ')}`,
       );
+    }
+
+    // The page layout (task QREC0b), checked against what the formulas just compiled
+    // to — a widget has to agree with its formula's presentation, and the compiled
+    // result_kind is only known from here on. No layout rows is valid: the page
+    // falls back to a computed one, and publishing is never gated on authoring it.
+    const layout = await loadLayout(this.classes.manager, slug, draft.version);
+    if (layout.length) {
+      const presentations = formulas.map((formula) => {
+        const result = results.get(formula.formulaKey)!;
+        const resultKind = formula.resultKind
+          ?? (result.status === 'ok' ? result.compiled.resultKind : null);
+        return presentationOf({ ...formula, resultKind });
+      });
+      const layoutIssues = layoutProblems(layout, {
+        scope: 'equipment', formulas: presentations, signals: draft.expectedSignals.map((s) => s.signal),
+      });
+      if (layoutIssues.length) {
+        throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${layoutIssues.join(' ')}`);
+      }
     }
 
     return this.classes.manager.transaction(async (m) => {

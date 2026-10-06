@@ -6,7 +6,9 @@ export type FormulaResultKind = 'scalar' | 'series';
 export type FormulaTargetDirection = 'higher_better' | 'lower_better' | 'band' | 'none';
 export type FormulaComparisonBasis = 'none' | 'previous_period' | 'target';
 export type FormulaAggregationWindow = 'shift' | 'today' | '24h' | '7d' | '30d' | 'mtd' | 'ytd';
-export type FormulaChartType = 'none' | 'line' | 'bar' | 'area' | 'gauge';
+/** `number` added by task QREC0a: the latest value alone, which is all a scalar can
+ * show. `line` on a scalar is refused at publish — see formula-compiler.ts. */
+export type FormulaChartType = 'none' | 'line' | 'bar' | 'area' | 'gauge' | 'number';
 
 /**
  * A formula for a class of machine (`1757970000000-LibraryStructure.ts`, task QL1).

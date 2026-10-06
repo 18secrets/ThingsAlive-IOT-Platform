@@ -73,8 +73,10 @@ describeDb('catalog import: workbook template and parser', () => {
 
     expect(result.status).toBe('parsed');
     expect(result.invalidRowCount).toBe(0);
+    // recommendation: template v4 (QREC0a); layout: added inside v4 (QREC0b). Each is a
+    // new sheet with its own example row.
     expect(result.countsBySheet).toEqual({
-      equipment_class: 1, signal: 1, failure_mode: 1, sensor_capability: 1, formula: 1,
+      equipment_class: 1, signal: 1, failure_mode: 1, recommendation: 1, layout: 1, sensor_capability: 1, formula: 1,
     });
   });
 
@@ -96,8 +98,9 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(result.countsBySheet.signal).toBe(2);
 
     const rows = await ds.getRepository(CatalogImportRow).find({ where: { batchId: result.id } });
-    // 5 example rows from the template, plus the 2 just added.
-    expect(rows).toHaveLength(7);
+    // 7 example rows from the template (v4 added recommendation, then layout in QREC0b),
+    // plus the 2 just added.
+    expect(rows).toHaveLength(9);
   });
 
   it('splits a comma-separated multi-value cell and parses the boolean column', async () => {
@@ -106,7 +109,10 @@ describeDb('catalog import: workbook template and parser', () => {
     const failureMode = await ds.getRepository(CatalogImportRow).findOneOrFail({
       where: { batchId: result.id, sheet: 'failure_mode' },
     });
-    expect(failureMode.payload.signals).toEqual(['coolant_temp_c', 'oil_pressure_kpa']);
+    // One signal since v4 (QREC0a): the example used to name oil_pressure_kpa, which
+    // its class never declares and which publish now refuses. The comma split is
+    // still exercised by `enables` below.
+    expect(failureMode.payload.signals).toEqual(['coolant_temp_c']);
 
     const signal = await ds.getRepository(CatalogImportRow).findOneOrFail({
       where: { batchId: result.id, sheet: 'signal' },
@@ -275,7 +281,9 @@ describeDb('catalog import: workbook template and parser', () => {
       const wb = new Workbook();
       await loadWorkbook(wb, await templates.build());
       expect(wb.worksheets.map((s) => s.name)).toEqual([
-        '_meta', 'equipment_class', 'signal', 'failure_mode', 'sensor_capability', 'formula', '_enums',
+        // layout: added inside v4 by QREC0b.
+        '_meta', 'equipment_class', 'signal', 'failure_mode', 'recommendation', 'layout', 'sensor_capability', 'formula',
+        '_enums',
       ]);
     });
 
