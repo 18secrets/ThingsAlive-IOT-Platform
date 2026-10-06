@@ -4,14 +4,16 @@ import { Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { RuleCard } from '../components/fleet/RuleCard';
+import { RuleBuilderModal } from '../components/fleet/RuleBuilderModal';
 import { FLEET, predictionFor } from '../data/fleetMockData';
-import { rulesByOutcome } from '../data/configuredRulesMockData';
+import { ConfiguredRule, rulesByOutcome } from '../data/configuredRulesMockData';
 
 export const LivePredictionsPage: React.FC = () => {
   usePageHeader({ title: 'Live Predictions', subtitle: 'Automated Dispatch' });
   const navigate = useNavigate();
   const [scope, setScope] = useState(DEFAULT_FLEET_SCOPE);
   const [selectedId, setSelectedId] = useState('all');
+  const [builderRule, setBuilderRule] = useState<ConfiguredRule | 'new' | null>(null);
 
   const matching = useMemo(() => matchingFleet(FLEET, scope), [scope]);
   const visible = useMemo(() => matching.filter((t) => selectedId === 'all' || t.id === selectedId), [matching, selectedId]);
@@ -30,7 +32,7 @@ export const LivePredictionsPage: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Prediction scenarios</h3>
           <button
-            onClick={() => navigate('/rule-builder', { state: { backTo: '/predictions', defaultOutcome: 'prediction' } })}
+            onClick={() => setBuilderRule('new')}
             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
           >
             Create prediction scenario
@@ -38,12 +40,19 @@ export const LivePredictionsPage: React.FC = () => {
         </div>
         {predictionRules.length ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {predictionRules.map((r) => <RuleCard key={r.id} rule={r} backTo="/predictions" />)}
+            {predictionRules.map((r) => <RuleCard key={r.id} rule={r} onEdit={setBuilderRule} />)}
           </div>
         ) : (
           <p className="text-[13px] text-slate-400">No configured prediction outcomes for this selection.</p>
         )}
       </div>
+
+      <RuleBuilderModal
+        isOpen={builderRule !== null}
+        onClose={() => setBuilderRule(null)}
+        rule={builderRule !== 'new' ? builderRule ?? undefined : undefined}
+        defaultOutcome="prediction"
+      />
 
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Prediction KPIs</h3>

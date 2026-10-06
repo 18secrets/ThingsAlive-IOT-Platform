@@ -10,6 +10,7 @@ import {
 import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/EvidenceRecord';
 import { FeatureCrossLinks } from '../components/fleet/FeatureCrossLinks';
 import { IncidentManagementSection } from '../components/shield/IncidentManagementSection';
+import { Modal } from '../components/common/Modal';
 
 export const ThingsShieldDetailPage: React.FC = () => {
   const { thingId } = useParams<{ thingId: string }>();
@@ -121,21 +122,26 @@ export const ThingsShieldDetailPage: React.FC = () => {
 
         <div className="space-y-3">
           {categoryRecords.map((r) => (
-            editingRecord?.id === r.id ? (
-              <EvidenceRecordForm key={r.id} initial={r} onCancel={() => setEditingRecord(null)} onSave={saveRecord} />
-            ) : (
-              <EvidenceRecordCard key={r.id} record={r} onEdit={() => { setEditingRecord(r); setAddingNew(false); }} />
-            )
+            <EvidenceRecordCard key={r.id} record={r} onEdit={() => setEditingRecord(r)} />
           ))}
         </div>
 
-        {addingNew ? (
-          <EvidenceRecordForm onCancel={() => setAddingNew(false)} onSave={saveRecord} />
-        ) : (
-          <button onClick={() => { setAddingNew(true); setEditingRecord(null); }} className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
-            Add evidence record
-          </button>
-        )}
+        <button onClick={() => setAddingNew(true)} className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
+          Add evidence record
+        </button>
+
+        <Modal
+          isOpen={addingNew || editingRecord !== null}
+          onClose={() => { setAddingNew(false); setEditingRecord(null); }}
+          title={editingRecord ? 'Edit evidence record' : 'Add evidence record'}
+          maxWidth="max-w-lg"
+        >
+          <EvidenceRecordForm
+            initial={editingRecord ?? undefined}
+            onCancel={() => { setAddingNew(false); setEditingRecord(null); }}
+            onSave={saveRecord}
+          />
+        </Modal>
 
         <FeatureCrossLinks thingId={thing.id} current="things-shield" />
       </div>

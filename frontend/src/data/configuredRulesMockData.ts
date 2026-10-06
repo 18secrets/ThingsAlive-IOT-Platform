@@ -3,7 +3,7 @@
 // type depending on the page (alert on Alerts, prediction on Predictions,
 // unfiltered on Scenarios). This is that same flattened shape, ported with
 // real fleet equipment instead of invented ids. Rules are created/edited via
-// RuleBuilderPage, which mutates MOCK_RULES in place through upsertRule.
+// RuleBuilderModal, which mutates MOCK_RULES in place through upsertRule.
 
 export type RuleOutcome = 'kpi' | 'alert' | 'prediction';
 export type RuleSeverity = 'Warning' | 'Critical';
@@ -43,7 +43,7 @@ export function findRule(id: string): ConfiguredRule | undefined {
   return MOCK_RULES.find((r) => r.id === id);
 }
 
-// RuleBuilderPage's confirm step calls this once per selected machine — it
+// RuleBuilderModal's confirm step calls this once per selected machine — it
 // mutates the exported array in place (not a React state setter) so every
 // page that imports MOCK_RULES sees the change the next time it mounts,
 // without needing a shared store for what's otherwise page-local mock data.

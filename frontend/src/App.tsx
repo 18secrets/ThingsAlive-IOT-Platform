@@ -61,7 +61,6 @@ import { ThingsShieldDetailPage } from './pages/ThingsShieldDetailPage';
 import { IncidentManagementPage } from './pages/IncidentManagementPage';
 import { ProductionMonitoringPage } from './pages/ProductionMonitoringPage';
 import { ProductionMonitoringDetailPage } from './pages/ProductionMonitoringDetailPage';
-import { RuleBuilderPage } from './pages/RuleBuilderPage';
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
 import { ScenariosPage } from './pages/ScenariosPage';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
@@ -1413,7 +1412,6 @@ function AppData() {
           <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
           <Route path="production-monitoring/:thingId" element={<ProductionMonitoringDetailPage />} />
           <Route path="alert-agent" element={<AlertAgentPage />} />
-          <Route path="rule-builder" element={<RuleBuilderPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="predictions" element={<LivePredictionsPage />} />
           <Route path="scenarios" element={<ScenariosPage />} />
