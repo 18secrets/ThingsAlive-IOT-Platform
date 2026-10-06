@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FleetThing, findThing } from '../../data/fleetMockData';
 import { ShieldIncident } from '../../data/shieldMockData';
 import { IncidentCard, IncidentForm, IncidentFormValues } from './IncidentRecord';
+import { Modal } from '../common/Modal';
 
 function exportCsv(incidents: ShieldIncident[]) {
   const header = ['id', 'equipmentCode', 'equipmentName', 'title', 'category', 'severity', 'status', 'owner', 'workOrderStatus', 'createdAt'];
@@ -60,15 +61,20 @@ export const IncidentManagementSection: React.FC<{
         </button>
       </div>
 
-      {editing && (
+      <Modal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing !== 'new' && editing ? 'Edit incident' : 'Report incident'}
+        maxWidth="max-w-lg"
+      >
         <IncidentForm
           things={things}
-          initial={editing !== 'new' ? editing : undefined}
+          initial={editing !== 'new' ? editing ?? undefined : undefined}
           defaultThingId={defaultThingId}
           onCancel={() => setEditing(null)}
           onSave={save}
         />
-      )}
+      </Modal>
 
       {visibleIncidents.length === 0 ? (
         <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">

@@ -1,16 +1,14 @@
-import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { usePageHeader } from '../lib/PageHeaderContext';
-import { ConfiguredRule, RuleOutcome, RuleSeverity, MOCK_RULES, upsertRule } from '../data/configuredRulesMockData';
-import { FLEET, SENSOR_SPECS, evaluateRuleForThing } from '../data/fleetMockData';
+import React, { useEffect, useState } from 'react';
+import { Modal } from '../common/Modal';
+import { ConfiguredRule, RuleOutcome, RuleSeverity, MOCK_RULES, upsertRule } from '../../data/configuredRulesMockData';
+import { FLEET, SENSOR_SPECS, evaluateRuleForThing } from '../../data/fleetMockData';
 
-interface NavState {
+interface RuleBuilderModalProps {
+  isOpen: boolean;
+  onClose: () => void;
   /** Present when reached via a RuleCard's "Edit / assign" — pre-fills the
    *  form and pre-checks this rule's own machine in the review step. */
   rule?: ConfiguredRule;
-  /** Where this flow started (Alerts/Predictions/Scenarios/a Thing detail
-   *  page) — both Cancel and a successful Confirm return here. */
-  backTo: string;
   defaultOutcome?: RuleOutcome;
 }
 
@@ -41,28 +39,32 @@ function draftFrom(rule: ConfiguredRule | undefined, defaultOutcome: RuleOutcome
 const fieldClass = 'w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
 const labelClass = 'text-xs font-medium text-slate-600 dark:text-slate-300';
 
-export const RuleBuilderPage: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const navState = location.state as NavState | null;
-  const backTo = navState?.backTo ?? '/alerts';
-  const existingRule = navState?.rule;
-
+// Was a standalone routed page (RuleBuilderPage, reached via navigate('/rule-builder', {state})).
+// Converted to a modal so Alerts/Predictions/Scenarios and a RuleCard's "Edit / assign" open it
+// in place instead of leaving the page — see the task that asked for forms to stop being separate
+// pages or same-page drilldowns.
+export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, rule: existingRule, defaultOutcome }) => {
   const [step, setStep] = useState<'form' | 'review'>('form');
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(existingRule, navState?.defaultOutcome));
+  const [draft, setDraft] = useState<Draft>(() => draftFrom(existingRule, defaultOutcome));
   const [selected, setSelected] = useState<Record<string, boolean>>(() => (existingRule ? { [existingRule.equipmentId]: true } : {}));
   const [inputs, setInputs] = useState<Record<string, number>>({});
   const [reviewedFingerprint, setReviewedFingerprint] = useState('');
 
+  // Re-seed everything each time the modal opens, rather than leaving stale
+  // state from a previous rule around for the next one it's opened with.
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep('form');
+    setDraft(draftFrom(existingRule, defaultOutcome));
+    setSelected(existingRule ? { [existingRule.equipmentId]: true } : {});
+    setInputs({});
+    setReviewedFingerprint('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, existingRule?.id]);
+
   const fingerprint = JSON.stringify({ draft, selected, inputs });
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
   const sensor = SENSOR_SPECS.find((s) => s.key === draft.sensorKey) ?? SENSOR_SPECS[0];
-
-  usePageHeader(
-    step === 'review'
-      ? { title: existingRule ? 'Edit Alert Rule' : 'Create Alert Rule', subtitle: 'Simulate & Confirm', onBack: () => setStep('form') }
-      : { title: existingRule ? 'Edit Alert Rule' : 'Create Alert Rule', subtitle: 'Rule Details', onBack: () => navigate(backTo) },
-  );
 
   function update(change: Partial<Draft>) {
     setDraft((d) => ({ ...d, ...change }));
@@ -89,17 +91,16 @@ export const RuleBuilderPage: React.FC = () => {
         predictionText: draft.outcomes.includes('prediction') ? `${result.predicted} ${sensor.unit} over ${draft.horizonHours} h. Linear planning projection, not a failure model.` : undefined,
       });
     }
-    navigate(backTo);
+    onClose();
   }
+
+  const title = existingRule ? 'Edit Alert Rule' : 'Create Alert Rule';
 
   if (step === 'review') {
     return (
-      <div className="space-y-6">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
-          <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Simulate and review changes</h3>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1">Select affected machines. Test values affect this preview only; active rules and readings remain unchanged.</p>
-          </div>
+      <Modal isOpen={isOpen} onClose={onClose} title={title} subtitle="Simulate & Confirm" maxWidth="max-w-2xl">
+        <div className="space-y-4">
+          <p className="text-[12px] text-slate-500 dark:text-slate-400">Select affected machines. Test values affect this preview only; active rules and readings remain unchanged.</p>
 
           <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
             <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{draft.name}</h4>
@@ -108,7 +109,7 @@ export const RuleBuilderPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="max-h-[420px] overflow-y-auto space-y-2 -mx-1 px-1">
+          <div className="max-h-[360px] overflow-y-auto space-y-2 -mx-1 px-1">
             {FLEET.map((t) => {
               const checked = !!selected[t.id];
               const value = inputs[t.id] ?? evaluateRuleForThing(t, draft).value;
@@ -149,26 +150,28 @@ export const RuleBuilderPage: React.FC = () => {
             })}
           </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <button onClick={() => setReviewedFingerprint(fingerprint)} disabled={!selectedIds.length} className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed">
-              Run simulation &amp; review impact
-            </button>
-            <button onClick={confirm} disabled={!selectedIds.length || reviewedFingerprint !== fingerprint} className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed">
-              Confirm selected machines
-            </button>
-            <button onClick={() => navigate(backTo)} className="px-3.5 py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <button onClick={() => setStep('form')} className="text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => setReviewedFingerprint(fingerprint)} disabled={!selectedIds.length} className="px-4 py-2 text-sm font-semibold rounded-lg border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 disabled:opacity-40 disabled:cursor-not-allowed">
+                Run simulation &amp; review impact
+              </button>
+              <button onClick={confirm} disabled={!selectedIds.length || reviewedFingerprint !== fingerprint} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Confirm selected machines
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <form
-        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4 shadow-xs"
-        onSubmit={(e) => { e.preventDefault(); setStep('review'); }}
-      >
+    <Modal isOpen={isOpen} onClose={onClose} title={title} subtitle="Rule Details" maxWidth="max-w-xl">
+      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setStep('review'); }}>
         <label className="block space-y-1">
           <span className={labelClass}>Name</span>
           <input required value={draft.name} onChange={(e) => update({ name: e.target.value })} className={fieldClass} />
@@ -216,13 +219,15 @@ export const RuleBuilderPage: React.FC = () => {
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
           <input type="checkbox" checked={draft.enabled} onChange={(e) => update({ enabled: e.target.checked })} /> Enabled
         </label>
-        <div className="flex items-center gap-2 pt-2">
-          <button type="submit" disabled={!draft.outcomes.length} className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed">
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={!draft.outcomes.length} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             Choose machines &amp; preview
           </button>
-          <button type="button" onClick={() => navigate(backTo)} className="px-3.5 py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Cancel</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 };

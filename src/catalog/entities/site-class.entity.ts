@@ -74,6 +74,14 @@ export class SiteClassLayout {
   @Column({ type: 'text' })
   size: WidgetSize;
 
+  /** How a bound site KPI combines its machines (task QPAGE1 §3). Present exactly
+   * when `boundTo` is — `ck_site_layout_aggregate_declared`. */
+  @Column({ type: 'text', nullable: true })
+  aggregate: SiteAggregate | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }
+
+export const SITE_AGGREGATES = ['sum', 'avg', 'min', 'max', 'count'] as const;
+export type SiteAggregate = (typeof SITE_AGGREGATES)[number];
