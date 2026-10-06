@@ -57,7 +57,7 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   // Task QREC0c: the visual's anchors are rows and the tenant's to move — copied to
   // client_equipment_class_visual_anchor. The visual itself is not copied: the image
   // is platform-owned and shared, so bandwidth stays flat and the cache stays warm.
-  { table: 'equipment_class_visual_anchor', disposition: 'copy' },
+  { table: 'equipment_class_visual_anchor', disposition: 'copy', copiedTo: 'client_equipment_class_visual_anchor' },
   {
     table: 'equipment_class_visual', disposition: 'exclude',
     reason: 'the image is platform-owned and shared by every tenant with the class — a tenant reads this '
