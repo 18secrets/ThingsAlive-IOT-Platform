@@ -4,14 +4,16 @@ import { AlertTriangle, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { RuleCard } from '../components/fleet/RuleCard';
+import { RuleBuilderModal } from '../components/fleet/RuleBuilderModal';
 import { FLEET, isBreaching } from '../data/fleetMockData';
-import { rulesByOutcome } from '../data/configuredRulesMockData';
+import { ConfiguredRule, rulesByOutcome } from '../data/configuredRulesMockData';
 
 export const AlertsPage: React.FC = () => {
   usePageHeader({ title: 'Alerts', subtitle: 'Fleet Attention Feed' });
   const navigate = useNavigate();
   const [scope, setScope] = useState(DEFAULT_FLEET_SCOPE);
   const [selectedId, setSelectedId] = useState('all');
+  const [builderRule, setBuilderRule] = useState<ConfiguredRule | 'new' | null>(null);
 
   const matching = useMemo(() => matchingFleet(FLEET, scope), [scope]);
   const breaching = useMemo(
@@ -34,7 +36,7 @@ export const AlertsPage: React.FC = () => {
           <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Configured alert rules</h3>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate('/rule-builder', { state: { backTo: '/alerts', defaultOutcome: 'alert' } })}
+              onClick={() => setBuilderRule('new')}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
             >
               Create alert
@@ -51,7 +53,7 @@ export const AlertsPage: React.FC = () => {
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {alertRules.map((r) => <RuleCard key={r.id} rule={r} backTo="/alerts" />)}
+          {alertRules.map((r) => <RuleCard key={r.id} rule={r} onEdit={setBuilderRule} />)}
         </div>
       </div>
 
@@ -90,6 +92,13 @@ export const AlertsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <RuleBuilderModal
+        isOpen={builderRule !== null}
+        onClose={() => setBuilderRule(null)}
+        rule={builderRule !== 'new' ? builderRule ?? undefined : undefined}
+        defaultOutcome="alert"
+      />
     </div>
   );
 };
