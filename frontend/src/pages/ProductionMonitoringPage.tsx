@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, AlertTriangle, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET, FleetThing } from '../data/fleetMockData';
 import { ProductionSummary, productionSummaryFor } from '../data/productionMockData';
+import { RingGauge } from '../components/common/RingGauge';
+import { Chip } from '../components/common/Chip';
 
 const PAGE_SIZE = 12;
 
@@ -40,9 +42,13 @@ export const ProductionMonitoringPage: React.FC = () => {
   return (
     <div id="production-monitoring-view" className="space-y-6">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Production Wellbeing</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Production Wellbeing</span>
+          <span title="Sample machine counts are not finished-line throughput. Projections assume the recent production pattern continues.">
+            <Info className="w-3.5 h-3.5 text-sky-200" />
+          </span>
+        </div>
         <h2 className="text-xl font-bold">Production Monitoring &amp; Performance</h2>
-        <p className="text-sm text-sky-100">Output, quality, equipment availability and next-shift planning.</p>
       </div>
 
       <FleetFilters
@@ -54,12 +60,11 @@ export const ProductionMonitoringPage: React.FC = () => {
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiTile label="Things with production KPIs" value={String(totals.count)} />
-        <KpiTile label="Mean OEE" value={`${totals.meanOee.toFixed(1)}%`} />
-        <KpiTile label="Uptime (sum)" value={`${totals.uptimeSum.toFixed(1)} h`} />
-        <KpiTile label="Downtime (sum)" value={`${totals.downtimeSum.toFixed(1)} h`} tone="warn" />
+        <KpiTile label="Things in scope" value={String(totals.count)} />
+        <KpiTile label="Mean OEE" value={`${totals.meanOee.toFixed(0)}%`} />
+        <KpiTile label="Uptime" value={`${totals.uptimeSum.toFixed(0)}h`} />
+        <KpiTile label="Downtime" value={`${totals.downtimeSum.toFixed(0)}h`} tone="warn" />
       </div>
-      <p className="text-[12px] text-slate-500 dark:text-slate-400">Sample machine counts are not finished-line throughput. Projections assume the recent production pattern continues.</p>
 
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -102,15 +107,35 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'warn' }> = ({ la
   </div>
 );
 
-const ProductionCard: React.FC<{ thing: FleetThing; summary: ProductionSummary; onOpen: () => void }> = ({ thing, summary, onOpen }) => (
-  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-    <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
-    <p className="text-[11px] text-slate-500 dark:text-slate-400">{thing.id} · {thing.location}</p>
-    <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.oeePercent.toFixed(1)}% OEE</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">{summary.uptimeHours.toFixed(1)} h uptime · {summary.downtimeHours.toFixed(1)} h downtime</p>
-    <p className="text-[11px] text-slate-400 dark:text-slate-500">Output projection not applicable</p>
-    <button onClick={onOpen} className="w-full mt-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-400">
-      Open production details
+const OEE_STYLE = {
+  good: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
+  fair: { ring: 'border-amber-200 dark:border-amber-900', bg: 'bg-amber-50/60 dark:bg-amber-950/20', gauge: 'text-amber-500 dark:text-amber-400' },
+  poor: { ring: 'border-rose-200 dark:border-rose-900', bg: 'bg-rose-50/60 dark:bg-rose-950/20', gauge: 'text-rose-500 dark:text-rose-400' },
+} as const;
+
+const ProductionCard: React.FC<{ thing: FleetThing; summary: ProductionSummary; onOpen: () => void }> = ({ thing, summary, onOpen }) => {
+  const level: 'good' | 'fair' | 'poor' = summary.oeePercent >= 75 ? 'good' : summary.oeePercent >= 60 ? 'fair' : 'poor';
+  const style = OEE_STYLE[level];
+  return (
+    <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
+      <div className="flex items-center gap-3">
+        <span title="Illustrative OEE — uses the existing demonstration assumptions.">
+          <RingGauge value={summary.oeePercent} size={52} colorClass={style.gauge} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-1.5">
+          <Chip icon={Clock3} title="Uptime hours">{summary.uptimeHours.toFixed(0)}h</Chip>
+          <Chip icon={AlertTriangle} tone={summary.downtimeHours > 0 ? 'amber' : 'slate'} title="Downtime hours">{summary.downtimeHours.toFixed(0)}h</Chip>
+        </div>
+        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3 h-3" />
+        </span>
+      </div>
     </button>
-  </div>
-);
+  );
+};

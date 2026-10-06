@@ -136,7 +136,13 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
           onLogout={signOut}
         />
 
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F4F7FB] dark:bg-slate-950">
+        {/* pb-28/32 instead of the plain p-6/p-8 bottom — the floating AI
+            widget (AskAIWidget.tsx, `fixed bottom-5 right-6`) sits on top of
+            whatever is at the bottom-right of the viewport regardless of
+            scroll, which is exactly where a page's pagination Next/Prev
+            controls land. The extra clearance keeps page content from ever
+            scrolling in underneath it. */}
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 pb-28 md:p-8 md:pb-32 bg-[#F4F7FB] dark:bg-slate-950">
           <div className="max-w-7xl mx-auto space-y-6">
             <Outlet />
           </div>

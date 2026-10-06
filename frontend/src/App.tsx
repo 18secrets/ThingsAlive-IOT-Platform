@@ -78,7 +78,7 @@ import {
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
   apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
-  apiApplyCatalogImport, apiDownloadCatalogTemplate,
+  apiApplyCatalogImport, apiDiscardCatalogImport, apiReviewCatalogImportSensors, apiDownloadCatalogTemplate,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
   apiSuspendPlatformStaff, apiReinstatePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
@@ -90,7 +90,7 @@ import {
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
-  CatalogImportBatch, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
+  CatalogImportBatch, SensorReviewSelection, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
@@ -948,6 +948,14 @@ function AppData() {
     return summary;
   };
 
+  const handleDiscardCatalogImport = async (id: string) => {
+    await apiDiscardCatalogImport(id);
+    await refreshCatalogImports();
+  };
+
+  const handleReviewCatalogImportSensors = (id: string, selection: SensorReviewSelection) =>
+    apiReviewCatalogImportSensors(id, selection);
+
   const handleDownloadCatalogTemplate = async () => {
     const blob = await apiDownloadCatalogTemplate();
     const url = URL.createObjectURL(blob);
@@ -1240,6 +1248,8 @@ function AppData() {
                   onUpload={handleUploadCatalogImport}
                   onLoadDiff={handleLoadCatalogImportDiff}
                   onApply={handleApplyCatalogImport}
+                  onDiscard={handleDiscardCatalogImport}
+                  onReviewSensors={handleReviewCatalogImportSensors}
                 />
               }
             />

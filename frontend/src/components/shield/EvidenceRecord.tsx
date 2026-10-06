@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Calendar, User, Pencil } from 'lucide-react';
 import { ShieldEvidenceRecord, ShieldResult, ShieldStatus } from '../../data/shieldMockData';
 
 const STATUS_STYLE: Record<ShieldStatus, string> = {
@@ -8,24 +9,39 @@ const STATUS_STYLE: Record<ShieldStatus, string> = {
   'Action required': 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900',
 };
 
+const STATUS_TEXT: Record<ShieldStatus, string> = {
+  Current: 'text-emerald-700 dark:text-emerald-400',
+  'Due soon': 'text-amber-700 dark:text-amber-400',
+  Overdue: 'text-rose-700 dark:text-rose-400',
+  'Action required': 'text-rose-700 dark:text-rose-400',
+};
+
 export const EvidenceRecordCard: React.FC<{ record: ShieldEvidenceRecord; onEdit: () => void }> = ({ record, onEdit }) => (
-  <div className={`border rounded-xl p-4 space-y-2 ${STATUS_STYLE[record.status]}`}>
-    <h4 className="font-semibold text-slate-900 dark:text-white text-sm">{record.title}</h4>
-    <p className="text-[12px] text-slate-600 dark:text-slate-300">Sample record · {record.result} · {record.status}</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">Due {record.dueDate} · {record.owner} · {record.reference}</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">{record.note}</p>
-    {record.findings && <p className="text-[12px] text-slate-500 dark:text-slate-400">Findings: {record.findings}</p>}
-    <button onClick={onEdit} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
-      Edit evidence
-    </button>
-    <details>
-      <summary className="text-[11px] font-medium text-slate-500 dark:text-slate-400 cursor-pointer">Change history (1)</summary>
-      <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
-        <p><strong>1. Sample library</strong> · {new Date(record.createdAt).toLocaleString()}</p>
-        <p>Illustrative sample record created</p>
-        <p className="text-slate-400 dark:text-slate-500">Browser-local demonstration history; not a tamper-proof regulatory audit.</p>
-      </div>
-    </details>
+  <div className={`border rounded-xl p-3.5 space-y-2 ${STATUS_STYLE[record.status]}`}>
+    <div className="flex items-start justify-between gap-2">
+      <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{record.title}</h4>
+      <span className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[record.status]}`}>
+        {record.status}
+      </span>
+    </div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+      <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{record.dueDate}</span>
+      <span className="inline-flex items-center gap-1"><User className="w-3 h-3" />{record.owner}</span>
+      <span className="font-mono text-[10px] text-slate-400" title={record.reference}>{record.reference}</span>
+    </div>
+    {(record.findings || record.note) && (
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={record.findings || record.note}>
+        {record.findings || record.note}
+      </p>
+    )}
+    <div className="flex items-center justify-between pt-1">
+      <button onClick={onEdit} className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
+        <Pencil className="w-3 h-3" /> Edit
+      </button>
+      <span className="text-[10px] text-slate-400" title="Browser-local demonstration history; not a tamper-proof regulatory audit.">
+        {new Date(record.createdAt).toLocaleDateString()}
+      </span>
+    </div>
   </div>
 );
 

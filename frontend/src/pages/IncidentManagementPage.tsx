@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET } from '../data/fleetMockData';
@@ -26,9 +27,13 @@ export const IncidentManagementPage: React.FC = () => {
   return (
     <div id="incident-management-view" className="space-y-6">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Security</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Security</span>
+          <span title="Browser-local records · review identities are self-declared in this demo.">
+            <Info className="w-3.5 h-3.5 text-sky-200" />
+          </span>
+        </div>
         <h2 className="text-xl font-bold">Incident Management</h2>
-        <p className="text-sm text-sky-100">Report, investigate and close out safety, machine wellbeing and security incidents.</p>
       </div>
 
       <FleetFilters scope={scope} onChange={setScope} things={matching} selectedId={selectedId} onSelectId={setSelectedId} />
@@ -39,7 +44,6 @@ export const IncidentManagementPage: React.FC = () => {
         <KpiTile label="Critical severity" value={String(criticalCount)} tone="bad" />
         <KpiTile label="Investigating" value={String(investigatingCount)} />
       </div>
-      <p className="text-[12px] text-slate-500 dark:text-slate-400">People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.</p>
 
       <IncidentManagementSection
         things={matching}

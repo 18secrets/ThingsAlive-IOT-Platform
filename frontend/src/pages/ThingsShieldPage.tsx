@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShieldCheck, ShieldAlert, FileCheck2, Siren, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET, FleetThing } from '../data/fleetMockData';
 import { MOCK_INCIDENTS, ShieldIncident, ShieldSummary, shieldSummaryFor } from '../data/shieldMockData';
 import { IncidentManagementSection } from '../components/shield/IncidentManagementSection';
+import { Chip } from '../components/common/Chip';
 
 const PAGE_SIZE = 12;
 
@@ -47,9 +48,13 @@ export const ThingsShieldPage: React.FC = () => {
   return (
     <div id="things-shield-view" className="space-y-6">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
+          <span title="Sample records demonstrate review workflows; they are not real inspection certificates or regulatory findings.">
+            <Info className="w-3.5 h-3.5 text-sky-200" />
+          </span>
+        </div>
         <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
-        <p className="text-sm text-sky-100">Inspections, site requirements, safety records and corrective actions.</p>
       </div>
 
       <FleetFilters
@@ -66,7 +71,6 @@ export const ThingsShieldPage: React.FC = () => {
         <KpiTile label="Overdue / failed" value={String(totals.overdueFailed)} tone="bad" />
         <KpiTile label="Open incidents" value={String(totals.openIncidents)} tone="warn" />
       </div>
-      <p className="text-[12px] text-slate-500 dark:text-slate-400">Sample records demonstrate review workflows; they are not real inspection certificates or regulatory findings.</p>
 
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -121,14 +125,26 @@ const ShieldCard: React.FC<{ thing: FleetThing; summary: ShieldSummary; onOpen: 
     : 'border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20';
 
   return (
-    <div className={`border rounded-xl p-4 shadow-xs space-y-2 ${style}`}>
-      <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">{thing.id} · {thing.location}</p>
-      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{summary.evidenceRecords} evidence records</p>
-      <p className="text-[12px] text-slate-500 dark:text-slate-400">{summary.overdueFailed} overdue/failed · {summary.openIncidents} open incidents</p>
-      <button onClick={onOpen} className="w-full mt-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">
-        Open ThingsShield details
-      </button>
-    </div>
+    <button onClick={onOpen} className={`text-left w-full border rounded-xl p-4 shadow-xs space-y-2.5 hover:shadow-md transition-shadow cursor-pointer group ${style}`}>
+      <div className="flex items-center gap-2">
+        <span title={alert ? 'Needs attention — overdue, failed or an open incident' : 'No overdue or failed records'}>
+          {alert ? <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" /> : <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Chip icon={FileCheck2} title="Evidence records">{summary.evidenceRecords}</Chip>
+          <Chip icon={ShieldAlert} tone={summary.overdueFailed > 0 ? 'rose' : 'slate'} title="Overdue or failed records">{summary.overdueFailed}</Chip>
+          <Chip icon={Siren} tone={summary.openIncidents > 0 ? 'amber' : 'slate'} title="Open incidents">{summary.openIncidents}</Chip>
+        </div>
+        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3 h-3" />
+        </span>
+      </div>
+    </button>
   );
 };

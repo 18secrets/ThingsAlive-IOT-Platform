@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Bell, Clock3, Info, ShieldAlert } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET, FleetThing, ThingsCareStatus, thingsCareFor } from '../data/fleetMockData';
+import { RingGauge } from '../components/common/RingGauge';
+import { Chip } from '../components/common/Chip';
 
 const PAGE_SIZE = 12;
 
@@ -35,9 +37,13 @@ export const ThingsCarePage: React.FC = () => {
   return (
     <div id="things-care-view" className="space-y-6">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Machine Wellbeing</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Machine Wellbeing</span>
+          <span title="Health, risk and RUL are illustrative sample fixtures, not validated predictions.">
+            <Info className="w-3.5 h-3.5 text-sky-200" />
+          </span>
+        </div>
         <h2 className="text-xl font-bold">ThingsCare: Health &amp; Prognostics</h2>
-        <p className="text-sm text-sky-100">Condition, degradation, sample prognosis and maintenance priorities.</p>
       </div>
 
       <FleetFilters
@@ -50,11 +56,10 @@ export const ThingsCarePage: React.FC = () => {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiTile label="Things in scope" value={String(matching.length)} />
-        <KpiTile label="Sample mean health" value={meanHealth != null ? `${meanHealth.toFixed(1)}%` : '—'} />
-        <KpiTile label="Active range alerts" value={String(activeAlerts)} />
-        <KpiTile label="Sample risk ≥ 20%" value={String(highRisk)} />
+        <KpiTile label="Mean health" value={meanHealth != null ? `${meanHealth.toFixed(0)}%` : '—'} tone="emerald" />
+        <KpiTile label="Active alerts" value={String(activeAlerts)} tone="amber" />
+        <KpiTile label="Risk ≥ 20%" value={String(highRisk)} tone="rose" />
       </div>
-      <p className="text-[12px] text-slate-500 dark:text-slate-400">Health, failure probability and RUL are illustrative sample fixtures, not validated predictions.</p>
 
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -98,42 +103,50 @@ export const ThingsCarePage: React.FC = () => {
   );
 };
 
-const KpiTile: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
-    <div className="text-xl font-bold text-slate-800 dark:text-slate-100">{value}</div>
-    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
-  </div>
-);
+const KpiTile: React.FC<{ label: string; value: string; tone?: 'emerald' | 'amber' | 'rose' }> = ({ label, value, tone }) => {
+  const toneClass = tone === 'emerald' ? 'text-emerald-600 dark:text-emerald-400' : tone === 'amber' ? 'text-amber-600 dark:text-amber-400' : tone === 'rose' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100';
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
+      <div className={`text-xl font-bold ${toneClass}`}>{value}</div>
+      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
+    </div>
+  );
+};
+
+const STATE_STYLE = {
+  healthy: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400', badge: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400', label: 'Healthy' },
+  'at-risk': { ring: 'border-amber-200 dark:border-amber-900', bg: 'bg-amber-50/60 dark:bg-amber-950/20', gauge: 'text-amber-500 dark:text-amber-400', badge: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400', label: 'At risk' },
+  offline: { ring: 'border-slate-200 dark:border-slate-800', bg: 'bg-slate-50/60 dark:bg-slate-900/40', gauge: 'text-slate-400', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400', label: 'Offline' },
+} as const;
 
 const ThingsCareCard: React.FC<{ thing: FleetThing; status: ThingsCareStatus; onOpen: () => void }> = ({ thing, status, onOpen }) => {
   const state: 'healthy' | 'at-risk' | 'offline' = status.health == null ? 'offline' : status.alertCount > 0 ? 'at-risk' : 'healthy';
-  const styles = {
-    healthy: { ring: 'border-emerald-200 dark:border-emerald-900', badge: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400', label: 'Healthy' },
-    'at-risk': { ring: 'border-amber-200 dark:border-amber-900', badge: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400', label: 'At risk' },
-    offline: { ring: 'border-slate-200 dark:border-slate-800', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400', label: 'Not assessed' },
-  }[state];
+  const style = STATE_STYLE[state];
 
   return (
-    <div className={`bg-white dark:bg-slate-900 border ${styles.ring} rounded-xl p-4 shadow-xs space-y-2`}>
-      <div className="flex items-center justify-between">
-        <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${styles.badge}`}>{styles.label}</span>
-        <span className="text-[11px] text-slate-400 dark:text-slate-500">{status.alertCount} alert{status.alertCount === 1 ? '' : 's'}</span>
-      </div>
-      <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">{thing.id} · {thing.location}</p>
-      <div className="grid grid-cols-2 gap-2 pt-1">
-        <div>
-          <div className="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">{status.health != null ? `${status.health}%` : '—'}</div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500">Health</div>
-        </div>
-        <div>
-          <div className="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">{status.rulHours != null ? `${status.rulHours} h` : '—'}</div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500">Illustrative RUL</div>
+    <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
+      <div className="flex items-center gap-3">
+        <span title="Sample health index">
+          <RingGauge value={status.health} size={52} colorClass={style.gauge} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className={`inline-block px-1.5 py-0.5 text-[9px] font-semibold uppercase rounded ${style.badge}`}>{style.label}</span>
+          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate mt-0.5" title={thing.name}>{thing.name}</h4>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
         </div>
       </div>
-      <button onClick={onOpen} className="w-full mt-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">
-        Open ThingsCare details
-      </button>
-    </div>
+      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Chip icon={ShieldAlert} tone={status.riskPct != null && status.riskPct >= 20 ? 'rose' : 'slate'} title="Illustrative sample failure risk">
+            {status.riskPct != null ? `${status.riskPct}%` : '—'}
+          </Chip>
+          <Chip icon={Clock3} title="Illustrative remaining useful life (RUL)">{status.rulHours != null ? `${status.rulHours}h` : '—'}</Chip>
+          <Chip icon={Bell} tone={status.alertCount > 0 ? 'amber' : 'slate'} title="Active configured range alerts">{status.alertCount}</Chip>
+        </div>
+        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3 h-3" />
+        </span>
+      </div>
+    </button>
   );
 };

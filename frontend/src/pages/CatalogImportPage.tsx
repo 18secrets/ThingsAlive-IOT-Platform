@@ -2,10 +2,10 @@ import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2,
-  UploadCloud, Layers, Radio,
+  UploadCloud, Layers, Radio, Trash2, Check, X,
 } from 'lucide-react';
 import {
-  ApiError, CatalogImportApplySummary, CatalogImportBatch, CatalogImportDiff,
+  ApiError, CatalogImportApplySummary, CatalogImportBatch, CatalogImportDiff, SensorReviewSelection,
 } from '../lib/api';
 import { usePageHeader } from '../lib/PageHeaderContext';
 
@@ -16,7 +16,12 @@ interface CatalogImportPageProps {
   onUpload: (file: File) => Promise<{ id: string }>;
   onLoadDiff: (id: string) => Promise<CatalogImportDiff>;
   onApply: (id: string) => Promise<CatalogImportApplySummary>;
+  onDiscard: (id: string) => Promise<void>;
+  onReviewSensors: (id: string, selection: SensorReviewSelection) => Promise<CatalogImportDiff>;
 }
+
+/** Per-slug choice in the proposed sensors/categories panel — unset means "not decided yet". */
+type ReviewDecision = 'approve' | 'dismiss' | undefined;
 
 const STATUS_STYLE: Record<CatalogImportBatch['status'], string> = {
   parsed: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
@@ -38,7 +43,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
-  batches, batchesError, onDownloadTemplate, onUpload, onLoadDiff, onApply,
+  batches, batchesError, onDownloadTemplate, onUpload, onLoadDiff, onApply, onDiscard, onReviewSensors,
 }) => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +58,12 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+
+  const [sensorDecisions, setSensorDecisions] = useState<Record<string, ReviewDecision>>({});
+  const [categoryDecisions, setCategoryDecisions] = useState<Record<string, ReviewDecision>>({});
+  const [reviewingSensors, setReviewingSensors] = useState(false);
+  const [reviewError, setReviewError] = useState<string | undefined>(undefined);
 
   usePageHeader({
     title: 'Equipment Library Import',
@@ -68,6 +79,9 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     setApplySummary(null);
     setDiff(null);
     setDiffError(undefined);
+    setSensorDecisions({});
+    setCategoryDecisions({});
+    setReviewError(undefined);
     setLoadingDiff(true);
     try {
       setDiff(await onLoadDiff(id));
@@ -112,6 +126,57 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       setDiffError(err instanceof ApiError ? err.message : 'Could not apply this batch.');
     } finally {
       setApplying(false);
+    }
+  };
+
+  const handleDiscard = async () => {
+    if (!selectedBatchId) return;
+    setDiscarding(true);
+    setDiffError(undefined);
+    try {
+      await onDiscard(selectedBatchId);
+      setSelectedBatchId(null);
+      setDiff(null);
+      setApplySummary(null);
+    } catch (err) {
+      setDiffError(err instanceof ApiError ? err.message : 'Could not discard this batch.');
+    } finally {
+      setDiscarding(false);
+    }
+  };
+
+  // Defensive: older deployments of this API don't send these fields at all
+  // (task QIMP5) — treat a missing array as empty rather than crashing the page.
+  const proposedSensors = diff?.proposedSensors ?? [];
+  const proposedCategories = diff?.proposedCategories ?? [];
+
+  const decisionCount = Object.values(sensorDecisions).filter(Boolean).length
+    + Object.values(categoryDecisions).filter(Boolean).length;
+  const hasOutstandingProposals = proposedSensors.length > 0 || proposedCategories.length > 0;
+
+  const handleSubmitSensorReview = async () => {
+    if (!selectedBatchId || !decisionCount) return;
+    setReviewingSensors(true);
+    setReviewError(undefined);
+    try {
+      const selection: SensorReviewSelection = {
+        approveCategories: Object.entries(categoryDecisions)
+          .filter(([, d]) => d === 'approve').map(([slug]) => ({ slug })),
+        approve: Object.entries(sensorDecisions)
+          .filter(([, d]) => d === 'approve').map(([slug]) => ({ slug })),
+        dismiss: [
+          ...Object.entries(categoryDecisions).filter(([, d]) => d === 'dismiss').map(([slug]) => ({ slug })),
+          ...Object.entries(sensorDecisions).filter(([, d]) => d === 'dismiss').map(([slug]) => ({ slug })),
+        ],
+      };
+      const updated = await onReviewSensors(selectedBatchId, selection);
+      setDiff(updated);
+      setSensorDecisions({});
+      setCategoryDecisions({});
+    } catch (err) {
+      setReviewError(err instanceof ApiError ? err.message : 'Could not save these decisions.');
+    } finally {
+      setReviewingSensors(false);
     }
   };
 
@@ -235,11 +300,24 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                     </h3>
                     <p className="text-[11px] text-slate-400 mt-0.5">{diff.partialApplyNote}</p>
                   </div>
-                  {selectedBatch && (
-                    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[selectedBatch.status]}`}>
-                      {selectedBatch.status}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedBatch && (
+                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[selectedBatch.status]}`}>
+                        {selectedBatch.status}
+                      </span>
+                    )}
+                    {selectedBatch && selectedBatch.status !== 'applied' && !applySummary && (
+                      <button
+                        onClick={handleDiscard}
+                        disabled={discarding}
+                        title="Discard this batch — only possible before it's applied"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-60"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>{discarding ? 'Discarding…' : 'Discard'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -299,18 +377,99 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                 )}
 
                 {selectedBatch?.status === 'validated' && !applySummary && (
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                    <button
-                      onClick={handleApply}
-                      disabled={applying}
-                      className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 flex items-center gap-2"
-                    >
-                      <UploadCloud className="w-3.5 h-3.5" />
-                      <span>{applying ? 'Applying…' : 'Apply This Batch'}</span>
-                    </button>
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                    {hasOutstandingProposals && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                        Approve or dismiss every proposed sensor and category below before applying.
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleApply}
+                        disabled={applying || hasOutstandingProposals}
+                        title={hasOutstandingProposals ? 'Resolve the proposed sensors/categories first' : undefined}
+                        className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>{applying ? 'Applying…' : 'Apply This Batch'}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {(proposedCategories.length > 0 || proposedSensors.length > 0) && (
+                <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-xl p-5 shadow-xs space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Proposed sensors &amp; categories</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      This workbook names sensors or categories the catalog doesn&apos;t have yet. Approve to create
+                      them, or dismiss to leave the referencing rows unresolved. No re-upload needed afterwards.
+                    </p>
+                  </div>
+
+                  {proposedCategories.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Categories</span>
+                      {proposedCategories.map((c) => (
+                        <div key={c.slug} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">{c.name}</p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              needed by: {c.proposedBySensors.join(', ')}
+                            </p>
+                          </div>
+                          <ReviewToggle
+                            value={categoryDecisions[c.slug]}
+                            onChange={(d) => setCategoryDecisions((cur) => ({ ...cur, [c.slug]: d }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {proposedSensors.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Sensors</span>
+                      {proposedSensors.map((s) => (
+                        <div key={s.slug} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">
+                              {s.name}
+                              {s.category && <span className="text-slate-400 font-normal"> · {s.category}</span>}
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {[s.parameterKey, s.canonicalUnit].filter(Boolean).join(' · ') || 'no parameter/unit declared'}
+                              {' · used by: '}{s.usedByClasses.join(', ')}
+                            </p>
+                          </div>
+                          <ReviewToggle
+                            value={sensorDecisions[s.slug]}
+                            onChange={(d) => setSensorDecisions((cur) => ({ ...cur, [s.slug]: d }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {reviewError && (
+                    <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{reviewError}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button
+                      onClick={handleSubmitSensorReview}
+                      disabled={reviewingSensors || !decisionCount}
+                      className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <span>{reviewingSensors ? 'Saving…' : `Save ${decisionCount || ''} decision${decisionCount === 1 ? '' : 's'}`}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {applySummary && (
                 <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 rounded-xl p-5 shadow-xs space-y-3">
@@ -341,3 +500,29 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     </div>
   );
 };
+
+/** Approve / Dismiss pair for one proposed sensor or category row. */
+const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDecision) => void }> = ({ value, onChange }) => (
+  <div className="flex items-center gap-1.5 shrink-0">
+    <button
+      onClick={() => onChange(value === 'approve' ? undefined : 'approve')}
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
+        value === 'approve'
+          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+          : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+      }`}
+    >
+      <Check className="w-3 h-3" /> Approve
+    </button>
+    <button
+      onClick={() => onChange(value === 'dismiss' ? undefined : 'dismiss')}
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer ${
+        value === 'dismiss'
+          ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+          : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+      }`}
+    >
+      <X className="w-3 h-3" /> Dismiss
+    </button>
+  </div>
+);
