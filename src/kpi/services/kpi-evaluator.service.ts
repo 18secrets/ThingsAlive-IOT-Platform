@@ -396,7 +396,7 @@ export class KpiEvaluatorService {
   ): Promise<{ ok: true; value: SeriesPoint[] } | { ok: false; readiness: Readiness; reason?: Reason }> {
     const plan = formula.compiledPlan as any;
 
-    if (plan.type === 'call' && BASELINE_OPERATOR_NAMES.has(plan.name)) {
+    if (isBaselinePointPlan(plan)) {
       const result = evalNode(plan, ctx);
       if (result.ok === false) return result;
       return { ok: true, value: [{ t: ctx.window.to.toISOString(), v: result.value }] };
@@ -407,7 +407,8 @@ export class KpiEvaluatorService {
       throw new Error(
         `formula "${formula.formulaKey}": declares result_kind "series" with a plan shape series `
           + 'bucketing does not support (only a bare signal, one reducer directly wrapping one signal, '
-          + 'or +/-/*// / unary-minus over such shapes) — QCE2.1 scopes this out rather than guessing.',
+          + 'or +/-/*// / unary-minus / a comparison over such shapes and constants) — QCE2.1 scopes this '
+          + 'out rather than guessing.',
       );
     }
 
@@ -433,6 +434,44 @@ export class KpiEvaluatorService {
     // when the window is short enough to produce exactly one bucket.
     return { ok: true, value: points };
   }
+}
+
+/** 1 when the ordering holds, else 0 (task QCE5). */
+function compareValues(op: '>' | '>=' | '<' | '<=', left: number, right: number): number {
+  const holds = op === '>' ? left > right
+    : op === '>=' ? left >= right
+      : op === '<' ? left < right
+        : left <= right;
+  return holds ? 1 : 0;
+}
+
+/**
+ * QCE2.1 §4's one-point exception, extended by task QCE5 from a bare baseline root to
+ * arithmetic and comparisons over baseline roots — the cross-sensor risk score,
+ * `(zscore(a, 90d) > 2) + (zscore(b, 90d) > 2)`. Every series input sits under a
+ * baseline operator, which is single-valued at the window's end already, so the whole
+ * plan is too. A bare signal or any other call anywhere disqualifies it: those vary
+ * per bucket, and this must not quietly collapse them to one point.
+ */
+function isBaselinePointPlan(node: any): boolean {
+  let sawBaseline = false;
+  const ok = (n: any): boolean => {
+    switch (n?.type) {
+      case 'call':
+        if (!BASELINE_OPERATOR_NAMES.has(n.name)) return false;
+        sawBaseline = true;
+        return true;
+      case 'const': case 'duration': case 'param':
+        return true;
+      case 'unary':
+        return ok(n.operand);
+      case 'binary': case 'compare':
+        return ok(n.left) && ok(n.right);
+      default:
+        return false;
+    }
+  };
+  return ok(node) && sawBaseline;
 }
 
 /** Baseline operators are declared `series` (QCE4) because they are genuinely
@@ -508,7 +547,8 @@ function collectSignalLookback(node: any, acc: Map<string, number>): void {
   if (!node || typeof node !== 'object') return;
   switch (node.type) {
     case 'unary': collectSignalLookback(node.operand, acc); return;
-    case 'binary': collectSignalLookback(node.left, acc); collectSignalLookback(node.right, acc); return;
+    case 'binary':
+    case 'compare': collectSignalLookback(node.left, acc); collectSignalLookback(node.right, acc); return;
     case 'call': {
       const durationHours = node.args
         .filter((a: any) => a.type === 'duration')
@@ -571,6 +611,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           : node.op === '*' ? left.value * right.value
             : left.value / right.value;
       return { ok: true, value };
+    }
+    case 'compare': {
+      const left = evalNode(node.left, ctx);
+      if (left.ok === false) return left;
+      const right = evalNode(node.right, ctx);
+      if (right.ok === false) return right;
+      return { ok: true, value: compareValues(node.op, left.value, right.value) };
     }
     case 'call': {
       const opEntry = lookupOperator(node.name);
@@ -649,10 +696,13 @@ function planBucketShape(node: any): BucketShape | null {
         return true;
       // One value for the whole window (task QPARAM1) — the same in every bucket.
       case 'param':
+      // The same in every bucket (task QCE5) — `coolant_temp_c > 105` needs its 105.
+      case 'const':
         return true;
       case 'unary':
         return supported(n.operand);
       case 'binary':
+      case 'compare':
         return supported(n.left) && supported(n.right);
       case 'call': {
         if (n.args.length !== 1 || n.args[0].type !== 'signal') return false;
@@ -679,6 +729,8 @@ function evalBucketNode(
   switch (node.type) {
     case 'param':
       return parameters.get(node.name) ?? null;
+    case 'const':
+      return node.value;
     case 'signal': {
       const agg = byBucketBySignal.get(node.name)?.get(bucketMs);
       if (!agg) return null;
@@ -697,6 +749,13 @@ function evalBucketNode(
         : node.op === '-' ? left - right
           : node.op === '*' ? left * right
             : left / right;
+    }
+    case 'compare': {
+      // A bucket missing either side has no answer — not a confident 0.
+      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      if (left === null || right === null) return null;
+      return compareValues(node.op, left, right);
     }
     case 'call': {
       const agg = byBucketBySignal.get(node.args[0].name)?.get(bucketMs);
