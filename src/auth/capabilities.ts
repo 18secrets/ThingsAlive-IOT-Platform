@@ -33,6 +33,8 @@ export type Capability =
   | 'prediction.read'
   | 'prediction.run'
   | 'utilization.read'
+  | 'parameters.read'
+  | 'parameters.write'
   | 'entitlement.grant'
   | 'platform.admin';
 
@@ -134,6 +136,16 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // support: it is a report about the customer's own machines, and the narrowing
   // that matters — which machines — is done by the assignment list rather than here.
   'utilization.read': ['super admin', 'admin', 'operational', 'support', 'platform-support'],
+  // The client's parameters and cost profiles (task QPARAM1). No platform role in
+  // either list, and adding one would be a change of model, not of permission: costs
+  // and currency are client configuration with no platform scope at all (D39), and a
+  // master admin seeing a customer's fuel price is a breach rather than a feature.
+  // Reading is narrower than `client-catalog.read` on purpose — an operator does not
+  // need the labour rate to do the work.
+  'parameters.read': ['super admin', 'admin'],
+  // Setting them. Super admin alone — not `catalog.write`, which is a platform
+  // capability for the templates Things Alive sells.
+  'parameters.write': ['super admin'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
 };
