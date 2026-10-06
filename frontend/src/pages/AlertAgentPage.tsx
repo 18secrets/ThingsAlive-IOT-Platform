@@ -9,8 +9,7 @@ import { WorkflowEditor } from '../components/alerts/WorkflowEditor';
 type View = 'list' | 'assistant' | 'workflow';
 
 interface AlertAgentNavState {
-  /** Set by Alerts' "Create alert" button (assistant) or a RuleCard's
-   *  "Edit / assign" (workflow, with workflowSpec already filled in). */
+  /** Set by Alerts' "Create alert with AI" button. */
   view?: 'assistant' | 'workflow';
   workflowSpec?: WorkflowSpec;
   /** Where this flow actually started — e.g. "/alerts", "/predictions", or a
