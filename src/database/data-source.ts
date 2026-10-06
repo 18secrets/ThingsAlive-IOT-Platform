@@ -58,6 +58,7 @@ import { SignalBindingVersion } from '../signal-binding/entities/signal-binding-
 import { SensorInstance } from '../signal-binding/entities/sensor-instance.entity';
 import { CalibrationVersion } from '../signal-binding/entities/calibration-version.entity';
 import { EquipmentParameter } from '../signal-binding/entities/equipment-parameter.entity';
+import { TenantParameter } from '../parameters/entities/tenant-parameter.entity';
 import { EquipmentClassFailureMode } from '../catalog/entities/equipment-class-failure-mode.entity';
 import { EquipmentClassRecommendation } from '../catalog/entities/equipment-class-recommendation.entity';
 import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
@@ -69,7 +70,7 @@ import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/ent
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
- * 2.0 owns its own database. Nothing here joins to the existing platform's schema Ã¢â‚¬â€
+ * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
  * foreign data arrives as projections through a contract, never as a cross-database
  * query. See the projection module for why.
  */
@@ -143,6 +144,7 @@ export const ENTITIES = [
   ClientEquipmentClassLayout,
   SiteClass,
   SiteClassLayout,
+  TenantParameter,
   EquipmentClassVisual,
   EquipmentClassVisualAnchor,
   ClientEquipmentClassVisualAnchor,
@@ -151,7 +153,7 @@ export const ENTITIES = [
 export interface DataSourceChoices {
   /**
    * The role every connection in this pool runs as. Null keeps the login user, which
-   * migrations need Ã¢â‚¬â€ they create tables, and `ta_app` cannot.
+   * migrations need — they create tables, and `ta_app` cannot.
    *
    * Everything else uses the constrained role. It is set at connection start rather
    * than per query, so a query that skipped ScopedRepository is *also* subject to

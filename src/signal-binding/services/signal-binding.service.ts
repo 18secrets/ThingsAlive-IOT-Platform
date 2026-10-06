@@ -13,6 +13,7 @@ import {
   SignalBindingDiscoveredBy, SignalBindingOrigin, SignalBindingVersion,
 } from '../entities/signal-binding-version.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
+import { tenantStaleAfterSeconds } from '../../parameters/services/parameter-resolution';
 import { resolveStaleAfterSeconds } from './signal-freshness';
 
 /**
@@ -163,6 +164,10 @@ export class SignalBindingService {
         const latestBySignal = await this.telemetryReader.latestPerSignal(
           m, scope.tenantId, imeis, requirements.map((r) => r.measurementRole),
         );
+        // The client's own threshold for this machine wins over the class's (task
+        // QPARAM1 §4b) — the same order the KPI evaluator uses, so a signal cannot be
+        // stale on one screen and fresh on another.
+        const tenantStaleAfter = await tenantStaleAfterSeconds(m, scope.tenantId, profile, at);
 
         for (const req of requirements) {
           const rows = await m.getRepository(SignalBindingVersion).find({
@@ -175,7 +180,7 @@ export class SignalBindingService {
           const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
           const activeCount = activeNow.length;
 
-          const staleAfterSeconds = resolveStaleAfterSeconds(req);
+          const staleAfterSeconds = resolveStaleAfterSeconds(req, tenantStaleAfter);
           const lastReadingAt = latestBySignal.get(req.measurementRole) ?? null;
           const secondsSinceLastReading = lastReadingAt ? (at.getTime() - lastReadingAt.getTime()) / 1000 : null;
           const freshness: SignalFreshness = {

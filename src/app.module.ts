@@ -21,6 +21,7 @@ import { PageModule } from './page/page.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
+import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
@@ -100,6 +101,7 @@ export class AppModule {
               IntelligenceModule,
               LegacyModule,
               AlertModule,
+              ParameterModule,
             ]
           : []),
       ],

@@ -1,14 +1,15 @@
 import { FormulaCompileError } from './errors';
 import { lookupOperator } from './operator-registry';
-import { MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
+import { CompareOp, MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
 import { divideUnits, multiplyUnits, parseUnitString, renderUnit, Unit, unitsEqual, DIMENSIONLESS } from './units';
 
 export { FormulaCompileError } from './errors';
 
 /** Bumped whenever the emitted plan shape or the unit/composition rules change, so a
  * plan compiled by an older compiler is detectable rather than silently trusted.
- * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition. */
-export const COMPILER_VERSION = 'qce1.1.0';
+ * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition.
+ * qce5.0.0: the `compare` node and `count_exceeding`. */
+export const COMPILER_VERSION = 'qce5.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -28,6 +29,10 @@ export type PlanNode =
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
+  /** 1 when the ordering holds, else 0 (task QCE5). Its own node type rather than more
+   * `binary` ops, so an evaluator that predates it throws on the plan instead of
+   * falling through to arithmetic. */
+  | { type: 'compare'; kind: ValueKind; unit: string; op: CompareOp; left: PlanNode; right: PlanNode }
   | { type: 'call'; kind: ValueKind; unit: string; name: string; args: PlanNode[] };
 
 export interface DeclaredSignal {
@@ -351,7 +356,7 @@ function collectFormulaRefs(node: RawNode): Set<string> {
   const walk = (n: RawNode): void => {
     if (n.type === 'formula_ref') out.add(n.name);
     else if (n.type === 'unary') walk(n.operand);
-    else if (n.type === 'binary') { walk(n.left); walk(n.right); }
+    else if (n.type === 'binary' || n.type === 'compare') { walk(n.left); walk(n.right); }
     else if (n.type === 'call') n.args.forEach(walk);
   };
   walk(node);
@@ -486,6 +491,21 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       return { type: 'binary', kind, unit: renderUnit(unit), op: node.op, left, right };
     }
 
+    case 'compare': {
+      const left = infer(node.left, ctx);
+      const right = infer(node.right, ctx);
+      // The same literal polymorphism `+`/`-` have: `coolant_temp_c > 105` compares
+      // in degC, while two quantities of different dimensions have no order at all.
+      if (!isLiteral(left) && !isLiteral(right)
+        && !unitsEqual(parseUnitStringFromRendered(left.unit), parseUnitStringFromRendered(right.unit))) {
+        throw new FormulaCompileError(
+          `"${node.op}" compares "${left.unit}" with "${right.unit}", which are different units.`,
+        );
+      }
+      const kind: ValueKind = left.kind === 'series' || right.kind === 'series' ? 'series' : 'scalar';
+      return { type: 'compare', kind, unit: renderUnit(DIMENSIONLESS), op: node.op, left, right };
+    }
+
     case 'call': {
       const entry = lookupOperator(node.name);
       if (!entry) {
@@ -508,7 +528,19 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
           );
         }
+        if (expected === 'series' && a.type !== 'signal') throw seriesInputRefusal(node.name, a);
       });
+
+      if (node.name === 'count_exceeding') {
+        const threshold = args[1];
+        if (!isLiteral(threshold)
+          && !unitsEqual(parseUnitStringFromRendered(threshold.unit), parseUnitStringFromRendered(args[0].unit))) {
+          throw new FormulaCompileError(
+            `calls "count_exceeding" with a threshold in "${threshold.unit}"; it must carry the series' `
+              + `unit ("${args[0].unit}").`,
+          );
+        }
+      }
 
       if (node.name === 'fraction_within') {
         const seriesUnit = parseUnitStringFromRendered(args[0].unit);
@@ -533,6 +565,32 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       throw new FormulaCompileError(`unrecognised node: ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+/**
+ * A series argument must be a signal, by name (task QCE5 follow-up). The evaluator
+ * feeds an operator a signal's raw readings and nothing else; a computed series —
+ * `avg(zscore(x, 20d))`, `avg(a * b)`, `avg(#other)` — compiled, then read at runtime
+ * as a signal with no name and reported `unbound`, which sends somebody to wire a
+ * sensor that is already wired. There is no honest runtime meaning to give it: the
+ * baseline family is single-valued at the window's end, not one value per reading,
+ * and two signals' readings do not share timestamps to combine point by point.
+ */
+function seriesInputRefusal(operator: string, arg: PlanNode): FormulaCompileError {
+  if (arg.type === 'compare') {
+    // `count(x > 2)` would count every reading, above 2 or not.
+    return new FormulaCompileError(
+      `calls "${operator}" over a comparison; it would reduce the 0/1 points, not count the ones that `
+        + 'hold. Use count_exceeding(series, threshold) to count readings above a threshold.',
+    );
+  }
+  const what = arg.type === 'formula_ref' ? `another formula ("#${arg.formulaKey}")`
+    : arg.type === 'call' ? `the output of "${arg.name}"`
+      : 'a computed expression';
+  return new FormulaCompileError(
+    `calls "${operator}" over ${what}; "${operator}" reads a signal's own readings, so its series `
+      + 'argument must be a signal by name. Apply the operator to each signal, then combine the results.',
+  );
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
@@ -562,7 +620,7 @@ function collectRequired(
         sib.requiredFormulas.forEach((k) => formulas.add(k));
       }
     } else if (n.type === 'unary') walk(n.operand);
-    else if (n.type === 'binary') { walk(n.left); walk(n.right); }
+    else if (n.type === 'binary' || n.type === 'compare') { walk(n.left); walk(n.right); }
     else if (n.type === 'call') n.args.forEach(walk);
   };
   walk(node);
@@ -588,7 +646,8 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
       const c = computeExpansion(node.operand, resolved);
       return { nodes: 1 + c.nodes, depth: 1 + c.depth };
     }
-    case 'binary': {
+    case 'binary':
+    case 'compare': {
       const l = computeExpansion(node.left, resolved);
       const r = computeExpansion(node.right, resolved);
       return { nodes: 1 + l.nodes + r.nodes, depth: 1 + Math.max(l.depth, r.depth) };
@@ -622,6 +681,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
     case 'unary':
       return computeCompositionDepth(node.operand, resolved);
     case 'binary':
+    case 'compare':
       return Math.max(computeCompositionDepth(node.left, resolved), computeCompositionDepth(node.right, resolved));
     case 'call':
       return Math.max(0, ...node.args.map((a) => computeCompositionDepth(a, resolved)));

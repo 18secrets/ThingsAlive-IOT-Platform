@@ -21,7 +21,7 @@ import { mintPlatformToken } from '../src/platform/platform-token';
 import { withTenantId } from '../src/scope/tenant-session';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
-const MIGRATION = 'ClassVisuals1758400000000';
+const MIGRATION = 'ClassVisuals1758500000000';
 const SECRET = 'test-secret-class-visuals';
 const ISSUER = 'things-alive-class-visuals-test';
 const S3_ENV = {

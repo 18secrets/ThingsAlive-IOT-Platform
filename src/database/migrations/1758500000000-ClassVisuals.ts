@@ -13,8 +13,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * A key recorded at issuance would be a row pointing at nothing the moment an upload
  * failed, and nothing would ever notice.
  */
-export class ClassVisuals1758400000000 implements MigrationInterface {
-  name = 'ClassVisuals1758400000000';
+export class ClassVisuals1758500000000 implements MigrationInterface {
+  name = 'ClassVisuals1758500000000';
 
   public async up(q: QueryRunner): Promise<void> {
     // Literal, not imported — a committed migration's meaning must not move when the

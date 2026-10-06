@@ -7,7 +7,7 @@ export const numericPercent = {
 };
 
 /**
- * A class's picture — tier 0, the schematic (`1758400000000-ClassVisuals.ts`, task
+ * A class's picture — tier 0, the schematic (`1758500000000-ClassVisuals.ts`, task
  * QREC0c). One per class version. Platform-owned and shared: every tenant with the
  * class reads this row and the one object it names; nobody gets a copy of the bytes.
  *

@@ -10,6 +10,7 @@ import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipmen
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { ClientFormula } from '../../client-catalog/entities/client-formula.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
 import { SignalBindingService } from '../../signal-binding/services/signal-binding.service';
@@ -42,6 +43,9 @@ type SignalStatus =
 interface PlanEvalContext {
   window: Window;
   signals: Map<string, SignalStatus>;
+  /** Numeric client parameters for this machine, resolved once per batch at the
+   * window's end (task QPARAM1 §4a). A name absent here has no value at any scope. */
+  parameters: Map<string, number>;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -156,8 +160,22 @@ export class KpiEvaluatorService {
     // of when, which this is and the window-bound read cannot be.
     const latestEverBySignal = await this.reader.latestPerSignal(m, tenantId, imeis, allRequiredSignals);
 
-    // Per-signal staleness threshold: the class's own requirement row, pinned
-    // to the equipment's granted class_version — there is no tenant copy of
+    // Client parameters (task QPARAM1 §4), one read for the whole batch, at the
+    // window's end — a fuel price that changed mid-month applies from when it was
+    // effective, not retroactively to a report that already ran.
+    const parameterNames = [...new Set(['stale_after_seconds', ...targets.flatMap((t) => t.requiredParameters)])];
+    const resolvedParameters = await resolveParameters(
+      m, tenantId, chainForEquipment(profile), parameterNames, explicitWindow?.to ?? at,
+    );
+    const parameters = new Map<string, number>();
+    for (const [name, resolved] of resolvedParameters) {
+      if (typeof resolved?.value === 'number') parameters.set(name, resolved.value);
+    }
+    const tenantStaleAfter = parameters.get('stale_after_seconds') ?? null;
+
+    // Per-signal staleness threshold: a tenant `stale_after_seconds` first, then
+    // the class's own requirement row, pinned to the equipment's granted
+    // class_version — there is no tenant copy of
     // `equipment_class_sensor_requirement` to read instead (see
     // `signal-freshness.ts`).
     const staleAfterSecondsBySignal = new Map<string, number>();
@@ -169,7 +187,7 @@ export class KpiEvaluatorService {
         },
       });
       for (const req of requirements) {
-        staleAfterSecondsBySignal.set(req.measurementRole, resolveStaleAfterSeconds(req));
+        staleAfterSecondsBySignal.set(req.measurementRole, resolveStaleAfterSeconds(req, tenantStaleAfter));
       }
     }
 
@@ -209,7 +227,7 @@ export class KpiEvaluatorService {
 
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
-      const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? DEFAULT_STALE_AFTER_SECONDS;
+      const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
       signals.set(signal, resolveSignalStatus(
         signal, bindingStatus, seriesBySignal, latestEverBySignal, staleAfterSeconds, at,
       ));
@@ -217,7 +235,10 @@ export class KpiEvaluatorService {
 
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
-      { signals, siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])), excludedRangesBySignal },
+      {
+        signals, parameters, excludedRangesBySignal,
+        siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
+      },
       m, tenantId, imeis,
     )));
   }
@@ -280,7 +301,10 @@ export class KpiEvaluatorService {
 
   private async buildEnvelope(
     formula: ClientFormula, window: Window | null,
-    ctxBase: { signals: Map<string, SignalStatus>; siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]> },
+    ctxBase: {
+      signals: Map<string, SignalStatus>; parameters: Map<string, number>;
+      siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
+    },
     m: EntityManager, tenantId: string, imeis: string[],
   ): Promise<KpiEnvelope> {
     const unit = formula.resultUnit ?? 'dimensionless';
@@ -291,8 +315,15 @@ export class KpiEvaluatorService {
       window: window ? { from: window.from.toISOString(), to: window.to.toISOString() } : { from: '', to: '' },
     };
 
-    if (formula.requiredParameters.length) {
-      return { ...base, value: null, readiness: 'not_configured', coverage: zeroCoverage() };
+    // Never 0 (task QPARAM1 §4a): a cost of zero is a number a customer will act on.
+    // `required_parameters` is transitive through `#formula_key`, so a sibling's
+    // parameter is caught here too, before any telemetry is touched.
+    const missingParameters = formula.requiredParameters.filter((p) => !ctxBase.parameters.has(p));
+    if (missingParameters.length) {
+      return {
+        ...base, value: null, readiness: 'not_configured', reason: 'parameter_not_set',
+        missingParameters, coverage: zeroCoverage(),
+      };
     }
     if (!window) {
       // aggregation_window: 'shift' — no shift-schedule resolution built here.
@@ -326,7 +357,7 @@ export class KpiEvaluatorService {
     }
 
     const ctx: PlanEvalContext = {
-      window, signals: ctxBase.signals, siblings: ctxBase.siblings,
+      window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal,
     };
 
@@ -365,7 +396,7 @@ export class KpiEvaluatorService {
   ): Promise<{ ok: true; value: SeriesPoint[] } | { ok: false; readiness: Readiness; reason?: Reason }> {
     const plan = formula.compiledPlan as any;
 
-    if (plan.type === 'call' && BASELINE_OPERATOR_NAMES.has(plan.name)) {
+    if (isBaselinePointPlan(plan)) {
       const result = evalNode(plan, ctx);
       if (result.ok === false) return result;
       return { ok: true, value: [{ t: ctx.window.to.toISOString(), v: result.value }] };
@@ -376,7 +407,8 @@ export class KpiEvaluatorService {
       throw new Error(
         `formula "${formula.formulaKey}": declares result_kind "series" with a plan shape series `
           + 'bucketing does not support (only a bare signal, one reducer directly wrapping one signal, '
-          + 'or +/-/*// / unary-minus over such shapes) — QCE2.1 scopes this out rather than guessing.',
+          + 'or +/-/*// / unary-minus / a comparison over such shapes and constants) — QCE2.1 scopes this '
+          + 'out rather than guessing.',
       );
     }
 
@@ -395,13 +427,51 @@ export class KpiEvaluatorService {
     const endEpoch = ctx.window.to.getTime() / 1000;
     for (let epoch = startEpoch; epoch <= endEpoch; epoch += bucketSeconds) {
       const bucketMs = epoch * 1000;
-      const v = evalBucketNode(bucketPlan.node, bucketMs, byBucketBySignal, bucketPlan.columnBySignal);
+      const v = evalBucketNode(bucketPlan.node, bucketMs, byBucketBySignal, bucketPlan.columnBySignal, ctx.parameters);
       points.push({ t: new Date(bucketMs).toISOString(), v });
     }
     // A `series` plan is guaranteed an array here — never a bare number, even
     // when the window is short enough to produce exactly one bucket.
     return { ok: true, value: points };
   }
+}
+
+/** 1 when the ordering holds, else 0 (task QCE5). */
+function compareValues(op: '>' | '>=' | '<' | '<=', left: number, right: number): number {
+  const holds = op === '>' ? left > right
+    : op === '>=' ? left >= right
+      : op === '<' ? left < right
+        : left <= right;
+  return holds ? 1 : 0;
+}
+
+/**
+ * QCE2.1 §4's one-point exception, extended by task QCE5 from a bare baseline root to
+ * arithmetic and comparisons over baseline roots — the cross-sensor risk score,
+ * `(zscore(a, 90d) > 2) + (zscore(b, 90d) > 2)`. Every series input sits under a
+ * baseline operator, which is single-valued at the window's end already, so the whole
+ * plan is too. A bare signal or any other call anywhere disqualifies it: those vary
+ * per bucket, and this must not quietly collapse them to one point.
+ */
+function isBaselinePointPlan(node: any): boolean {
+  let sawBaseline = false;
+  const ok = (n: any): boolean => {
+    switch (n?.type) {
+      case 'call':
+        if (!BASELINE_OPERATOR_NAMES.has(n.name)) return false;
+        sawBaseline = true;
+        return true;
+      case 'const': case 'duration': case 'param':
+        return true;
+      case 'unary':
+        return ok(n.operand);
+      case 'binary': case 'compare':
+        return ok(n.left) && ok(n.right);
+      default:
+        return false;
+    }
+  };
+  return ok(node) && sawBaseline;
 }
 
 /** Baseline operators are declared `series` (QCE4) because they are genuinely
@@ -477,7 +547,8 @@ function collectSignalLookback(node: any, acc: Map<string, number>): void {
   if (!node || typeof node !== 'object') return;
   switch (node.type) {
     case 'unary': collectSignalLookback(node.operand, acc); return;
-    case 'binary': collectSignalLookback(node.left, acc); collectSignalLookback(node.right, acc); return;
+    case 'binary':
+    case 'compare': collectSignalLookback(node.left, acc); collectSignalLookback(node.right, acc); return;
     case 'call': {
       const durationHours = node.args
         .filter((a: any) => a.type === 'duration')
@@ -502,10 +573,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       return { ok: true, value: node.value };
     case 'duration':
       return { ok: true, value: node.hours };
-    case 'param':
-      // QPARAM1 (tenant parameter values) does not exist yet — a formula that
-      // references one cannot be evaluated, by construction, not by omission.
-      return { ok: false, readiness: 'not_configured' };
+    case 'param': {
+      // buildEnvelope already refused a formula missing one; this is the net for a
+      // plan reached some other way.
+      const value = ctx.parameters.get(node.name);
+      if (value === undefined) return { ok: false, readiness: 'not_configured', reason: 'parameter_not_set' };
+      return { ok: true, value };
+    }
     case 'signal': {
       const sig = ctx.signals.get(node.name);
       if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
@@ -538,6 +612,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
             : left.value / right.value;
       return { ok: true, value };
     }
+    case 'compare': {
+      const left = evalNode(node.left, ctx);
+      if (left.ok === false) return left;
+      const right = evalNode(node.right, ctx);
+      if (right.ok === false) return right;
+      return { ok: true, value: compareValues(node.op, left.value, right.value) };
+    }
     case 'call': {
       const opEntry = lookupOperator(node.name);
       const executor = lookupExecutor(node.name);
@@ -556,6 +637,10 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           continue;
         }
         if (kind === 'series') {
+          // The compiler refuses anything but a signal here. A plan stored before it
+          // did is not configurable as written — and is not "unbound", which would
+          // send somebody to wire a sensor that is already wired.
+          if (argNode.type !== 'signal') return { ok: false, readiness: 'not_configured' };
           const sig = ctx.signals.get(argNode.name);
           if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
           if (sig.ok === false) return { ok: false, readiness: sig.readiness, reason: sig.reason };
@@ -613,9 +698,15 @@ function planBucketShape(node: any): BucketShape | null {
       case 'signal':
         if (!columnBySignal.has(n.name)) columnBySignal.set(n.name, 'last');
         return true;
+      // One value for the whole window (task QPARAM1) — the same in every bucket.
+      case 'param':
+      // The same in every bucket (task QCE5) — `coolant_temp_c > 105` needs its 105.
+      case 'const':
+        return true;
       case 'unary':
         return supported(n.operand);
       case 'binary':
+      case 'compare':
         return supported(n.left) && supported(n.right);
       case 'call': {
         if (n.args.length !== 1 || n.args[0].type !== 'signal') return false;
@@ -637,27 +728,38 @@ function planBucketShape(node: any): BucketShape | null {
  */
 function evalBucketNode(
   node: any, bucketMs: number, byBucketBySignal: Map<string, Map<number, BucketAggregate>>,
-  columnBySignal: Map<string, BucketColumn>,
+  columnBySignal: Map<string, BucketColumn>, parameters: Map<string, number>,
 ): number | null {
   switch (node.type) {
+    case 'param':
+      return parameters.get(node.name) ?? null;
+    case 'const':
+      return node.value;
     case 'signal': {
       const agg = byBucketBySignal.get(node.name)?.get(bucketMs);
       if (!agg) return null;
       return agg[columnBySignal.get(node.name) ?? 'last'];
     }
     case 'unary': {
-      const v = evalBucketNode(node.operand, bucketMs, byBucketBySignal, columnBySignal);
+      const v = evalBucketNode(node.operand, bucketMs, byBucketBySignal, columnBySignal, parameters);
       return v === null ? null : -v;
     }
     case 'binary': {
-      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal);
-      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal);
+      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal, parameters);
       if (left === null || right === null) return null;
       if (node.op === '/' && right === 0) return null;
       return node.op === '+' ? left + right
         : node.op === '-' ? left - right
           : node.op === '*' ? left * right
             : left / right;
+    }
+    case 'compare': {
+      // A bucket missing either side has no answer — not a confident 0.
+      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      if (left === null || right === null) return null;
+      return compareValues(node.op, left, right);
     }
     case 'call': {
       const agg = byBucketBySignal.get(node.args[0].name)?.get(bucketMs);

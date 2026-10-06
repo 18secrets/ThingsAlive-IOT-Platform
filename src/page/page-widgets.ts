@@ -2,12 +2,12 @@
 import { KpiEnvelope, Readiness, SeriesPoint } from '../kpi/types';
 
 /**
- * Who answers each widget, and the shape of its `data` (task QPAGE1 Â§0, Â§4).
+ * Who answers each widget, and the shape of its `data` (task QPAGE1 §0, §4).
  *
  * The page composes; it does not compute. Every widget type names the one producer
  * its number already comes from, and a test fails naming any type in WIDGET_TYPES
- * that has no entry â€” the same pattern as QCE2's executor registry and QGRANT0's
- * inventory. A `Record<WidgetType, â€¦>` makes a missing entry a compile error too.
+ * that has no entry — the same pattern as QCE2's executor registry and QGRANT0's
+ * inventory. A `Record<WidgetType, …>` makes a missing entry a compile error too.
  */
 export const WIDGET_PRODUCERS: Readonly<Record<WidgetType, string>> = Object.freeze({
   kpi_number: 'KpiEvaluatorService.evaluateAll',
@@ -53,7 +53,7 @@ export interface AlertRow {
   id: string;
   severity: string;
   raisedAt: string;
-  /** From the rule that raised it â€” `alert_event` carries no signal of its own. */
+  /** From the rule that raised it — `alert_event` carries no signal of its own. */
   signal: string | null;
   message: string;
   acknowledged: boolean;
@@ -110,7 +110,7 @@ export interface PageWidget {
   title: string | null;
   position: number;
   size: string;
-  /** Always null unless readiness is 'ready' â€” never 0, never [] standing in for nothing. */
+  /** Always null unless readiness is 'ready' — never 0, never [] standing in for nothing. */
   data: WidgetData | null;
   readiness: PageReadiness;
   reason?: PageReason;
@@ -124,13 +124,13 @@ export const unfilled = <W extends Omit<PageWidget, 'data' | 'readiness' | 'reas
 export const filled = <W extends Omit<PageWidget, 'data' | 'readiness' | 'reason'>>(w: W, data: WidgetData): PageWidget =>
   ({ ...w, data, readiness: 'ready' });
 
-/** Worst first â€” what a machine's single readiness reports when its signals disagree. */
+/** Worst first — what a machine's single readiness reports when its signals disagree. */
 export const READINESS_SEVERITY: Readonly<Record<PageReadiness, number>> = {
   ready: 0, not_available: 1, blocked: 2, not_configured: 3,
 };
 
 /**
- * One signal's readiness from the coverage result â€” the same mapping the evaluator
+ * One signal's readiness from the coverage result — the same mapping the evaluator
  * applies to a KPI's input (kpi-evaluator.service.ts `signalStatus`): unbound is
  * not_configured; no readings and stale are not_available. Restated here, not
  * re-derived, because the evaluator's is private and that file is shared with
