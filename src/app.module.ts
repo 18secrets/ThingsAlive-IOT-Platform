@@ -17,6 +17,7 @@ import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
+import { PageModule } from './page/page.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { LegacyModule } from './legacy/legacy.module';
@@ -87,6 +88,7 @@ export class AppModule {
               EquipmentModule,
               SignalBindingModule,
               KpiModule,
+      PageModule,
               WorkModule,
               ShiftModule,
               TelemetryPartitionModule,

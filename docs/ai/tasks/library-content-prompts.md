@@ -444,3 +444,249 @@ sheet is optional, and a workbook without it gets the computed fallback.
   `position_custom`. A partial reorder is ambiguous and would have been a silent bug.
 - **Missing widget types, queued as QREC0b.1 after QPARAM1:** `parameter_list` (needs
   QPARAM1) and `forecast_chart` (QREC0a's forecast declaration has nowhere to render).
+
+---
+
+## QPAGE1 — the composed page endpoint
+
+# QPAGE1 — the composed page endpoint
+
+Read `CLAUDE.md` first. Commit this prompt to `docs/ai/prompts/` before writing code.
+Append the task to `docs/ai/tasks/library-content-prompts.md`.
+
+**Branch:** `git checkout main && git pull && git checkout -b feature/composed-page`
+
+**Stream A.** Starts after !56 (QREC0b) merges — it reads the layout tables. Migration
+timestamp assigned **at rebase time**.
+
+**Before writing anything**, read `docs/ai/schema-inventory.md` and the widget vocabulary in
+`src/catalog/layout/widget-types.ts`. This task consumes what QREC0a and QREC0b built; if
+something below contradicts what is there, **stop and say so** rather than reconciling it.
+
+---
+
+## 0. The rule this task must not break
+
+> **The page endpoint composes. It does not compute.**
+
+Every number on the page already has exactly one producer:
+
+| widget | producer |
+|---|---|
+| `kpi_number`, `kpi_gauge`, `kpi_chart` | `KpiEvaluatorService` |
+| `signal_chart` | `TelemetryWindowReader` |
+| `readiness_list` | the readiness resolver (Q08S s3) |
+| `alert_list` | `AlertService` |
+| `work_order_list` | `WorkOrderService` |
+| `service_due` | `ServiceService` |
+| `failure_modes`, `recommendations` | the tenant's class copy (QREC0a) |
+| `schematic` | QREC0c — not built; the widget returns `not_available` / `no_visual` |
+
+**If this task computes a number itself, it has created a second source of truth** and the
+page will disagree with the endpoint it came from. Where a producer cannot answer, the
+widget carries that state — it does not get an answer from somewhere else.
+
+## 1. The machine page
+
+```
+GET /api/v1/equipment/:sourceSystem/:externalId/page
+```
+
+Tenant-scoped. Returns the whole page in one call — **the console must not need a second
+request per widget.** That is the entire reason D29 specifies a composed endpoint.
+
+```ts
+{
+  equipment: { sourceSystem, externalId, name, classSlug, classVersion, plantId },
+  layout: { fallback: boolean },
+  widgets: [
+    { widgetKey, widgetType, title, position, size,
+      data: <shape per type>,
+      readiness: 'ready' | 'blocked' | 'not_configured' | 'not_available',
+      reason?: string }
+  ]
+}
+```
+
+- Hidden widgets are **excluded**. Order comes from the tenant's copy.
+- **A widget that cannot be filled still appears**, with its readiness and reason. A missing
+  tile is indistinguishable from one nobody authored — that was settled in QCE2 and holds
+  here.
+- `data` is `null` whenever `readiness !== 'ready'`. Never `0`, never `[]` standing in for
+  "nothing happened".
+
+## 2. One pass per producer, not one per widget
+
+A page with twenty widgets must not make twenty round trips. Group by producer and ask once:
+
+- **all** KPI widgets → one evaluator call for the set of formula keys
+- **all** `signal_chart` widgets → one bucketed read for the set of signals
+- alerts, work orders, service, failure modes → one call each
+
+**Report the query count for a twenty-widget page.** If it is not roughly the number of
+producers, say so rather than shipping it.
+
+## 3. The site page
+
+```
+GET /api/v1/sites/:plantId/page
+```
+
+Same envelope. The site's layout comes from its `site_class`, or the default when the plant
+names none.
+
+**Site KPIs need an aggregation and it must be declared, not guessed.** Add to
+`site_class_layout`:
+
+```sql
+aggregate text NULL   -- 'sum' | 'avg' | 'min' | 'max' | 'count'
+```
+
+**Required when `bound_to` is set; refused when it is not.** There is no default — an
+unstated aggregation is a wrong number nobody can see is wrong. Averaging a fuel total and
+summing a temperature are both silently plausible.
+
+Aggregation covers **only machines whose own KPI is `ready`**. The widget reports
+`machinesIncluded` and `machinesExcluded` beside the value. An average over machines that
+could not be measured is fabricated.
+
+If **no** machine is ready, the widget is `not_available` / `no_ready_machines`, value null.
+
+`machine_list` returns each machine with its worst readiness and its open alert count — not
+its KPIs. A site page that evaluates every KPI of every machine is the thing that will make
+this slow.
+
+## 4. Widget data shapes
+
+Closed, one per type, in a module beside the vocabulary. A test asserts every type in
+`WIDGET_TYPES` has a shape and a producer, and fails naming any that does not — the same
+pattern as QCE2's executor registry and QGRANT0's inventory.
+
+| type | `data` |
+|---|---|
+| `kpi_number`, `kpi_gauge` | the QCE2 envelope: `value`, `unit`, `window`, `coverage`, plus `target`, `targetDirection` |
+| `kpi_chart` | the envelope with `value` as `{t,v}[]` |
+| `signal_chart` | `{ signal, unit, points: {t,v}[] }` |
+| `readiness_list` | `[{ signal, readiness, reason, lastReadingAt, secondsSinceLastReading }]` |
+| `alert_list` | `[{ id, severity, raisedAt, signal, message, acknowledged }]` |
+| `work_order_list` | `[{ id, status, title, assignedTo, dueAt }]` |
+| `service_due` | `{ nextDueAt, hoursRemaining, basis }` |
+| `failure_modes` | `[{ code, name, symptom, severity, signals, status }]` |
+| `recommendations` | `[{ failureModeCode, action, urgency, estimatedHours }]` |
+| `machine_list` *(site only)* | `[{ sourceSystem, externalId, name, readiness, openAlerts }]` |
+| `schematic` | `null`, `not_available` / `no_visual` until QREC0c |
+
+`failure_modes.status` is **derived, not stored**: a mode is `active` when an open alert
+names one of its signals, otherwise `clear`. Say in the report how you determined it, and if
+the alert does not carry enough to decide, return `unknown` rather than guessing `clear`.
+
+## 5. Performance
+
+Measure and report:
+
+- a twenty-widget machine page, cold
+- a site page over twenty machines
+- the query count for each
+
+QCE2 measured 40 ms for twenty KPIs. **If a page exceeds about two seconds, stop and report
+the breakdown** rather than optimising. Caching and materialisation are a design
+conversation, and they are mine.
+
+## 6. Out of scope
+
+- Visuals and anchors — **QREC0c**.
+- A tenant adding a widget — after QREC0c, when there is something to add.
+- `parameter_list` and `forecast_chart` — **QREC0b.1**, after QPARAM1.
+- Any new computation. See §0.
+- Anything under `frontend/`. Report the full response shape; the console builds the page.
+
+## 7. Tests
+
+1. A machine with a layout → widgets in the tenant's order, hidden ones absent.
+2. A machine whose class has no layout → the QREC0b fallback, `layout.fallback: true`.
+3. A KPI that is not ready → the widget appears, `data: null`, with its reason.
+4. A `schematic` widget → `not_available` / `no_visual`.
+5. Twenty widgets → the query count is near the producer count, not twenty.
+6. A site page → the site class's layout; a plant naming none gets the default.
+7. A site KPI with `aggregate: 'avg'` over three machines, one not ready → the average covers
+   two, and `machinesIncluded: 2`, `machinesExcluded: 1`.
+8. A site KPI where no machine is ready → `no_ready_machines`, value null.
+9. A `site_class_layout` row with `bound_to` and no `aggregate` → refused at publish.
+10. Every `WIDGET_TYPES` entry has a shape and a producer.
+11. A failure mode whose signal has an open alert → `active`; otherwise `clear`.
+12. RLS: a tenant cannot read another tenant's page. Write this one deliberately.
+
+**Seed before you migrate.**
+
+## 8. Done when
+
+- `npm run build` clean, `npm test` and `npm run test:db` green. Counts before and after on a
+  worktree off `origin/main`, naming the base SHA. **In-band, in chunks.**
+- Migration timestamp at rebase; `verify:migrations` clean; chain from empty; down path named.
+- Report: commit SHA, test counts with base SHA, **the §5 numbers and query counts**, how
+  `failure_modes.status` was derived, and anything not implemented with the reason.
+
+### Settled before implementation (2026-10-05)
+
+1. **Mixed classes on a site page are normal, not an error.** A machine whose class does
+   not declare the bound key is excluded and counted; exclusions are reported separately
+   as `notDeclared` and `notReady`. **Mixed units are refused, never converted**: the widget
+   is `blocked` / `unit_conflict`, naming each unit and a machine that reported it. The
+   platform has no conversion, and QCE3 settled that a dimension is its unit.
+2. **`aggregate` is a database CHECK**, `(bound_to IS NULL) = (aggregate IS NULL)` plus the
+   closed set — there is no publish path for site classes (QREC0b removed the authoring
+   routes), and a rule with nowhere to run is not a rule. The seeded default satisfies it.
+3. **`failure_modes.status` is derived through the rule, not the alert**: `alert_event` →
+   `alert_rule` → the rule's `params.signal`. `active` when an open alert's rule watches
+   one of the mode's signals; `unknown` when any open alert on the machine comes from a
+   rule that names no signal (chain, fuel-loss, prediction) — it might be this failure,
+   and `clear` would be a guess; `clear` otherwise. No column was added to the alert
+   pipeline: that would be a schema change in the one task that must not compute.
+4. **Performance is measured and reported, not optimised.** Two seconds is the stop line.
+5. **Names are mapped, not renamed.** The prompt's `ServiceService` is
+   `ServiceForecastService`; `docs/ai/schema-inventory.md` is on Stream B's
+   `chore/two-stream-setup`, not yet on `main`. If either name is genuinely wrong that is
+   a cleanup task of its own.
+
+### Found while building (2026-10-05)
+
+- **Two producers disagree about which devices a machine has.** The KPI evaluator reads
+  `device_projection` (the legacy mirror); `SignalBindingService.coverage` — and so
+  `readiness_list` and `machine_list` — reads `device_inventory` (claimed devices). A
+  machine present in one and not the other shows KPIs `ready` beside signals
+  `no_readings` on the same page. Pre-existing; not reconciled here, because choosing one
+  is a decision about the producers, not about composing them.
+- **`readiness_list` covers the class's sensor requirements**, which is what `coverage`
+  reports — not every declared signal. A declared signal with no requirement row is not
+  listed. Rows carry `componentScope`, because a composite machine has one row per
+  component for the same signal.
+- **`signal_chart` reads a 24-hour window**, each bucket's `avg` — the task names no
+  window; the reader computes every aggregate and the caller picks one.
+- **A site KPI over a series formula is `not_available` / `series_not_aggregated`** — the
+  task defines aggregation for values, not for bucketed series.
+- **`kpi-evaluator.service.ts` was not opened** (shared with Stream B until QPARAM1). The
+  signal-readiness mapping the page needs is restated in `page-widgets.ts`; the evaluator
+  should call it once QPARAM1 merges.
+### Recorded at review (2026-10-05)
+
+- **The query rule fired on the wrong metric, and QPAGE1 ships as measured.** Machine page:
+  84 queries, of which 32 are data reads and 52 are transaction framing (each producer
+  opens its own tenant transaction). Thirty-two reads for twenty widgets is about one per
+  producer per signal, which is what §2 asked for. 127–163 ms and 217–311 ms are both an
+  order of magnitude inside the two-second line.
+- **QTX1 — shared-transaction producers — exists because the site page is linear in
+  machines.** About 6 queries per machine (each machine's coverage, for `machine_list`):
+  20 machines is ~218 queries and ~0.3 s; 200 machines is ~1,200 queries and seconds. **The
+  forcing function is machine count, not widget count. QTX1 must land before any customer
+  has a large site.** It touches every producer, the evaluator included — a cross-cutting
+  change that does not belong inside a feature.
+- **QFIX-DEVICES — next in Stream A, and it blocks the machine page reaching a customer.**
+  The evaluator reads `device_projection`; coverage reads `device_inventory`. A machine in
+  only one shows KPIs `ready` beside signals `no_readings` — two adjacent widgets that
+  contradict each other, which is the second-source-of-truth failure §0 exists to prevent.
+- **Migration chain timing.** `migration.spec.ts`'s chain test now has an explicit 30 s
+  timeout like every other DB spec (a fixture change; it asserts the same thing). On
+  Railway, the pre-deploy `migration:run` executes only *pending* migrations, so a deploy
+  never replays the chain. The full chain (~3 s locally at 52) runs only against an empty
+  database, which means tests and any new environment such as Staging. It is a test-time
+  and new-environment cost, not a per-deploy one.
