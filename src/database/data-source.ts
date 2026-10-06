@@ -59,6 +59,7 @@ import { SensorInstance } from '../signal-binding/entities/sensor-instance.entit
 import { CalibrationVersion } from '../signal-binding/entities/calibration-version.entity';
 import { EquipmentParameter } from '../signal-binding/entities/equipment-parameter.entity';
 import { TenantParameter } from '../parameters/entities/tenant-parameter.entity';
+import { SignalState } from '../device-catalog/entities/signal-state.entity';
 import { EquipmentClassFailureMode } from '../catalog/entities/equipment-class-failure-mode.entity';
 import { EquipmentClassRecommendation } from '../catalog/entities/equipment-class-recommendation.entity';
 import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
@@ -143,6 +144,7 @@ export const ENTITIES = [
   SiteClass,
   SiteClassLayout,
   TenantParameter,
+  SignalState,
 ];
 
 export interface DataSourceChoices {

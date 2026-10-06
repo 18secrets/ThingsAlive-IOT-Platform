@@ -1,4 +1,5 @@
 import { retiredSignalProblems, rethrowSensorContentError } from '../../device-catalog/services/sensor-retirement';
+import { loadSignalStates } from '../../device-catalog/services/signal-state.service';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -244,8 +245,12 @@ export class CatalogAuthoringService {
       );
     }
 
+    // Categorical states resolve to codes here (task QCAT1), so a published plan never
+    // depends on the vocabulary staying as it is.
+    const signalStates = await loadSignalStates(this.classes.manager, draft.expectedSignals.map((s) => s.signal));
     const results = compileClassFormulas({
       classSlug: slug,
+      signalStates,
       expectedSignals: draft.expectedSignals.map((s) => ({ signal: s.signal, unit: s.unit })),
       formulas: formulas.map((formula) => ({
         formulaKey: formula.formulaKey,

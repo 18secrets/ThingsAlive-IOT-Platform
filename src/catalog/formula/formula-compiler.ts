@@ -8,8 +8,9 @@ export { FormulaCompileError } from './errors';
 /** Bumped whenever the emitted plan shape or the unit/composition rules change, so a
  * plan compiled by an older compiler is detectable rather than silently trusted.
  * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition.
- * qce5.0.0: the `compare` node and `count_exceeding`. */
-export const COMPILER_VERSION = 'qce5.0.0';
+ * qce5.0.0: the `compare` node and `count_exceeding`.
+ * qcat1.0.0: the `state` node and the categorical operators. */
+export const COMPILER_VERSION = 'qcat1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -26,6 +27,10 @@ export type PlanNode =
   | { type: 'duration'; kind: 'scalar'; unit: string; hours: number }
   | { type: 'signal'; kind: 'series'; unit: string; name: string }
   | { type: 'param'; kind: 'scalar'; unit: string; name: string }
+  /** A categorical state (task QCAT1). `code` is resolved from the vocabulary at publish;
+   * null only where no vocabulary was supplied (the import dry-run), and a null code
+   * evaluates `not_configured` rather than guessing a state. */
+  | { type: 'state'; kind: 'scalar'; unit: string; name: string; code: number | null }
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
@@ -75,9 +80,13 @@ export type ClassFormulaResult =
   | { status: 'ok'; compiled: CompiledFormula }
   | { status: 'error'; error: FormulaCompileError };
 
+/** signal → state name → code (task QCAT1). Supplied at publish; absent at dry-run. */
+export type SignalStateVocabulary = Map<string, Map<string, number>>;
+
 export interface CompileClassFormulasInput {
   classSlug: string;
   expectedSignals: DeclaredSignal[];
+  signalStates?: SignalStateVocabulary;
   formulas: FormulaInput[];
 }
 
@@ -95,6 +104,7 @@ export interface CompileFormulaInput {
    * formula has none — a `#ref` with no siblings supplied is refused as unknown,
    * same as a `#ref` to a key genuinely absent from the class. */
   siblingFormulas?: FormulaInput[];
+  signalStates?: SignalStateVocabulary;
 }
 
 /** What a `#ref` resolves against once its target has already compiled — enough to
@@ -118,6 +128,7 @@ interface InferContext {
   byKey: Map<string, FormulaInput>;
   resolved: Map<string, ResolvedSibling>;
   results: Map<string, ClassFormulaResult>;
+  signalStates?: SignalStateVocabulary;
 }
 
 /**
@@ -206,7 +217,9 @@ export function compileClassFormulas(input: CompileClassFormulasInput): Map<stri
     const f = byKey.get(key)!;
     const raw = parsed.get(key)!;
     try {
-      const ctx: InferContext = { formulaKey: key, classSlug, signalUnits, byKey, resolved, results };
+      const ctx: InferContext = {
+        formulaKey: key, classSlug, signalUnits, byKey, resolved, results, signalStates: input.signalStates,
+      };
       const compiled = compileOne(f, raw, ctx);
       resolved.set(key, {
         kind: compiled.resultKind,
@@ -239,6 +252,7 @@ export function compileFormula(input: CompileFormulaInput): CompiledFormula {
   const results = compileClassFormulas({
     classSlug: input.classSlug,
     expectedSignals: input.expectedSignals,
+    signalStates: input.signalStates,
     formulas: [
       ...siblings,
       {
@@ -416,6 +430,14 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
     case 'param':
       return { type: 'param', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), name: node.name };
 
+    // Reached only where a state is not an operator's state argument — those are
+    // resolved in the call branch. A state is a label, not a number to add or compare.
+    case 'state':
+      throw new FormulaCompileError(
+        `'${node.name}' is a state; it can only be the state argument of fraction_in_state, transitions `
+          + 'or dwell_in_state.',
+      );
+
     case 'formula_ref': {
       if (!ctx.byKey.has(node.name)) {
         throw new FormulaCompileError(
@@ -516,13 +538,16 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
           `calls "${node.name}" with ${node.args.length} argument(s); it takes ${entry.argKinds.length}.`,
         );
       }
-      const args = node.args.map((a) => infer(a, ctx));
+      // State arguments are resolved after the rest, against the series argument's
+      // signal (task QCAT1) — a state name only means something for one signal.
+      const nonState = node.args.map((a, i) => (entry.argKinds[i] === 'state' ? null : infer(a, ctx)));
+      const args = node.args.map((a, i) => nonState[i] ?? inferState(node.name, a, nonState[0], ctx));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
         // A duration literal reports kind:'scalar' (task QCE4) so it never widens
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
-        const actual = a.type === 'duration' ? 'duration' : a.kind;
+        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.kind;
         if (actual !== expected) {
           throw new FormulaCompileError(
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
@@ -593,6 +618,34 @@ function seriesInputRefusal(operator: string, arg: PlanNode): FormulaCompileErro
   );
 }
 
+/**
+ * A categorical operator's state argument (task QCAT1): a quoted name, resolved to
+ * its code when a vocabulary is supplied. With one, an unknown state or a signal with
+ * no vocabulary is refused here, at publish, rather than reading wrong at runtime.
+ */
+function inferState(operator: string, raw: RawNode, series: PlanNode | null, ctx: InferContext): PlanNode {
+  if (raw.type !== 'state') {
+    throw new FormulaCompileError(`calls "${operator}" with a state that is not a quoted name, e.g. 'idle'.`);
+  }
+  const unit = renderUnit(DIMENSIONLESS);
+  if (!ctx.signalStates) return { type: 'state', kind: 'scalar', unit, name: raw.name, code: null };
+  const signal = series?.type === 'signal' ? series.name : null;
+  const states = signal ? ctx.signalStates.get(signal) : undefined;
+  if (!signal || !states?.size) {
+    throw new FormulaCompileError(
+      `calls "${operator}" on "${signal ?? '?'}", which has no state vocabulary — a categorical signal's states `
+        + 'are declared in the device catalog first.',
+    );
+  }
+  const code = states.get(raw.name);
+  if (code === undefined) {
+    throw new FormulaCompileError(
+      `"${signal}" has no state '${raw.name}'; its states are ${[...states.keys()].map((st) => `'${st}'`).join(', ')}.`,
+    );
+  }
+  return { type: 'state', kind: 'scalar', unit, name: raw.name, code };
+}
+
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
  * lookup) — re-parsed here purely for the algebra, never for display.
  * `parseUnitString` already recognises the literal "dimensionless" `renderUnit`
@@ -641,6 +694,7 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
     case 'duration':
     case 'signal':
     case 'param':
+    case 'state':
       return { nodes: 1, depth: 1 };
     case 'unary': {
       const c = computeExpansion(node.operand, resolved);
@@ -677,6 +731,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
     case 'duration':
     case 'signal':
     case 'param':
+    case 'state':
       return 0;
     case 'unary':
       return computeCompositionDepth(node.operand, resolved);
