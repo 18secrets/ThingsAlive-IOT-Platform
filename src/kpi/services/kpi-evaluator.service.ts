@@ -603,6 +603,10 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           continue;
         }
         if (kind === 'series') {
+          // The compiler refuses anything but a signal here. A plan stored before it
+          // did is not configurable as written — and is not "unbound", which would
+          // send somebody to wire a sensor that is already wired.
+          if (argNode.type !== 'signal') return { ok: false, readiness: 'not_configured' };
           const sig = ctx.signals.get(argNode.name);
           if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
           if (sig.ok === false) return { ok: false, readiness: sig.readiness, reason: sig.reason };
