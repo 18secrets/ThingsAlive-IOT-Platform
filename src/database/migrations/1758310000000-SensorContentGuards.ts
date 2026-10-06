@@ -4,8 +4,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * only through a narrow function: ta_app never receives general DELETE permission.
  * Its fixed search path and transaction-local bypass allow counts across tenants
  * without returning tenant content or changing the caller's RLS context. */
-export class SensorContentGuards1758110000000 implements MigrationInterface {
-  name = 'SensorContentGuards1758110000000';
+export class SensorContentGuards1758310000000 implements MigrationInterface {
+  name = 'SensorContentGuards1758310000000';
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`CREATE FUNCTION sensor_retirement_problems(signals jsonb) RETURNS text[]

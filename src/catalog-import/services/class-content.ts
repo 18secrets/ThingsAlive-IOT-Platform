@@ -1,10 +1,20 @@
 import { EntityManager } from 'typeorm';
-import { EquipmentClassFormula, FormulaKind } from '../../catalog/entities/equipment-class-formula.entity';
+import {
+  EquipmentClassFormula, FormulaAggregationWindow, FormulaChartType, FormulaComparisonBasis, FormulaKind,
+  FormulaTargetDirection,
+} from '../../catalog/entities/equipment-class-formula.entity';
 import { parseBindings } from '../../catalog/formula/named-formula-binding';
-import { EquipmentClassProfile, ExpectedSignal, FailureMode } from '../../catalog/entities/equipment-class-profile.entity';
+import { EquipmentClassProfile, ExpectedSignal } from '../../catalog/entities/equipment-class-profile.entity';
+import { RecommendationUrgency } from '../../catalog/entities/equipment-class-recommendation.entity';
 import {
   EquipmentClassSensorRequirement, SensorRequirementCriticality,
 } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
+import {
+  FailureModeContent, RecommendationContent, loadFailureModes, loadRecommendations,
+} from '../../catalog/services/class-failure-modes';
+import { Severity } from '../../common/severity';
+import { loadLayout } from '../../catalog/services/class-layout';
+import { LayoutWidget } from '../../catalog/layout/layout-rules';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 
 export interface ThresholdEntry {
@@ -22,6 +32,10 @@ export interface SensorRequirementContent {
   canonicalUnit: string | null;
   enables: string[];
   notes: string | null;
+  /** Template v4 (task QREC0a). Null/false/null are also what a v3 workbook gets. */
+  staleAfterSeconds: number | null;
+  forecastEnabled: boolean;
+  forecastHorizonHours: number | null;
 }
 
 export interface FormulaContent {
@@ -39,6 +53,16 @@ export interface FormulaContent {
   namedFormulaSlug: string | null;
   namedFormulaVersion: number | null;
   bindings: { role: string; signal: string }[];
+  /** KPI presentation (D30), carried by template v4 under the database's own column
+   * names (task QREC0a). A blank cell is the column's own default, not a guess. */
+  displayUnit: string | null;
+  targetValue: number | null;
+  targetMin: number | null;
+  targetMax: number | null;
+  targetDirection: FormulaTargetDirection;
+  comparisonBasis: FormulaComparisonBasis;
+  aggregationWindow: FormulaAggregationWindow;
+  chartType: FormulaChartType;
 }
 
 export interface ClassContent {
@@ -47,10 +71,14 @@ export interface ClassContent {
   category: string | null;
   serviceIntervalHours: number | null;
   expectedSignals: ExpectedSignal[];
-  failureModes: FailureMode[];
+  /** Read from `equipment_class_failure_mode`, never from the deprecated jsonb. */
+  failureModes: FailureModeContent[];
+  recommendations: RecommendationContent[];
   defaultThresholds: Record<string, ThresholdEntry>;
   sensorRequirements: SensorRequirementContent[];
   formulas: FormulaContent[];
+  /** The machine page (task QREC0b). Empty is valid — the computed fallback applies. */
+  layout: LayoutWidget[];
 }
 
 export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -63,7 +91,8 @@ export const num = (v: unknown): number | undefined => {
 
 const emptyContent = (slug: string): ClassContent => ({
   name: slug, description: null, category: null, serviceIntervalHours: null,
-  expectedSignals: [], failureModes: [], defaultThresholds: {}, sensorRequirements: [], formulas: [],
+  expectedSignals: [], failureModes: [], recommendations: [], defaultThresholds: {}, sensorRequirements: [],
+  formulas: [], layout: [],
 });
 
 /**
@@ -78,11 +107,14 @@ export async function loadCurrentClass(
   });
   if (!current) return { current: null, content: emptyContent(slug) };
 
-  const [reqs, formulas] = await Promise.all([
+  const [reqs, formulas, failureModes, recommendations, layout] = await Promise.all([
     m.getRepository(EquipmentClassSensorRequirement).find({
       where: { classSlug: slug, classVersion: current.version },
     }),
     m.getRepository(EquipmentClassFormula).find({ where: { classSlug: slug, classVersion: current.version } }),
+    loadFailureModes(m, slug, current.version),
+    loadRecommendations(m, slug, current.version),
+    loadLayout(m, slug, current.version),
   ]);
 
   return {
@@ -90,17 +122,23 @@ export async function loadCurrentClass(
     content: {
       name: current.name, description: current.description, category: current.category,
       serviceIntervalHours: current.serviceIntervalHours,
-      expectedSignals: current.expectedSignals, failureModes: current.failureModes,
+      expectedSignals: current.expectedSignals, failureModes, recommendations,
       defaultThresholds: (current.defaultThresholds ?? {}) as Record<string, ThresholdEntry>,
       sensorRequirements: reqs.map((r) => ({
         measurementRole: r.measurementRole, componentScope: r.componentScope, criticality: r.criticality,
         minCount: r.minCount, canonicalUnit: r.canonicalUnit, enables: r.enables, notes: r.notes,
+        staleAfterSeconds: r.staleAfterSeconds, forecastEnabled: r.forecastEnabled,
+        forecastHorizonHours: r.forecastHorizonHours,
       })),
       formulas: formulas.map((f) => ({
         formulaKey: f.formulaKey, kind: f.kind, expression: f.expression, inputs: f.inputs,
         outputUnit: f.outputUnit, basis: f.basis, references: f.references,
         namedFormulaSlug: f.namedFormulaSlug, namedFormulaVersion: f.namedFormulaVersion, bindings: f.bindings,
+        displayUnit: f.displayUnit, targetValue: f.targetValue, targetMin: f.targetMin, targetMax: f.targetMax,
+        targetDirection: f.targetDirection, comparisonBasis: f.comparisonBasis,
+        aggregationWindow: f.aggregationWindow, chartType: f.chartType,
       })),
+      layout,
     },
   };
 }
@@ -123,6 +161,8 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
   const classRow = byS('equipment_class')[0];
   const signalRows = byS('signal');
   const modeRows = byS('failure_mode');
+  const recommendationRows = byS('recommendation');
+  const layoutRows = byS('layout');
   const formulaRows = byS('formula');
 
   const reqRows = signalRows.filter((r) => strOrNull(r.payload.criticality));
@@ -158,9 +198,22 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
     failureModes: modeRows.length
       ? modeRows.map((r) => ({
           code: str(r.payload.code), name: str(r.payload.name), symptom: str(r.payload.symptom),
+          // Blank — and every v3 workbook — is NULL, not a severity nobody chose (D32).
+          severity: strOrNull(r.payload.severity) as Severity | null,
           signals: (r.payload.signals as string[] | undefined) ?? [],
         }))
       : current.failureModes,
+    // Same inheritance as every other sheet. A batch that replaces failure modes but
+    // inherits recommendations can leave one pointing at a code that is gone; apply
+    // refuses that by name (catalog-import-apply.service.ts) rather than dropping it.
+    recommendations: recommendationRows.length
+      ? recommendationRows.map((r) => ({
+          failureModeCode: str(r.payload.failure_mode_code), action: str(r.payload.action),
+          urgency: str(r.payload.urgency) as RecommendationUrgency,
+          estimatedHours: num(r.payload.estimated_hours) ?? null,
+          requiredParts: null,
+        }))
+      : current.recommendations,
     defaultThresholds: thresholdRows.length
       ? Object.fromEntries(firstPerSignal(thresholdRows).map((r) => {
           const entry: ThresholdEntry = {};
@@ -179,6 +232,9 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
           canonicalUnit: strOrNull(r.payload.unit),
           enables: (r.payload.enables as string[] | undefined) ?? [],
           notes: strOrNull(r.payload.notes),
+          staleAfterSeconds: num(r.payload.stale_after_seconds) ?? null,
+          forecastEnabled: r.payload.forecast_enabled === true,
+          forecastHorizonHours: num(r.payload.forecast_horizon_hours) ?? null,
         }))
       : current.sensorRequirements,
     formulas: formulaRows.length
@@ -194,8 +250,25 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
           namedFormulaSlug: strOrNull(r.payload.named_formula),
           namedFormulaVersion: num(r.payload.named_formula_version) ?? null,
           bindings: parseBindings(str(r.payload.bindings)),
+          displayUnit: strOrNull(r.payload.display_unit),
+          targetValue: num(r.payload.target_value) ?? null,
+          targetMin: num(r.payload.target_min) ?? null,
+          targetMax: num(r.payload.target_max) ?? null,
+          targetDirection: (strOrNull(r.payload.target_direction) ?? 'none') as FormulaTargetDirection,
+          comparisonBasis: (strOrNull(r.payload.comparison_basis) ?? 'none') as FormulaComparisonBasis,
+          aggregationWindow: (strOrNull(r.payload.aggregation_window) ?? 'shift') as FormulaAggregationWindow,
+          chartType: (strOrNull(r.payload.chart_type) ?? 'none') as FormulaChartType,
         }))
       : current.formulas,
+    // Same inheritance as every other sheet: no layout rows means "this workbook says
+    // nothing about the page", not "clear it".
+    layout: layoutRows.length
+      ? layoutRows.map((r) => ({
+          widgetType: str(r.payload.widget_type), widgetKey: str(r.payload.widget_key),
+          boundTo: strOrNull(r.payload.bound_to), title: strOrNull(r.payload.title),
+          position: num(r.payload.position) ?? 0, size: str(r.payload.size),
+        }))
+      : current.layout,
   };
 }
 
@@ -224,8 +297,13 @@ export function canonicalizeClass(content: ClassContent): string {
     .map((s) => ({ signal: s.signal, unit: s.unit, required: s.required, description: s.description ?? null }))
     .sort((a, b) => a.signal.localeCompare(b.signal));
   const modes = [...content.failureModes]
-    .map((m) => ({ code: m.code, name: m.name, symptom: m.symptom, signals: [...m.signals].sort() }))
+    .map((m) => ({
+      code: m.code, name: m.name, symptom: m.symptom, severity: m.severity ?? null, signals: [...m.signals].sort(),
+    }))
     .sort((a, b) => a.code.localeCompare(b.code));
+  const recommendations = [...content.recommendations]
+    .map((r) => ({ ...r, requiredParts: r.requiredParts ?? null }))
+    .sort((a, b) => `${a.failureModeCode}::${a.action}`.localeCompare(`${b.failureModeCode}::${b.action}`));
   const reqs = [...content.sensorRequirements]
     .map((r) => ({ ...r, enables: [...r.enables].sort() }))
     .sort((a, b) => `${a.measurementRole}::${a.componentScope}`.localeCompare(`${b.measurementRole}::${b.componentScope}`));
@@ -237,8 +315,9 @@ export function canonicalizeClass(content: ClassContent): string {
   return JSON.stringify({
     name: content.name, description: content.description, category: content.category,
     serviceIntervalHours: content.serviceIntervalHours,
-    expectedSignals: signals, failureModes: modes, defaultThresholds: thresholds,
+    expectedSignals: signals, failureModes: modes, recommendations, defaultThresholds: thresholds,
     sensorRequirements: reqs, formulas,
+    layout: [...content.layout].sort((a, b) => a.widgetKey.localeCompare(b.widgetKey)),
   });
 }
 
@@ -312,7 +391,7 @@ export async function computeClassDiffEntry(
   const previousPublishedVersion: PreviousPublishedVersion | null = lastPublished ? {
     version: lastPublished.version,
     signalCount: lastPublished.expectedSignals.length,
-    failureModeCount: lastPublished.failureModes.length,
+    failureModeCount: (await loadFailureModes(m, slug, lastPublished.version)).length,
   } : null;
 
   const warnings: ClassDiffWarning[] = [];

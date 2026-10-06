@@ -12,7 +12,11 @@ import {
   AlertTriangle,
   GitBranch,
   ClipboardList,
-  Receipt
+  Receipt,
+  HeartPulse,
+  ShieldCheck,
+  Siren,
+  Factory
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 
@@ -35,16 +39,13 @@ const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>(['dashboard', 'admin', 'sett
 // a ThingsAlive-staff screen, not a client page at all.
 const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users']);
 
-// UI-only pages with no backend permission model yet — `allowedTabs` comes
-// from the real GET /me/permissions response (see AuthProvider.tsx), which
-// has no notion of these tabs, so no role record will ever grant them. Shown
-// to every client user unconditionally until a real endpoint exists to grant
-// them properly; move into the normal `allowedTabs` check once it does.
-const CLIENT_ALWAYS_VISIBLE = new Set<NavigationTab>(['alerts', 'scenarios', 'work-orders', 'cost-administration']);
-
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin }) => {
   const allNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'things-care', label: 'ThingsCare', icon: HeartPulse },
+    { id: 'things-shield', label: 'ThingsShield', icon: ShieldCheck },
+    { id: 'incident-management', label: 'Incident Management', icon: Siren },
+    { id: 'production-monitoring', label: 'Production Monitoring', icon: Factory },
     { id: 'ai-onboarding', label: 'AI Onboarding', icon: Sparkles },
     // 'alert-agent' is deliberately not in this list — it stays reachable by
     // direct link (Alerts' "Create alert" / "Edit, assign" buttons navigate
@@ -65,12 +66,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, role,
   const navItems = allNavItems.filter((item) => {
     if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
     if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
-    // A Super Admin gets every client page unconditionally. allowedTabs comes
-    // from the real backend (AuthProvider.tsx) and has no notion of the
-    // UI-only tabs in CLIENT_ALWAYS_VISIBLE, so "Super Admin sees everything"
-    // can't be left to depend on whatever that happens to return.
+    // A Super Admin gets every client page unconditionally, regardless of
+    // what allowedTabs (from the real backend) happens to list.
     if (isSuperAdmin) return true;
-    return CLIENT_ALWAYS_VISIBLE.has(item.id) || allowed.includes(item.id);
+    return allowed.includes(item.id);
   });
 
   return (

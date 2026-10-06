@@ -166,7 +166,7 @@ export class DeviceCatalogService {
   }
 
   /**
-   * The category rules live in triggers (`1758100000000-SensorRetirement.ts`), so the
+   * The category rules live in triggers (`1758300000000-SensorRetirement.ts`), so the
    * refusal arrives as a database error. It is the caller's mistake, not a fault, and
    * its message already names what to fix — passed through as a 400.
    */

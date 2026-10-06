@@ -1,3 +1,6 @@
+import { RECOMMENDATION_URGENCY_VALUES } from '../catalog/entities/equipment-class-recommendation.entity';
+import { WIDGET_SIZES, WIDGET_TYPES } from '../catalog/layout/widget-types';
+
 /**
  * The one shape the template generator writes and the parser reads (task QIMP1).
  *
@@ -20,7 +23,18 @@
 // QL1's role-must-be-declared trigger impossible to violate from an import, by
 // construction rather than by validation. A v2 workbook is refused by
 // template_version rather than silently read against column names it no longer has.
-export const TEMPLATE_VERSION = 'v3';
+//
+// v3 -> v4 (task QREC0a), the bump deferred three times, everything at once:
+// stale_after_seconds and the forecast declaration on `signal`, the seven KPI
+// presentation fields on `formula` under the database's own column names, severity
+// on `failure_mode`, and a new `recommendation` sheet. Unlike v1 and v2, a v3
+// workbook is NOT refused: nothing v4 added changes what a v3 column means, every
+// addition is optional, and the library team has v3 work in flight. It loads with
+// the defaults, and the diff names the v4 capabilities it is not using. A workbook
+// stamped v3 that carries a v4 column or sheet is refused instead — it is claiming
+// a shape it does not have.
+export const TEMPLATE_VERSION = 'v4';
+export const ACCEPTED_TEMPLATE_VERSIONS = ['v3', 'v4'];
 
 export interface SheetColumn {
   name: string;
@@ -28,8 +42,10 @@ export interface SheetColumn {
   requiredCell: boolean;
   /** Comma-separated in the cell: failure_mode.signals, signal.enables, formula.inputs. */
   multiValue?: boolean;
-  /** TRUE/FALSE in the cell, parsed to a boolean. Only signal.required today. */
+  /** TRUE/FALSE in the cell, parsed to a boolean: signal.required, signal.forecast_enabled. */
   boolean?: boolean;
+  /** The template version that introduced the column. Absent means v3 or earlier. */
+  since?: 'v4';
 }
 
 export interface SheetSchema {
@@ -38,6 +54,8 @@ export interface SheetSchema {
   columns: SheetColumn[];
   /** One filled row, so the template is never handed over as a blank shell. */
   example: Record<string, string | number>;
+  /** The template version that introduced the sheet. Absent means v3 or earlier. */
+  since?: 'v4';
 }
 
 export const META_SHEET: SheetSchema = {
@@ -126,12 +144,19 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'min_count', requiredCell: false },
       { name: 'enables', requiredCell: false, multiValue: true },
       { name: 'notes', requiredCell: false },
+      // v4 (task QREC0a). All three describe the sensor_requirement row, so a row
+      // with a blank criticality — which writes no requirement — has nowhere to put
+      // them, and is refused rather than silently writing nowhere.
+      { name: 'stale_after_seconds', requiredCell: false, since: 'v4' },
+      { name: 'forecast_enabled', requiredCell: false, boolean: true, since: 'v4' },
+      { name: 'forecast_horizon_hours', requiredCell: false, since: 'v4' },
     ],
     example: {
       class_slug: 'diesel-generator', signal: 'coolant_temp_c', unit: 'degC',
       required: 'TRUE', description: 'Coolant temperature', min: '', max: 105, severity: 'critical',
       component_scope: '', criticality: 'required', min_count: 1,
       enables: 'data_quality,physics_calculation', notes: 'Primary coolant probe',
+      stale_after_seconds: 300, forecast_enabled: 'TRUE', forecast_horizon_hours: 24,
     },
   },
   {
@@ -142,11 +167,63 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'code', requiredCell: true },
       { name: 'name', requiredCell: true },
       { name: 'symptom', requiredCell: true },
+      // Optional even in v4: blank is NULL — "nobody said" — never a default (D32).
+      { name: 'severity', requiredCell: false, since: 'v4' },
       { name: 'signals', requiredCell: false, multiValue: true },
     ],
+    // Names only the signal the example declares. Until v4 it also named
+    // oil_pressure_kpa, which the example class never declared — and a failure mode
+    // naming an undeclared signal is now refused at publish (task QREC0a), so the
+    // template's own example would fail its own publish.
     example: {
       class_slug: 'diesel-generator', code: 'overheat', name: 'Overheating',
-      symptom: 'High coolant temperature, reduced power', signals: 'coolant_temp_c,oil_pressure_kpa',
+      symptom: 'High coolant temperature, reduced power', severity: 'high', signals: 'coolant_temp_c',
+    },
+  },
+  {
+    sheet: 'recommendation',
+    entityKind: 'recommendation',
+    since: 'v4',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      // Must name a failure mode on the same class version — refused at validate,
+      // naming both, and by the foreign key behind it.
+      { name: 'failure_mode_code', requiredCell: true },
+      { name: 'action', requiredCell: true },
+      { name: 'urgency', requiredCell: true },
+      { name: 'estimated_hours', requiredCell: false },
+    ],
+    example: {
+      class_slug: 'diesel-generator', failure_mode_code: 'overheat',
+      action: 'Check coolant level and clear the radiator fins', urgency: 'next_shift', estimated_hours: 1,
+    },
+  },
+  /**
+   * The machine page (task QREC0b) — added inside v4, not as a v5: QREC0a's bump has
+   * landed, the sheet is optional, and a workbook without it is unchanged in meaning
+   * (the class gets the computed fallback page). `since: 'v4'` still refuses it in a
+   * workbook stamped v3. Whether a widget agrees with its formula's presentation is
+   * checked at publish, once the formula is compiled; this sheet's own shape and its
+   * references are checked at validate.
+   */
+  {
+    sheet: 'layout',
+    entityKind: 'layout',
+    since: 'v4',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      { name: 'widget_key', requiredCell: true },
+      { name: 'widget_type', requiredCell: true },
+      { name: 'bound_to', requiredCell: false },
+      { name: 'title', requiredCell: false },
+      { name: 'position', requiredCell: true },
+      { name: 'size', requiredCell: true },
+    ],
+    // The example formula is a series with chart_type "line", so the chart is what it
+    // asks for; a kpi_number here would be refused at publish.
+    example: {
+      class_slug: 'diesel-generator', widget_key: 'coolant_margin', widget_type: 'kpi_chart',
+      bound_to: 'coolant_margin_c', title: 'Coolant margin', position: 1, size: 'large',
     },
   },
   {
@@ -154,10 +231,10 @@ export const CONTENT_SHEETS: SheetSchema[] = [
     entityKind: 'sensor_capability',
     columns: [
       { name: 'sensor_name', requiredCell: true },
-      // Optional, added by task QIMP5 — not a template version bump, because an
-      // optional column asks nothing of a workbook that predates it. sensor_slug
-      // resolves exactly, no fallback, once a sensor is catalogued; sensor_name
-      // stays the display string and the case/whitespace-insensitive fallback.
+      // Added by task QIMP5 as optional; primary as of v4 (task QREC0a). It resolves
+      // exactly, no fallback, once a sensor is catalogued; sensor_name stays the
+      // display string and the case/whitespace-insensitive fallback. Still not a
+      // required cell: a sensor this workbook proposes has no slug yet.
       { name: 'sensor_slug', requiredCell: false },
       // Optional, same reason: what a proposed sensor should be filed under. Blank
       // is legal — the sensor is still proposable, uncategorised.
@@ -195,6 +272,18 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'named_formula_version', requiredCell: false },
       // "role=signal; role=signal" (task QCE3 §3).
       { name: 'bindings', requiredCell: false },
+      // KPI presentation (D30), v4 (task QREC0a), named after the columns QCE1
+      // already shipped on equipment_class_formula. Each blank cell is that column's
+      // own default. display_unit is checked against the compiled unit and
+      // chart_type against the compiled kind — at validate and again at publish.
+      { name: 'display_unit', requiredCell: false, since: 'v4' },
+      { name: 'target_value', requiredCell: false, since: 'v4' },
+      { name: 'target_min', requiredCell: false, since: 'v4' },
+      { name: 'target_max', requiredCell: false, since: 'v4' },
+      { name: 'target_direction', requiredCell: false, since: 'v4' },
+      { name: 'comparison_basis', requiredCell: false, since: 'v4' },
+      { name: 'aggregation_window', requiredCell: false, since: 'v4' },
+      { name: 'chart_type', requiredCell: false, since: 'v4' },
     ],
     // inputs names a declared expected_signal ('coolant_temp_c'), and `expression`
     // is compiled for real by CatalogImportValidatorService (task QCE1's
@@ -206,6 +295,11 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       class_slug: 'diesel-generator', formula_key: 'coolant_margin_c', kind: 'empirical',
       expression: '105 - coolant_temp_c', inputs: 'coolant_temp_c',
       output_unit: 'degC', basis: 'OEM derate curve', references: '[]',
+      // A series (it reads coolant_temp_c over time), so a line chart is legal; on
+      // a scalar it would be refused.
+      display_unit: 'degC', target_value: 10, target_min: '', target_max: '',
+      target_direction: 'higher_better', comparison_basis: 'target', aggregation_window: 'shift',
+      chart_type: 'line',
     },
   },
 ];
@@ -222,11 +316,39 @@ export const ENABLES_VALUES = [
 ];
 export const FORMULA_KIND_VALUES = ['physics', 'empirical', 'ml_feature'];
 export const SEVERITY_VALUES = ['none', 'low', 'medium', 'high', 'critical'];
+/** Defined beside the column it constrains; restated here so the template's enums
+ * sheet lists it with the rest. */
+export const URGENCY_VALUES: string[] = [...RECOMMENDATION_URGENCY_VALUES];
+// The CHECK constraints of 1758010000000-FormulaCompilerMetadata.ts (and 'number',
+// 1758100000000-LibraryContent.ts), restated so an author sees them before the
+// database does. `fleet` and `own_baseline` are not here on purpose: nothing
+// evaluates them yet, and a value with no evaluator is a declared state nobody honours.
+export const TARGET_DIRECTION_VALUES = ['higher_better', 'lower_better', 'band', 'none'];
+export const COMPARISON_BASIS_VALUES = ['none', 'previous_period', 'target'];
+/** QCE2's vocabulary — `resolveWindow` in kpi-evaluator.service.ts accepts exactly these. */
+export const AGGREGATION_WINDOW_VALUES = ['shift', 'today', '24h', '7d', '30d', 'mtd', 'ytd'];
+export const CHART_TYPE_VALUES = ['none', 'line', 'bar', 'area', 'gauge', 'number'];
+
+/** What a v3 workbook does not use, for the diff to name — derived from `since`, so it
+ * cannot drift from the columns themselves. */
+export function v4OnlyCapabilities(): string[] {
+  const names: string[] = [];
+  for (const schema of CONTENT_SHEETS) {
+    if (schema.since === 'v4') {
+      names.push(`${schema.sheet} sheet`);
+      continue;
+    }
+    for (const col of schema.columns) if (col.since === 'v4') names.push(`${schema.sheet}.${col.name}`);
+  }
+  return names;
+}
 
 /**
  * Enums worth telling a spreadsheet author about — because a CHECK constraint already
  * enforces them (`1757970000000-LibraryStructure.ts`) or the task states them verbatim
- * (`required` is TRUE/FALSE). All five live on the `signal` sheet as of template v3 —
+ * (`required` is TRUE/FALSE). Template v4 (task QREC0a) adds the formula presentation
+ * columns, failure_mode.severity, recommendation.urgency and signal.forecast_enabled,
+ * each restating a CHECK constraint. The first five live on the `signal` sheet as of template v3 —
  * criticality and enables feed equipment_class_sensor_requirement, required feeds
  * expected_signals, severity feeds the threshold, and all four are read off the same
  * row that names the signal.
@@ -248,4 +370,13 @@ export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
   { field: 'formula.kind', values: FORMULA_KIND_VALUES },
   { field: 'signal.required', values: ['TRUE', 'FALSE'] },
   { field: 'signal.severity', values: SEVERITY_VALUES },
+  { field: 'signal.forecast_enabled', values: ['TRUE', 'FALSE'] },
+  { field: 'failure_mode.severity', values: SEVERITY_VALUES },
+  { field: 'recommendation.urgency', values: URGENCY_VALUES },
+  { field: 'formula.target_direction', values: TARGET_DIRECTION_VALUES },
+  { field: 'formula.comparison_basis', values: COMPARISON_BASIS_VALUES },
+  { field: 'formula.aggregation_window', values: AGGREGATION_WINDOW_VALUES },
+  { field: 'formula.chart_type', values: CHART_TYPE_VALUES },
+  { field: 'layout.widget_type', values: [...WIDGET_TYPES] },
+  { field: 'layout.size', values: [...WIDGET_SIZES] },
 ];

@@ -7,6 +7,7 @@ import { ClientCatalogEntitlement } from '../../catalog/entities/client-catalog-
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../../catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../../catalog/entities/signal-alias.entity';
+import { fromFailureModeJsonb, insertClassContent, loadFailureModes } from '../../catalog/services/class-failure-modes';
 import dataSource from '../data-source';
 
 /**
@@ -124,6 +125,15 @@ export async function seedCatalog(m: EntityManager, publish: boolean): Promise<R
       status: status(c.status) as any,
       publishedAt: publish ? publishedAt : null,
     }));
+    // The rows are what is read now (task QREC0a); the jsonb above is still written.
+    // Insert-only, for the codes not already there, so a re-run on every deploy
+    // stays a no-op — and never trips ck_class_content_draft_only, which refuses an
+    // update to a published version, not an insert.
+    const have = new Set((await loadFailureModes(m, c.slug, c.version)).map((f) => f.code));
+    await insertClassContent(
+      m, c.slug, c.version, fromFailureModeJsonb(c.failureModes.filter((f) => !have.has(f.code))), [],
+      { source: 'manual', importBatchId: null },
+    );
     counts.classes += 1;
   }
 

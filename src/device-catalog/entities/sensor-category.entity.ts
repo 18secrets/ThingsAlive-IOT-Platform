@@ -22,7 +22,7 @@ export class SensorCategory {
 
   /**
    * Retired: no longer offered for new work, still resolving everywhere it is already
-   * used (task QCAT2, `1758100000000-SensorRetirement.ts`). Null is live.
+   * used (task QCAT2, `1758300000000-SensorRetirement.ts`). Null is live.
    */
   @Column({ name: 'retired_at', type: 'timestamptz', nullable: true })
   retiredAt: Date | null;

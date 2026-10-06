@@ -1,5 +1,9 @@
 export type NavigationTab =
   | 'dashboard'
+  | 'things-care'
+  | 'things-shield'
+  | 'incident-management'
+  | 'production-monitoring'
   | 'ai-onboarding'
   | 'alert-agent'
   | 'alerts'
@@ -24,7 +28,7 @@ export type NavigationTab =
 // and 'administrator' are ThingsAlive-side screens and never apply to a
 // client role either.
 export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = [
-  'dashboard', 'ai-onboarding', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
+  'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
 ];
 
 export type UserRole = 'master-admin' | 'client';

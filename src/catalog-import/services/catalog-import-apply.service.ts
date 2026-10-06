@@ -5,6 +5,10 @@ import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-fo
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
+import {
+  danglingRecommendations, insertClassContent, toFailureModeJsonb,
+} from '../../catalog/services/class-failure-modes';
+import { insertLayout } from '../../catalog/services/class-layout';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
@@ -226,13 +230,24 @@ export class CatalogImportApplyService {
     const proposed = buildProposedClass(rows, currentContent);
     const identical = current !== null && classesIdentical(proposed, currentContent);
 
+    // A recommendation row naming a missing failure mode is already invalid at
+    // validate. This is the other way to get there: a batch that replaces the
+    // failure modes and inherits recommendations pointing at a code it dropped. The
+    // foreign key would refuse it mid-apply with a constraint name; this refuses it
+    // first, naming both, and nothing is written.
+    const dangling = danglingRecommendations(proposed.recommendations, proposed.failureModes);
+    if (!identical && dangling.length) {
+      throw new BadRequestException(`Refused: "${slug}": ${dangling.join(' ')}`);
+    }
+
     let targetClass: EquipmentClassProfile;
     let action: ClassApplyResult['action'];
 
     const classFields = {
       name: proposed.name, description: proposed.description, category: proposed.category,
       serviceIntervalHours: proposed.serviceIntervalHours,
-      expectedSignals: proposed.expectedSignals, failureModes: proposed.failureModes,
+      // Deprecated jsonb, still written (task QREC0a) — the rows below are what is read.
+      expectedSignals: proposed.expectedSignals, failureModes: toFailureModeJsonb(proposed.failureModes),
       defaultThresholds: proposed.defaultThresholds,
       source: SOURCE, importBatchId: batch.id,
     };
@@ -274,9 +289,17 @@ export class CatalogImportApplyService {
           classSlug: slug, classVersion: targetClass.version,
           measurementRole: r.measurementRole, componentScope: r.componentScope, criticality: r.criticality,
           minCount: r.minCount, canonicalUnit: r.canonicalUnit, enables: r.enables, notes: r.notes,
+          staleAfterSeconds: r.staleAfterSeconds, forecastEnabled: r.forecastEnabled,
+          forecastHorizonHours: r.forecastHorizonHours,
           source: SOURCE, importBatchId: batch.id,
         })));
       }
+
+      await insertClassContent(
+        m, slug, targetClass.version, proposed.failureModes, proposed.recommendations,
+        { source: SOURCE, importBatchId: batch.id },
+      );
+      await insertLayout(m, slug, targetClass.version, proposed.layout, { source: SOURCE, importBatchId: batch.id });
 
       if (proposed.formulas.length) {
         await formulaRepo.save(proposed.formulas.map((f) => formulaRepo.create({
@@ -288,6 +311,9 @@ export class CatalogImportApplyService {
           // field. Substitution and compilation happen at publish, not here — a
           // bind-mode row is as uncompiled at apply as an expression-mode one.
           namedFormulaSlug: f.namedFormulaSlug, namedFormulaVersion: f.namedFormulaVersion, bindings: f.bindings,
+          displayUnit: f.displayUnit, targetValue: f.targetValue, targetMin: f.targetMin, targetMax: f.targetMax,
+          targetDirection: f.targetDirection, comparisonBasis: f.comparisonBasis,
+          aggregationWindow: f.aggregationWindow, chartType: f.chartType,
           source: SOURCE, importBatchId: batch.id,
         })));
       }
@@ -298,6 +324,10 @@ export class CatalogImportApplyService {
       // one row per component.
       created.expected_signal = proposed.expectedSignals.length;
       created.failure_mode = bySheetCount('failure_mode');
+      // Only present when the batch carried the sheet — a v3 batch's summary keeps
+      // exactly the keys it always had.
+      if (bySheetCount('recommendation')) created.recommendation = bySheetCount('recommendation');
+      if (bySheetCount('layout')) created.layout = bySheetCount('layout');
       created.sensor_requirement = proposed.sensorRequirements.length;
       created.default_threshold = Object.keys(proposed.defaultThresholds).length;
       created.formula = bySheetCount('formula');

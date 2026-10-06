@@ -194,6 +194,43 @@ export function excursionsFor(t: FleetThing): number {
   return 90 + (seed % 11);
 }
 
+// ThingsCare: health/risk/RUL summary. Offline machines carry no reading of
+// any kind — there's nothing to assess until the device reconnects, so every
+// field is null rather than a guessed baseline. For everything else, health
+// is driven entirely by the same coolant-range breach used across Alerts/
+// Predictions/Work Orders (one active alert today, since that's the only
+// range this mock evaluates): 94 with none active, 78 with one, floored at
+// 30 if more were ever added. Risk and RUL are a fixed illustrative pair per
+// state, same "not a validated model" caveat as predictionFor().
+export interface ThingsCareStatus {
+  alertCount: number;
+  health: number | null;
+  riskPct: number | null;
+  rulHours: number | null;
+}
+
+export function thingsCareFor(t: FleetThing): ThingsCareStatus {
+  if (t.offline) return { alertCount: 0, health: null, riskPct: null, rulHours: null };
+  const alertCount = isBreaching(t) ? 1 : 0;
+  return {
+    alertCount,
+    health: Math.max(30, 94 - 16 * alertCount),
+    riskPct: alertCount ? 24 : 8,
+    rulHours: alertCount ? 310 : 470,
+  };
+}
+
+// A short illustrative decline into today's health reading, shown only when
+// there's an active alert pulling it down — a flat or offline reading has no
+// "trend" worth drawing.
+export function healthTrendFor(t: FleetThing): number[] | undefined {
+  const status = thingsCareFor(t);
+  if (!status.alertCount || status.health == null) return undefined;
+  const start = 94;
+  const steps = 6;
+  return Array.from({ length: steps }, (_, i) => Math.round(start - ((start - status.health!) * i) / (steps - 1)));
+}
+
 export type PredictionPriority = 'Routine' | 'Review' | 'Maintenance';
 
 export interface FleetPrediction {
