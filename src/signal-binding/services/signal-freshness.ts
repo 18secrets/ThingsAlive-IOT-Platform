@@ -1,14 +1,19 @@
 /**
- * The resolution order for how old is too old (task Q08S s3): the tenant's
- * class copy's own `stale_after_seconds`, else the platform default. There is
- * no tenant copy of `equipment_class_sensor_requirement` to read instead —
+ * The resolution order for how old is too old: a tenant `stale_after_seconds`
+ * parameter for the machine (task QPARAM1 §4b), then the class requirement's own
+ * value (task Q08S s3), then the platform default. The tenant wins because a site
+ * on a flaky link legitimately needs a longer threshold than the class assumed,
+ * and the client owning their own configuration is a standing principle. There
+ * is no tenant copy of `equipment_class_sensor_requirement` to read instead —
  * `equipment_profile.class_version` already pins which immutable platform row
  * applies, which is the same guarantee a copy would exist to provide.
  */
 export const DEFAULT_STALE_AFTER_SECONDS = 900;
 
-export function resolveStaleAfterSeconds(requirement: { staleAfterSeconds: number | null } | null): number {
-  return requirement?.staleAfterSeconds ?? DEFAULT_STALE_AFTER_SECONDS;
+export function resolveStaleAfterSeconds(
+  requirement: { staleAfterSeconds: number | null } | null, tenantOverride: number | null = null,
+): number {
+  return tenantOverride ?? requirement?.staleAfterSeconds ?? DEFAULT_STALE_AFTER_SECONDS;
 }
 
 /** The two reasons `coverage()` could not previously tell apart (its own doc
