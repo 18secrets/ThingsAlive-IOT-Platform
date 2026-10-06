@@ -49,14 +49,18 @@ describeDb('formula compiler: publish and migration', () => {
     );
   });
 
-  const seedDraft = () => ds.getRepository(EquipmentClassProfile).save(
-    ds.getRepository(EquipmentClassProfile).create({
-      slug: CLASS_SLUG, version: 1, name: 'Diesel Generator', status: 'draft',
-      expectedSignals: [
-        { signal: 'coolant_temp_c', unit: 'degC', required: true },
-        { signal: 'active_power', unit: 'MW', required: true },
-      ],
-    }),
+  // Raw SQL, not the TypeORM repository — the same reason the migration test below
+  // gives for its formula row: a repository insert is built from the entity's current
+  // shape, and the migration tests unwind the schema to before some of its columns
+  // existed (QSEED1's `seed_only` was the one that broke this). These five columns are
+  // in every schema this file unwinds to.
+  const seedDraft = () => ds.query(
+    `INSERT INTO equipment_class_profile (slug, version, name, status, expected_signals)
+       VALUES ($1, 1, 'Diesel Generator', 'draft', $2::jsonb)`,
+    [CLASS_SLUG, JSON.stringify([
+      { signal: 'coolant_temp_c', unit: 'degC', required: true },
+      { signal: 'active_power', unit: 'MW', required: true },
+    ])],
   );
 
   describe('publish', () => {
