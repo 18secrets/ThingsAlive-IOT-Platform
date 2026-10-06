@@ -1,16 +1,15 @@
 import 'reflect-metadata';
 
 import { DataSource, EntityManager } from 'typeorm';
-import { ClientCatalogEntitlement } from '../../catalog/entities/client-catalog-entitlement.entity';
-import { EquipmentProfile, ServiceTier } from '../../equipment/equipment-profile.entity';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
-import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
-import { SensorMapProjection } from '../../projection/entities/sensor-map-projection.entity';
-import { TenantMap } from '../../projection/entities/tenant-map.entity';
-import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
-import { runTenantSpanning } from '../../scope/tenant-session';
-import { CopyOnGrantService } from '../../client-catalog/services/copy-on-grant.service';
-import dataSource from '../data-source';
+import { ClientCatalogEntitlement } from '../../src/catalog/entities/client-catalog-entitlement.entity';
+import { EquipmentProfile, ServiceTier } from '../../src/equipment/equipment-profile.entity';
+import { DeviceProjection } from '../../src/projection/entities/device-projection.entity';
+import { EquipmentProjection } from '../../src/projection/entities/equipment-projection.entity';
+import { SensorMapProjection } from '../../src/projection/entities/sensor-map-projection.entity';
+import { TenantMap } from '../../src/projection/entities/tenant-map.entity';
+import { TelemetryReading } from '../../src/telemetry/telemetry-reading.entity';
+import { runTenantSpanning } from '../../src/scope/tenant-session';
+import { CopyOnGrantService } from '../../src/client-catalog/services/copy-on-grant.service';
 
 /**
  * A fleet shaped to exercise every answer the recommendation engine can give.
@@ -20,7 +19,10 @@ import dataSource from '../data-source';
  * availableLater with each blocker code, and notApplicable, and anybody reviewing
  * the work can see all of it without constructing a scenario by hand.
  *
- *   npx ts-node src/database/seeds/seed-demo-fleet.ts
+ * A test fixture since QSEED1 (task QSEED1 §3): it was the old `seed:demo`, and a test
+ * depending on a demo seeder is a defect — the seeder's content can change for a demo's
+ * sake and break an assertion that was never about the demo. `npm run seed:demo` is now
+ * `seed-demo.ts`; this stays exactly what `seed-catalog.spec.ts` asserts against.
  *
  * Assumes the catalog is already seeded and published.
  */
@@ -229,23 +231,4 @@ async function upsertAsset(m: EntityManager, asset: AssetSpec, now: Date): Promi
       sourceTimestamp: at, receivedAt: at, source: 'simulated',
     }));
   }
-}
-
-async function main() {
-  const ds = await dataSource.initialize();
-  try {
-    const count = await seedDemoFleet(ds);
-    // eslint-disable-next-line no-console
-    console.log(`${count} demo assets seeded for tenant "${TENANT}".`);
-  } finally {
-    await ds.destroy();
-  }
-}
-
-if (require.main === module) {
-  main().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err instanceof Error ? err.message : err);
-    process.exit(1);
-  });
 }

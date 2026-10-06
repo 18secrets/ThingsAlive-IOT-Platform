@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { CopyOnGrantService } from '../../client-catalog/services/copy-on-grant.service';
 import { ClientCatalogEntitlement } from '../entities/client-catalog-entitlement.entity';
@@ -41,6 +41,17 @@ export class EntitlementService {
     const known = await this.classes.findOne({ where: { slug: equipmentClassSlug } });
     if (!known) throw new BadRequestException(`No equipment class "${equipmentClassSlug}" to grant.`);
 
+    // A seed-only class (task QSEED1) exists for the demo tenant and nowhere else. This
+    // is the readable refusal; `ck_seed_only_grant` is the one that holds, refusing the
+    // row itself unless the session says the demo seeder is the one granting.
+    const seedOnly = known.seedOnly;
+    if (seedOnly && process.env.SEED_DEMO_ENABLED !== 'true') {
+      throw new BadRequestException(
+        `"${equipmentClassSlug}" is a seed-only class: it exists for the demo tenant and cannot be granted `
+        + 'to anybody else. Only the demo seeder grants it, with SEED_DEMO_ENABLED=true.',
+      );
+    }
+
     // Checked before the grant row is written, not after. A grant is now two writes —
     // the entitlement, and the copy into the client's account — and failing between
     // them would leave an account holding an entitlement with no catalog behind it,
@@ -67,7 +78,7 @@ export class EntitlementService {
       existing.revokedBy = null;
       existing.grantedBy = scope.userId;
       if (note !== undefined) existing.note = note;
-      const restored = await this.grants.save(existing);
+      const restored = await this.saveGrant(existing, seedOnly);
       // Their copy may still be there from last time, edited. copyForTenant leaves an
       // existing copy alone, so re-granting restores access without undoing their work.
       await this.copies.copyForTenant(tenantId, equipmentClassSlug, scope.userId);
@@ -75,8 +86,8 @@ export class EntitlementService {
     }
 
     this.logger.log(`Granting "${equipmentClassSlug}" to tenant ${tenantId} by ${scope.userId}.`);
-    const grant = await this.grants.save(
-      this.grants.create({ tenantId, equipmentClassSlug, grantedBy: scope.userId, note: note ?? null }),
+    const grant = await this.saveGrant(
+      this.grants.create({ tenantId, equipmentClassSlug, grantedBy: scope.userId, note: note ?? null }), seedOnly,
     );
 
     // The grant is also the moment ownership transfers. The class and its published
@@ -87,6 +98,16 @@ export class EntitlementService {
     // revocation restores access without undoing whatever they had changed.
     await this.copies.copyForTenant(tenantId, equipmentClassSlug, scope.userId);
     return grant;
+  }
+
+  /** A seed-only grant carries `ta.seed_demo` for its own transaction only — `SET LOCAL`
+   * semantics, so the flag cannot outlive the write on a pooled connection. */
+  private saveGrant(row: ClientCatalogEntitlement, seedOnly: boolean): Promise<ClientCatalogEntitlement> {
+    if (!seedOnly) return this.grants.save(row);
+    return this.grants.manager.transaction(async (m: EntityManager) => {
+      await m.query(`SELECT set_config('ta.seed_demo', 'on', true)`);
+      return m.getRepository(ClientCatalogEntitlement).save(row);
+    });
   }
 
   async revoke(scope: RequestScope, id: string): Promise<ClientCatalogEntitlement> {
