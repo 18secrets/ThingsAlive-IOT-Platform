@@ -636,6 +636,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           durationArgs.push(argNode.hours);
           continue;
         }
+        // A state's code, resolved at publish (task QCAT1). Null only in a plan that
+        // never went through publish — not configured, rather than a guessed state.
+        if (kind === 'state') {
+          if (typeof argNode.code !== 'number') return { ok: false, readiness: 'not_configured' };
+          scalarArgs.push(argNode.code);
+          continue;
+        }
         if (kind === 'series') {
           // The compiler refuses anything but a signal here. A plan stored before it
           // did is not configurable as written — and is not "unbound", which would

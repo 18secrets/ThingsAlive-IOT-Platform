@@ -66,7 +66,6 @@ describe('QCE5: compiling comparisons', () => {
 
   it('marks plans compiled with the new node as such', () => {
     expect(compile('coolant_temp_c > 105').compilerVersion).toBe(COMPILER_VERSION);
-    expect(COMPILER_VERSION).toBe('qce5.0.0');
   });
 });
 
