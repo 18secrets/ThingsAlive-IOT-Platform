@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
 import { slugify } from '../../catalog-import/services/sensor-review';
+import { retiredSensorProblem } from './sensor-retirement';
 
 export interface ResolvedMappedSensor {
   sensorId: string;
@@ -56,35 +57,146 @@ export class DeviceCatalogService {
 
   // ---- Categories -----------------------------------------------------------------
 
-  listCategories(): Promise<SensorCategory[]> {
-    return this.categories.find({ order: { name: 'ASC' } });
+  /** Live categories only, unless asked — a retired one is not somewhere to file a sensor. */
+  listCategories(includeRetired = false): Promise<SensorCategory[]> {
+    return this.categories.find({
+      where: includeRetired ? {} : { retiredAt: IsNull() },
+      order: { name: 'ASC' },
+    });
   }
 
+  /**
+   * Re-adding a retired category's name is refused rather than handed back. Returning
+   * it would look like success, and the next sensor filed under it would then be
+   * refused by the database with no hint why.
+   */
   async createCategory(name: string): Promise<SensorCategory> {
     const trimmed = name.trim();
     if (!trimmed) throw new BadRequestException('A category needs a name.');
     const existing = await this.categories.findOne({ where: { name: trimmed } });
+    if (existing?.retiredAt) {
+      throw new BadRequestException(
+        `Category "${trimmed}" exists but was retired on ${day(existing.retiredAt)}; un-retire it instead.`,
+      );
+    }
     if (existing) return existing;
     return this.categories.save(this.categories.create({ name: trimmed }));
   }
 
+  async retireCategory(id: string, userId: string): Promise<SensorCategory> {
+    return this.retire(this.categories, 'sensor_category', 'category', id, userId);
+  }
+
+  async unretireCategory(id: string): Promise<SensorCategory> {
+    return this.unretire(this.categories, 'sensor_category', 'category', id);
+  }
+
+  async deleteSensor(id: string): Promise<void> {
+    return this.deleteUnused(id, false);
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    return this.deleteUnused(id, true);
+  }
+
+  private async deleteUnused(id: string, category: boolean): Promise<void> {
+    const label = category ? 'category' : 'sensor';
+    if (!UUID.test(id)) throw new NotFoundException(`No ${label} "${id}".`);
+    const [result] = await this.translateRefusal(() => this.sensors.query(
+      'SELECT delete_unused_sensor($1::uuid, $2::boolean) AS deleted', [id, category],
+    ));
+    if (!result.deleted) throw new NotFoundException(`No ${label} "${id}".`);
+  }
+
   // ---- Sensors ----------------------------------------------------------------------
 
-  async listSensors(): Promise<Sensor[]> {
-    return this.sensors.find({ order: { sensorName: 'ASC' } });
+  /**
+   * The picker list: live sensors only, unless asked. Retired ones still resolve by id
+   * everywhere they are already used — this hides them from new work, nothing more.
+   */
+  async listSensors(includeRetired = false): Promise<Sensor[]> {
+    return this.sensors.find({
+      where: includeRetired ? {} : { retiredAt: IsNull() },
+      order: { sensorName: 'ASC' },
+    });
+  }
+
+  async retireSensor(id: string, userId: string): Promise<Sensor> {
+    return this.retire(this.sensors, 'sensor', 'sensor', id, userId);
+  }
+
+  /** Allowed: retiring is a correction, and corrections have their own mistakes. */
+  async unretireSensor(id: string): Promise<Sensor> {
+    return this.unretire(this.sensors, 'sensor', 'sensor', id);
+  }
+
+  /**
+   * Idempotent, and atomically so. The `retired_at IS NULL` guard is in the UPDATE
+   * itself rather than read first: two concurrent retires would otherwise both see a
+   * live row and the second would overwrite who retired it and when. Retiring an
+   * already-retired row keeps the original record.
+   */
+  private async retire<T extends { retiredAt: Date | null }>(
+    repo: Repository<T>, table: string, label: string, id: string, userId: string,
+  ): Promise<T> {
+    await this.translateRefusal(() => repo.query(
+      `UPDATE "${table}" SET "retired_at" = now(), "retired_by" = $2
+        WHERE "id" = $1 AND "retired_at" IS NULL`,
+      [id, userId],
+    ));
+    return this.reload(repo, label, id);
+  }
+
+  private async unretire<T extends { retiredAt: Date | null }>(
+    repo: Repository<T>, table: string, label: string, id: string,
+  ): Promise<T> {
+    await this.translateRefusal(() => repo.query(
+      `UPDATE "${table}" SET "retired_at" = NULL, "retired_by" = NULL
+        WHERE "id" = $1 AND "retired_at" IS NOT NULL`,
+      [id],
+    ));
+    return this.reload(repo, label, id);
+  }
+
+  private async reload<T>(repo: Repository<T>, label: string, id: string): Promise<T> {
+    if (!UUID.test(id)) throw new NotFoundException(`No ${label} "${id}".`);
+    const row = await repo.findOne({ where: { id } as any });
+    if (!row) throw new NotFoundException(`No ${label} "${id}".`);
+    return row;
+  }
+
+  /**
+   * The category rules live in triggers (`1758410000000-SensorRetirement.ts`), so the
+   * refusal arrives as a database error. It is the caller's mistake, not a fault, and
+   * its message already names what to fix — passed through as a 400.
+   */
+  private async translateRefusal<R>(fn: () => Promise<R>): Promise<R> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof QueryFailedError && /\((ck_sensor_category_(live|retire_empty)|sensor_referenced|sensor_retired|sensor_reference)\)/.test(err.message)) {
+        throw new BadRequestException(err.message);
+      }
+      if (err instanceof QueryFailedError && /invalid input syntax for type uuid/.test(err.message)) {
+        return undefined as R;
+      }
+      throw err;
+    }
   }
 
   async createSensor(draft: SensorDraft): Promise<Sensor> {
     if (!draft.sensorName?.trim()) throw new BadRequestException('A sensor needs a name.');
     if (draft.categoryId) await this.requireCategory(draft.categoryId);
-    return this.sensors.save(this.sensors.create({
-      sensorName: draft.sensorName.trim(),
-      slug: await this.uniqueSlugFor(draft.sensorName),
+    const sensorName = draft.sensorName.trim();
+    const slug = await this.uniqueSlugFor(draft.sensorName);
+    return this.translateRefusal(() => this.sensors.save(this.sensors.create({
+      sensorName,
+      slug,
       categoryId: draft.categoryId ?? null,
       description: draft.description ?? null,
       protocol: draft.protocol ?? null,
       parameterSpecs: draft.parameterSpecs ?? [],
-    }));
+    })));
   }
 
   /** The same derivation `sensor-review.ts` uses for a proposed sensor (task
@@ -110,12 +222,21 @@ export class DeviceCatalogService {
     if (!sensor) throw new NotFoundException(`No sensor "${id}".`);
     if (draft.categoryId) await this.requireCategory(draft.categoryId);
     assignDefined(sensor, draft);
-    return this.sensors.save(sensor);
+    return this.translateRefusal(() => this.sensors.save(sensor));
   }
 
+  /**
+   * Checked here for a readable message; the trigger is what actually guarantees it,
+   * since a category can be retired between this read and the write.
+   */
   private async requireCategory(categoryId: string): Promise<void> {
-    const exists = await this.categories.findOne({ where: { id: categoryId } });
-    if (!exists) throw new BadRequestException(`No sensor category "${categoryId}".`);
+    const category = await this.categories.findOne({ where: { id: categoryId } });
+    if (!category) throw new BadRequestException(`No sensor category "${categoryId}".`);
+    if (category.retiredAt) {
+      throw new BadRequestException(
+        `Sensor category "${category.name}" was retired on ${day(category.retiredAt)}.`,
+      );
+    }
   }
 
   // ---- Tool mappings ----------------------------------------------------------------
@@ -133,7 +254,7 @@ export class DeviceCatalogService {
 
   async createToolMapping(draft: ToolMappingDraft): Promise<ResolvedToolMapping> {
     if (!draft.toolName?.trim()) throw new BadRequestException('A tool mapping needs a name.');
-    const mappedSensors = await this.requireValidMappedSensors(draft.mappedSensors ?? []);
+    const mappedSensors = await this.requireValidMappedSensors(draft.mappedSensors ?? [], []);
     const saved = await this.toolMappings.save(this.toolMappings.create({
       toolName: draft.toolName.trim(),
       industryType: draft.industryType ?? null,
@@ -147,7 +268,7 @@ export class DeviceCatalogService {
     const row = await this.toolMappings.findOne({ where: { id } });
     if (!row) throw new NotFoundException(`No tool mapping "${id}".`);
     const mappedSensors = draft.mappedSensors
-      ? await this.requireValidMappedSensors(draft.mappedSensors)
+      ? await this.requireValidMappedSensors(draft.mappedSensors, row.mappedSensors)
       : undefined;
     assignDefined(row, { ...draft, ...(mappedSensors ? { mappedSensors } : {}) });
     const saved = await this.toolMappings.save(row);
@@ -162,8 +283,15 @@ export class DeviceCatalogService {
     return new Map(rows.map((r) => [r.id, r.toolName]));
   }
 
-  /** Every referenced sensor exists, and every requested parameter is one it declares. */
-  private async requireValidMappedSensors(refs: MappedSensorRef[]): Promise<MappedSensorRef[]> {
+  /**
+   * Every referenced sensor exists, every requested parameter is one it declares, and
+   * none is retired — unless the mapping already held it. A mapping that has carried a
+   * sensor since before it was retired keeps it through an unrelated edit; refusing
+   * would make the whole mapping uneditable over a sensor nobody is adding.
+   */
+  private async requireValidMappedSensors(
+    refs: MappedSensorRef[], alreadyMapped: MappedSensorRef[],
+  ): Promise<MappedSensorRef[]> {
     if (!refs.length) return [];
     const ids = [...new Set(refs.map((r) => r.sensorId))];
     const rows = await this.sensors.find({ where: { id: In(ids) } });
@@ -172,6 +300,10 @@ export class DeviceCatalogService {
     for (const ref of refs) {
       const sensor = byId.get(ref.sensorId);
       if (!sensor) throw new BadRequestException(`No sensor "${ref.sensorId}".`);
+      const retired = retiredSensorProblem(sensor);
+      if (retired && !alreadyMapped.some((m) => m.sensorId === sensor.id)) {
+        throw new BadRequestException(retired);
+      }
       const declared = new Set(sensor.parameterSpecs.map((p) => p.parameter));
       const unknown = ref.parameters.filter((p) => !declared.has(p));
       if (unknown.length) {
@@ -198,5 +330,9 @@ export class DeviceCatalogService {
     }));
   }
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const day = (at: Date) => at.toISOString().slice(0, 10);
 
 export type { SensorParameterSpec };

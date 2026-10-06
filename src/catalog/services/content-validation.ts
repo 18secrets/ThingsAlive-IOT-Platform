@@ -13,15 +13,9 @@ export interface SignalForValidation {
  * (`CatalogImportValidatorService` and `CatalogAuthoringService`), so there is one
  * place this can be gotten right or wrong, not one per path.
  *
- * NOT implemented here: "a signal whose capability is not in the sensor catalog."
- * Tried it, keyed on `sensor_role_capability.measurement_role` — it broke 37 tests
- * across both paths, because most existing fixtures declare an expected_signal
- * with no capability row behind it at all, and nothing has ever required one
- * before now. That is either the intended (much larger) tightening, or "capability"
- * means something narrower than "a matching `sensor_role_capability` row exists" —
- * I could not tell which from the incident alone, and forcing it through by
- * rewriting every fixture that touches a class is the kind of scope decision this
- * report asks you to make, not me. See the final report.
+ * Sensor retirement is checked by retiredSignalProblems on both write paths and
+ * by database triggers at the write boundary. Uncatalogued legacy signal roles
+ * remain supported; this module does not require every role to have a capability.
  */
 export function validateSignals(signals: SignalForValidation[]): string[] {
   const problems: string[] = [];
