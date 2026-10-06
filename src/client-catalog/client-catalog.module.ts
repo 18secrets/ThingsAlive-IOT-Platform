@@ -6,6 +6,8 @@ import { ClientFormula } from './entities/client-formula.entity';
 import { ClientScenario } from './entities/client-scenario.entity';
 import { ClientCatalogService } from './services/client-catalog.service';
 import { CopyOnGrantService } from './services/copy-on-grant.service';
+import { ClientVisualService } from './services/client-visual.service';
+import { ClientVisualController } from './client-visual.controller';
 
 /**
  * The client's own copies. Registered separately from the catalog module because the
@@ -14,8 +16,8 @@ import { CopyOnGrantService } from './services/copy-on-grant.service';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ClientEquipmentClass, ClientScenario, ClientFormula])],
-  controllers: [ClientCatalogController],
-  providers: [ClientCatalogService, CopyOnGrantService],
+  controllers: [ClientCatalogController, ClientVisualController],
+  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService],
   exports: [ClientCatalogService, CopyOnGrantService],
 })
 export class ClientCatalogModule {}

@@ -22,7 +22,7 @@ import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 const HOUR = 3_600_000;
-const MIGRATION = 'SignalStates1758500000000';
+const MIGRATION = 'SignalStates1758510000000';
 const SIGNALS = [{ signal: 'utilization_status', unit: 'dimensionless' }, { signal: 'coolant_temp_c', unit: 'degC' }];
 const VOCAB = new Map([['utilization_status', new Map([['off', 0], ['idle', 1], ['working', 2]])]]);
 const compile = (expression: string, signalStates?: typeof VOCAB) => compileFormula({

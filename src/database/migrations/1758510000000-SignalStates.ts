@@ -12,8 +12,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * formulas carry the code itself (resolved at publish), so editing this table later
  * cannot change what an already-published KPI measures.
  */
-export class SignalStates1758500000000 implements MigrationInterface {
-  name = 'SignalStates1758500000000';
+export class SignalStates1758510000000 implements MigrationInterface {
+  name = 'SignalStates1758510000000';
 
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`

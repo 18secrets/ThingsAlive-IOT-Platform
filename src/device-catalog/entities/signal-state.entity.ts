@@ -2,7 +2,7 @@ import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 /**
  * One state of a categorical signal and the code it arrives as (task QCAT1,
- * `1758500000000-SignalStates.ts`). Platform reference data — no tenant.
+ * `1758510000000-SignalStates.ts`). Platform reference data — no tenant.
  */
 @Entity('signal_state')
 export class SignalState {

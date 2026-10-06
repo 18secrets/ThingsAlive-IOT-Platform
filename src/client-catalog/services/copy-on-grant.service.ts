@@ -13,6 +13,8 @@ import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-cl
 import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
 import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
 import { loadLayout } from '../../catalog/services/class-layout';
+import { loadAnchors } from '../../catalog/services/class-visual.service';
+import { ClientEquipmentClassVisualAnchor } from '../entities/client-equipment-class-visual-anchor.entity';
 import { WidgetSize, WidgetType } from '../../catalog/layout/widget-types';
 import {
   loadFailureModes, loadRecommendations, toFailureModeJsonb,
@@ -28,6 +30,7 @@ export interface CopyResult {
   failureModesCopied: number;
   recommendationsCopied: number;
   layoutWidgetsCopied: number;
+  anchorsCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -72,6 +75,7 @@ export class CopyOnGrantService {
     const failureModes = await loadFailureModes(this.ds.manager, templateSlug, template.version);
     const recommendations = await loadRecommendations(this.ds.manager, templateSlug, template.version);
     const layout = await loadLayout(this.ds.manager, templateSlug, template.version);
+    const anchors = await loadAnchors(this.ds.manager, templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
@@ -103,6 +107,7 @@ export class CopyOnGrantService {
           failureModesCopied: 0,
           recommendationsCopied: 0,
           layoutWidgetsCopied: 0,
+          anchorsCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -267,6 +272,16 @@ export class CopyOnGrantService {
         })));
       }
 
+      // The visual's anchors (task QREC0c) — rows, and the tenant's from here on. The
+      // image itself is not copied: one object serves every tenant with the class.
+      const clientAnchors = m.getRepository(ClientEquipmentClassVisualAnchor);
+      if (anchors.length) {
+        await clientAnchors.save(anchors.map((a) => clientAnchors.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...a,
+          placementCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
       this.logger.log(
         `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
         + `${rulesCopied} alert rule(s), ${formulasCopied} formula(s), ${failureModes.length} failure mode(s) `
@@ -281,6 +296,7 @@ export class CopyOnGrantService {
         failureModesCopied: failureModes.length,
         recommendationsCopied: recommendations.length,
         layoutWidgetsCopied: layout.length,
+        anchorsCopied: anchors.length,
         alreadyPresent: false,
       };
     });
