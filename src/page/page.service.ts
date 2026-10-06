@@ -507,7 +507,7 @@ export class PageService {
 }
 
 /** The signal the rule that raised an alert watches, where its trigger names one. */
-function ruleSignal(rule: AlertRule): string | null {
+export function ruleSignal(rule: AlertRule): string | null {
   const signal = (rule.params as { signal?: unknown } | null)?.signal;
   return typeof signal === 'string' && signal ? signal : null;
 }

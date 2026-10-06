@@ -182,7 +182,11 @@ export class AlertService {
   }
 
   async listEvents(
-    scope: RequestScope, filter: { state?: string[]; externalId?: string } = {},
+    scope: RequestScope,
+    // `limit: null` is unbounded. The default stays 200 for the alert list; the
+    // incident view (closeout §4) asks for every open alert, because an incident list
+    // cut short at 200 silently drops whichever machines happened to fire earliest.
+    filter: { state?: string[]; externalId?: string; limit?: number | null } = {},
   ): Promise<AlertEvent[]> {
     return withTenantSession(this.ds, scope, (m) => {
       const where: Record<string, unknown> = { tenantId: scope.tenantId };
@@ -199,7 +203,8 @@ export class AlertService {
         if (!filter.externalId) where.externalId = In([...scope.equipmentIds]);
       }
       return m.getRepository(AlertEvent).find({
-        where: where as any, order: { firedAt: 'DESC' }, take: 200,
+        where: where as any, order: { firedAt: 'DESC' },
+        ...(filter.limit === null ? {} : { take: filter.limit ?? 200 }),
       });
     });
   }

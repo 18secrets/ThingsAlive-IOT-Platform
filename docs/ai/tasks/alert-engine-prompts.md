@@ -123,3 +123,34 @@ arithmetic inside an assertion.
 - Report back: commit SHA, test counts, whether a migration was needed, which
   existing tests you changed, and anything above you could not implement with the
   reason.
+
+
+---
+
+# Incident Management — the view, not the entity
+
+Phase 1 ships **a view over what already exists**, not a new object.
+
+```
+GET /api/v1/incidents?status=open
+```
+
+Returns, per machine with an open alert: the machine, its open alerts, any open work orders
+against it, and the worst severity among them. **No new table, no new lifecycle, no SLA
+clock.** Acknowledging and resolving stay on the alert; assigning and completing stay on the
+work order.
+
+An incident **entity** — ownership, escalation, SLA timers — is phase 2, and only once
+someone has used alerts in anger and can say what is missing. Designing that workflow now
+means designing against no evidence.
+
+## Recorded at implementation (2026-10-06)
+
+- `GET /api/v1/incidents?status=open`, gated by `prediction.read` like the alert list it is built on.
+  Any other `status` is a 400 — with no incident entity there is no closed incident to list.
+- Worst severity is over the **alerts** only. Work orders carry a priority (low/normal/high/urgent), not
+  a severity, and no mapping between the two has been decided; the priority is shown as it is.
+- Work orders are included only for a caller holding `action.work`; otherwise `openWorkOrders: null`,
+  never an empty list that would claim there are none.
+- `AlertService.listEvents` gained `limit: null` (unbounded). The alert list keeps its 200 cap; an
+  incident list cut at 200 would silently drop machines.
