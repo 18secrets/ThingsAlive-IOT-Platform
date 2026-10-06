@@ -5,6 +5,7 @@ export type RawNode =
   | { type: 'duration'; hours: number; pos: number }
   | { type: 'signal'; name: string; pos: number }
   | { type: 'param'; name: string; pos: number }
+  | { type: 'state'; name: string; pos: number }
   | { type: 'formula_ref'; name: string; pos: number }
   | { type: 'unary'; op: '-'; operand: RawNode; pos: number }
   | { type: 'binary'; op: '+' | '-' | '*' | '/'; left: RawNode; right: RawNode; pos: number }
@@ -23,7 +24,7 @@ export const MAX_NODES = 200;
 export const MAX_DEPTH = 20;
 
 type TokenType =
-  | 'number' | 'duration' | 'ident' | 'param' | 'formularef'
+  | 'number' | 'duration' | 'ident' | 'param' | 'formularef' | 'state'
   | '+' | '-' | '*' | '/' | '>' | '>=' | '<' | '<=' | '(' | ')' | ',' | 'eof';
 interface Token { type: TokenType; text: string; pos: number }
 
@@ -38,7 +39,9 @@ interface Token { type: TokenType; text: string; pos: number }
  *   expression  := term (('+' | '-') term)*
  *   term        := factor (('*' | '/') factor)*
  *   factor      := '-' factor | primary
- *   primary     := number | duration | call | signal | param | formula_ref | '(' comparison ')'
+ *   primary     := number | duration | call | signal | param | formula_ref | state | '(' comparison ')'
+ *   state       := "'" [a-z][a-z0-9_]* "'"   -- task QCAT1; a categorical state by name,
+ *                  valid only as an operator's state argument (the compiler enforces where)
  *   call        := identifier '(' [ comparison (',' comparison)* ] ')'
  *   signal      := identifier
  *   param       := '@' identifier
@@ -147,6 +150,10 @@ export function parseExpression(source: string): RawNode {
       advance();
       return makeNode({ type: 'param', name: t.text, pos: t.pos }, depth);
     }
+    if (t.type === 'state') {
+      advance();
+      return makeNode({ type: 'state', name: t.text, pos: t.pos }, depth);
+    }
     if (t.type === 'formularef') {
       advance();
       return makeNode({ type: 'formula_ref', name: t.text, pos: t.pos }, depth);
@@ -233,6 +240,20 @@ function tokenize(source: string): Token[] {
         continue;
       }
       tokens.push({ type: 'number', text: source.slice(start, i), pos: start });
+      continue;
+    }
+    if (c === "'") {
+      const start = i;
+      const end = source.indexOf("'", i + 1);
+      if (end === -1) throw new FormulaCompileError(`unterminated state name starting at position ${start}.`);
+      const name = source.slice(i + 1, end);
+      if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+        throw new FormulaCompileError(
+          `'${name}' at position ${start} is not a state name: lower_snake_case, starting with a letter.`,
+        );
+      }
+      tokens.push({ type: 'state', text: name, pos: start });
+      i = end + 1;
       continue;
     }
     if (c === '@') {

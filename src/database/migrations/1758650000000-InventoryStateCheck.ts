@@ -18,8 +18,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * left alone here: that table is append-only history, and constraining history is a
  * separate decision from constraining the current state.
  */
-export class InventoryStateCheck1758600000000 implements MigrationInterface {
-  name = 'InventoryStateCheck1758600000000';
+export class InventoryStateCheck1758650000000 implements MigrationInterface {
+  name = 'InventoryStateCheck1758650000000';
 
   public async up(q: QueryRunner): Promise<void> {
     // Named rather than left to ADD CONSTRAINT's generic violation: if a row outside

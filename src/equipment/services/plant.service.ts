@@ -104,6 +104,26 @@ export class PlantService {
   }
 
   /**
+   * Set or clear a site's boundary (task QGEO1). The shape is the database's to judge —
+   * `site_boundary_problem` is the same function its CHECK uses — asked first only so
+   * the refusal can say what is wrong instead of naming a constraint.
+   */
+  async setBoundary(scope: RequestScope, id: string, boundary: unknown | null): Promise<Plant> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(Plant);
+      const plant = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
+      if (!plant) throw new NotFoundException('No such site in this account.');
+      if (boundary !== null) {
+        const [{ problem }] = await m.query(`SELECT site_boundary_problem($1::jsonb) AS problem`, [JSON.stringify(boundary)]);
+        if (problem) throw new BadRequestException(`Boundary refused: ${problem}.`);
+      }
+      plant.boundary = boundary as Plant['boundary'];
+      plant.updatedBy = scope.userId;
+      return repo.save(plant);
+    });
+  }
+
+  /**
    * Close a site, once nothing is standing on it.
    *
    * Refused while equipment is still placed there, and the count is in the message.

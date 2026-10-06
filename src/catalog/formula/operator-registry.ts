@@ -1,6 +1,7 @@
 import { divideByHour, DIMENSIONLESS, multiplyByHour, Unit } from './units';
 
-export type ArgKind = 'series' | 'scalar' | 'duration';
+/** `'state'` (task QCAT1): a quoted categorical state, resolved to its code at publish. */
+export type ArgKind = 'series' | 'scalar' | 'duration' | 'state';
 
 export interface OperatorEntry {
   name: string;
@@ -15,6 +16,9 @@ export interface OperatorEntry {
    * trailing, time-indexed value — still a series, same as the signal it reads. */
   resultKind: 'scalar' | 'series';
   unitRule: (argUnits: Unit[]) => Unit;
+  /** Reads the machine's site boundary (task QGEO1); the evaluator supplies it, and a
+   * machine with none is `not_configured` rather than "inside". */
+  needsSiteBoundary?: boolean;
 }
 
 /**
@@ -87,6 +91,34 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
   count_exceeding: {
     name: 'count_exceeding', argKinds: ['series', 'scalar'], resultKind: 'scalar',
     unitRule: () => DIMENSIONLESS,
+  },
+
+  // ------------------------------------------------------------- QCAT1
+  // Categorical signals: the series carries state codes, and each of these reads it
+  // as a step function — a reading's state holds until the next one. Time, not
+  // samples: a machine that reports more often while working must not look busier.
+  fraction_in_state: {
+    name: 'fraction_in_state', argKinds: ['series', 'state'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS,
+  },
+  transitions: {
+    name: 'transitions', argKinds: ['series', 'state', 'state'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS,
+  },
+  dwell_in_state: {
+    name: 'dwell_in_state', argKinds: ['series', 'state'], resultKind: 'scalar',
+    unitRule: () => multiplyByHour(DIMENSIONLESS),
+  },
+
+  // -------------------------------------------------------------- QGEO1
+  // (latitude, longitude) against the machine's own site boundary.
+  outside_site: {
+    name: 'outside_site', argKinds: ['series', 'series'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsSiteBoundary: true,
+  },
+  fraction_outside_site: {
+    name: 'fraction_outside_site', argKinds: ['series', 'series'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsSiteBoundary: true,
   },
 });
 

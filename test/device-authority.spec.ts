@@ -303,7 +303,7 @@ describeDb('the binding is the device authority', () => {
 
   // ============================================== the CHECK on inventory state
   describe('device_inventory.state', () => {
-    const MIGRATION = 'InventoryStateCheck1758600000000';
+    const MIGRATION = 'InventoryStateCheck1758650000000';
     // Read from the transition table, not retyped: every state a transition starts
     // from or moves to is the vocabulary the CHECK must accept.
     const VOCABULARY = [...new Set(Object.values(INVENTORY_TRANSITIONS).flatMap((t) =>

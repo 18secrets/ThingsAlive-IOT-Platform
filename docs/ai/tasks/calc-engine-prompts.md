@@ -1051,3 +1051,154 @@ keeps passing, now for a stated reason.
 
 `npm run build`, `npm test` and `npm run test:db` green, counts before and after on a worktree
 off `origin/main`, naming the base SHA. No migration.
+
+---
+
+# QCAT1 — categorical signals and their operators
+
+Read `CLAUDE.md` first. Commit this prompt to `docs/ai/prompts/` before writing code.
+Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `feature/categorical-signals`, stacked on QGRANT1 (!67) — merge after it.
+
+**Stream B.** Touches `src/catalog/formula/`, the evaluator's plan walk, publish in
+`catalog-authoring.service.ts`, and a new vocabulary in `src/device-catalog`. Append to
+`operator-registry.ts`, never reorder. Nothing under `src/catalog-import/`.
+
+Drafted at the user's instruction from `docs/ai/analysis/itdc-coverage-analysis.md` §4a.
+The user chose numeric codes plus a vocabulary over a text column on `telemetry_reading`.
+
+---
+
+## 0. Why
+
+`ignition_status`, `engine_running_status` and `utilization_status` are states, not numbers.
+Every registry operator is a numeric aggregation, so utilisation, duty-cycle stress, idling and
+fuel theft's "ignition off" clause cannot be expressed.
+
+## 1. Storage — codes stay numeric
+
+`telemetry_reading.value` is unchanged: a state arrives as its code. A new platform table says
+what the codes mean:
+
+```sql
+signal_state (
+  measurement_role text, state text, code int,
+  PRIMARY KEY (measurement_role, state),
+  UNIQUE (measurement_role, code)
+)
+```
+
+- `state` matches `^[a-z][a-z0-9_]*$`; `code` is a whole number ≥ 0.
+- Platform-owned reference data, like `sensor_role_capability`: no `tenant_id`. Read with
+  `device-catalog.read`, written with `device-catalog.write`.
+- `GET /api/v1/device-catalog/signal-states?role=` and
+  `PUT /api/v1/device-catalog/signal-states/:role` (replace the role's whole vocabulary).
+
+## 2. Grammar — a state is a quoted name
+
+`'idle'` is a new literal, allowed **only** as an operator's state argument. Anywhere else —
+arithmetic, a comparison, a root — it is refused: a state is a label, not a number.
+
+## 3. Operators
+
+| operator | result | meaning |
+|---|---|---|
+| `fraction_in_state(s, 'state')` | dimensionless | share of time in the state |
+| `transitions(s, 'from', 'to')` | dimensionless | count of from → to changes |
+| `dwell_in_state(s, 'state')` | hours | longest continuous run in the state |
+
+**Time-weighted, as a step function.** A reading's state holds until the next reading; the
+last holds until the window's end; time before the first reading in the window is unknown and
+not counted. A sample-count fraction would make a machine that reports more often while
+working look busier than it was.
+
+No readings in the window is `no_readings`, never 0.
+
+## 4. Codes are resolved at publish
+
+The compiler takes an optional vocabulary. Given one, it resolves each state name to its code
+and embeds the code in the plan, refusing an unknown state (listing the known ones) or a
+signal with no vocabulary. Without one — the import dry-run, which has no database — the name
+is kept and the code left empty.
+
+`publishClass` always passes the vocabulary for the class's signals, so a published plan
+always carries codes. Changing the vocabulary later cannot change a published or copied KPI's
+meaning. A plan with an unresolved code reads `not_configured`, never a guessed state.
+
+## 5. Out of scope
+
+- A text value column on `telemetry_reading` — rejected (§0 of the user's decision).
+- Categorical alert rules, and the import workbook's vocabulary sheet — Builder A's area.
+- Geospatial — QGEO1.
+
+## 6. Done when
+
+`npm run build`, `npm test` and `npm run test:db` green, counts before and after naming the
+base SHA. Migration timestamp above `main`; down path named with `undoMigrationNamed`.
+
+---
+
+# QGEO1 — site boundaries and inside/outside
+
+Read `CLAUDE.md` first. Commit this prompt to `docs/ai/prompts/` before writing code.
+Append the task to `docs/ai/tasks/calc-engine-prompts.md`.
+
+**Branch:** `feature/site-geofence`, stacked on QCAT1 (!70) — merge after it.
+
+**Stream B.** Touches `plant` (a boundary column and its route), `src/catalog/formula/` and the
+evaluator. Append to `operator-registry.ts`, never reorder. No npm dependency, no PostGIS.
+
+Drafted at the user's instruction from `docs/ai/analysis/itdc-coverage-analysis.md` §4b. The
+user chose a TypeScript point-in-polygon over PostGIS, which Railway's Postgres image lacks.
+
+---
+
+## 0. Why
+
+`latitude` and `longitude` are two numeric signals today: enough to see a machine has not
+moved, not enough to say it left its site. Fuel theft's strongest clause and ITDC case 5 need
+inside/outside.
+
+## 1. A site has a boundary
+
+`plant.boundary jsonb NULL` — a GeoJSON `Polygon`: an outer ring, optional hole rings,
+`[longitude, latitude]` positions, each ring closed and with at least four positions.
+
+The database refuses a malformed one (a CHECK over an immutable validation function), so no
+path can store a boundary the operators would then misread. Set with
+`PUT /api/v1/equipment/plants/:id/boundary` under `equipment.write`, the same capability that
+edits the site; `null` removes it.
+
+## 2. Operators
+
+| operator | result | meaning |
+|---|---|---|
+| `outside_site(latitude, longitude)` | dimensionless 0/1 | is the latest position outside the site |
+| `fraction_outside_site(latitude, longitude)` | dimensionless | share of time outside, time-weighted |
+
+- Both series arguments are signals by name and must share a unit.
+- **Pairing:** a latitude reading takes the latest longitude reading at or before it, within
+  five minutes. Unpaired readings are dropped — a position is both halves or nothing.
+- Time-weighted as QCAT1 is: each position holds until the next.
+- A point exactly on the boundary is **inside**. A site is drawn generously; a machine parked
+  on the line has not left.
+- Planar ray casting over longitude/latitude. Accurate at site scale, which is the only scale
+  a site boundary has. No polygon crosses the antimeridian here; say so rather than handle it.
+
+## 3. When there is no boundary
+
+A machine with no site, or a site with no boundary, reads `not_configured`, reason
+`site_boundary_not_set`. Never "inside" — an unfenced site is not a site the machine is in.
+No positions in the window is `no_readings`.
+
+## 4. Out of scope
+
+- Map drawing — the UI's.
+- Multi-polygon sites, distance-to-boundary, speed.
+- Geofence alert rules — a threshold on `outside_site` already expresses one.
+
+## 5. Done when
+
+`npm run build`, `npm test` and `npm run test:db` green, counts before and after naming the
+base SHA. Migration timestamp above `main`; down path named with `undoMigrationNamed`.
