@@ -16,6 +16,9 @@ export interface OperatorEntry {
    * trailing, time-indexed value — still a series, same as the signal it reads. */
   resultKind: 'scalar' | 'series';
   unitRule: (argUnits: Unit[]) => Unit;
+  /** Reads the machine's site boundary (task QGEO1); the evaluator supplies it, and a
+   * machine with none is `not_configured` rather than "inside". */
+  needsSiteBoundary?: boolean;
 }
 
 /**
@@ -105,6 +108,17 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
   dwell_in_state: {
     name: 'dwell_in_state', argKinds: ['series', 'state'], resultKind: 'scalar',
     unitRule: () => multiplyByHour(DIMENSIONLESS),
+  },
+
+  // -------------------------------------------------------------- QGEO1
+  // (latitude, longitude) against the machine's own site boundary.
+  outside_site: {
+    name: 'outside_site', argKinds: ['series', 'series'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsSiteBoundary: true,
+  },
+  fraction_outside_site: {
+    name: 'fraction_outside_site', argKinds: ['series', 'series'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsSiteBoundary: true,
   },
 });
 

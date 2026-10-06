@@ -1,3 +1,4 @@
+import { insideBoundary, pairPositions, SiteBoundary } from './geofence';
 import {
   alertExcludedRanges, baselineAvg, baselineSd, BaselineValue, deltaRatio, ExcludedRange, Reading, zscore,
 } from './baseline-operators';
@@ -12,6 +13,8 @@ export interface ExecContext {
    * baseline operators need lookback the display window itself does not cover. */
   history: Reading[];
   excludedRanges: ExcludedRange[];
+  /** The machine's site boundary (task QGEO1), for operators that need one. */
+  siteBoundary?: SiteBoundary | null;
 }
 
 export type ExecValue =
@@ -193,7 +196,37 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
       return { ok: true, value: longest };
     },
   },
+
+  outside_site: { run: (series, _s, _d, ctx) => outsideSite(series, ctx) },
+  fraction_outside_site: { run: (series, _s, _d, ctx) => fractionOutsideSite(series, ctx) },
 });
+
+// QGEO1 operators live in the table above; their arithmetic is here.
+function outsideSite([lat, lng]: Reading[][], ctx: ExecContext): ExecValue {
+  if (!ctx.siteBoundary) return UNDEFINED_RESULT; // the evaluator refuses this case first
+  const positions = pairPositions(windowed(lat, ctx.windowFrom, ctx.windowTo), windowed(lng, ctx.windowFrom, ctx.windowTo));
+  if (!positions.length) return NO_READINGS;
+  const last = positions[positions.length - 1];
+  return { ok: true, value: insideBoundary(ctx.siteBoundary, last.lng, last.lat) ? 0 : 1 };
+}
+
+function fractionOutsideSite([lat, lng]: Reading[][], ctx: ExecContext): ExecValue {
+  if (!ctx.siteBoundary) return UNDEFINED_RESULT;
+  const positions = pairPositions(windowed(lat, ctx.windowFrom, ctx.windowTo), windowed(lng, ctx.windowFrom, ctx.windowTo));
+  if (!positions.length) return NO_READINGS;
+  // Each position holds until the next, the last until the window ends — the same
+  // step-function reading QCAT1 gives states.
+  let total = 0;
+  let outside = 0;
+  positions.forEach((p, i) => {
+    const end = i + 1 < positions.length ? positions[i + 1].at : ctx.windowTo;
+    const hours = Math.max(0, end.getTime() - p.at.getTime()) / 3_600_000;
+    total += hours;
+    if (!insideBoundary(ctx.siteBoundary!, p.lng, p.lat)) outside += hours;
+  });
+  if (total === 0) return UNDEFINED_RESULT;
+  return { ok: true, value: outside / total };
+}
 
 /**
  * A categorical series as a step function (task QCAT1): each reading's state holds

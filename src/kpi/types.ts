@@ -10,7 +10,7 @@ export type Readiness = 'ready' | 'blocked' | 'not_configured' | 'not_available'
 export type Reason =
   | 'unbound' | 'stale' | 'no_readings' | 'mapping_required'
   | 'baseline_not_established' | 'insufficient_coverage' | 'undefined_result'
-  | 'parameter_not_set';
+  | 'parameter_not_set' | 'site_boundary_not_set';
 
 export interface Coverage {
   expected: number;

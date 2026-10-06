@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsISO8601, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDefined, IsIn, IsISO8601, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -74,6 +74,13 @@ export class ReasonDto {
  * Owned by their CEO or manager. Every route runs inside the caller's own account,
  * so nothing here needs to check which customer is asking.
  */
+/** A GeoJSON Polygon or null (task QGEO1). Its shape is checked by the database. */
+export class PlantBoundaryDto {
+  @IsDefined({ message: 'boundary is required — send null to remove it.' })
+  @ValidateIf((_, v) => v !== null) @IsObject()
+  boundary: Record<string, unknown> | null;
+}
+
 @ApiTags('Equipment')
 @Controller('equipment')
 export class EquipmentController {
@@ -105,6 +112,13 @@ export class EquipmentController {
     @Body() body: PlantPatchDto,
   ) {
     return this.plants.update(scope, id, body);
+  }
+
+  @Put('plants/:id/boundary')
+  @Requires('equipment.write')
+  @ApiOperation({ summary: 'Set a site\'s boundary (GeoJSON Polygon), or null to remove it' })
+  setPlantBoundary(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() body: PlantBoundaryDto) {
+    return this.plants.setBoundary(scope, id, body.boundary);
   }
 
   @Post('plants/:id/retire')

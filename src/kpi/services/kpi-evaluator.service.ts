@@ -10,6 +10,8 @@ import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipmen
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { ClientFormula } from '../../client-catalog/entities/client-formula.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { Plant } from '../../equipment/entities/plant.entity';
+import { SiteBoundary } from '../../catalog/formula/geofence';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
@@ -46,6 +48,9 @@ interface PlanEvalContext {
   /** Numeric client parameters for this machine, resolved once per batch at the
    * window's end (task QPARAM1 §4a). A name absent here has no value at any scope. */
   parameters: Map<string, number>;
+  /** The machine's site boundary (task QGEO1); null when it has no site or the site
+   * is unfenced. */
+  siteBoundary: SiteBoundary | null;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -225,6 +230,13 @@ export class KpiEvaluatorService {
       excludedRangesBySignal.set(signal, [...workOrderRanges, ...(alertRangesBySignal.get(signal) ?? [])]);
     }
 
+    // The site boundary (task QGEO1), read in this tenant session like the rest. One
+    // row, and only when the machine is placed somewhere.
+    const plant = profile.plantId
+      ? await m.getRepository(Plant).findOne({ where: { tenantId, id: profile.plantId } })
+      : null;
+    const siteBoundary = plant?.boundary ?? null;
+
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
       const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
@@ -236,7 +248,7 @@ export class KpiEvaluatorService {
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
       {
-        signals, parameters, excludedRangesBySignal,
+        signals, parameters, excludedRangesBySignal, siteBoundary,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
       m, tenantId, imeis,
@@ -304,6 +316,7 @@ export class KpiEvaluatorService {
     ctxBase: {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
+      siteBoundary: SiteBoundary | null;
     },
     m: EntityManager, tenantId: string, imeis: string[],
   ): Promise<KpiEnvelope> {
@@ -358,7 +371,7 @@ export class KpiEvaluatorService {
 
     const ctx: PlanEvalContext = {
       window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
-      excludedRangesBySignal: ctxBase.excludedRangesBySignal,
+      excludedRangesBySignal: ctxBase.excludedRangesBySignal, siteBoundary: ctxBase.siteBoundary,
     };
 
     if (resultKind === 'series') {
@@ -625,6 +638,10 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       if (!opEntry || !executor) {
         throw new Error(`no executor registered for operator "${node.name}" — registry drift.`);
       }
+      // An unfenced site is not a site the machine is in (task QGEO1).
+      if (opEntry.needsSiteBoundary && !ctx.siteBoundary) {
+        return { ok: false, readiness: 'not_configured', reason: 'site_boundary_not_set' };
+      }
       const seriesArgs: Reading[][] = [];
       const scalarArgs: number[] = [];
       const durationArgs: number[] = [];
@@ -664,6 +681,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
         windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
+        siteBoundary: ctx.siteBoundary,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
       if (result.ok === false) return { ok: false, readiness: 'not_available', reason: result.reason };
