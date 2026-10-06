@@ -23,7 +23,7 @@ function tabFromPath(pathname: string, state: unknown): NavigationTab {
   const backTo = (state as { backTo?: string } | null)?.backTo;
   if ((first === 'alert-agent' || first === 'rule-builder') && backTo) return tabFromPath(backTo, null);
   const known: NavigationTab[] = [
-    'dashboard', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
+    'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
     'admin', 'client-users', 'roles', 'users', 'settings',
   ];
   return (known as string[]).includes(first) ? (first as NavigationTab) : 'dashboard';
@@ -34,6 +34,10 @@ function tabFromPath(pathname: string, state: unknown): NavigationTab {
 function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeaderConfig {
   switch (tab) {
     case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
+    case 'things-care': return { title: 'ThingsCare', subtitle: 'Health & Prognostics' };
+    case 'things-shield': return { title: 'ThingsShield', subtitle: 'Safety, Compliance & Risk' };
+    case 'incident-management': return { title: 'Incident Management', subtitle: 'People, Machine Wellbeing & Security' };
+    case 'production-monitoring': return { title: 'Production Monitoring', subtitle: 'Output & Performance' };
     case 'ai-onboarding': return { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' };
     case 'alert-agent': return { title: 'Alert Agent', subtitle: 'Automated Dispatch' };
     case 'alerts': return { title: 'Alerts', subtitle: 'Fleet Attention Feed' };
