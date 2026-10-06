@@ -76,3 +76,12 @@ Do not re-derive a decision that is already written down there.
 - Opening the MR is fine; **merging is Deepak's**, always.
 - Measure baseline test counts on a throwaway commit or a second worktree, never by stashing.
   Never `git stash drop` or `git stash clear`; `apply`, not `pop`.
+
+## Editing files
+- Never write or patch a source file through PowerShell string interpolation or a
+  here-string. It re-encodes non-ASCII — em dashes, arrows, symbols — and the damage
+  lands in a committed file where nothing fails. Use the file tools, `git apply`, or a
+  short Node/Python script that reads and writes UTF-8 explicitly.
+- `npm run lint` fails on a mojibake sequence (`â€”`, `Ã`, `â€™`) anywhere under `src/`,
+  `test/` or `docs/` (`scripts/check-encoding.js`). Two files reached `main` before anyone
+  noticed.
