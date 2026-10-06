@@ -10,6 +10,7 @@ import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipmen
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { ClientFormula } from '../../client-catalog/entities/client-formula.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
 import { SignalBindingService } from '../../signal-binding/services/signal-binding.service';
@@ -42,6 +43,9 @@ type SignalStatus =
 interface PlanEvalContext {
   window: Window;
   signals: Map<string, SignalStatus>;
+  /** Numeric client parameters for this machine, resolved once per batch at the
+   * window's end (task QPARAM1 §4a). A name absent here has no value at any scope. */
+  parameters: Map<string, number>;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -156,8 +160,22 @@ export class KpiEvaluatorService {
     // of when, which this is and the window-bound read cannot be.
     const latestEverBySignal = await this.reader.latestPerSignal(m, tenantId, imeis, allRequiredSignals);
 
-    // Per-signal staleness threshold: the class's own requirement row, pinned
-    // to the equipment's granted class_version — there is no tenant copy of
+    // Client parameters (task QPARAM1 §4), one read for the whole batch, at the
+    // window's end — a fuel price that changed mid-month applies from when it was
+    // effective, not retroactively to a report that already ran.
+    const parameterNames = [...new Set(['stale_after_seconds', ...targets.flatMap((t) => t.requiredParameters)])];
+    const resolvedParameters = await resolveParameters(
+      m, tenantId, chainForEquipment(profile), parameterNames, explicitWindow?.to ?? at,
+    );
+    const parameters = new Map<string, number>();
+    for (const [name, resolved] of resolvedParameters) {
+      if (typeof resolved?.value === 'number') parameters.set(name, resolved.value);
+    }
+    const tenantStaleAfter = parameters.get('stale_after_seconds') ?? null;
+
+    // Per-signal staleness threshold: a tenant `stale_after_seconds` first, then
+    // the class's own requirement row, pinned to the equipment's granted
+    // class_version — there is no tenant copy of
     // `equipment_class_sensor_requirement` to read instead (see
     // `signal-freshness.ts`).
     const staleAfterSecondsBySignal = new Map<string, number>();
@@ -169,7 +187,7 @@ export class KpiEvaluatorService {
         },
       });
       for (const req of requirements) {
-        staleAfterSecondsBySignal.set(req.measurementRole, resolveStaleAfterSeconds(req));
+        staleAfterSecondsBySignal.set(req.measurementRole, resolveStaleAfterSeconds(req, tenantStaleAfter));
       }
     }
 
@@ -209,7 +227,7 @@ export class KpiEvaluatorService {
 
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
-      const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? DEFAULT_STALE_AFTER_SECONDS;
+      const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
       signals.set(signal, resolveSignalStatus(
         signal, bindingStatus, seriesBySignal, latestEverBySignal, staleAfterSeconds, at,
       ));
@@ -217,7 +235,10 @@ export class KpiEvaluatorService {
 
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
-      { signals, siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])), excludedRangesBySignal },
+      {
+        signals, parameters, excludedRangesBySignal,
+        siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
+      },
       m, tenantId, imeis,
     )));
   }
@@ -280,7 +301,10 @@ export class KpiEvaluatorService {
 
   private async buildEnvelope(
     formula: ClientFormula, window: Window | null,
-    ctxBase: { signals: Map<string, SignalStatus>; siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]> },
+    ctxBase: {
+      signals: Map<string, SignalStatus>; parameters: Map<string, number>;
+      siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
+    },
     m: EntityManager, tenantId: string, imeis: string[],
   ): Promise<KpiEnvelope> {
     const unit = formula.resultUnit ?? 'dimensionless';
@@ -291,8 +315,15 @@ export class KpiEvaluatorService {
       window: window ? { from: window.from.toISOString(), to: window.to.toISOString() } : { from: '', to: '' },
     };
 
-    if (formula.requiredParameters.length) {
-      return { ...base, value: null, readiness: 'not_configured', coverage: zeroCoverage() };
+    // Never 0 (task QPARAM1 §4a): a cost of zero is a number a customer will act on.
+    // `required_parameters` is transitive through `#formula_key`, so a sibling's
+    // parameter is caught here too, before any telemetry is touched.
+    const missingParameters = formula.requiredParameters.filter((p) => !ctxBase.parameters.has(p));
+    if (missingParameters.length) {
+      return {
+        ...base, value: null, readiness: 'not_configured', reason: 'parameter_not_set',
+        missingParameters, coverage: zeroCoverage(),
+      };
     }
     if (!window) {
       // aggregation_window: 'shift' — no shift-schedule resolution built here.
@@ -326,7 +357,7 @@ export class KpiEvaluatorService {
     }
 
     const ctx: PlanEvalContext = {
-      window, signals: ctxBase.signals, siblings: ctxBase.siblings,
+      window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal,
     };
 
@@ -395,7 +426,7 @@ export class KpiEvaluatorService {
     const endEpoch = ctx.window.to.getTime() / 1000;
     for (let epoch = startEpoch; epoch <= endEpoch; epoch += bucketSeconds) {
       const bucketMs = epoch * 1000;
-      const v = evalBucketNode(bucketPlan.node, bucketMs, byBucketBySignal, bucketPlan.columnBySignal);
+      const v = evalBucketNode(bucketPlan.node, bucketMs, byBucketBySignal, bucketPlan.columnBySignal, ctx.parameters);
       points.push({ t: new Date(bucketMs).toISOString(), v });
     }
     // A `series` plan is guaranteed an array here — never a bare number, even
@@ -502,10 +533,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       return { ok: true, value: node.value };
     case 'duration':
       return { ok: true, value: node.hours };
-    case 'param':
-      // QPARAM1 (tenant parameter values) does not exist yet — a formula that
-      // references one cannot be evaluated, by construction, not by omission.
-      return { ok: false, readiness: 'not_configured' };
+    case 'param': {
+      // buildEnvelope already refused a formula missing one; this is the net for a
+      // plan reached some other way.
+      const value = ctx.parameters.get(node.name);
+      if (value === undefined) return { ok: false, readiness: 'not_configured', reason: 'parameter_not_set' };
+      return { ok: true, value };
+    }
     case 'signal': {
       const sig = ctx.signals.get(node.name);
       if (!sig) return { ok: false, readiness: 'not_configured', reason: 'unbound' };
@@ -613,6 +647,9 @@ function planBucketShape(node: any): BucketShape | null {
       case 'signal':
         if (!columnBySignal.has(n.name)) columnBySignal.set(n.name, 'last');
         return true;
+      // One value for the whole window (task QPARAM1) — the same in every bucket.
+      case 'param':
+        return true;
       case 'unary':
         return supported(n.operand);
       case 'binary':
@@ -637,21 +674,23 @@ function planBucketShape(node: any): BucketShape | null {
  */
 function evalBucketNode(
   node: any, bucketMs: number, byBucketBySignal: Map<string, Map<number, BucketAggregate>>,
-  columnBySignal: Map<string, BucketColumn>,
+  columnBySignal: Map<string, BucketColumn>, parameters: Map<string, number>,
 ): number | null {
   switch (node.type) {
+    case 'param':
+      return parameters.get(node.name) ?? null;
     case 'signal': {
       const agg = byBucketBySignal.get(node.name)?.get(bucketMs);
       if (!agg) return null;
       return agg[columnBySignal.get(node.name) ?? 'last'];
     }
     case 'unary': {
-      const v = evalBucketNode(node.operand, bucketMs, byBucketBySignal, columnBySignal);
+      const v = evalBucketNode(node.operand, bucketMs, byBucketBySignal, columnBySignal, parameters);
       return v === null ? null : -v;
     }
     case 'binary': {
-      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal);
-      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal);
+      const left = evalBucketNode(node.left, bucketMs, byBucketBySignal, columnBySignal, parameters);
+      const right = evalBucketNode(node.right, bucketMs, byBucketBySignal, columnBySignal, parameters);
       if (left === null || right === null) return null;
       if (node.op === '/' && right === 0) return null;
       return node.op === '+' ? left + right
