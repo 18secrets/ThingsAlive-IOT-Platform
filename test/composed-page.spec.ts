@@ -125,10 +125,11 @@ describeDb('composed page', () => {
         sourceSystem: SS, externalId: `dev-${externalId}`, tenantId: tenant, payload: {}, sourceUpdatedAt: null,
         syncedAt: NOW, checksum: 'c', status: 'live', imei, equipmentExternalId: externalId, name: null,
       });
-      // Both device sources, as a claimed device really has: the evaluator reads the
+      // Both device sources, as an assigned-and-claimed device really has (state 'assigned',
+      // claim = equipment_external_id + claimed_at): the evaluator reads the
       // projection, coverage reads the inventory (see the QPAGE1 report).
       await m.query(
-        `INSERT INTO device_inventory (imei, tenant_id, state, equipment_external_id, claimed_at) VALUES ($1, $2, 'claimed', $3, $4)`,
+        `INSERT INTO device_inventory (imei, tenant_id, state, equipment_external_id, claimed_at) VALUES ($1, $2, 'assigned', $3, $4)`,
         [imei, tenant, externalId, NOW],
       );
       for (const s of SIGNALS) {
