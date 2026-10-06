@@ -22,6 +22,7 @@ import {
   loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
 } from './class-failure-modes';
 import { copyLayout, loadLayout, presentationOf } from './class-layout';
+import { copyVisual, visualPublishProblems } from './class-visual.service';
 import { layoutProblems } from '../layout/layout-rules';
 
 type ClassDraft = Partial<Pick<EquipmentClassProfile,
@@ -111,6 +112,7 @@ export class CatalogAuthoringService {
       if (forked) {
         await copyClassContent(m, slug, working.version - 1, working.version);
         await copyLayout(m, slug, working.version - 1, working.version);
+        await copyVisual(m, slug, working.version - 1, working.version);
       }
       if (draft.failureModes) {
         try {
@@ -168,6 +170,9 @@ export class CatalogAuthoringService {
     const contentProblems = [
       ...undeclaredFailureModeSignals(failureModes, draft.expectedSignals.map((s) => s.signal)),
       ...danglingRecommendations(recommendations, failureModes),
+      // The visual (task QREC0c): an anchor on an undeclared signal, or an upload never
+      // confirmed. No visual at all publishes normally.
+      ...await visualPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
     ];
     if (contentProblems.length) {
       throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${contentProblems.join(' ')}`);

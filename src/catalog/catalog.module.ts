@@ -4,6 +4,8 @@ import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { CatalogController } from './catalog.controller';
 import { NamedFormulaController } from './named-formula.controller';
+import { ClassVisualController } from './class-visual.controller';
+import { ClassVisualService } from './services/class-visual.service';
 import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.entity';
 import { EquipmentClassFormula } from './entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
@@ -35,8 +37,11 @@ import { RecommendationService } from './services/recommendation.service';
     ]),
     ClientCatalogModule,
   ],
-  controllers: [CatalogController, NamedFormulaController],
-  providers: [CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService],
+  controllers: [CatalogController, NamedFormulaController, ClassVisualController],
+  providers: [
+    CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService,
+    ClassVisualService,
+  ],
   exports: [CatalogService, RecommendationService, NamedFormulaService],
 })
 export class CatalogModule {}

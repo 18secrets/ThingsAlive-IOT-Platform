@@ -77,6 +77,16 @@ describeDb('class content inventory: copy is proven', () => {
       classSlug: CLASS, classVersion: 1, widgetType: 'kpi_number', widgetKey: 'mean_temp', position: 1,
       boundTo: 'mean_temp', title: null, size: 'medium',
     } as Partial<EquipmentClassLayout>));
+    // QREC0c's anchor — a hotspot on the class's schematic, copied per tenant. An
+    // anchor needs its visual, which is shared rather than copied.
+    await owner.query(
+      `INSERT INTO equipment_class_visual (class_slug, class_version, tier, asset_key, content_type, width_px, height_px)
+       VALUES ($1, 1, 'schematic', 'class-visuals/audit.png', 'image/png', 100, 100)`, [CLASS],
+    );
+    await owner.query(
+      `INSERT INTO equipment_class_visual_anchor (class_slug, class_version, signal, hotspot_x, hotspot_y)
+       VALUES ($1, 1, 'coolant_temp', 10, 10)`, [CLASS],
+    );
     await authoring.publishClass(master, CLASS);
     await authoring.createScenario(master, 'audit-overheat', {
       equipmentClassSlug: CLASS, name: 'Overheat', requiredSignals: ['coolant_temp'], parameters: [] as any,

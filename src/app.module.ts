@@ -18,6 +18,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
 import { PageModule } from './page/page.module';
+import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { ParameterModule } from './parameters/parameter.module';
@@ -90,6 +91,7 @@ export class AppModule {
               SignalBindingModule,
               KpiModule,
       PageModule,
+      AssetsModule,
               WorkModule,
               ShiftModule,
               TelemetryPartitionModule,
