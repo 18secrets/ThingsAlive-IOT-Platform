@@ -144,6 +144,17 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
     run: ([series], _s, [w1, w2], ctx) =>
       toExec(deltaRatio(series, ctx.windowTo, w1, w2, ctx.excludedRanges)),
   },
+
+  // ------------------------------------------------------------------------ QCE5
+  // No readings is `no_readings`, unlike `count`'s 0: "nothing exceeded" is a claim
+  // about readings, and zero exceedances of nothing is not evidence of anything.
+  count_exceeding: {
+    run: ([series], [threshold], _d, ctx) => {
+      const rows = windowed(series, ctx.windowFrom, ctx.windowTo);
+      if (!rows.length) return NO_READINGS;
+      return { ok: true, value: rows.filter((r) => r.value > threshold).length };
+    },
+  },
 });
 
 export function lookupExecutor(name: string): ExecutorEntry | undefined {

@@ -9,7 +9,8 @@ export type Readiness = 'ready' | 'blocked' | 'not_configured' | 'not_available'
 
 export type Reason =
   | 'unbound' | 'stale' | 'no_readings' | 'mapping_required'
-  | 'baseline_not_established' | 'insufficient_coverage' | 'undefined_result';
+  | 'baseline_not_established' | 'insufficient_coverage' | 'undefined_result'
+  | 'parameter_not_set';
 
 export interface Coverage {
   expected: number;
@@ -49,6 +50,9 @@ export interface KpiEnvelope {
   window: { from: string; to: string };
   readiness: Readiness;
   reason?: Reason;
+  /** With `reason: 'parameter_not_set'` (task QPARAM1 §4a): which client parameters
+   * have no value at any scope for this machine, so the screen can say what to set. */
+  missingParameters?: string[];
   coverage: Coverage;
 }
 
