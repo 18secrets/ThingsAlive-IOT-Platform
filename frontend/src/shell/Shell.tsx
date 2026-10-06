@@ -16,14 +16,15 @@ interface ShellProps {
 
 function tabFromPath(pathname: string, state: unknown): NavigationTab {
   const first = pathname.split('/')[1];
-  // Reached from Alerts/Predictions/Scenarios/a Thing detail page (Create
-  // alert, or a RuleCard's Edit/assign — see RuleBuilderPage.tsx and
-  // AlertAgentPage.tsx's nav state). Neither alert-agent nor rule-builder has
-  // its own sidebar entry, so highlight whichever tab this flow started from.
+  // Reached from Alerts/Predictions/Scenarios/a Thing detail page's "Create
+  // alert with AI" button — see AlertAgentPage.tsx's nav state. It has no
+  // sidebar entry of its own, so highlight whichever tab this flow started
+  // from. (The alert/scenario/prediction rule form itself is a modal now,
+  // not a route, so it never changes the URL and needs no entry here.)
   const backTo = (state as { backTo?: string } | null)?.backTo;
-  if ((first === 'alert-agent' || first === 'rule-builder') && backTo) return tabFromPath(backTo, null);
+  if (first === 'alert-agent' && backTo) return tabFromPath(backTo, null);
   const known: NavigationTab[] = [
-    'dashboard', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
+    'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
     'admin', 'client-users', 'roles', 'users', 'settings',
   ];
   return (known as string[]).includes(first) ? (first as NavigationTab) : 'dashboard';
@@ -34,6 +35,10 @@ function tabFromPath(pathname: string, state: unknown): NavigationTab {
 function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeaderConfig {
   switch (tab) {
     case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
+    case 'things-care': return { title: 'ThingsCare', subtitle: 'Health & Prognostics' };
+    case 'things-shield': return { title: 'ThingsShield', subtitle: 'Safety, Compliance & Risk' };
+    case 'incident-management': return { title: 'Incident Management', subtitle: 'People, Machine Wellbeing & Security' };
+    case 'production-monitoring': return { title: 'Production Monitoring', subtitle: 'Output & Performance' };
     case 'ai-onboarding': return { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' };
     case 'alert-agent': return { title: 'Alert Agent', subtitle: 'Automated Dispatch' };
     case 'alerts': return { title: 'Alerts', subtitle: 'Fleet Attention Feed' };
@@ -87,8 +92,7 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   // so without this a new page inherits whatever scroll position the last
   // one was left at instead of opening at the top. Keyed on location.key
   // (unique per navigate() call) rather than pathname, so it also resets for
-  // same-path navigations with new state — e.g. RuleCard's "Edit / assign"
-  // opening a different rule while already on /rule-builder.
+  // same-path navigations with new state — e.g. Alert Agent's view switcher.
   React.useEffect(() => {
     mainRef.current?.scrollTo(0, 0);
   }, [location.key]);

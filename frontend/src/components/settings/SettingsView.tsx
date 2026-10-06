@@ -74,9 +74,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
   return (
     <div id="settings-view" className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Account Settings</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage your profile information and account security.</p>
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
+        <h2 className="text-lg font-bold">Account Settings</h2>
+        <p className="text-xs text-sky-100">Manage your profile information and account security.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
