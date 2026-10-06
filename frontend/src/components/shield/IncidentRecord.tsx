@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle, Siren, Info as InfoIcon, User, Wrench, Pencil } from 'lucide-react';
 import { FleetThing } from '../../data/fleetMockData';
 import { IncidentCategory, IncidentSeverity, IncidentStatus, ShieldIncident } from '../../data/shieldMockData';
 
@@ -8,32 +9,53 @@ const SEVERITY_STYLE: Record<IncidentSeverity, string> = {
   Info: 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-900',
 };
 
-export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => void; onViewWorkOrder: () => void }> = ({ incident, onEdit, onViewWorkOrder }) => (
-  <div className={`border rounded-xl p-4 space-y-1.5 ${SEVERITY_STYLE[incident.severity]}`}>
-    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Sample incident · {incident.category} · {incident.severity}</p>
-    <h4 className="font-semibold text-slate-900 dark:text-white text-sm">{incident.title}</h4>
-    <p className="text-[12px] text-slate-600 dark:text-slate-300">{incident.equipmentName} · {incident.status} · {incident.owner}</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">{incident.note}</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">Action: Review evidence, assign corrective action and verify before closure.</p>
-    <p className="text-[12px] text-slate-500 dark:text-slate-400">Work order: {incident.workOrderStatus}</p>
-    <div className="flex items-center gap-2 pt-1">
-      <button onClick={onEdit} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
-        Edit incident
-      </button>
-      <button onClick={onViewWorkOrder} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">
-        View work order
-      </button>
-    </div>
-    <details>
-      <summary className="text-[11px] font-medium text-slate-500 dark:text-slate-400 cursor-pointer pt-1">Change history (1)</summary>
-      <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
-        <p><strong>1. Sample library</strong> · {new Date(incident.createdAt).toLocaleString()}</p>
-        <p>Illustrative sample record created</p>
-        <p className="text-slate-400 dark:text-slate-500">Browser-local demonstration history; not a tamper-proof regulatory audit.</p>
+const SEVERITY_TEXT: Record<IncidentSeverity, string> = {
+  Critical: 'text-rose-700 dark:text-rose-400',
+  Warning: 'text-amber-700 dark:text-amber-400',
+  Info: 'text-sky-700 dark:text-sky-400',
+};
+
+const SEVERITY_ICON: Record<IncidentSeverity, React.FC<{ className?: string }>> = {
+  Critical: Siren,
+  Warning: AlertTriangle,
+  Info: InfoIcon,
+};
+
+export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => void; onViewWorkOrder: () => void }> = ({ incident, onEdit, onViewWorkOrder }) => {
+  const SeverityIcon = SEVERITY_ICON[incident.severity];
+  return (
+    <div className={`border rounded-xl p-3.5 space-y-2 ${SEVERITY_STYLE[incident.severity]}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <SeverityIcon className={`w-4 h-4 shrink-0 ${SEVERITY_TEXT[incident.severity]}`} />
+          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{incident.title}</h4>
+        </div>
+        <span className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${SEVERITY_TEXT[incident.severity]}`}>
+          {incident.severity}
+        </span>
       </div>
-    </details>
-  </div>
-);
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{incident.equipmentName} · {incident.category}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+        <span className="inline-flex items-center gap-1"><User className="w-3 h-3" />{incident.owner}</span>
+        <span className="inline-flex items-center gap-1"><Wrench className="w-3 h-3" />{incident.workOrderStatus}</span>
+        <span className="px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/50 text-[10px] font-medium">{incident.status}</span>
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center gap-2">
+          <button onClick={onEdit} className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
+          <button onClick={onViewWorkOrder} className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-sky-600 text-white hover:bg-sky-700">
+            Work order
+          </button>
+        </div>
+        <span className="text-[10px] text-slate-400" title="Browser-local demonstration history; not a tamper-proof regulatory audit.">
+          {new Date(incident.createdAt).toLocaleDateString()}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 export interface IncidentFormValues {
   equipmentCode: string;

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FileCheck2, Scale, HardHat, Lock, Plus, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET, findThing } from '../data/fleetMockData';
@@ -11,6 +12,14 @@ import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/Evi
 import { FeatureCrossLinks } from '../components/fleet/FeatureCrossLinks';
 import { IncidentManagementSection } from '../components/shield/IncidentManagementSection';
 import { Modal } from '../components/common/Modal';
+import { Chip } from '../components/common/Chip';
+
+const CATEGORY_ICON: Record<ShieldCategory, React.FC<{ className?: string }>> = {
+  compliance: FileCheck2,
+  regulation: Scale,
+  safety: HardHat,
+  security: Lock,
+};
 
 export const ThingsShieldDetailPage: React.FC = () => {
   const { thingId } = useParams<{ thingId: string }>();
@@ -49,6 +58,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
   const summary = shieldSummaryFor(thing, incidents);
   const categoryRecords = records.filter((r) => r.category === category);
   const visibleIncidents = incidents.filter((i) => i.equipmentCode === thing.id);
+  const currentCount = categoryRecords.filter((r) => r.status === 'Current').length;
 
   function saveRecord(data: { title: string; reference: string; owner: string; dueDate: string; result: ShieldEvidenceRecord['result'] | 'Not assessed'; findings: string; reviewer: string; recordedBy: string }) {
     const status: ShieldEvidenceRecord['status'] = data.result === 'Failed' ? 'Action required' : data.result === 'Attention' ? 'Due soon' : 'Current';
@@ -76,58 +86,68 @@ export const ThingsShieldDetailPage: React.FC = () => {
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
         <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
-        <p className="text-sm text-sky-100">Inspections, site requirements, safety records and corrective actions.</p>
       </div>
 
       <FleetFilters scope={scope} onChange={setScope} things={matching} selectedId={thing.id} onSelectId={(id) => navigate(id === 'all' ? '/things-shield' : `/things-shield/${id}`)} />
 
       <div className="flex flex-wrap gap-2">
-        {SHIELD_CATEGORIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => { setCategory(c); setAddingNew(false); setEditingRecord(null); }}
-            className={`px-3.5 py-2 text-sm font-medium rounded-lg ${category === c ? 'bg-sky-600 text-white' : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
-          >
-            {CATEGORY_LABELS[c]}
-          </button>
-        ))}
+        {SHIELD_CATEGORIES.map((c) => {
+          const Icon = CATEGORY_ICON[c];
+          return (
+            <button
+              key={c}
+              onClick={() => { setCategory(c); setAddingNew(false); setEditingRecord(null); }}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg ${category === c ? 'bg-sky-600 text-white' : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {CATEGORY_LABELS[c]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
         <div className="flex items-start justify-between">
-          <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{thing.name}</h3>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400">{thing.id} · {thing.location}</p>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{thing.name}</h3>
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
           </div>
-          <span className="text-[11px] text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Not available in this demo">Sample history</span>
+          <span className="text-[11px] text-slate-300 dark:text-slate-600 cursor-not-allowed shrink-0" title="Not available in this demo">Sample history</span>
         </div>
-        <p className="text-[12px] text-slate-500 dark:text-slate-400">
-          {summary.evidenceRecords} evidence records · {summary.currentPassed} current &amp; passed · {summary.overdueFailed} overdue/failed · {summary.openIncidents} open incidents
-        </p>
+        <div className="flex flex-wrap gap-1.5">
+          <Chip icon={FileCheck2}>{summary.evidenceRecords} records</Chip>
+          <Chip tone="emerald">{summary.currentPassed} current</Chip>
+          <Chip tone={summary.overdueFailed > 0 ? 'rose' : 'slate'}>{summary.overdueFailed} overdue</Chip>
+          <Chip tone={summary.openIncidents > 0 ? 'amber' : 'slate'}>{summary.openIncidents} incidents</Chip>
+        </div>
 
-        <div>
-          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{CATEGORY_LABELS[category]} records</h4>
-          <p className="text-[12px] text-slate-500 dark:text-slate-400">{categoryRecords.filter((r) => r.status === 'Current').length} / {categoryRecords.length} records current and passed · sample records do not establish certification, SIL or PL.</p>
+        <div className="flex items-center gap-2">
+          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{CATEGORY_LABELS[category]}</h4>
+          <span title="Sample records do not establish certification, SIL or PL.">
+            <Chip tone={currentCount === categoryRecords.length ? 'emerald' : 'amber'}>{currentCount}/{categoryRecords.length} current</Chip>
+          </span>
         </div>
 
         {category === 'regulation' && (
-          <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-2">
-            <p className="text-[12px] font-medium text-slate-700 dark:text-slate-200">{REGULATION_APPLICABILITY.jurisdiction} · {REGULATION_APPLICABILITY.status} · {REGULATION_APPLICABILITY.label}</p>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400">{REGULATION_APPLICABILITY.description}</p>
-            <button disabled className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed" title="Not available in this demo">
-              Configure site requirements
+          <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              <Chip>{REGULATION_APPLICABILITY.jurisdiction}</Chip>
+              <Chip tone="amber">{REGULATION_APPLICABILITY.status}</Chip>
+              <span title={REGULATION_APPLICABILITY.description}><Info className="w-3.5 h-3.5 text-slate-400" /></span>
+            </div>
+            <button disabled className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shrink-0" title="Not available in this demo">
+              Configure
             </button>
           </div>
         )}
 
         <div className="space-y-3">
           {categoryRecords.map((r) => (
-            <EvidenceRecordCard key={r.id} record={r} onEdit={() => setEditingRecord(r)} />
+            editingRecord?.id === r.id ? null : <EvidenceRecordCard key={r.id} record={r} onEdit={() => setEditingRecord(r)} />
           ))}
         </div>
 
-        <button onClick={() => setAddingNew(true)} className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
-          Add evidence record
+        <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
+          <Plus className="w-3.5 h-3.5" /> Add evidence record
         </button>
 
         <Modal

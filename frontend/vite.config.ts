@@ -17,6 +17,12 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Vite 6 checks the Host header on every request and refuses anything that
+      // isn't localhost/127.0.0.1 by default â a teammate hitting this through a
+      // forwarded port presents a different host and gets blocked outright, even
+      // though the socket itself is reachable (--host=0.0.0.0 in package.json's
+      // dev script already takes care of that part).
+      allowedHosts: true as const,
     },
   };
 });

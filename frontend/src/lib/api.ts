@@ -777,6 +777,24 @@ export interface RejectedImportRow {
   reason: string;
 }
 
+/** A sensor the workbook references that the catalog does not have yet (task QIMP5). */
+export interface ProposedSensor {
+  slug: string;
+  name: string;
+  category: string | null;
+  parameterKey: string | null;
+  canonicalUnit: string | null;
+  proposedByRows: number[];
+  usedByClasses: string[];
+}
+
+/** A category one or more proposed sensors need, that the catalog also lacks. */
+export interface ProposedCategory {
+  slug: string;
+  name: string;
+  proposedBySensors: string[];
+}
+
 export interface CatalogImportDiff {
   batchId: string;
   status: string;
@@ -784,6 +802,8 @@ export interface CatalogImportDiff {
   sensorCapabilities: { valid: number; invalid: number };
   rejectedRows: RejectedImportRow[];
   partialApplyNote: string;
+  proposedSensors: ProposedSensor[];
+  proposedCategories: ProposedCategory[];
 }
 
 export interface ClassApplyResult {
@@ -833,6 +853,33 @@ export function apiApplyCatalogImport(
   return authFetch(
     `/platform/catalog/imports/${encodeURIComponent(id)}/apply`,
     { method: "POST" },
+  );
+}
+
+/** Discards a batch that has not been applied yet. Refused once a batch is applied — its content is the catalog's own provenance record by then (task QIMP4). */
+export async function apiDiscardCatalogImport(id: string): Promise<void> {
+  await authFetch(`/platform/catalog/imports/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export interface SensorReviewSelection {
+  /** Category slugs to create. */
+  approveCategories?: { slug: string }[];
+  /** Sensor slugs to create — each one's category must already exist or be named in `approveCategories` in the same call. */
+  approve?: { slug: string }[];
+  /** Sensor or category slugs to drop from the proposal list without creating anything. */
+  dismiss?: { slug: string }[];
+}
+
+/** Approves or dismisses the sensors/categories a batch proposes, then re-validates and returns the recomputed diff — no re-upload needed (task QIMP5). */
+export function apiReviewCatalogImportSensors(
+  id: string,
+  selection: SensorReviewSelection,
+): Promise<CatalogImportDiff> {
+  return authFetch(
+    `/platform/catalog/imports/${encodeURIComponent(id)}/sensors`,
+    { method: "POST", body: JSON.stringify(selection) },
   );
 }
 

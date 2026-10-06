@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Plus, ShieldAlert } from 'lucide-react';
+import { Download, Plus, ShieldAlert, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { FleetThing, findThing } from '../../data/fleetMockData';
 import { ShieldIncident } from '../../data/shieldMockData';
@@ -46,9 +46,11 @@ export const IncidentManagementSection: React.FC<{
   return (
     <div className="space-y-4">
       {!hideHeading && (
-        <div>
+        <div className="flex items-center gap-1.5">
           <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Incident Management</h3>
-          <p className="text-[12px] text-slate-500 dark:text-slate-400">People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.</p>
+          <span title="People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.">
+            <Info className="w-3.5 h-3.5 text-slate-400" />
+          </span>
         </div>
       )}
 
