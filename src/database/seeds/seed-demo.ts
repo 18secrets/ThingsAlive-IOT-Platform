@@ -126,8 +126,9 @@ export const DEMO_MACHINES: DemoMachine[] = [
   },
   {
     externalId: 'EX-03', name: 'EX-03 Breaching', state: 'breaching', historyDays: 90, endDaysAgo: 0, unbound: [],
-    expect: '6 of its last 10 coolant readings above 105 °C: one open high-severity alert from the class rule '
-      + '(M-of-N, 6 of 10); the incident view lists it; the COOLANT_OVERHEAT failure mode reads active.',
+    expect: '6 of the last 10 coolant readings of its latest operating run above 105 °C: one open high-severity alert '
+      + 'from the class rule (M-of-N, 6 of 10), raised on that run whatever hour the seed ran; the incident view lists '
+      + 'it; the COOLANT_OVERHEAT failure mode reads active.',
   },
   {
     externalId: 'EX-04', name: 'EX-04 Gone quiet', state: 'quiet', historyDays: 60, endDaysAgo: 3, unbound: [],
@@ -451,13 +452,38 @@ export function demoValue(machine: DemoMachine, signal: string, t: number, now: 
  * whenever it is seeded. */
 export const BREACH_TAIL = [101, 108, 99, 110, 107, 100, 109, 111, 98, 106];
 
+/** Every reading tick for one machine, oldest first. */
+function ticksOf(machine: DemoMachine, nowMs: number): number[] {
+  const end = nowMs - machine.endDaysAgo * DAY_MS;
+  const start = end - machine.historyDays * DAY_MS;
+  const times: number[] = [];
+  for (let t = start; t <= end; t += STEP_MS) times.push(t);
+  return times;
+}
+
+/**
+ * The ticks of the most recent operating run — in shift, engine running — with at least
+ * `min` readings. From the shift calendar, not the wall clock (a QSEED1 defect, found
+ * during QFIX-BASELINE): the breach used to be stamped on the last ten ticks before the
+ * seed ran, so a seed at 06:10 put 108 °C coolant on a parked engine — not physical, and
+ * different depending on the hour somebody happened to run the seeder. A full shift is
+ * 60 ticks, so this is today's shift once it is under way, otherwise the last working day's.
+ */
+export function latestOperatingRun(times: number[], min: number): number[] {
+  let run: number[] = [];
+  let latest: number[] = [];
+  for (const t of times) {
+    if (running(t)) { run.push(t); continue; }
+    if (run.length >= min) latest = run;
+    run = [];
+  }
+  return run.length >= min ? run : latest;
+}
+
 async function seedTelemetry(ds: DataSource, now: Date): Promise<void> {
   const nowMs = now.getTime();
   for (const machine of DEMO_MACHINES) {
-    const end = nowMs - machine.endDaysAgo * DAY_MS;
-    const start = end - machine.historyDays * DAY_MS;
-    const times: number[] = [];
-    for (let t = start; t <= end; t += STEP_MS) times.push(t);
+    const times = ticksOf(machine, nowMs);
 
     for (const month of new Set(times.map((t) => new Date(t).toISOString().slice(0, 7)))) {
       await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
@@ -467,7 +493,8 @@ async function seedTelemetry(ds: DataSource, now: Date): Promise<void> {
       const noise = prng(Number(machine.externalId.slice(-2)) * 101 + index);
       const values = times.map((t) => demoValue(machine, s.signal, t, nowMs, noise));
       if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature') {
-        values.splice(values.length - BREACH_TAIL.length, BREACH_TAIL.length, ...BREACH_TAIL);
+        const run = latestOperatingRun(times, BREACH_TAIL.length);
+        run.slice(-BREACH_TAIL.length).forEach((t, i) => { values[times.indexOf(t)] = BREACH_TAIL[i]; });
       }
       await runTenantSpanning(ds, 'seed:demo telemetry', (m) => m.query(
         `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
@@ -481,25 +508,28 @@ async function seedTelemetry(ds: DataSource, now: Date): Promise<void> {
 
 // ========================================================================= alerts
 
-/** The class rule judges each machine's latest readings the way the shift runner would
- * at a window close — through `evaluateWindow`, so the breaching machine's alert is
- * raised by the engine, not written by the seeder. */
+/** The class rule judges each machine's latest operating run the way the shift runner
+ * judges a shift — through `evaluateWindow`, so the breaching machine's alert is raised
+ * by the engine, not written by the seeder. */
 async function raiseAlerts(ds: DataSource, alerts: AlertService, now: Date): Promise<void> {
-  const windowStart = new Date(now.getTime() - 2 * 3_600_000);
   for (const machine of DEMO_MACHINES) {
+    const run = latestOperatingRun(ticksOf(machine, now.getTime()), BREACH_TAIL.length);
+    if (!run.length) continue;
+    const windowStart = new Date(run[0]);
+    const windowEnd = new Date(run[run.length - 1] + STEP_MS);
     const rows: { signal: string; value: number; unit: string; ts: Date }[] = await runTenantSpanning(
       ds, 'seed:demo alert window', (m) => m.query(
         `SELECT signal, value, unit, source_timestamp AS ts FROM telemetry_reading
-          WHERE tenant_id = $1 AND imei = $2 AND source_timestamp > $3 AND source_timestamp <= $4
+          WHERE tenant_id = $1 AND imei = $2 AND source_timestamp > $3 AND source_timestamp < $4
           ORDER BY source_timestamp`,
-        [DEMO_TENANT, imeiOf(machine), windowStart, now],
+        [DEMO_TENANT, imeiOf(machine), new Date(windowStart.getTime() - 1), windowEnd],
       ),
     );
     if (!rows.length) continue;
     await alerts.evaluateWindow({
       tenantId: DEMO_TENANT, sourceSystem: DEMO_SOURCE, externalId: machine.externalId,
-      shiftLocalDate: new Date(now.getTime() + TZ_OFFSET_MS).toISOString().slice(0, 10),
-      windowStart, windowEnd: now,
+      shiftLocalDate: new Date(windowStart.getTime() + TZ_OFFSET_MS).toISOString().slice(0, 10),
+      windowStart, windowEnd,
       readings: rows.map((r) => ({
         imei: imeiOf(machine), signal: r.signal, value: Number(r.value), unit: r.unit,
         sourceTimestamp: new Date(r.ts).toISOString(),
