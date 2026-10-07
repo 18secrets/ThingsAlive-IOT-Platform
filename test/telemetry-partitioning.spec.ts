@@ -7,6 +7,12 @@ import { TELEMETRY_READING_V1, TelemetryBatchEnvelope } from '../src/projection/
 import { withTenantId } from '../src/scope/tenant-session';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
+/** Tests 9 and 10 unwind every migration back to TelemetryPartitioning and re-apply them,
+ * so their cost grows with each migration added after it. Under a full test:db run the
+ * merged main of 2026-10-06 (62 migrations) crossed jest's 5 s default. The same reason,
+ * and the same figure, as migration.spec.ts's chain test. */
+const UNWIND_TIMEOUT_MS = 30_000;
+
 /**
  * Monthly partitioning of `telemetry_reading` against a real Postgres (task QPART1).
  *
@@ -281,7 +287,7 @@ describeDb('telemetry_reading partitioning', () => {
       // 12 months ahead of whenever this actually runs, plus the seeded January —
       // a floor rather than an exact count, since "ahead" moves with the wall clock.
       expect(parts.length).toBeGreaterThanOrEqual(13);
-    });
+    }, UNWIND_TIMEOUT_MS);
 
     it('10. the down path restores a plain table with the original primary key and the same rows', async () => {
       const [{ count: before }] = await owner.query(`SELECT count(*)::int AS count FROM "telemetry_reading"`);
@@ -304,6 +310,6 @@ describeDb('telemetry_reading partitioning', () => {
       // Leaves the chain forward, matching the convention `migration.spec.ts` closes
       // its own down-path assertions with.
       await owner.runMigrations({ transaction: 'all' });
-    });
+    }, UNWIND_TIMEOUT_MS);
   });
 });
