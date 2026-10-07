@@ -39,6 +39,7 @@ import { dataSourceOptions } from '../data-source';
  *
  *   SEED_DEMO_ENABLED=true npm run seed:demo          # create, or say it is already there
  *   SEED_DEMO_ENABLED=true npm run seed:demo:reset    # remove everything it created
+ *   SEED_DEMO_ENABLED=true npm run seed:demo:top-up   # readings up to now; add -- --follow to keep going
  *
  * It writes a tenant's worth of data, so it refuses to run without
  * `SEED_DEMO_ENABLED=true` passed for the one command. Never set that as a standing
@@ -593,6 +594,92 @@ async function raiseAlerts(ds: DataSource, alerts: AlertService, now: Date): Pro
   }
 }
 
+// ========================================================================= top-up
+
+export interface TopUpResult {
+  /** Readings written, per machine. */
+  written: Record<string, number>;
+  /** EX-05 readings removed from beyond its history window, so it stays newly commissioned. */
+  trimmed: number;
+}
+
+/**
+ * Brings the demo's telemetry up to now (D-001, found in phase 1 manual testing). The
+ * seed writes history up to the moment it runs and nothing after, and a signal is stale
+ * after six missed readings — so an hour after seeding every machine read stale, and a
+ * tester saw five copies of EX-04 instead of six states. Readiness is honest about the
+ * wall clock; the fix is to keep the readings arriving, not to bend staleness.
+ *
+ * Each machine continues its own story from its last reading: the same model, the same
+ * shift calendar. EX-04 is not topped up — being quiet is its state. EX-03 keeps
+ * breaching: while running, its coolant cycles through `BREACH_TAIL` by tick number, so
+ * any ten consecutive running readings carry exactly six past the bound, and the open
+ * alert stays true (a second is suppressed by the open one). EX-05's oldest readings are
+ * trimmed to its nine days; otherwise it crosses the baseline's coverage threshold a week
+ * after seeding and stops being newly commissioned.
+ *
+ * Safe to run on a timer and twice at once: `uq_telemetry_reading_dedupe` refuses a
+ * duplicate reading, and the insert skips it rather than failing.
+ */
+export async function topUpDemo(
+  ds: DataSource,
+  opts: { now?: Date; env?: NodeJS.ProcessEnv } = {},
+): Promise<TopUpResult> {
+  requireEnabled(opts.env ?? process.env);
+  if (await presence(ds) !== 'complete') {
+    throw new Error(`No complete demo tenant "${DEMO_TENANT}" to top up. Run seed:demo first.`);
+  }
+  const nowMs = Math.floor((opts.now ?? new Date()).getTime() / STEP_MS) * STEP_MS;
+  const written: Record<string, number> = {};
+  let trimmed = 0;
+
+  for (const machine of DEMO_MACHINES.filter((m) => m.endDaysAgo === 0)) {
+    const imei = imeiOf(machine);
+    const [{ last }] = await runTenantSpanning(ds, 'seed:demo top-up last reading', (m) => m.query(
+      `SELECT max(source_timestamp) AS last FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2`, [DEMO_TENANT, imei],
+    ));
+    if (!last) continue;
+    const times: number[] = [];
+    for (let t = new Date(last).getTime() + STEP_MS; t <= nowMs; t += STEP_MS) times.push(t);
+
+    for (const month of new Set(times.map((t) => new Date(t).toISOString().slice(0, 7)))) {
+      await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
+    }
+
+    let count = 0;
+    for (const [index, s] of DEMO_SIGNALS.entries()) {
+      // Seeded by tick as well as machine and signal: a top-up is drawn the same
+      // whichever run writes it, and no two top-ups repeat each other's noise.
+      const values = times.map((t) => {
+        if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(t)) {
+          return BREACH_TAIL[Math.floor(t / STEP_MS) % BREACH_TAIL.length];
+        }
+        const noise = prng(Number(machine.externalId.slice(-2)) * 101 + index + Math.floor(t / STEP_MS) * 7919);
+        return demoValue(machine, s.signal, t, nowMs, noise);
+      });
+      const rows: unknown[] = await runTenantSpanning(ds, 'seed:demo top-up telemetry', (m) => m.query(
+        `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
+           SELECT $1, $2, $3, v, $4, ts, ts, 'simulated'
+             FROM unnest($5::timestamptz[], $6::double precision[]) AS r(ts, v)
+         ON CONFLICT DO NOTHING
+         RETURNING 1`,
+        [DEMO_TENANT, imei, s.signal, s.unit, times.map((t) => new Date(t).toISOString()), values],
+      ));
+      count += rows.length;
+    }
+    written[machine.externalId] = count;
+
+    if (machine.state === 'new') {
+      const result = await runTenantSpanning(ds, 'seed:demo top-up trim', (m) => m.query(
+        `DELETE FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2 AND source_timestamp < $3`,
+        [DEMO_TENANT, imei, new Date(nowMs - machine.historyDays * DAY_MS)],
+      ));
+      trimmed += Array.isArray(result) ? Number(result[1] ?? 0) : 0;
+    }
+  }
+  return { written, trimmed };
+}
+
 // ========================================================================== reset
 
 /** Every table holding the demo tenant's rows, found from the schema rather than
@@ -704,6 +791,21 @@ async function main() {
   requireEnabled();
   const ds = await new DataSource(dataSourceOptions(process.env, { appRole: null })).initialize();
   try {
+    if (process.argv.includes('--top-up')) {
+      // --follow keeps the demo fresh for a whole test session: one top-up per reading
+      // interval, until the process is stopped.
+      const once = async () => {
+        const { written, trimmed } = await topUpDemo(ds);
+        // eslint-disable-next-line no-console
+        console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
+      };
+      await once();
+      if (!process.argv.includes('--follow')) return;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, STEP_MS));
+        await once();
+      }
+    }
     if (process.argv.includes('--reset')) {
       const removed = await resetDemo(ds);
       // eslint-disable-next-line no-console

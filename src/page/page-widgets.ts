@@ -59,7 +59,11 @@ export interface AlertRow {
   acknowledged: boolean;
 }
 
-export interface WorkOrderRow { id: string; status: string; title: string; assignedTo: string | null; dueAt: string | null }
+export interface WorkOrderRow {
+  id: string; status: string; title: string; assignedTo: string | null; dueAt: string | null;
+  /** The alert it was raised from, when it was (D-002) — so the page can draw the line between them. */
+  alertId: string | null;
+}
 
 export interface ServiceDueData { nextDueAt: string | null; hoursRemaining: number | null; basis: string | null }
 

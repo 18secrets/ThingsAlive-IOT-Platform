@@ -81,6 +81,14 @@ export class WorkOrder {
   predictionId: string | null;
 
   /**
+   * The alert a person raised this from, when they did (D-002) — the same question as
+   * `predictionId`, asked of alerts. The database refuses an alert on another machine
+   * (`fk_work_order_alert`), so the link can be trusted without re-checking it.
+   */
+  @Column({ name: 'alert_id', type: 'uuid', nullable: true })
+  alertId: string | null;
+
+  /**
    * Raised by a person, or raised by the scorer.
    *
    * Kept apart because they answer different questions and are de-duplicated

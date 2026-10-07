@@ -18,6 +18,7 @@ const OPEN_WORK_STATES = ['created', 'in-progress'];
 
 export interface IncidentWorkOrder {
   id: string; status: string; title: string; priority: string; assignedTo: string | null; dueAt: string | null;
+  alertId: string | null;
 }
 
 export interface Incident {
@@ -81,7 +82,7 @@ export class IncidentService {
       const list = ordersByKey.get(keyOf(o)) ?? [];
       list.push({
         id: o.id, status: o.status, title: o.title, priority: o.priority,
-        assignedTo: o.assignedToUserId, dueAt: o.dueAt?.toISOString() ?? null,
+        assignedTo: o.assignedToUserId, dueAt: o.dueAt?.toISOString() ?? null, alertId: o.alertId,
       });
       ordersByKey.set(keyOf(o), list);
     }
