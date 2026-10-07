@@ -39,6 +39,10 @@ export class SiteClass {
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;
 
+  /** The demo seeder's own; no real tenant's plant may use it (`ck_seed_only_site`). */
+  @Column({ name: 'seed_only', type: 'boolean', default: false })
+  seedOnly: boolean;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }
