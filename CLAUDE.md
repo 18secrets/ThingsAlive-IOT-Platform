@@ -74,8 +74,10 @@ Do not re-derive a decision that is already written down there.
 - Commit and push when the task is green. Branches are yours.
 - Never force-push. Never push to `main`, `feature/dev`, `integration` or `production`.
 - Opening the MR is fine; **merging is Deepak's**, always.
-- Measure baseline test counts on a throwaway commit or a second worktree, never by stashing.
-  Never `git stash drop` or `git stash clear`; `apply`, not `pop`.
+- Measure `test:db` before and after, on a worktree off origin/main, naming the base SHA.
+- Run the full suite on the branch only. Its before-count is not required — the delta
+  is the new spec's test count, and a mismatch there shows up in test:db anyway.
+- Never measure by stashing. Never `git stash drop` or `git stash clear`; `apply`, not `pop`.
 
 ## Editing files
 - Never write or patch a source file through PowerShell string interpolation or a
