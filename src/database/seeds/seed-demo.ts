@@ -280,7 +280,13 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
     await m.getRepository(EquipmentClassFormula).save([
       formula('avg_coolant_temp', 'avg(engine_coolant_temperature)', { targetValue: 100, targetDirection: 'lower_better' }),
       formula('coolant_trace', 'engine_coolant_temperature', { chartType: 'line' }),
-      formula('avg_oil_pressure', 'avg(engine_oil_pressure)', { targetValue: 250, targetDirection: 'higher_better' }),
+      // While running, not over the day (D-006): a parked engine reads ~0 kPa, so a 24 h
+      // average held the healthy machine at ~130 against a 250 target that only means
+      // anything for a running engine, and at ~0 on a weekend. Mean pressure divided by
+      // the share of readings in the running band is the running mean, still in kPa; a
+      // day with no running divides by zero and reads undefined_result, never 0.
+      formula('avg_oil_pressure', 'avg(engine_oil_pressure) / fraction_within(engine_oil_pressure, 50, 1000)',
+        { targetValue: 250, targetDirection: 'higher_better' }),
       formula('avg_hydraulic_temp', 'avg(hydraulic_oil_temperature)', { targetValue: 75, targetDirection: 'lower_better' }),
       formula('avg_fuel_level', 'avg(fuel_level)'),
       formula('avg_engine_load', 'avg(engine_load)'),
@@ -748,8 +754,11 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
     // (`ck_class_content_draft_only`), for this transaction only.
     await m.query(`SELECT set_config('ta.seed_demo', 'on', true)`);
     // Tenant rows reference each other; delete in passes until a pass removes nothing
-    // and nothing is left, rather than hand-ordering every foreign key.
-    let remaining = await tenantTables(ds);
+    // and nothing is left, rather than hand-ordering every foreign key. The `tenant` row
+    // goes last: the parameter guard exempts only a tenant the seeder provisioned, and
+    // cannot tell that once the row naming it is gone (D-005).
+    const tables = await tenantTables(ds);
+    let remaining = [...tables.filter((t) => t !== 'tenant'), ...tables.filter((t) => t === 'tenant')];
     for (let pass = 0; remaining.length && pass < 20; pass += 1) {
       const blocked: string[] = [];
       for (const table of remaining) {
