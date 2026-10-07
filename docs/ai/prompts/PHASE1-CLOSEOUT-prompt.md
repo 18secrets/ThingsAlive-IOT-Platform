@@ -85,9 +85,9 @@ npm run seed:demo
 | | |
 |---|---|
 | One tenant | `demo-construction`, with a super-admin user and the role templates |
-| Three granted classes | chosen from what the library already holds — **do not author new classes** |
+| **One seed-only class** | authored by the seeder — see below. The published classes hold no sensor requirements, layouts, alert rule templates or baseline formulas, so seeding against them produces six identical `not_configured` machines |
 | One site | a plant, with the default site class |
-| Six machines | across those three classes |
+| Six machines | all on that one class |
 | Devices and bindings | one device per machine, bound to every signal its class declares |
 | Shifts | a weekday schedule, so Availability has scheduled hours to divide by |
 | Telemetry | **90 days**, at each signal's declared cadence |
@@ -111,9 +111,36 @@ reads `undefined_result` — which would look like a bug and is not.
 **Report what a tester should see** for each machine, as a short list, so the test plan can be
 checked against it rather than against a guess.
 
-**Out of scope:** authoring new library content. Seed uses what is published. If the three
-classes you pick have no formulas or no layout, say so — that is a content gap for the
-library team, not something to paper over with seeded rows.
+**The seed-only class, and why it is allowed to exist:**
+
+The seeder authors **one** complete equipment class — declared signals with criticality,
+sensor requirements, a layout, alert rule templates, baseline formulas. All six machines use
+it. Class variety is the library team's deliverable; **the six states are what manual testing
+needs**, and one complete class demonstrates all six.
+
+It is marked in the schema, not by naming convention:
+
+- `equipment_class_profile.seed_only boolean NOT NULL DEFAULT false`
+- **Granting a `seed_only` class is refused unless `SEED_DEMO_ENABLED=true`** — the same
+  guard that protects the seeder, so it can never reach a real tenant
+- `seed:demo:reset` removes it
+
+**This does not paper over the content gap.** A class marked `seed_only` cannot be mistaken
+for library content. **Report every published class's gaps** — missing sensor requirements,
+layouts, alert rule templates, baseline formulas — as a list. That list is the library team's
+work queue.
+
+**`seed:demo` is the one demo seeder.** It replaces `seed-demo-fleet.ts` and absorbs what it
+provided, so the six machines carry failure modes and recommendations and the recommendation
+engine still has something to run against. **Before deleting it, check whether any test
+depends on it** — if one does, move that content into a test fixture and cut the dependency.
+A test depending on a demo seeder is a defect regardless of this task.
+
+**Running it against Development** is granted as a one-time exception: `seed:demo` and its
+reset, against Development Postgres, with `SEED_DEMO_ENABLED=true` passed inline for that one
+command. **Do not persist it as a Railway variable.** Run after the MR merges and deploys,
+not from the branch; run the reset first if a demo tenant already exists; report row counts
+per table. Nothing else on Railway changes.
 
 ---
 
@@ -162,6 +189,11 @@ Recorded so nobody rediscovers them as gaps.
   during this phase.**
 - **Incident entity** — see §4.
 - **QTWIN1** — the 3-D twin. Tier 0, the schematic, is built.
+- **QFIX-BASELINE** — the 30-day baseline mixes running and parked hours, so σ is inflated by
+  the gap between two populations and every machine swings ±1.5σ daily. **Found by QSEED1**;
+  no test could have caught it while Development had no telemetry. Specified in
+  `docs/ai/prompts/QFIX-BASELINE-prompt.md`. Until it ships, baseline KPIs are documented to
+  testers as a **known defect** — not as expected behaviour.
 - **QFIX-DEVICES-2** — prediction and baseline still read `device_projection`.
 - **QONBOARD1** — bulk-registering a 1.0 fleet from the projection.
 - **QTX1** — producers sharing one transaction. Forced by machine count on a site page, not

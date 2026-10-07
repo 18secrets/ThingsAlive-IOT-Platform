@@ -98,6 +98,14 @@ export class EquipmentClassProfile {
   @Column({ type: 'text', default: 'manual' })
   source: 'manual' | 'excel-import';
 
+  /**
+   * Authored by the demo seeder for the demo tenant only, never library content (task
+   * QSEED1). The database refuses to grant one without the seeder's session flag; see
+   * `1758900000000-SeedOnlyClass.ts`.
+   */
+  @Column({ name: 'seed_only', type: 'boolean', default: false })
+  seedOnly: boolean;
+
   @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
   importBatchId: string | null;
 }
