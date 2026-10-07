@@ -90,9 +90,12 @@ export class AuthGuard implements CanActivate {
     // What the account says now beats what the token said when it was issued. This is
     // the whole reason scope is resolved per request: a suspension, a role change or
     // a withdrawn assignment applies to the next request rather than whenever the
-    // token happens to expire.
+    // token happens to expire. Signing out is the same kind of change (D-003): a token
+    // that names its sign-in is refused once that sign-in has ended. One without a `sid`
+    // predates the claim and keeps working until it expires, within the hour.
     if (this.resolver && userId && !scope.isPlatformRole) {
-      const resolved = await this.resolver.resolve(scope.tenantId, userId);
+      const sessionId = payload.sid ? String(payload.sid) : undefined;
+      const resolved = await this.resolver.resolve(scope.tenantId, userId, sessionId);
       if (resolved) {
         scope = {
           ...scope,
