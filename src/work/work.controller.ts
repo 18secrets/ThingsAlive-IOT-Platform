@@ -17,6 +17,7 @@ export class RaiseDto {
   @IsOptional() @IsIn(PRIORITIES as unknown as string[]) priority?: WorkOrderPriority;
   @IsOptional() @IsUUID() assignedToUserId?: string;
   @IsOptional() @IsUUID() predictionId?: string;
+  @IsOptional() @IsUUID() alertId?: string;
   @IsOptional() @IsISO8601() dueAt?: string;
 }
 

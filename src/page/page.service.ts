@@ -408,6 +408,7 @@ export class PageService {
     });
     return orders.filter((o) => keys.has(`${o.sourceSystem}/${o.externalId}`)).map((o) => ({
       id: o.id, status: o.status, title: o.title, assignedTo: o.assignedToUserId, dueAt: o.dueAt?.toISOString() ?? null,
+      alertId: o.alertId,
     }));
   }
 
