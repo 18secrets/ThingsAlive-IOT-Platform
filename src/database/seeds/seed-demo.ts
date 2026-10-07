@@ -25,6 +25,7 @@ import { EquipmentProjection } from '../../projection/entities/equipment-project
 import { SensorMapProjection } from '../../projection/entities/sensor-map-projection.entity';
 import { TenantMap } from '../../projection/entities/tenant-map.entity';
 import { runTenantSpanning } from '../../scope/tenant-session';
+import { siteLayoutProblems, SiteLayoutWidget } from '../../catalog/services/class-layout';
 import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { SignalBindingVersion } from '../../signal-binding/entities/signal-binding-version.entity';
 import { ProvisioningService } from '../../tenancy/services/provisioning.service';
@@ -60,6 +61,9 @@ import { dataSourceOptions } from '../data-source';
 export const DEMO_TENANT = 'demo-construction';
 export const DEMO_CLASS = 'demo-excavator';
 export const DEMO_SOURCE = 'seed-demo';
+/** The seeder's own site class (D-004): the platform `default` binds no KPI, and adding
+ * any to it would put them on every customer's site page. */
+export const DEMO_SITE_CLASS = 'demo-site';
 const SEEDER = 'seed-demo';
 const STEP_MS = 10 * 60_000;
 const DAY_MS = 86_400_000;
@@ -187,7 +191,8 @@ const services = (ds: DataSource) => {
 async function presence(ds: DataSource): Promise<'none' | 'complete' | 'partial'> {
   const [{ tenants }] = await ds.query(`SELECT count(*)::int AS tenants FROM tenant WHERE tenant_id = $1`, [DEMO_TENANT]);
   const [{ classes }] = await ds.query(`SELECT count(*)::int AS classes FROM equipment_class_profile WHERE slug = $1`, [DEMO_CLASS]);
-  if (!tenants && !classes) return 'none';
+  const [{ sites }] = await ds.query(`SELECT count(*)::int AS sites FROM site_class WHERE slug = $1`, [DEMO_SITE_CLASS]);
+  if (!tenants && !classes && !sites) return 'none';
   const [{ done }] = await ds.query(
     `SELECT count(*)::int AS done FROM equipment_shift WHERE tenant_id = $1 AND created_by = $2`, [DEMO_TENANT, SEEDER],
   );
@@ -219,6 +224,7 @@ export async function seedDemo(
   try {
     const s = services(ds);
     await authorClass(ds, s.authoring);
+    await authorSiteClass(ds);
     const provisioned = await s.provisioning.provision(PLATFORM, {
       tenantId: DEMO_TENANT, name: 'Demo Construction', plan: 'demo', region: 'IN',
       superAdmin: { email: adminEmail, fullName: 'Demo Admin' },
@@ -330,14 +336,62 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
   }
 }
 
+// ===================================================================== the site class
+
+/**
+ * Site KPIs over the six machines (D-004), each declaring how it combines them. Chosen
+ * so the exclusions are visible: EX-04 is stale on all three, and EX-06 has no fuel
+ * binding, so fuel reads from four machines and says which two it left out.
+ */
+export const DEMO_SITE_LAYOUT: SiteLayoutWidget[] = [
+  { widgetType: 'machine_list', widgetKey: 'machines', boundTo: null, title: null, position: 1, size: 'full', aggregate: null },
+  { widgetType: 'kpi_number', widgetKey: 'site_avg_coolant', boundTo: 'avg_coolant_temp', title: 'Average coolant temperature', position: 2, size: 'small', aggregate: 'avg' },
+  { widgetType: 'kpi_number', widgetKey: 'site_min_oil_pressure', boundTo: 'avg_oil_pressure', title: 'Lowest oil pressure', position: 3, size: 'small', aggregate: 'min' },
+  { widgetType: 'kpi_number', widgetKey: 'site_avg_fuel', boundTo: 'avg_fuel_level', title: 'Average fuel level', position: 4, size: 'small', aggregate: 'avg' },
+  { widgetType: 'alert_list', widgetKey: 'alerts', boundTo: null, title: null, position: 5, size: 'medium', aggregate: null },
+  { widgetType: 'work_order_list', widgetKey: 'work_orders', boundTo: null, title: null, position: 6, size: 'medium', aggregate: null },
+];
+
+/** Through the platform's own layout check, as the equipment class goes through publish;
+ * site classes have no publish path, so the check is called here rather than skipped. */
+async function authorSiteClass(ds: DataSource): Promise<void> {
+  const problems = siteLayoutProblems(DEMO_SITE_LAYOUT);
+  if (problems.length) throw new Error(`The demo site layout is invalid: ${problems.join(' ')}`);
+  await ds.transaction(async (m) => {
+    await m.query(
+      `INSERT INTO site_class (slug, version, name, description, status, published_at, created_by, seed_only)
+         VALUES ($1, 1, 'Demo site (seed-only)', 'Authored by seed:demo for the demo tenant. Not library content.',
+                 'published', now(), $2, true)`,
+      [DEMO_SITE_CLASS, SEEDER],
+    );
+    for (const w of DEMO_SITE_LAYOUT) {
+      await m.query(
+        `INSERT INTO site_class_layout (site_class_slug, class_version, widget_type, widget_key, bound_to, title, position, size, aggregate)
+           VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8)`,
+        [DEMO_SITE_CLASS, w.widgetType, w.widgetKey, w.boundTo, w.title, w.position, w.size, w.aggregate],
+      );
+    }
+  });
+}
+
 // ============================================================ site, machines, devices
 
 async function seedSiteAndMachines(ds: DataSource, now: Date): Promise<void> {
   await runTenantSpanning(ds, 'seed:demo machines', async (m: EntityManager) => {
+    // The one session allowed to point a plant at a seed-only site class
+    // (`ck_seed_only_site`), for this transaction only.
+    await m.query(`SELECT set_config('ta.seed_demo', 'on', true)`);
     const [plant] = await m.query(
       `INSERT INTO plant (tenant_id, code, name, site_class_slug, site_class_version, description)
-         VALUES ($1, 'PUNE-01', 'Pune ring road package', 'default', 1, 'Demo site (seed:demo).') RETURNING id`,
-      [DEMO_TENANT],
+         VALUES ($1, 'PUNE-01', 'Pune ring road package', $2, 1, 'Demo site (seed:demo).') RETURNING id`,
+      [DEMO_TENANT, DEMO_SITE_CLASS],
+    );
+    // A second site with no machines on it yet: every site KPI there reads
+    // no_ready_machines with a null value — the case a naive sum shows as 0.
+    await m.query(
+      `INSERT INTO plant (tenant_id, code, name, site_class_slug, site_class_version, description)
+         VALUES ($1, 'PUNE-02', 'Pune yard (no machines yet)', $2, 1, 'Empty demo site (seed:demo).')`,
+      [DEMO_TENANT, DEMO_SITE_CLASS],
     );
 
     await m.getRepository(TenantMap).save({
@@ -578,6 +632,11 @@ export async function countDemoRows(ds: DataSource): Promise<Record<string, numb
       const [{ n }] = await m.query(`SELECT count(*)::int AS n FROM "${table}" WHERE "${column}" = $1`, [DEMO_CLASS]);
       if (n) counts[table] = (counts[table] ?? 0) + n;
     }
+    for (const table of ['site_class_layout', 'site_class']) {
+      const column = table === 'site_class' ? 'slug' : 'site_class_slug';
+      const [{ n }] = await m.query(`SELECT count(*)::int AS n FROM "${table}" WHERE "${column}" = $1`, [DEMO_SITE_CLASS]);
+      if (n) counts[table] = n;
+    }
     const [{ users }] = await m.query(
       `SELECT count(*)::int AS users FROM app_user WHERE tenant_id = $1`, [DEMO_TENANT],
     );
@@ -593,6 +652,9 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
   if (seedOnly.length) {
     // Never delete a class that is not ours, whatever its name: the slug alone is a convention.
     throw new Error(`"${DEMO_CLASS}" exists and is not seed_only — refusing to remove library content.`);
+  }
+  if ((await ds.query(`SELECT 1 FROM site_class WHERE slug = $1 AND NOT seed_only`, [DEMO_SITE_CLASS])).length) {
+    throw new Error(`Site class "${DEMO_SITE_CLASS}" exists and is not seed_only — refusing to remove library content.`);
   }
   await runTenantSpanning(ds, 'seed:demo reset', async (m) => {
     // The one session allowed to delete published seed-only content
@@ -626,6 +688,12 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
       const n = Array.isArray(result) ? Number(result[1] ?? 0) : 0;
       if (n) removed[table] = (removed[table] ?? 0) + n;
     }
+    // After the plants (tenant rows, above), which reference it.
+    for (const [table, column] of [['site_class_layout', 'site_class_slug'], ['site_class', 'slug']]) {
+      const result = await m.query(`DELETE FROM "${table}" WHERE "${column}" = $1`, [DEMO_SITE_CLASS]);
+      const n = Array.isArray(result) ? Number(result[1] ?? 0) : 0;
+      if (n) removed[table] = (removed[table] ?? 0) + n;
+    }
   });
   return removed;
 }
@@ -653,6 +721,8 @@ async function main() {
       `Seeded "${DEMO_TENANT}". Rows created, per table:`, JSON.stringify(result.counts, null, 2),
       `Super admin ${result.adminEmail} is invited, not active. Invitation token (shown once): ${result.invitationToken}`,
       '', 'What each machine should show:', ...DEMO_MACHINES.map((mc) => `  ${mc.externalId} — ${mc.expect}`),
+      '', 'Site pages: PUNE-01 aggregates the six (EX-04 excluded as stale; EX-06 excluded from fuel as unbound);',
+      '  PUNE-02 has no machines, so every site KPI reads not_available / no_ready_machines, value null.',
     ].join('\n'));
   } finally {
     await ds.destroy();
