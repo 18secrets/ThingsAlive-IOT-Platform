@@ -35,6 +35,11 @@ export class ClientEquipmentClassVisualAnchor {
   @Column({ name: 'template_version', type: 'int', nullable: true })
   templateVersion: number | null;
 
+  /** A class upgrade changed the schematic under a tenant-placed anchor (task QUPGRADE1):
+   * its position is kept, but it may now point at the wrong part of the picture. */
+  @Column({ name: 'needs_recheck', type: 'boolean', default: false })
+  needsRecheck: boolean;
+
   @Column({ name: 'copied_at', type: 'timestamptz', nullable: true })
   copiedAt: Date | null;
 

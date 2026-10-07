@@ -112,6 +112,11 @@ export class ClientFormula {
   @Column({ name: 'template_version', type: 'int', nullable: true })
   templateVersion: number | null;
 
+  /** The class version this was last upgraded to no longer has it (task QUPGRADE1).
+   * Kept, because it is the tenant's; labelled, because it no longer comes from the library. */
+  @Column({ name: 'orphaned_at', type: 'timestamptz', nullable: true })
+  orphanedAt: Date | null;
+
   @Column({ name: 'copied_at', type: 'timestamptz', nullable: true })
   copiedAt: Date | null;
 
