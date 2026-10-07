@@ -45,7 +45,8 @@ export interface RequestContext {
   userAgent?: string | null;
 }
 
-/** An hour. Short because revoking one is impossible; the refresh token is the handle. */
+/** An hour. It names its sign-in (`sid`), so signing out refuses it on the next request
+ * (D-003); the hour still bounds a token issued before that claim existed. */
 export const ACCESS_TOKEN_SECONDS = 3600;
 const REFRESH_TOKEN_DAYS = 30;
 const INVITATION_DAYS = 14;
@@ -392,11 +393,12 @@ export class CredentialService {
   ): Promise<SignInResult> {
     const refreshToken = this.passwords.newToken();
     const sessions = m.getRepository(UserSession);
+    const sid = family ?? randomUUID();
     await sessions.save(sessions.create({
       tenantId: user.tenantId,
       userId: user.id,
       tokenHash: this.passwords.fingerprint(refreshToken),
-      family: family ?? randomUUID(),
+      family: sid,
       expiresAt: new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
       rotatedAt: null, revokedAt: null, revokedReason: null,
       userAgent: ctx.userAgent ?? null,
@@ -405,9 +407,11 @@ export class CredentialService {
     const claim = this.config.get<string>('AUTH_TENANT_CLAIM') || 'client_id';
     // Deliberately thin. The existing platform puts the whole user record in its
     // token, which is how a year-old token still describes somebody's job; everything
-    // beyond identity is resolved per request from the account's own tables.
+    // beyond identity is resolved per request from the account's own tables. `sid` is
+    // the family, not this row: a refresh rotates the row but is the same sign-in, and
+    // signing out revokes the family.
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, [claim]: user.tenantId },
+      { sub: user.id, [claim]: user.tenantId, sid },
       {
         secret: this.config.get<string>('AUTH_JWT_SECRET'),
         expiresIn: ACCESS_TOKEN_SECONDS,
