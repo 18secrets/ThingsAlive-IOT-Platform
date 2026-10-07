@@ -154,15 +154,16 @@ export class SignalBindingService {
           },
         });
 
-        // Telemetry-aware now (task Q08S s3) — the "later slice" this service's
-        // own comments named below. Devices the same way `discover()` already
-        // finds them, so there is one device-resolution idea in this file, not two.
-        const devices = await m.getRepository(DeviceInventory).find({
-          where: { tenantId: scope.tenantId, equipmentExternalId: equipment.externalId },
-        });
-        const imeis = [...new Set(devices.map((d) => d.imei))];
-        const latestBySignal = await this.telemetryReader.latestPerSignal(
-          m, scope.tenantId, imeis, requirements.map((r) => r.measurementRole),
+        // Freshness by the binding's device, over the binding's window (task
+        // QFIX-DEVICES) — not `device_inventory`'s IMEIs. The KPI evaluator reads the
+        // same segments, so a signal cannot be ready on one widget and silent on the
+        // one beside it. Discovery still starts from the inventory: that is a
+        // different question (what could be bound), not this one (what is).
+        const segments = await bindingSegments(
+          m, scope.tenantId, equipment, [...new Set(requirements.map((r) => r.measurementRole))], { by: 'measurementRole' },
+        );
+        const latestBySignal = await this.telemetryReader.latestPerSignalInSegments(
+          m, scope.tenantId, segments.map(({ signal, imei, from, to }) => ({ signal, imei, from, to })), at,
         );
         // The client's own threshold for this machine wins over the class's (task
         // QPARAM1 §4b) — the same order the KPI evaluator uses, so a signal cannot be
@@ -445,6 +446,49 @@ export class SignalBindingService {
     }
   }
 }
+
+export interface BindingSegment {
+  /** The signal as the caller names it — `signalKey` or `measurementRole`, per `by`. */
+  signal: string;
+  imei: string;
+  from: Date;
+  to: Date | null;
+  expectedPeriodSeconds: number | null;
+}
+
+/**
+ * Which device produced each signal on this machine, and when (task QFIX-DEVICES): the
+ * active primary bindings, as segments. **The binding is the authority for this
+ * question** — not `device_projection` (where 1.0 thinks a device is) and not
+ * `device_inventory` (where the customer claimed it). Both of those hold only the
+ * current link; only a binding's validity window knows when a device moved.
+ *
+ * A binding with no IMEI (a virtual or model-derived source) has no device to read
+ * and contributes no segment. One query for every signal the caller needs.
+ */
+export async function bindingSegments(
+  m: EntityManager, tenantId: string, equipment: EquipmentRef, signals: string[],
+  opts: { by: 'signalKey' | 'measurementRole'; componentId?: string },
+): Promise<BindingSegment[]> {
+  if (!signals.length) return [];
+  const rows = await m.getRepository(SignalBindingVersion).find({
+    where: {
+      tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+      [opts.by]: In(signals), isPrimary: true, status: 'active',
+      ...(opts.componentId !== undefined ? { componentId: opts.componentId } : {}),
+    },
+  });
+  return rows.filter((r) => !!r.imei).map((r) => ({
+    signal: opts.by === 'signalKey' ? r.signalKey : r.measurementRole,
+    imei: r.imei!, from: r.validFrom, to: r.validTo, expectedPeriodSeconds: r.expectedPeriodSeconds,
+  }));
+}
+
+/** Segments that overlap `[from, to]` — a signal is bound for a window when some
+ * binding was in force during it, which is what lets history after a move still be
+ * read for the machine that had the device at the time. */
+export const overlapping = (segments: BindingSegment[], from: Date, to: Date) =>
+  segments.filter((s) => s.from <= to && (s.to === null || s.to > from));
 
 /** [valid_from, valid_to) — half-open, replicated in application code to match
  * the generated `validity` column's own semantics exactly. */
