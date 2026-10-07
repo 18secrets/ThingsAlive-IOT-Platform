@@ -17,7 +17,8 @@ import { PageService } from '../src/page/page.service';
 import { FailureModeRow, ReadinessRow } from '../src/page/page-widgets';
 import { SignalBindingService } from '../src/signal-binding/services/signal-binding.service';
 import { AvailabilityService } from '../src/utilization/services/availability.service';
-import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
+import { withTenantId } from '../src/scope/tenant-session';
+import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 const MIGRATION = 'SeedOnlyClass1758900000000';
 /** A Tuesday, 12:30 in Pune: mid-shift, so "running now" is true for the demo. */
@@ -222,6 +223,36 @@ describeDb('seed:demo', () => {
       `INSERT INTO client_catalog_entitlement (tenant_id, equipment_class_slug, granted_by) VALUES ('acme', $1, 'u')`, [DEMO_CLASS],
     )).rejects.toThrow(/ck_seed_only_grant/);
     expect(await owner.query(`SELECT count(*)::int AS n FROM client_catalog_entitlement WHERE tenant_id = 'acme'`)).toEqual([{ n: 0 }]);
+  });
+
+  it('the grant guard holds from a tenant-scoped ta_app session too, not only from platform context', async () => {
+    // Tests elsewhere grant as the owner, where every row is visible. A guard that read
+    // under the caller's role could pass there and fail open here; it is definer, so it
+    // does not depend on what this session can see.
+    const app = await createAppDataSource();
+    try {
+      await expect(withTenantId(app, 'acme', (m) => m.query(
+        `INSERT INTO client_catalog_entitlement (tenant_id, equipment_class_slug, granted_by) VALUES ('acme', $1, 'u')`, [DEMO_CLASS],
+      ))).rejects.toThrow(/ck_seed_only_grant/);
+    } finally {
+      await app.destroy();
+    }
+  });
+
+  it('published seed-only content is deletable by the seeder\'s session only', async () => {
+    // Without ta.seed_demo — any other session, any other code path — it is as
+    // immutable as library content.
+    await expect(owner.query(`DELETE FROM equipment_class_recommendation WHERE class_slug = $1`, [DEMO_CLASS]))
+      .rejects.toThrow(/ck_class_content_draft_only/);
+    // With it, inside a transaction that is then rolled back: the exemption exists.
+    await owner.transaction(async (m) => {
+      await m.query(`SELECT set_config('ta.seed_demo', 'on', true)`);
+      const result = await m.query(`DELETE FROM equipment_class_recommendation WHERE class_slug = $1`, [DEMO_CLASS]);
+      expect(Number(result[1])).toBeGreaterThan(0);
+      throw new Error('rollback');
+    }).catch((err: Error) => { if (err.message !== 'rollback') throw err; });
+    expect(await owner.query(`SELECT count(*)::int AS n FROM equipment_class_recommendation WHERE class_slug = $1`, [DEMO_CLASS]))
+      .toEqual([{ n: 3 }]);
   });
 
   it('published content stays immutable: the seed-only exemption is DELETE only, and only for seed_only', async () => {

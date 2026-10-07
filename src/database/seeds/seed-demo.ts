@@ -565,6 +565,9 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
     throw new Error(`"${DEMO_CLASS}" exists and is not seed_only — refusing to remove library content.`);
   }
   await runTenantSpanning(ds, 'seed:demo reset', async (m) => {
+    // The one session allowed to delete published seed-only content
+    // (`ck_class_content_draft_only`), for this transaction only.
+    await m.query(`SELECT set_config('ta.seed_demo', 'on', true)`);
     // Tenant rows reference each other; delete in passes until a pass removes nothing
     // and nothing is left, rather than hand-ordering every foreign key.
     let remaining = await tenantTables(ds);
