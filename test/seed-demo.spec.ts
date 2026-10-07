@@ -7,8 +7,8 @@ import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-p
 import { EntitlementService } from '../src/catalog/services/entitlement.service';
 import { CopyOnGrantService } from '../src/client-catalog/services/copy-on-grant.service';
 import {
-  CADENCE_SECONDS, countDemoRows, DEMO_CLASS, DEMO_MACHINES, DEMO_SOURCE, DEMO_TENANT, resetDemo, seedDemo,
-  STALE_AFTER_SECONDS,
+  BREACH_TAIL, CADENCE_SECONDS, countDemoRows, DEMO_CLASS, DEMO_MACHINES, DEMO_SOURCE, DEMO_TENANT, imeiOf,
+  resetDemo, seedDemo, STALE_AFTER_SECONDS,
 } from '../src/database/seeds/seed-demo';
 import { KpiEvaluatorService } from '../src/kpi/services/kpi-evaluator.service';
 import { KpiEnvelope } from '../src/kpi/types';
@@ -291,6 +291,31 @@ describeDb('seed:demo', () => {
     const again = await seedDemo(owner, { now: NOW, env: ENABLED });
     expect(again.created).toBe(true);
     expect(again.counts.equipment_profile).toBe(6);
+  }, 180_000);
+
+  it('the breach comes from the shift calendar, not the hour the seed ran: seeded at 06:10, it still lands on a running engine', async () => {
+    // Wednesday 06:10 in Pune — parked, before the shift. The wall-clock version put
+    // 108 °C coolant on a parked engine here (the first Development seed did exactly that).
+    const parkedHour = new Date('2026-10-07T00:40:00.000Z');
+    await resetDemo(owner, ENABLED);
+    await seedDemo(owner, { now: parkedHour, env: ENABLED });
+    const ex03 = DEMO_MACHINES.find((m) => m.externalId === 'EX-03')!;
+    const breach: { ts: Date; value: number; running: number }[] = await owner.query(
+      `SELECT c.source_timestamp AS ts, c.value, r.value AS running
+         FROM telemetry_reading c
+         JOIN telemetry_reading r ON r.tenant_id = c.tenant_id AND r.imei = c.imei
+                                 AND r.signal = 'engine_running_status' AND r.source_timestamp = c.source_timestamp
+        WHERE c.tenant_id = $1 AND c.imei = $2 AND c.signal = 'engine_coolant_temperature' AND c.value > 97
+        ORDER BY c.source_timestamp`,
+      [DEMO_TENANT, imeiOf(ex03)],
+    );
+    expect(breach.map((b) => Number(b.value))).toEqual(BREACH_TAIL);
+    // Every one taken with the engine running, inside Tuesday's shift (08:00–18:00 IST).
+    expect(breach.every((b) => Number(b.running) === 1)).toBe(true);
+    const ist = (d: Date) => new Date(new Date(d).getTime() + 330 * 60_000);
+    expect(breach.every((b) => ist(b.ts).getUTCDay() === 2 && ist(b.ts).getUTCHours() >= 8 && ist(b.ts).getUTCHours() < 18)).toBe(true);
+    // And the class rule still fires on it, through the engine.
+    expect((await openAlertsOn('EX-03')).map((e) => [e.severity, e.state])).toEqual([['high', 'open']]);
   }, 180_000);
 
   it('reset refuses to remove a class by that name that is not seed_only', async () => {

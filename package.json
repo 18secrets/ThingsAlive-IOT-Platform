@@ -19,6 +19,7 @@
     "seed:catalog": "ts-node src/database/seeds/seed-catalog.ts",
     "seed:demo": "ts-node src/database/seeds/seed-demo.ts",
     "seed:demo:reset": "ts-node src/database/seeds/seed-demo.ts --reset",
+    "schema:inventory": "ts-node scripts/generate-schema-inventory.ts",
     "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts",
     "staff:bootstrap": "ts-node src/database/seeds/staff-bootstrap.ts",
     "catalog:template": "ts-node src/catalog-import/generate-template.ts"
