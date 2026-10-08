@@ -39,26 +39,26 @@ const STATUS_TEXT: Record<ShieldStatus, string> = {
 export const EvidenceRecordCard: React.FC<{ record: ShieldEvidenceRecord; onEdit: () => void }> = ({ record, onEdit }) => (
   <div className={`border rounded-xl p-3.5 space-y-2 ${STATUS_STYLE[record.status]}`}>
     <div className="flex items-start justify-between gap-2">
-      <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{record.title}</h4>
-      <span className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[record.status]}`}>
+      <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{record.title}</h4>
+      <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[record.status]}`}>
         {record.status}
       </span>
     </div>
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
-      <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{record.dueDate}</span>
-      <span className="inline-flex items-center gap-1"><User className="w-3 h-3" />{record.owner}</span>
-      <span className="font-mono text-[10px] text-slate-400" title={record.reference}>{record.reference}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+      <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{record.dueDate}</span>
+      <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" />{record.owner}</span>
+      <span className="font-mono text-[11px] text-slate-400" title={record.reference}>{record.reference}</span>
     </div>
     {(record.findings || record.note) && (
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={record.findings || record.note}>
+      <p className="text-xs text-slate-500 dark:text-slate-400 truncate" title={record.findings || record.note}>
         {record.findings || record.note}
       </p>
     )}
     <div className="flex items-center justify-between pt-1">
-      <button onClick={onEdit} className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
-        <Pencil className="w-3 h-3" /> Edit
+      <button onClick={onEdit} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
+        <Pencil className="w-3.5 h-3.5" /> Edit
       </button>
-      <span className="text-[10px] text-slate-400" title="Browser-local demonstration history; not a tamper-proof regulatory audit.">
+      <span className="text-[11px] text-slate-400" title="Browser-local demonstration history; not a tamper-proof regulatory audit.">
         {new Date(record.createdAt).toLocaleDateString()}
       </span>
     </div>

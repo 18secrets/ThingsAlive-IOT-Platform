@@ -16,9 +16,17 @@ export const Chip: React.FC<{
   tone?: ChipTone;
   title?: string;
   children: React.ReactNode;
-}> = ({ icon: Icon, tone = 'slate', title, children }) => (
-  <span title={title} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium whitespace-nowrap ${TONE_CLASS[tone]}`}>
-    {Icon && <Icon className="w-3 h-3 shrink-0" />}
+  /** 'sm' (default) keeps every existing page byte-for-byte the same; 'md' is
+   *  ThingsCare's slightly larger pass, opted into per-page, not a global bump. */
+  size?: 'sm' | 'md';
+}> = ({ icon: Icon, tone = 'slate', title, children, size = 'sm' }) => (
+  <span
+    title={title}
+    className={`inline-flex items-center gap-1 rounded-md border font-medium whitespace-nowrap ${TONE_CLASS[tone]} ${
+      size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-[11px]'
+    }`}
+  >
+    {Icon && <Icon className={size === 'md' ? 'w-3.5 h-3.5 shrink-0' : 'w-3 h-3 shrink-0'} />}
     {children}
   </span>
 );

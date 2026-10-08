@@ -38,9 +38,9 @@ export const ThingsCarePage: React.FC = () => {
     <div id="things-care-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Machine Wellbeing</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Machine Wellbeing</span>
           <span title="Health, risk and RUL are illustrative sample fixtures, not validated predictions.">
-            <Info className="w-3.5 h-3.5 text-sky-200" />
+            <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
         <h2 className="text-xl font-bold">ThingsCare: Health &amp; Prognostics</h2>
@@ -63,8 +63,8 @@ export const ThingsCarePage: React.FC = () => {
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Things overview</h3>
-          <span className="text-[12px] text-slate-400 dark:text-slate-500">{matching.length} Things</span>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Things overview</h3>
+          <span className="text-sm text-slate-400 dark:text-slate-500">{matching.length} Things</span>
         </div>
 
         {pageItems.length === 0 ? (
@@ -79,7 +79,7 @@ export const ThingsCarePage: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-between text-[12px] text-slate-500 dark:text-slate-400 mt-4">
+        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
           <span>Page {pageSafe} of {pageCount}</span>
           <div className="flex items-center gap-2">
             <button
@@ -87,14 +87,14 @@ export const ThingsCarePage: React.FC = () => {
               onClick={() => setPage((p) => p - 1)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40"
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              <ChevronLeft className="w-4 h-4" /> Prev
             </button>
             <button
               disabled={pageSafe >= pageCount}
               onClick={() => setPage((p) => p + 1)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40"
             >
-              Next <ChevronRight className="w-3.5 h-3.5" />
+              Next <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -107,8 +107,8 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'emerald' | 'ambe
   const toneClass = tone === 'emerald' ? 'text-emerald-600 dark:text-emerald-400' : tone === 'amber' ? 'text-amber-600 dark:text-amber-400' : tone === 'rose' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100';
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
-      <div className={`text-xl font-bold ${toneClass}`}>{value}</div>
-      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );
 };
@@ -127,24 +127,24 @@ const ThingsCareCard: React.FC<{ thing: FleetThing; status: ThingsCareStatus; on
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">
         <span title="Sample health index">
-          <RingGauge value={status.health} size={52} colorClass={style.gauge} />
+          <RingGauge value={status.health} size={60} colorClass={style.gauge} />
         </span>
         <div className="min-w-0 flex-1">
-          <span className={`inline-block px-1.5 py-0.5 text-[9px] font-semibold uppercase rounded ${style.badge}`}>{style.label}</span>
-          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate mt-0.5" title={thing.name}>{thing.name}</h4>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
+          <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded ${style.badge}`}>{style.label}</span>
+          <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={thing.name}>{thing.name}</h4>
+          <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Chip icon={ShieldAlert} tone={status.riskPct != null && status.riskPct >= 20 ? 'rose' : 'slate'} title="Illustrative sample failure risk">
+          <Chip icon={ShieldAlert} tone={status.riskPct != null && status.riskPct >= 20 ? 'rose' : 'slate'} title="Illustrative sample failure risk" size="md">
             {status.riskPct != null ? `${status.riskPct}%` : '—'}
           </Chip>
-          <Chip icon={Clock3} title="Illustrative remaining useful life (RUL)">{status.rulHours != null ? `${status.rulHours}h` : '—'}</Chip>
-          <Chip icon={Bell} tone={status.alertCount > 0 ? 'amber' : 'slate'} title="Active configured range alerts">{status.alertCount}</Chip>
+          <Chip icon={Clock3} title="Illustrative remaining useful life (RUL)" size="md">{status.rulHours != null ? `${status.rulHours}h` : '—'}</Chip>
+          <Chip icon={Bell} tone={status.alertCount > 0 ? 'amber' : 'slate'} title="Active configured range alerts" size="md">{status.alertCount}</Chip>
         </div>
-        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
-          Details <ChevronRight className="w-3 h-3" />
+        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </div>
     </button>

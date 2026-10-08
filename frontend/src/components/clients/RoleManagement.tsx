@@ -51,13 +51,13 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
   return (
     <div id="role-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           A role decides which pages its users can open, and what its users can do —
           two different questions, both bundled into every custom role.
         </p>
         <button
           onClick={() => { setEditingRole(null); setIsModalOpen(true); }}
-          className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Role</span>
@@ -65,8 +65,8 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -79,7 +79,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
                   {role.name}
-                  {role.isBuiltIn && <span title="One of the roles every account starts with"><Shield className="w-3.5 h-3.5 text-sky-500" /></span>}
+                  {role.isBuiltIn && <span title="One of the roles every account starts with"><Shield className="w-4 h-4 text-sky-500" /></span>}
                 </h4>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -87,7 +87,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
                     title="Edit name and pages"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => !role.isBuiltIn && holders === 0 && handleDelete(role.slug)}
@@ -95,7 +95,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title={role.isBuiltIn ? "One of the roles every account starts with — can't be deleted" : holders > 0 ? 'Move its holders to another role first' : 'Delete Role'}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -106,18 +106,18 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     allowedTabs; this keeps that stale grant from showing as if it
                     still meant something. */}
                 {role.allowedTabs.filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab)).length === 0 ? (
-                  <span className="text-[11px] text-slate-400 italic">No pages granted</span>
+                  <span className="text-xs text-slate-400 italic">No pages granted</span>
                 ) : (
                   role.allowedTabs
                     .filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab))
                     .map((tab) => (
-                      <span key={tab} className="px-2 py-0.5 text-[11px] bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
+                      <span key={tab} className="px-2 py-0.5 text-xs bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
                         {TAB_LABELS[tab as NavigationTab] ?? tab}
                       </span>
                     ))
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <p className="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
                 {holders} {holders === 1 ? 'user' : 'users'} assigned
               </p>
             </div>
@@ -248,7 +248,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
                 searchable={false}
                 cleanable={false}
               />
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 What this role can do (not just which pages) starts as a copy of the role you pick here.
               </p>
             </div>
@@ -266,8 +266,8 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-              <Info className="w-3.5 h-3.5 shrink-0" />
+            <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+              <Info className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}

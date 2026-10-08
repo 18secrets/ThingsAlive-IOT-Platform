@@ -3,6 +3,7 @@ import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, Alert
 import { Input } from 'rsuite';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
+import { copyToClipboard } from '../../lib/clipboard';
 import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
 
@@ -60,10 +61,12 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
   const handleCopyReissued = () => {
     if (!reissued) return;
-    navigator.clipboard?.writeText(reissued.invitationToken).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    copyToClipboard(reissued.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
   };
 
   const filteredClients = useMemo(() => {

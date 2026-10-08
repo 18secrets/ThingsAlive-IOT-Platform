@@ -84,7 +84,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
+        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
         <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
       </div>
 
@@ -99,7 +99,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
               onClick={() => { setCategory(c); setAddingNew(false); setEditingRecord(null); }}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg ${category === c ? 'bg-sky-600 text-white' : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
             >
-              <Icon className="w-3.5 h-3.5" /> {CATEGORY_LABELS[c]}
+              <Icon className="w-4 h-4" /> {CATEGORY_LABELS[c]}
             </button>
           );
         })}
@@ -108,31 +108,31 @@ export const ThingsShieldDetailPage: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
         <div className="flex items-start justify-between">
           <div className="min-w-0">
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{thing.name}</h3>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base truncate">{thing.name}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
           </div>
-          <span className="text-[11px] text-slate-300 dark:text-slate-600 cursor-not-allowed shrink-0" title="Not available in this demo">Sample history</span>
+          <span className="text-xs text-slate-300 dark:text-slate-600 cursor-not-allowed shrink-0" title="Not available in this demo">Sample history</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <Chip icon={FileCheck2}>{summary.evidenceRecords} records</Chip>
-          <Chip tone="emerald">{summary.currentPassed} current</Chip>
-          <Chip tone={summary.overdueFailed > 0 ? 'rose' : 'slate'}>{summary.overdueFailed} overdue</Chip>
-          <Chip tone={summary.openIncidents > 0 ? 'amber' : 'slate'}>{summary.openIncidents} incidents</Chip>
+          <Chip icon={FileCheck2} size="md">{summary.evidenceRecords} records</Chip>
+          <Chip tone="emerald" size="md">{summary.currentPassed} current</Chip>
+          <Chip tone={summary.overdueFailed > 0 ? 'rose' : 'slate'} size="md">{summary.overdueFailed} overdue</Chip>
+          <Chip tone={summary.openIncidents > 0 ? 'amber' : 'slate'} size="md">{summary.openIncidents} incidents</Chip>
         </div>
 
         <div className="flex items-center gap-2">
-          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{CATEGORY_LABELS[category]}</h4>
+          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{CATEGORY_LABELS[category]}</h4>
           <span title="Sample records do not establish certification, SIL or PL.">
-            <Chip tone={currentCount === categoryRecords.length ? 'emerald' : 'amber'}>{currentCount}/{categoryRecords.length} current</Chip>
+            <Chip tone={currentCount === categoryRecords.length ? 'emerald' : 'amber'} size="md">{currentCount}/{categoryRecords.length} current</Chip>
           </span>
         </div>
 
         {category === 'regulation' && (
           <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
-              <Chip>{REGULATION_APPLICABILITY.jurisdiction}</Chip>
-              <Chip tone="amber">{REGULATION_APPLICABILITY.status}</Chip>
-              <span title={REGULATION_APPLICABILITY.description}><Info className="w-3.5 h-3.5 text-slate-400" /></span>
+              <Chip size="md">{REGULATION_APPLICABILITY.jurisdiction}</Chip>
+              <Chip tone="amber" size="md">{REGULATION_APPLICABILITY.status}</Chip>
+              <span title={REGULATION_APPLICABILITY.description}><Info className="w-4 h-4 text-slate-400" /></span>
             </div>
             <button disabled className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shrink-0" title="Not available in this demo">
               Configure
@@ -147,7 +147,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
         </div>
 
         <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
-          <Plus className="w-3.5 h-3.5" /> Add evidence record
+          <Plus className="w-4 h-4" /> Add evidence record
         </button>
 
         <Modal

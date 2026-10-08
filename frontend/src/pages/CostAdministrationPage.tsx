@@ -66,8 +66,8 @@ export const CostAdministrationPage: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Cost administration</h3>
-            <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-1">
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">Cost administration</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               Equipment → Site → Client → Administration defaults. Rates are effective-dated; blank fields inherit a rate in the same currency. Records are saved in this browser.
             </p>
           </div>
@@ -95,19 +95,19 @@ export const CostAdministrationPage: React.FC = () => {
             cleanable={false}
           />
         </div>
-        <p className="text-[12px] text-slate-400 dark:text-slate-500">Access: {role}</p>
-        {notice && <p className="text-[13px] text-sky-700 dark:text-sky-400">{notice}</p>}
+        <p className="text-sm text-slate-400 dark:text-slate-500">Access: {role}</p>
+        {notice && <p className="text-sm text-sky-700 dark:text-sky-400">{notice}</p>}
 
         <div>
-          <h4 className="font-semibold text-slate-900 dark:text-white text-sm mb-2">Rate history</h4>
+          <h4 className="font-semibold text-slate-900 dark:text-white text-base mb-2">Rate history</h4>
           {!profiles.length ? (
-            <p className="text-[13px] text-slate-400">No costs configured. No default market prices are assumed. To apply costs to the sample week, use an effective date on or before 23 September 2026.</p>
+            <p className="text-sm text-slate-400">No costs configured. No default market prices are assumed. To apply costs to the sample week, use an effective date on or before 23 September 2026.</p>
           ) : (
             <div className="space-y-2">
               {profiles.map((p) => (
                 <div key={p.id} className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
-                  <strong className="text-sm text-slate-800 dark:text-slate-100">{p.scope} · {p.target} · {p.currency} · {p.effectiveFrom}</strong>
-                  <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1">
+                  <strong className="text-base text-slate-800 dark:text-slate-100">{p.scope} · {p.target} · {p.currency} · {p.effectiveFrom}</strong>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     {costFields.map((f) => `${COST_FIELD_LABELS[f as CostField]}: ${p[f as CostField] ?? 'Inherit'}`).join(' · ')}
                   </p>
                 </div>
@@ -163,12 +163,12 @@ const CostProfileForm: React.FC<{
   if (review) {
     return (
       <div className="space-y-4">
-        <h4 className="font-semibold text-slate-900 dark:text-white text-sm">Confirm cost version</h4>
-        <p className="text-[13px] text-slate-600 dark:text-slate-300">{form.scope} · {form.target} · {form.currency} · from {form.effectiveFrom}</p>
-        <ul className="text-[12px] text-slate-500 dark:text-slate-400 list-disc pl-4 space-y-0.5">
+        <h4 className="font-semibold text-slate-900 dark:text-white text-base">Confirm cost version</h4>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{form.scope} · {form.target} · {form.currency} · from {form.effectiveFrom}</p>
+        <ul className="text-sm text-slate-500 dark:text-slate-400 list-disc pl-4 space-y-0.5">
           {costFields.map((f) => <li key={f}>{COST_FIELD_LABELS[f as CostField]}: {form[f as CostField] ?? 'Inherit / unavailable'}</li>)}
         </ul>
-        {error && <p className="text-[13px] text-rose-600 dark:text-rose-400">{error}</p>}
+        {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <button type="button" onClick={() => setReview(false)} className="text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
           <div className="flex items-center gap-3">
@@ -186,7 +186,7 @@ const CostProfileForm: React.FC<{
 
   return (
     <div className="space-y-4">
-      {!editable && <p className="text-[13px] text-amber-600 dark:text-amber-400">The "{role}" demo role can&apos;t edit this scope.</p>}
+      {!editable && <p className="text-sm text-amber-600 dark:text-amber-400">The "{role}" demo role can&apos;t edit this scope.</p>}
       <fieldset disabled={!editable} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="block space-y-1">

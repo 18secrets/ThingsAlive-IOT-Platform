@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Clock3, AlertTriangle, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, AlertTriangle, Bell, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/fleet/FleetFilters';
 import { FLEET, FleetThing } from '../data/fleetMockData';
@@ -43,9 +43,9 @@ export const ProductionMonitoringPage: React.FC = () => {
     <div id="production-monitoring-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Production Wellbeing</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Production Wellbeing</span>
           <span title="Sample machine counts are not finished-line throughput. Projections assume the recent production pattern continues.">
-            <Info className="w-3.5 h-3.5 text-sky-200" />
+            <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
         <h2 className="text-xl font-bold">Production Monitoring &amp; Performance</h2>
@@ -68,8 +68,8 @@ export const ProductionMonitoringPage: React.FC = () => {
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Things overview</h3>
-          <span className="text-[12px] text-slate-400 dark:text-slate-500">{matching.length} Things</span>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Things overview</h3>
+          <span className="text-sm text-slate-400 dark:text-slate-500">{matching.length} Things</span>
         </div>
 
         {pageItems.length === 0 ? (
@@ -84,14 +84,14 @@ export const ProductionMonitoringPage: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-between text-[12px] text-slate-500 dark:text-slate-400 mt-4">
+        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
           <span>Page {pageSafe} of {pageCount}</span>
           <div className="flex items-center gap-2">
             <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              <ChevronLeft className="w-4 h-4" /> Prev
             </button>
             <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">
-              Next <ChevronRight className="w-3.5 h-3.5" />
+              Next <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -102,8 +102,8 @@ export const ProductionMonitoringPage: React.FC = () => {
 
 const KpiTile: React.FC<{ label: string; value: string; tone?: 'warn' }> = ({ label, value, tone }) => (
   <div className={`border rounded-xl p-4 shadow-xs ${tone === 'warn' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
-    <div className={`text-xl font-bold ${tone === 'warn' ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>{value}</div>
-    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
+    <div className={`text-2xl font-bold ${tone === 'warn' ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>{value}</div>
+    <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
   </div>
 );
 
@@ -120,20 +120,21 @@ const ProductionCard: React.FC<{ thing: FleetThing; summary: ProductionSummary; 
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">
         <span title="Illustrative OEE — uses the existing demonstration assumptions.">
-          <RingGauge value={summary.oeePercent} size={52} colorClass={style.gauge} />
+          <RingGauge value={summary.oeePercent} size={60} colorClass={style.gauge} />
         </span>
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
+          <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate" title={thing.name}>{thing.name}</h4>
+          <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{thing.id} · {thing.location}</p>
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-1.5">
-          <Chip icon={Clock3} title="Uptime hours">{summary.uptimeHours.toFixed(0)}h</Chip>
-          <Chip icon={AlertTriangle} tone={summary.downtimeHours > 0 ? 'amber' : 'slate'} title="Downtime hours">{summary.downtimeHours.toFixed(0)}h</Chip>
+          <Chip icon={Clock3} title="Uptime hours" size="md">{summary.uptimeHours.toFixed(0)}h</Chip>
+          <Chip icon={AlertTriangle} tone={summary.downtimeHours > 0 ? 'amber' : 'slate'} title="Downtime hours" size="md">{summary.downtimeHours.toFixed(0)}h</Chip>
+          <Chip icon={Bell} tone={summary.activeAlerts > 0 ? 'amber' : 'slate'} title="Active configured range alerts" size="md">{summary.activeAlerts}</Chip>
         </div>
-        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
-          Details <ChevronRight className="w-3 h-3" />
+        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </div>
     </button>

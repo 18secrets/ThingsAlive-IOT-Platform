@@ -283,13 +283,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               key={tab.id}
               id={`admin-subtab-${tab.id}`}
               onClick={() => onChangeSubTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`px-4 py-2 text-base font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                 isActive
                   ? 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 shadow-xs font-semibold'
                   : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
+              <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
               <span>{tab.label}</span>
             </button>
           );

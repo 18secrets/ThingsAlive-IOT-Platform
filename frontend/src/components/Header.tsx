@@ -19,7 +19,6 @@ interface HeaderProps {
   onBack?: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  aiIndicator?: boolean;
   onLogout?: () => void;
 }
 
@@ -29,7 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
   onBack,
   isDarkMode,
   onToggleDarkMode,
-  aiIndicator,
   onLogout,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -67,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-slate-400">/</span>
             </>
           )}
-          <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
+          <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
             {title}
           </h1>
         </div>
@@ -131,16 +129,6 @@ export const Header: React.FC<HeaderProps> = ({
             <Moon className="w-3.5 h-3.5" />
           </button>
         </div>
-
-        {/* AI Assistant Indicator (shown on AI-driven pages) */}
-        {aiIndicator && (
-          <div
-            className="p-1.5 rounded-full bg-sky-600 text-white shadow-xs"
-            title="AI Assistant Active"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-        )}
 
         {/* Language Selector matching "EN ⌵" in screenshot */}
         <div className="relative">

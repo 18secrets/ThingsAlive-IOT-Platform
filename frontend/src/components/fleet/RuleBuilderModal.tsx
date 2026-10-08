@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckPicker, Input, InputNumber, SelectPicker } from 'rsuite';
+import { Checkbox, CheckPicker, Input, InputNumber, SelectPicker } from 'rsuite';
 import { Modal } from '../common/Modal';
 import { ConfiguredRule, RuleOutcome, RuleSeverity, MOCK_RULES, upsertRule } from '../../data/configuredRulesMockData';
 import { FLEET, SENSOR_SPECS, evaluateRuleForThing } from '../../data/fleetMockData';
@@ -100,11 +100,11 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
     return (
       <Modal isOpen={isOpen} onClose={onClose} title={title} subtitle="Simulate & Confirm" maxWidth="max-w-2xl">
         <div className="space-y-4">
-          <p className="text-[12px] text-slate-500 dark:text-slate-400">Select affected machines. Test values affect this preview only; active rules and readings remain unchanged.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Select machines. Test values affect this preview only.</p>
 
           <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
             <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{draft.name}</h4>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {draft.sensorKey} {draft.operator} {draft.threshold} {sensor.unit} · {draft.outcomes.join(', ')} · {draft.enabled ? 'Enabled' : 'Disabled'}
             </p>
           </div>
@@ -116,15 +116,13 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
               const before = MOCK_RULES.find((r) => r.equipmentId === t.id && r.sensorKey === draft.sensorKey && r.id !== existingRule?.id);
               const result = evaluateRuleForThing(t, draft, inputs[t.id]);
               return (
-                <div key={t.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-2">
-                  <label className="flex items-center gap-2 text-[13px] text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => { setSelected({ ...selected, [t.id]: e.target.checked }); setReviewedFingerprint(''); }}
-                    />
-                    {t.name} · {t.id}
-                  </label>
+                <div key={t.id} className={`border rounded-lg p-3 space-y-2 transition-colors ${checked ? 'border-sky-300 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20' : 'border-slate-100 dark:border-slate-800'}`}>
+                  <Checkbox
+                    checked={checked}
+                    onChange={(_, isChecked) => { setSelected({ ...selected, [t.id]: isChecked }); setReviewedFingerprint(''); }}
+                  >
+                    <span className="text-sm text-slate-700 dark:text-slate-200">{t.name} · {t.id}</span>
+                  </Checkbox>
                   {checked && (
                     <>
                       <label className="block space-y-1 max-w-xs">
@@ -135,12 +133,12 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
                           className="w-full"
                         />
                       </label>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                        Before: {before ? `${before.operator} ${before.threshold} ${before.unit} · revision ${before.revision}` : 'Not assigned'} → Proposed: {draft.operator} {draft.threshold} {sensor.unit}
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        Before: {before ? `${before.operator} ${before.threshold} ${before.unit} · rev ${before.revision}` : 'Not assigned'} → Proposed: {draft.operator} {draft.threshold} {sensor.unit}
                       </p>
                       {reviewedFingerprint === fingerprint && (
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Evaluated · KPI {result.value} {sensor.unit} · Alert {result.triggered ? 'would trigger' : 'would not trigger'} · Prediction {result.predicted} {sensor.unit}
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          KPI {result.value} {sensor.unit} · Alert {result.triggered ? 'triggers' : 'no trigger'} · Predicted {result.predicted} {sensor.unit}
                         </p>
                       )}
                     </>
@@ -150,17 +148,17 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
             })}
           </div>
 
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <button onClick={() => setStep('form')} className="text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">Back</button>
-            <div className="flex items-center gap-3">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <button onClick={() => setStep('form')} className="text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 self-start">Back</button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                 Cancel
               </button>
               <button onClick={() => setReviewedFingerprint(fingerprint)} disabled={!selectedIds.length} className="px-4 py-2 text-sm font-semibold rounded-lg border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 disabled:opacity-40 disabled:cursor-not-allowed">
-                Run simulation &amp; review impact
+                Run simulation
               </button>
               <button onClick={confirm} disabled={!selectedIds.length || reviewedFingerprint !== fingerprint} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                Confirm selected machines
+                Confirm &amp; save
               </button>
             </div>
           </div>

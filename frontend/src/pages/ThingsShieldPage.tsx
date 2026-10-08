@@ -49,9 +49,9 @@ export const ThingsShieldPage: React.FC = () => {
     <div id="things-shield-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
           <span title="Sample records demonstrate review workflows; they are not real inspection certificates or regulatory findings.">
-            <Info className="w-3.5 h-3.5 text-sky-200" />
+            <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
         <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
@@ -74,8 +74,8 @@ export const ThingsShieldPage: React.FC = () => {
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Things overview</h3>
-          <span className="text-[12px] text-slate-400 dark:text-slate-500">{matching.length} Things</span>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Things overview</h3>
+          <span className="text-sm text-slate-400 dark:text-slate-500">{matching.length} Things</span>
         </div>
 
         {pageItems.length === 0 ? (
@@ -90,14 +90,14 @@ export const ThingsShieldPage: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-between text-[12px] text-slate-500 dark:text-slate-400 mt-4">
+        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
           <span>Page {pageSafe} of {pageCount}</span>
           <div className="flex items-center gap-2">
             <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              <ChevronLeft className="w-4 h-4" /> Prev
             </button>
             <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">
-              Next <ChevronRight className="w-3.5 h-3.5" />
+              Next <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -112,8 +112,8 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'good' | 'bad' | 
   const toneClass = tone === 'good' ? 'text-emerald-600 dark:text-emerald-400' : tone === 'bad' ? 'text-rose-600 dark:text-rose-400' : tone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100';
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
-      <div className={`text-xl font-bold ${toneClass}`}>{value}</div>
-      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );
 };
@@ -128,21 +128,21 @@ const ShieldCard: React.FC<{ thing: FleetThing; summary: ShieldSummary; onOpen: 
     <button onClick={onOpen} className={`text-left w-full border rounded-xl p-4 shadow-xs space-y-2.5 hover:shadow-md transition-shadow cursor-pointer group ${style}`}>
       <div className="flex items-center gap-2">
         <span title={alert ? 'Needs attention — overdue, failed or an open incident' : 'No overdue or failed records'}>
-          {alert ? <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" /> : <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />}
+          {alert ? <ShieldAlert className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0" /> : <ShieldCheck className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0" />}
         </span>
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate" title={thing.name}>{thing.name}</h4>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
+          <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate" title={thing.name}>{thing.name}</h4>
+          <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{thing.id} · {thing.location}</p>
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Chip icon={FileCheck2} title="Evidence records">{summary.evidenceRecords}</Chip>
-          <Chip icon={ShieldAlert} tone={summary.overdueFailed > 0 ? 'rose' : 'slate'} title="Overdue or failed records">{summary.overdueFailed}</Chip>
-          <Chip icon={Siren} tone={summary.openIncidents > 0 ? 'amber' : 'slate'} title="Open incidents">{summary.openIncidents}</Chip>
+          <Chip icon={FileCheck2} title="Evidence records" size="md">{summary.evidenceRecords}</Chip>
+          <Chip icon={ShieldAlert} tone={summary.overdueFailed > 0 ? 'rose' : 'slate'} title="Overdue or failed records" size="md">{summary.overdueFailed}</Chip>
+          <Chip icon={Siren} tone={summary.openIncidents > 0 ? 'amber' : 'slate'} title="Open incidents" size="md">{summary.openIncidents}</Chip>
         </div>
-        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
-          Details <ChevronRight className="w-3 h-3" />
+        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
+          Details <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </div>
     </button>

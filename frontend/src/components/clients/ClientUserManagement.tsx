@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { ApiError, InviteUserInput, InviteUserResult, TenantRole, TenantUser } from '../../lib/api';
+import { copyToClipboard } from '../../lib/clipboard';
 
 interface ClientUserManagementProps {
   users: TenantUser[];
@@ -39,6 +40,15 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
     return !!(role?.capabilities.includes('user.manage') && role?.capabilities.includes('role.manage'));
   };
 
+  // Mirrors the backend's own invariant exactly (ck_app_user_ceo_manager_retained,
+  // SuperAdminRetention migration) — keyed on the literal 'ceo-manager' slug, not on
+  // a capability combination a custom role could also happen to have. Reassigning
+  // this account's only ceo-manager elsewhere would leave nobody who can manage
+  // users or roles here, with no way back short of a direct database fix — which is
+  // exactly what happened to two live accounts before this guard existed.
+  const ceoManagerCount = users.filter((u) => u.roleSlug === 'ceo-manager').length;
+  const isLastCeoManager = (user: TenantUser) => user.roleSlug === 'ceo-manager' && ceoManagerCount <= 1;
+
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return users;
@@ -72,7 +82,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Invite User</span>
@@ -80,15 +90,15 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
       </div>
 
       {(error || actionError) && (
-        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error || actionError}</span>
         </div>
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
               <tr>
                 <th className="py-3 px-4">Name</th>
@@ -101,26 +111,29 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredUsers.map((u) => {
                 const superAdmin = isSuperAdminUser(u);
+                const lastCeoManager = isLastCeoManager(u);
                 const busy = busyId === u.id;
                 return (
                   <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
                       <span className="flex items-center gap-1.5">
                         {u.fullName}
-                        {superAdmin && <span title="Super Admin"><Crown className="w-3.5 h-3.5 text-amber-500" /></span>}
+                        {superAdmin && <span title="Super Admin"><Crown className="w-4 h-4 text-amber-500" /></span>}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">{u.email}</td>
                     <td className="py-3 px-4">
-                      <SelectPicker
-                        data={roles.map((r) => ({ label: r.name, value: r.slug }))}
-                        value={u.roleSlug}
-                        disabled={busy}
-                        onChange={(value) => runAction(u.id, () => onSetUserRole(u.id, value ?? u.roleSlug))}
-                        searchable={false}
-                        cleanable={false}
-                        size="sm"
-                      />
+                      <span title={lastCeoManager ? "This account's only ceo-manager — move someone else into this role first" : undefined}>
+                        <SelectPicker
+                          data={roles.map((r) => ({ label: r.name, value: r.slug }))}
+                          value={u.roleSlug}
+                          disabled={busy || lastCeoManager}
+                          onChange={(value) => runAction(u.id, () => onSetUserRole(u.id, value ?? u.roleSlug))}
+                          searchable={false}
+                          cleanable={false}
+                          size="sm"
+                        />
+                      </span>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
@@ -136,7 +149,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-30 transition-colors cursor-pointer"
                             title="Reinstate"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
+                            <RotateCcw className="w-4 h-4" />
                           </button>
                         ) : (
                           <button
@@ -148,7 +161,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                             title={superAdmin ? "The Super Admin can't be suspended" : 'Suspend'}
                           >
-                            <Ban className="w-3.5 h-3.5" />
+                            <Ban className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -234,10 +247,12 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
 
   const handleCopyToken = () => {
     if (!invited?.invitationToken) return;
-    navigator.clipboard?.writeText(invited.invitationToken).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    copyToClipboard(invited.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
   };
 
   return (
@@ -266,7 +281,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
                 </button>
               </div>
               {invited.invitationExpiresAt && (
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   Expires {new Date(invited.invitationExpiresAt).toLocaleString()}. There is no password to hand
                   over — they set their own via the accept-invitation link with this token.
                 </p>
@@ -300,7 +315,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
                 onChange={(value) => setEmail(value)}
                 placeholder="e.g. priya.sharma@example.com"
               />
-              <p className="text-[11px] text-slate-400 mt-1">This is how they'll sign in — there is no separate username.</p>
+              <p className="text-xs text-slate-400 mt-1">This is how they'll sign in — there is no separate username.</p>
             </div>
 
             <div>
@@ -327,7 +342,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
             </div>
 
             {error && (
-              <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{error}</div>
+              <div className="text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{error}</div>
             )}
 
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">

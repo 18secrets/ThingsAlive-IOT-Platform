@@ -91,7 +91,7 @@ export const FleetFilters: React.FC<{
             data={[{ label: 'All matching Things', value: 'all' }, ...visible.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))]}
             value={selectedId && visible.some((t) => t.id === selectedId) ? selectedId : 'all'}
             onChange={(value) => onSelectId(value ?? 'all')}
-            searchable={false}
+            searchable
             cleanable={false}
             className="min-w-[200px]"
           />

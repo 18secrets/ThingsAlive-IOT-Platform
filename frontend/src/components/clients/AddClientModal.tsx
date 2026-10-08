@@ -3,6 +3,7 @@ import { X, Check, Copy, CheckCheck } from 'lucide-react';
 import { Input } from 'rsuite';
 import { ApiError, Account, CreateAccountResult } from '../../lib/api';
 import { ClientAccount } from '../../types';
+import { copyToClipboard } from '../../lib/clipboard';
 
 interface AddClientModalProps {
   isOpen: boolean;
@@ -97,10 +98,12 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
 
   const handleCopyToken = () => {
     if (!created) return;
-    navigator.clipboard?.writeText(created.invitationToken).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    copyToClipboard(created.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
   };
 
   return (

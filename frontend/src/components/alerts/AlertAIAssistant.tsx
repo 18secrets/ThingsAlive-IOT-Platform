@@ -231,33 +231,21 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
 
   return (
     <div id="alert-ai-assistant-view" className="space-y-3">
-      {/* Header row */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">
-            Describe your alarm in natural language
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust,
-            industrial-grade monitoring workflows.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleCreateCustom}
-          disabled={!canAct}
-          className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Create Custom
-        </button>
+      {/* Hero — matches the Alerts page's own header styling */}
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
+        <h2 className="text-xl font-bold">Describe your alarm in natural language</h2>
+        <p className="text-sm text-sky-100 max-w-2xl">
+          ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust,
+          industrial-grade monitoring workflows.
+        </p>
       </div>
 
       {/* Equipment — required before any draft can be generated; this alert
-          always applies to exactly one Thing. */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 max-w-sm">
-        <div className="block space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Equipment</span>
+          always applies to exactly one Thing. Kept in the header area, right
+          under the hero, rather than buried further down the page. */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1 max-w-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">Equipment</span>
           <SelectPicker
             data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
             value={equipmentId}
@@ -269,8 +257,17 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             size="sm"
           />
         </div>
-        {!canAct && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">Select a Thing before describing or generating an alert.</p>}
+        <button
+          type="button"
+          onClick={handleCreateCustom}
+          disabled={!canAct}
+          className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          Create Custom
+        </button>
       </div>
+      {!canAct && <p className="text-xs text-amber-600 dark:text-amber-400">Select a Thing before describing or generating an alert.</p>}
 
       {/* AI Prompt + Right Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">

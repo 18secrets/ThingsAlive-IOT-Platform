@@ -154,17 +154,18 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
           onBack={header.onBack}
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode((v) => !v)}
-          aiIndicator={header.aiIndicator}
           onLogout={signOut}
         />
 
-        {/* pb-28/32 instead of the plain p-6/p-8 bottom — the floating AI
+        {/* pb-28/32 instead of the plain p-3 bottom — the floating AI
             widget (AskAIWidget.tsx, `fixed bottom-5 right-6`) sits on top of
             whatever is at the bottom-right of the viewport regardless of
             scroll, which is exactly where a page's pagination Next/Prev
             controls land. The extra clearance keeps page content from ever
-            scrolling in underneath it. */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-3 pb-28 md:p-3 md:pb-32 bg-[#F4F7FB] dark:bg-slate-950">
+            scrolling in underneath it. Skipped on pages where the widget
+            itself is hidden (aiIndicator lit — AI Onboarding's chat, Alert
+            Agent) since there's nothing there to clear. */}
+        <main ref={mainRef} className={`flex-1 overflow-y-auto p-3 bg-[#F4F7FB] dark:bg-slate-950 ${header.aiIndicator ? '' : 'pb-15 md:pb-20'}`}>
           <div className="max-w-7xl mx-auto space-y-3">
             <Outlet />
           </div>

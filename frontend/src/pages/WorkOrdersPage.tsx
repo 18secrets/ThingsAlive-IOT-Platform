@@ -88,14 +88,14 @@ export const WorkOrdersPage: React.FC = () => {
                     searchable={false}
                     cleanable={false}
                     size="sm"
-                    className={`text-[12px] font-medium rounded-lg border ${STATUS_STYLE[o.status]}`}
+                    className={`text-sm font-medium rounded-lg border ${STATUS_STYLE[o.status]}`}
                   />
                 </div>
-                <h4 className="font-semibold text-slate-900 dark:text-white text-sm">{o.title}</h4>
-                <p className="text-[12px] text-slate-500 dark:text-slate-400">{thing?.name ?? o.equipmentName}</p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">{o.channel} · {o.contact || 'Contact not specified'}</p>
-                {o.notes && <p className="text-[12px] text-slate-500 dark:text-slate-400">{o.notes}</p>}
-                <small className="block text-[11px] text-slate-400 dark:text-slate-500 pt-1">{new Date(o.createdAt).toLocaleString()} · Not dispatched</small>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{thing?.name ?? o.equipmentName}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{o.channel} · {o.contact || 'Contact not specified'}</p>
+                {o.notes && <p className="text-sm text-slate-500 dark:text-slate-400">{o.notes}</p>}
+                <small className="block text-xs text-slate-400 dark:text-slate-500 pt-1">{new Date(o.createdAt).toLocaleString()} · Not dispatched</small>
               </div>
             );
           })}

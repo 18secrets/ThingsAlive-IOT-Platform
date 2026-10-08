@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Copy, CheckCheck } from 'lucide-react';
 import { Input } from 'rsuite';
 import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
+import { copyToClipboard } from '../../lib/clipboard';
 
 interface InviteStaffModalProps {
   isOpen: boolean;
@@ -58,10 +59,12 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
   const handleCopyToken = () => {
     if (!invited) return;
-    navigator.clipboard?.writeText(invited.invitationToken).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    copyToClipboard(invited.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
   };
 
   return (

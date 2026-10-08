@@ -116,23 +116,29 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) 
     <div id="workflow-editor-view" className="space-y-4">
       {/* Toolbar */}
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Input
-            value={workflowName}
-            onChange={(value) => setWorkflowName(value)}
-            size="sm"
-            className="min-w-[260px]"
-          />
-          <SelectPicker
-            data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
-            value={equipmentId}
-            onChange={(value) => setEquipmentId(value ?? '')}
-            placeholder="Select equipment…"
-            searchable={false}
-            cleanable={false}
-            size="sm"
-            className="min-w-[220px]"
-          />
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
+          <label className="block space-y-1 flex-1 min-w-[200px]">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Workflow name</span>
+            <Input
+              value={workflowName}
+              onChange={(value) => setWorkflowName(value)}
+              size="sm"
+              className="w-full"
+            />
+          </label>
+          <div className="block space-y-1 flex-1 min-w-[200px]">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment</span>
+            <SelectPicker
+              data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
+              value={equipmentId}
+              onChange={(value) => setEquipmentId(value ?? '')}
+              placeholder="Select equipment…"
+              searchable={false}
+              cleanable={false}
+              size="sm"
+              block
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -178,7 +184,7 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) 
               onChange={(value) => setPaletteSearch(value)}
               placeholder="Search Nodes..."
               size="sm"
-              className="pl-7"
+              className="pl-7!"
             />
           </div>
 
