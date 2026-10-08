@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Pencil, TrendingUp, X, Check, ShieldCheck } from 'lucide-react';
+import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { Sensor } from '../../../lib/api';
 import { PredictionMethod, PredictionTier, TemplatePredictiveRule } from '../../../types';
 
@@ -30,6 +31,10 @@ const METHOD_LABEL: Record<PredictionMethod, string> = {
   'rule-based': 'Rule-based',
   unsupervised: 'Unsupervised model',
 };
+const METHOD_OPTIONS: { label: string; value: PredictionMethod }[] = [
+  { label: 'Rule-based', value: 'rule-based' },
+  { label: 'Unsupervised model', value: 'unsupervised' },
+];
 
 const RuleCard: React.FC<{ r: TemplatePredictiveRule; onEdit?: () => void; onDelete?: () => void }> = ({ r, onEdit, onDelete }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-2.5">
@@ -212,28 +217,30 @@ const AddPredictiveRuleModal: React.FC<AddPredictiveRuleModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Rule Name <span className="text-rose-500">*</span></label>
-            <input
-              type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            <Input
+              required autoFocus value={name} onChange={(value) => setName(value)}
               placeholder="e.g. Fuel Consumption Anomaly"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Parameter</label>
-              <select
-                value={parameter} onChange={(e) => setParameter(e.target.value)}
-                className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 cursor-pointer"
-              >
-                {availableParameters.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <SelectPicker
+                data={availableParameters.map((p) => ({ label: p, value: p }))}
+                value={parameter}
+                onChange={(value) => setParameter(value ?? '')}
+                block
+                size="sm"
+                searchable={false}
+                cleanable={false}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Rolling window (days)</label>
-              <input
-                type="number" min={1} required value={windowDays} onChange={(e) => setWindowDays(e.target.value)}
-                className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100"
+              <InputNumber
+                min={1} required value={windowDays} onChange={(value) => setWindowDays(String(value))}
+                size="sm"
               />
             </div>
           </div>
@@ -256,21 +263,23 @@ const AddPredictiveRuleModal: React.FC<AddPredictiveRuleModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Method</label>
-            <select
-              value={method} onChange={(e) => setMethod(e.target.value as PredictionMethod)}
-              className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 cursor-pointer"
-            >
-              <option value="rule-based">Rule-based</option>
-              <option value="unsupervised">Unsupervised model</option>
-            </select>
+            <SelectPicker
+              data={METHOD_OPTIONS}
+              value={method}
+              onChange={(value) => setMethod((value ?? 'rule-based') as PredictionMethod)}
+              block
+              size="sm"
+              searchable={false}
+              cleanable={false}
+            />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Caption shown to the client</label>
-            <textarea
-              rows={2} value={caption} onChange={(e) => setCaption(e.target.value)}
+            <Input
+              as="textarea"
+              rows={2} value={caption} onChange={(value) => setCaption(value)}
               placeholder="e.g. vs 7-day rolling baseline"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 resize-none"
             />
           </div>
 

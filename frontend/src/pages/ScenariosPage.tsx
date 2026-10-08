@@ -12,7 +12,7 @@ export const ScenariosPage: React.FC = () => {
   const [builderRule, setBuilderRule] = useState<ConfiguredRule | 'new' | null>(null);
 
   return (
-    <div id="scenarios-view" className="space-y-6">
+    <div id="scenarios-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-xl font-bold">Things Scenarios</h2>
         <p className="text-sm text-sky-100">From machine signals to your next best action.</p>

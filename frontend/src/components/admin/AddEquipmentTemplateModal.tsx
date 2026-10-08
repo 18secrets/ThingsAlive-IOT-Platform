@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { Input, InputNumber } from 'rsuite';
 import { ApiError, EquipmentTemplate, EquipmentTemplateInput } from '../../lib/api';
 
 interface AddEquipmentTemplateModalProps {
@@ -102,14 +103,13 @@ export const AddEquipmentTemplateModal: React.FC<AddEquipmentTemplateModalProps>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 autoFocus
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(value) => setName(value)}
                 placeholder="e.g. Diesel Generator 500kVA"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
 
@@ -117,12 +117,11 @@ export const AddEquipmentTemplateModal: React.FC<AddEquipmentTemplateModalProps>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Category <span className="text-slate-400 font-normal">(matched during onboarding)</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(value) => setCategory(value)}
                 placeholder="e.g. Diesel Generator"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
           </div>
@@ -132,24 +131,22 @@ export const AddEquipmentTemplateModal: React.FC<AddEquipmentTemplateModalProps>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Manufacturer
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={manufacturer}
-                onChange={(e) => setManufacturer(e.target.value)}
+                onChange={(value) => setManufacturer(value)}
                 placeholder="e.g. Cummins"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Engine Type
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={engineType}
-                onChange={(e) => setEngineType(e.target.value)}
+                onChange={(value) => setEngineType(value)}
                 placeholder="e.g. Diesel, 4-stroke"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
           </div>
@@ -159,24 +156,24 @@ export const AddEquipmentTemplateModal: React.FC<AddEquipmentTemplateModalProps>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Fuel Tank Capacity <span className="text-slate-400 font-normal">(liters)</span>
               </label>
-              <input
-                type="number"
+              <InputNumber
+                size="sm"
                 value={fuelTankCapacityLiters}
-                onChange={(e) => setFuelTankCapacityLiters(e.target.value)}
+                onChange={(value) => setFuelTankCapacityLiters(String(value))}
                 placeholder="e.g. 500"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
+                className="w-full"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Service Interval <span className="text-slate-400 font-normal">(hours)</span>
               </label>
-              <input
-                type="number"
+              <InputNumber
+                size="sm"
                 value={serviceIntervalHours}
-                onChange={(e) => setServiceIntervalHours(e.target.value)}
+                onChange={(value) => setServiceIntervalHours(String(value))}
                 placeholder="e.g. 250"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
+                className="w-full"
               />
             </div>
           </div>
@@ -185,12 +182,13 @@ export const AddEquipmentTemplateModal: React.FC<AddEquipmentTemplateModalProps>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Description
             </label>
-            <textarea
+            <Input
+              as="textarea"
+              size="sm"
               rows={2}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(value) => setDescription(value)}
               placeholder="What this kind of equipment typically is..."
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all resize-none leading-relaxed"
             />
           </div>
 

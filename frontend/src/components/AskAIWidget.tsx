@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2 } from 'lucide-react';
+import { Input } from 'rsuite';
 
 interface AskAIWidgetProps {
   onOpenHelpModal?: () => void;
@@ -236,12 +237,12 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
             onSubmit={handleSend}
             className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 shrink-0"
           >
-            <input
-              type="text"
+            <Input
               value={inputQuery}
-              onChange={(e) => setInputQuery(e.target.value)}
+              onChange={(value) => setInputQuery(value)}
               placeholder="Ask about telematics, sensors, errors..."
-              className="flex-1 px-4 py-2.5 text-xs bg-slate-100 dark:bg-slate-800 border border-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-full focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition-colors"
+              size="sm"
+              className="flex-1"
             />
             <button
               type="submit"

@@ -181,15 +181,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   };
 
   return (
-    <div className="space-y-6" data-purpose="catalog-import">
-      <button
-        onClick={() => navigate('/admin/category')}
-        className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Equipment Classes</span>
-      </button>
-
+    <div className="space-y-3" data-purpose="catalog-import">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Equipment Library Import</h2>

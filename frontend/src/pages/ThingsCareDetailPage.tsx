@@ -50,7 +50,7 @@ export const ThingsCareDetailPage: React.FC = () => {
   const gaugeColor = state === 'healthy' ? 'text-emerald-500 dark:text-emerald-400' : state === 'at-risk' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">Machine Wellbeing</span>
         <h2 className="text-xl font-bold">ThingsCare: Health &amp; Prognostics</h2>

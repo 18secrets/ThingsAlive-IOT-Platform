@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Library, Cog, Fuel, Radio, Bell, Sigma, ArrowRight, AlertCircle } from 'lucide-react';
+import { Input } from 'rsuite';
 import { EquipmentTemplate, EquipmentTemplateInput } from '../../lib/api';
 import { EquipmentTemplateView } from './EquipmentTemplateView';
 
@@ -51,12 +52,12 @@ export const ClientEquipmentTemplateView: React.FC<ClientEquipmentTemplateViewPr
 
         <div className="relative max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search the master library..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            size="sm"
+            className="w-full pl-9!"
           />
         </div>
 

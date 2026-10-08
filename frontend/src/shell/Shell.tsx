@@ -57,6 +57,7 @@ function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeade
 }
 
 const THEME_KEY = 'ta_theme';
+const SIDEBAR_COLLAPSED_KEY = 'ta_sidebar_collapsed';
 
 // Falls back to the OS preference on a first visit, then whatever the
 // person last chose via the header toggle.
@@ -71,11 +72,22 @@ function initialDarkMode(): boolean {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 }
 
+// Expanded by default — collapsing is a deliberate choice the sidebar's own
+// logo click remembers across sessions, same as the theme toggle.
+function initialSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const { authUser, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(initialDarkMode);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(initialSidebarCollapsed);
   const override = usePageHeaderValue();
   const mainRef = useRef<HTMLElement>(null);
 
@@ -87,6 +99,14 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
       // Nothing to do if storage is unavailable — the toggle still works for this session.
     }
   }, [isDarkMode]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(isSidebarCollapsed));
+    } catch {
+      // Nothing to do if storage is unavailable — the toggle still works for this session.
+    }
+  }, [isSidebarCollapsed]);
 
   // <Outlet/> only swaps the page content, not the scrollable <main> itself,
   // so without this a new page inherits whatever scroll position the last
@@ -122,6 +142,8 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
         allowedTabs={authUser.allowedTabs}
         isSuperAdmin={authUser.isSuperAdmin}
         onSelectTab={goToTab}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#F4F7FB] dark:bg-slate-950">
@@ -142,8 +164,8 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
             scroll, which is exactly where a page's pagination Next/Prev
             controls land. The extra clearance keeps page content from ever
             scrolling in underneath it. */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 pb-28 md:p-8 md:pb-32 bg-[#F4F7FB] dark:bg-slate-950">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-3 pb-28 md:p-3 md:pb-32 bg-[#F4F7FB] dark:bg-slate-950">
+          <div className="max-w-7xl mx-auto space-y-3">
             <Outlet />
           </div>
         </main>

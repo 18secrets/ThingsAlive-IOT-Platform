@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { Input } from 'rsuite';
 import { IndustryTypeItem } from '../../types';
 
 interface AddIndustryTypeModalProps {
@@ -72,14 +73,13 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Industry Type Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 autoFocus
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(value) => setName(value)}
                 placeholder="e.g. Power & Energy"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
 
@@ -87,13 +87,12 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Code <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(value) => setCode(value)}
                 placeholder="e.g. PWR"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono uppercase"
               />
             </div>
           </div>

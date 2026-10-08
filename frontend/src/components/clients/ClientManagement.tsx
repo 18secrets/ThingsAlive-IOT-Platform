@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, KeyRound, Copy, CheckCheck, X } from 'lucide-react';
+import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers } from 'lucide-react';
+import { Input } from 'rsuite';
 import { ClientAccount } from '../../types';
-import { Account, ApiError, CreateAccountResult, ResendInvitationResult } from '../../lib/api';
+import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { AddClientModal } from './AddClientModal';
+import { ClientEntitlementsModal } from './ClientEntitlementsModal';
 
 interface ClientManagementProps {
   clients: ClientAccount[];
@@ -16,15 +18,12 @@ interface ClientManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleStatus: (id: string) => void;
+  equipmentClasses: EquipmentClass[];
+  entitlements: Entitlement[];
+  entitlementsError?: string;
+  onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
+  onRevokeEntitlement: (id: string) => Promise<Entitlement>;
 }
-
-// Viewing a client's own users has no backend route yet — a platform token
-// cannot read inside a tenant today. Kept as a real, clickable button rather
-// than removed, so the gap stays visible in the design instead of
-// disappearing quietly.
-const MANAGE_ACCESS_NOT_INTEGRATED =
-  "Viewing a client's own users needs a backend route that does not exist yet — "
-  + 'a platform token cannot read inside a tenant today.';
 
 export const ClientManagement: React.FC<ClientManagementProps> = ({
   clients,
@@ -33,6 +32,11 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleStatus,
+  equipmentClasses,
+  entitlements,
+  entitlementsError,
+  onGrantEntitlement,
+  onRevokeEntitlement,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,19 +44,9 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [entitlementsClient, setEntitlementsClient] = useState<ClientAccount | null>(null);
 
   const handleResetPasswordClick = async (client: ClientAccount) => {
-    if (!client.mustChangePassword) {
-      // The person already has a password — resending an invitation would not
-      // help them, and there is no admin-forced reset built yet (only
-      // self-service POST /auth/forgot-password, which needs their own action).
-      window.alert(
-        `${client.contactPersonName ?? 'This person'} already has a password set. `
-        + 'An admin-forced reset needs a backend route that does not exist yet — '
-        + 'they can use "forgot password" themselves instead.',
-      );
-      return;
-    }
     setResendingId(client.id);
     try {
       const result = await onResendInvitation(client.id);
@@ -83,18 +77,18 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   }, [clients, searchTerm]);
 
   return (
-    <div id="client-management-view" className="space-y-6">
+    <div id="client-management-view" className="space-y-3">
 
       {/* Search / Add Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Client Name or Account ID..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            className="pl-9!"
+            size="sm"
           />
         </div>
 
@@ -115,6 +109,13 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {entitlementsError && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{entitlementsError}</span>
         </div>
       )}
 
@@ -146,20 +147,22 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
 
-                  <button
-                    onClick={() => handleResetPasswordClick(c)}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={c.mustChangePassword ? 'Resend invitation' : 'Reset password (not integrated yet)'}
-                  >
-                    <RotateCw className={`w-3.5 h-3.5 ${resendingId === c.id ? 'animate-spin' : ''}`} />
-                  </button>
+                  {c.mustChangePassword && (
+                    <button
+                      onClick={() => handleResetPasswordClick(c)}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                      title="Resend invitation"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${resendingId === c.id ? 'animate-spin' : ''}`} />
+                    </button>
+                  )}
 
                   <button
-                    onClick={() => window.alert(MANAGE_ACCESS_NOT_INTEGRATED)}
+                    onClick={() => setEntitlementsClient(c)}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Manage access (not integrated yet)"
+                    title="Granted classes"
                   >
-                    <KeyRound className="w-3.5 h-3.5" />
+                    <Layers className="w-3.5 h-3.5" />
                   </button>
 
                   <button
@@ -242,6 +245,16 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         existingClient={editingClient}
       />
 
+      <ClientEntitlementsModal
+        isOpen={!!entitlementsClient}
+        onClose={() => setEntitlementsClient(null)}
+        client={entitlementsClient}
+        equipmentClasses={equipmentClasses}
+        entitlements={entitlements}
+        onGrant={onGrantEntitlement}
+        onRevoke={onRevokeEntitlement}
+      />
+
       {reissued && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
@@ -264,10 +277,10 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   Invitation Token
                 </label>
                 <div className="relative">
-                  <input
+                  <Input
                     readOnly
                     value={reissued.invitationToken}
-                    className="w-full px-3 py-2 pr-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 font-mono"
+                    className="pr-9 font-mono"
                   />
                   <button
                     type="button"

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Network, KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Input } from 'rsuite';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/AuthProvider';
 import { PasswordField } from '../common/PasswordField';
+import logoFull from '../../../assets/logo-icon.png';
 
 export const AcceptInvitationScreen: React.FC = () => {
   const { acceptInvitation } = useAuth();
@@ -46,12 +48,7 @@ export const AcceptInvitationScreen: React.FC = () => {
       <div className="w-full max-w-sm">
 
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-center text-[#00A4BD] mb-3">
-            <Network className="w-7 h-7 stroke-[2.2]" />
-          </div>
-          <span className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-100">
-            Things<span className="font-normal text-slate-700 dark:text-slate-300">Alive</span>
-          </span>
+          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain" />
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-6">
@@ -69,14 +66,13 @@ export const AcceptInvitationScreen: React.FC = () => {
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Invitation Token
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus={!initialToken}
                 value={token}
-                onChange={(e) => setToken(e.target.value)}
+                onChange={(value) => setToken(value)}
                 placeholder="Paste the token here"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                className="font-mono"
               />
             </div>
 

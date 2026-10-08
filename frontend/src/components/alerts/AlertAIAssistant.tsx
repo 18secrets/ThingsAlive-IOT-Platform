@@ -14,6 +14,7 @@ import {
   Settings,
   Wind,
 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { WorkflowSpec, parsePromptToWorkflow, hasConcreteConditions, mentionsSensorKeyword } from '../../utils/workflowParser';
 import { FLEET } from '../../data/fleetMockData';
 
@@ -229,7 +230,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   }, [searchTerm]);
 
   return (
-    <div id="alert-ai-assistant-view" className="space-y-6">
+    <div id="alert-ai-assistant-view" className="space-y-3">
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
@@ -255,17 +256,19 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       {/* Equipment — required before any draft can be generated; this alert
           always applies to exactly one Thing. */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 max-w-sm">
-        <label className="block space-y-1">
+        <div className="block space-y-1">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Equipment</span>
-          <select
+          <SelectPicker
+            data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
             value={equipmentId}
-            onChange={(e) => setEquipmentId(e.target.value)}
-            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 transition-colors"
-          >
-            <option value="">Select equipment…</option>
-            {FLEET.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
-          </select>
-        </label>
+            onChange={(value) => setEquipmentId(value ?? '')}
+            placeholder="Select equipment…"
+            block
+            searchable={false}
+            cleanable={false}
+            size="sm"
+          />
+        </div>
         {!canAct && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">Select a Thing before describing or generating an alert.</p>}
       </div>
 
@@ -277,15 +280,16 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             <Sparkles className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
             AI PROMPT
           </div>
-          <textarea
+          <Input
+            as="textarea"
             value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              if (phase === 'clarifying' && !e.target.value.trim()) setPhase('suggest');
+            onChange={(value) => {
+              setPrompt(value);
+              if (phase === 'clarifying' && !value.trim()) setPhase('suggest');
             }}
             rows={6}
             placeholder={"e.g. \"Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.\""}
-            className="flex-1 min-h-[140px] resize-none bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+            className="flex-1 min-h-[140px] resize-none bg-transparent"
           />
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
@@ -383,12 +387,12 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1 min-w-[220px] max-w-xs">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search drafts..."
-            className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            size="sm"
+            className="pl-9!"
           />
         </div>
         <button

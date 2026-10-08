@@ -39,7 +39,7 @@ export const ThingDetailPage: React.FC = () => {
   const orders = MOCK_WORK_ORDERS.filter((o) => o.equipmentCode === thing.id);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <FleetFilters scope={scope} onChange={setScope} things={matching} selectedId={thing.id} onSelectId={(id) => navigate(id === 'all' ? '/dashboard' : `/dashboard/${id}`)} />
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-2">

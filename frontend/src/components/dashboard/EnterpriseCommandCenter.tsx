@@ -42,7 +42,7 @@ export const EnterpriseCommandCenter: React.FC = () => {
   const visibleOrders = MOCK_WORK_ORDERS.filter((o) => o.status === 'Open' || o.status === 'In Progress');
 
   return (
-    <div id="enterprise-command-center" className="space-y-6">
+    <div id="enterprise-command-center" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-xl font-bold">Enterprise Command Center</h2>
         <p className="text-sm text-sky-100">Construction sites, Things performance and maintenance priorities.</p>

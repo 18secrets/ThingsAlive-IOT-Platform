@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { SelectPicker } from 'rsuite';
 import { ApiError, PooledDevice } from '../../lib/api';
 import { ClientAccount } from '../../types';
 
@@ -19,6 +20,8 @@ export const AssignDeviceModal: React.FC<AssignDeviceModalProps> = ({ device, cl
     setTenantId('');
     setError(undefined);
   }, [device]);
+
+  const clientOptions = clients.map((c) => ({ label: c.clientName, value: c.id }));
 
   if (!device) return null;
 
@@ -54,17 +57,16 @@ export const AssignDeviceModal: React.FC<AssignDeviceModalProps> = ({ device, cl
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Client <span className="text-red-500">*</span>
             </label>
-            <select
-              required
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-sky-500 outline-none cursor-pointer"
-            >
-              <option value="">— Select client —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.clientName}</option>
-              ))}
-            </select>
+            <SelectPicker
+              data={clientOptions}
+              value={tenantId || null}
+              onChange={(value) => setTenantId(value ?? '')}
+              placeholder="— Select client —"
+              block
+              searchable={false}
+              cleanable={false}
+              size="sm"
+            />
           </div>
 
           {error && (

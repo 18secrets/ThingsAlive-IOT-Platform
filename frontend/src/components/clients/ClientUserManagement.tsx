@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw,
 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { ApiError, InviteUserInput, InviteUserResult, TenantRole, TenantUser } from '../../lib/api';
 
 interface ClientUserManagementProps {
@@ -57,16 +58,16 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
   };
 
   return (
-    <div id="client-user-management-view" className="space-y-6">
+    <div id="client-user-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Name or Email..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            className="pl-9!"
+            size="sm"
           />
         </div>
         <button
@@ -111,16 +112,15 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                     </td>
                     <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">{u.email}</td>
                     <td className="py-3 px-4">
-                      <select
+                      <SelectPicker
+                        data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                         value={u.roleSlug}
                         disabled={busy}
-                        onChange={(e) => runAction(u.id, () => onSetUserRole(u.id, e.target.value))}
-                        className="px-2 py-1 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium text-[11px] border border-sky-200 dark:border-sky-800 cursor-pointer disabled:opacity-50"
-                      >
-                        {roles.map((r) => (
-                          <option key={r.slug} value={r.slug}>{r.name}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => runAction(u.id, () => onSetUserRole(u.id, value ?? u.roleSlug))}
+                        searchable={false}
+                        cleanable={false}
+                        size="sm"
+                      />
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
@@ -260,7 +260,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Invitation Token</label>
               <div className="relative">
-                <input readOnly value={invited.invitationToken ?? ''} className="w-full px-3 py-2 pr-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 font-mono" />
+                <Input readOnly value={invited.invitationToken ?? ''} className="pr-9 font-mono" />
                 <button type="button" onClick={handleCopyToken} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Copy token">
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -282,53 +282,48 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
           <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(value) => setFullName(value)}
                 placeholder="e.g. Priya Sharma"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email <span className="text-rose-500">*</span></label>
-              <input
+              <Input
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(value) => setEmail(value)}
                 placeholder="e.g. priya.sharma@example.com"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
               <p className="text-[11px] text-slate-400 mt-1">This is how they'll sign in — there is no separate username.</p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Phone</label>
-              <input
+              <Input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(value) => setPhone(value)}
                 placeholder="e.g. +91 98100 22341"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono"
+                className="font-mono"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Role <span className="text-rose-500">*</span></label>
-              <select
+              <SelectPicker
+                data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                 value={roleSlug}
-                onChange={(e) => setRoleSlug(e.target.value)}
-                required
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer"
-              >
-                {roles.map((r) => (
-                  <option key={r.slug} value={r.slug}>{r.name}</option>
-                ))}
-              </select>
+                onChange={(value) => setRoleSlug(value ?? '')}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
 
             {error && (

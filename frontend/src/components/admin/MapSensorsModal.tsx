@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Activity, Layers, Info } from 'lucide-react';
+import { Input } from 'rsuite';
 import {
   ApiError, Sensor, ToolMapping, ToolMappingInput,
 } from '../../lib/api';
@@ -144,13 +145,12 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Tool Profile Name <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 value={toolName}
-                onChange={(e) => setToolName(e.target.value)}
+                onChange={(value) => setToolName(value)}
                 placeholder="e.g. Crusher Rig Pro Telematics"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
               />
             </div>
 
@@ -158,12 +158,11 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Industrial Domain
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={industryType}
-                onChange={(e) => setIndustryType(e.target.value)}
+                onChange={(value) => setIndustryType(value)}
                 placeholder="e.g. Heavy Construction & Mining"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
               />
             </div>
           </div>

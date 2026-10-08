@@ -496,6 +496,15 @@ export function apiListEquipmentClasses(): Promise<EquipmentClass[]> {
   return authFetch("/catalog/authoring/equipment-classes");
 }
 
+/**
+ * Published classes this tenant is entitled to (`/catalog/equipment-classes`,
+ * `catalog.read`) — the list a client picks from when registering a machine.
+ * Narrowed by the entitlement join server-side, not by role.
+ */
+export function apiListMyEquipmentClasses(): Promise<EquipmentClass[]> {
+  return authFetch("/catalog/equipment-classes");
+}
+
 export function apiCreateEquipmentClass(
   slug: string,
   input: EquipmentClassInput,
@@ -534,6 +543,154 @@ export function apiRetireEquipmentClass(
   return authFetch(
     `/catalog/equipment-classes/${encodeURIComponent(slug)}/retire`,
     { method: "POST" },
+  );
+}
+
+// ------------------------------------------------------------------ entitlements
+
+/**
+ * Which equipment classes a tenant has been granted (`/catalog/entitlements`,
+ * `entitlement.grant` — master admin only). The commercial boundary: a tenant
+ * cannot write its own entitlements, only read the catalog they resolve to.
+ * A revoked grant keeps the row rather than deleting it — "existed and was
+ * withdrawn" is a different fact from "never existed."
+ */
+export interface Entitlement {
+  id: string;
+  tenantId: string;
+  equipmentClassSlug: string;
+  grantedBy: string;
+  grantedAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  note: string | null;
+}
+
+/** Every grant across every tenant — filter client-side by tenantId. */
+export function apiListEntitlements(): Promise<Entitlement[]> {
+  return authFetch("/catalog/entitlements");
+}
+
+/** Re-granting a revoked (or re-granting the same) class reuses the one row per
+ *  (tenant, class) — the backend enforces that uniqueness, not this call. */
+export function apiGrantEntitlement(
+  tenantId: string,
+  equipmentClassSlug: string,
+  note?: string,
+): Promise<Entitlement> {
+  return authFetch("/catalog/entitlements", {
+    method: "POST",
+    body: JSON.stringify({ tenantId, equipmentClassSlug, note }),
+  });
+}
+
+export function apiRevokeEntitlement(id: string): Promise<Entitlement> {
+  return authFetch(`/catalog/entitlements/${encodeURIComponent(id)}/revoke`, {
+    method: "POST",
+  });
+}
+
+// --------------------------------------------------------------------- equipment
+
+export type ServiceTier = "basic" | "standard" | "advanced" | "full";
+
+/**
+ * A machine in the client's own register (`/equipment`, `equipment.write`).
+ * `sourceSystem`/`externalId` are the real identity — assigned server-side
+ * (`externalId` is just the `code` sent on create), never supplied by the caller.
+ */
+export interface EquipmentProfile {
+  id: string;
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  equipmentClassSlug: string | null;
+  classVersion: number | null;
+  tier: ServiceTier;
+  commissionedAt: string | null;
+  serviceIntervalHours: number | null;
+  readiness: Record<string, unknown>;
+  origin: "mirrored" | "client";
+  status: "active" | "retired";
+  name: string | null;
+  manufacturer: string | null;
+  modelNumber: string | null;
+  serialNumber: string | null;
+  description: string | null;
+  plantId: string | null;
+  updatedAt: string;
+}
+
+export interface EquipmentInput {
+  /** Becomes `externalId` — part of the machine's identity, not changed later. */
+  code: string;
+  name: string;
+  manufacturer?: string;
+  modelNumber?: string;
+  serialNumber?: string;
+  description?: string;
+  plantId?: string;
+  equipmentClassSlug?: string;
+  tier?: ServiceTier;
+  commissionedAt?: string;
+  serviceIntervalHours?: number;
+}
+
+export function apiListEquipment(
+  filters: { plantId?: string; includeRetired?: boolean } = {},
+): Promise<EquipmentProfile[]> {
+  const params = new URLSearchParams();
+  if (filters.plantId) params.set("plantId", filters.plantId);
+  if (filters.includeRetired) params.set("includeRetired", "true");
+  const qs = params.toString();
+  return authFetch(`/equipment${qs ? `?${qs}` : ""}`);
+}
+
+export function apiCreateEquipment(input: EquipmentInput): Promise<EquipmentProfile> {
+  return authFetch("/equipment", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Descriptive fields only — the validator rejects anything else on this route,
+ *  `plantId` included. Placement has its own route (`apiMoveEquipment`) because
+ *  moving a machine has consequences (who can see it) a plain edit does not. */
+export function apiUpdateEquipment(
+  sourceSystem: string,
+  externalId: string,
+  input: Partial<Omit<EquipmentInput, "code" | "plantId">>,
+): Promise<EquipmentProfile> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+/** Move a machine to another site (or null to take it off site). Requires a
+ *  reason — this is the edit that changes who can see the asset. */
+export function apiMoveEquipment(
+  sourceSystem: string,
+  externalId: string,
+  toPlantId: string | null,
+  reason: string,
+): Promise<EquipmentProfile> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/move`,
+    { method: "POST", body: JSON.stringify({ toPlantId, reason }) },
+  );
+}
+
+/** There is no hard delete — a machine leaves its site and stops counting as
+ *  active, but the row (and its placement/binding history) stays. */
+export function apiRetireEquipment(
+  sourceSystem: string,
+  externalId: string,
+  reason: string,
+): Promise<EquipmentProfile> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/retire`,
+    { method: "POST", body: JSON.stringify({ reason }) },
   );
 }
 
@@ -1104,6 +1261,181 @@ export function apiRetireDevices(
     method: "POST",
     body: JSON.stringify({ imeis, reason }),
   });
+}
+
+/** A device in the client's own account (`/inventory/mine`, `device.read`) — fitted
+ *  to a machine or not, which is what `equipmentExternalId` tells apart. */
+export interface MyDevice {
+  id: string;
+  imei: string;
+  tenantId: string | null;
+  state: "in-stock" | "assigned" | "retired";
+  model: string | null;
+  toolMappingId: string | null;
+  batchRef: string | null;
+  receivedAt: string | null;
+  assignedAt: string | null;
+  equipmentExternalId: string | null;
+  claimedAt: string | null;
+  claimedBy: string | null;
+  notes: string | null;
+}
+
+export function apiListMyDevices(): Promise<MyDevice[]> {
+  return authFetch("/inventory/mine");
+}
+
+/** Fit a device already in this account to one of its machines (`device.claim`). */
+export function apiClaimDevice(
+  imei: string,
+  equipmentExternalId: string,
+  sourceSystem: string,
+): Promise<MyDevice> {
+  return authFetch("/inventory/claim", {
+    method: "POST",
+    body: JSON.stringify({ imei, equipmentExternalId, sourceSystem }),
+  });
+}
+
+export function apiUnclaimDevice(imei: string, reason?: string): Promise<MyDevice> {
+  return authFetch("/inventory/unclaim", {
+    method: "POST",
+    body: JSON.stringify({ imei, reason }),
+  });
+}
+
+// ---------------------------------------------------------------- signal bindings
+
+/**
+ * Coverage, discovery and binding (`/equipment/:sourceSystem/:externalId/...`,
+ * reads behind `catalog.read`, writes behind `equipment.write`) — closes the gap
+ * between "a reading arrived" and "this equipment has this signal".
+ */
+export type SignalBindingOrigin = "physical" | "ecu_derived" | "virtual";
+export type SignalBindingStatus = "proposed" | "discovered_unreviewed" | "active" | "superseded" | "rejected";
+export type SignalBindingDiscoveredBy = "tool-mapping" | "sensor-map" | "both" | "manual" | "model";
+export type MissingReason = "unbound" | "mapping_required" | "stale" | "no_readings";
+
+export interface SignalFreshness {
+  staleAfterSeconds: number;
+  lastReadingAt: string | null;
+  secondsSinceLastReading: number | null;
+}
+
+export type CoveredRequirement = {
+  measurementRole: string;
+  componentScope: string;
+  minCount: number;
+  activeCount: number;
+} & SignalFreshness;
+
+export interface MissingRequirement extends SignalFreshness {
+  measurementRole: string;
+  componentScope: string;
+  minCount: number;
+  activeCount: number;
+  reason: MissingReason;
+}
+
+export interface BlockedLayer {
+  layer: string;
+  missingInputs: string[];
+}
+
+export interface CoverageResult {
+  equipment: { sourceSystem: string; externalId: string };
+  at: string;
+  covered: CoveredRequirement[];
+  missing: MissingRequirement[];
+  blockedLayers: BlockedLayer[];
+}
+
+export interface DiscoveryCandidate {
+  signalKey: string;
+  measurementRole: string;
+  unit: string | null;
+  imei: string | null;
+  sensorName: string | null;
+  sensorId: string | null;
+}
+
+export interface DiscoveryResult {
+  equipment: { sourceSystem: string; externalId: string };
+  matched: DiscoveryCandidate[];
+  expectedNotMapped: DiscoveryCandidate[];
+  mappedNotExpected: DiscoveryCandidate[];
+}
+
+export interface SignalBindingVersion {
+  id: string;
+  tenantId: string;
+  sourceSystem: string;
+  externalId: string;
+  signalKey: string;
+  measurementRole: string;
+  componentId: string;
+  origin: SignalBindingOrigin;
+  imei: string | null;
+  channel: string | null;
+  sensorInstanceId: string | null;
+  canonicalUnit: string;
+  sourceUnit: string | null;
+  validFrom: string;
+  validTo: string | null;
+  isPrimary: boolean;
+  status: SignalBindingStatus;
+  discoveredFrom: string | null;
+  discoveredBy: SignalBindingDiscoveredBy;
+  approvedBy: string | null;
+  approvedAt: string | null;
+}
+
+export interface ProposeOrActivateBindingInput {
+  action: "propose" | "activate";
+  signalKey: string;
+  measurementRole: string;
+  componentId?: string;
+  origin: SignalBindingOrigin;
+  imei?: string;
+  channel?: string;
+  sensorInstanceId?: string;
+  canonicalUnit: string;
+  sourceUnit?: string;
+  validFrom: string;
+  validTo?: string;
+  discoveredBy?: SignalBindingDiscoveredBy;
+  discoveredFrom?: string;
+}
+
+export function apiGetEquipmentCoverage(
+  sourceSystem: string,
+  externalId: string,
+  at?: string,
+): Promise<CoverageResult> {
+  const qs = at ? `?at=${encodeURIComponent(at)}` : "";
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/coverage${qs}`,
+  );
+}
+
+export function apiGetBindingDiscovery(
+  sourceSystem: string,
+  externalId: string,
+): Promise<DiscoveryResult> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/binding-discovery`,
+  );
+}
+
+export function apiProposeOrActivateBinding(
+  sourceSystem: string,
+  externalId: string,
+  input: ProposeOrActivateBindingInput,
+): Promise<SignalBindingVersion> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/bindings`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 // --------------------------------------------------------------------- equipment templates

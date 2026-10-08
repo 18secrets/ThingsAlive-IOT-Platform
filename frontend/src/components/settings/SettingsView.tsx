@@ -73,7 +73,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
-    <div id="settings-view" className="space-y-6">
+    <div id="settings-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-lg font-bold">Account Settings</h2>
         <p className="text-xs text-sky-100">Manage your profile information and account security.</p>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Copy, CheckCheck } from 'lucide-react';
+import { Input } from 'rsuite';
 import { ApiError, Account, CreateAccountResult } from '../../lib/api';
 import { ClientAccount } from '../../types';
 
@@ -132,10 +133,10 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 Invitation Token
               </label>
               <div className="relative">
-                <input
+                <Input
                   readOnly
                   value={created.invitationToken}
-                  className="w-full px-3 py-2 pr-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 font-mono"
+                  className="pr-9 font-mono"
                 />
                 <button
                   type="button"
@@ -166,14 +167,12 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Client Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={clientName}
-                onChange={(e) => handleClientNameChange(e.target.value)}
+                onChange={(value) => handleClientNameChange(value)}
                 placeholder="e.g. Acme Cement Works"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 
@@ -181,14 +180,13 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Account ID <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 disabled={isEditing}
                 value={tenantId}
-                onChange={(e) => { setTenantId(e.target.value); setTenantIdTouched(true); }}
+                onChange={(value) => { setTenantId(value); setTenantIdTouched(true); }}
                 placeholder="e.g. acme-cement"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400"
+                className="font-mono"
               />
               <p className="text-[11px] text-slate-400 mt-1">
                 {isEditing
@@ -201,13 +199,11 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Super Admin's Full Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(value) => setFullName(value)}
                 placeholder="e.g. Rohan Kapoor"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 
@@ -216,13 +212,13 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Super Admin's Phone <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="tel"
                   required
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(value) => setPhone(value)}
                   placeholder="e.g. +91 98100 22341"
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono"
+                  className="font-mono"
                 />
               </div>
 
@@ -230,13 +226,12 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Super Admin's Email <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(value) => setEmail(value)}
                   placeholder="e.g. rohan@acmecement.com"
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
                 />
               </div>
             </div>

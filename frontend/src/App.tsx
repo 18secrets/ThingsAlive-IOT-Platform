@@ -79,6 +79,10 @@ import {
   apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
   apiApplyCatalogImport, apiDiscardCatalogImport, apiReviewCatalogImportSensors, apiDownloadCatalogTemplate,
+  apiListEntitlements, apiGrantEntitlement, apiRevokeEntitlement,
+  apiListMyEquipmentClasses, apiListEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
+  apiListMyDevices, apiClaimDevice, apiUnclaimDevice,
+  apiGetEquipmentCoverage, apiGetBindingDiscovery, apiProposeOrActivateBinding,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
   apiSuspendPlatformStaff, apiReinstatePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
@@ -90,9 +94,10 @@ import {
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
-  CatalogImportBatch, SensorReviewSelection, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
+  CatalogImportBatch, SensorReviewSelection, Entitlement, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
+  EquipmentTemplate, EquipmentTemplateInput, EquipmentProfile, EquipmentInput,
+  MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
 } from './lib/api';
 
@@ -238,6 +243,21 @@ function AppData() {
   // classes/scenarios/alert templates above.
   const [catalogImportBatches, setCatalogImportBatches] = useState<CatalogImportBatch[]>([]);
   const [catalogImportBatchesError, setCatalogImportBatchesError] = useState<string | undefined>(undefined);
+  // Every tenant's grants, across the whole platform — same platform-owned shape as
+  // the classes/scenarios/alert templates above; filtered per client in ClientManagement.
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [entitlementsError, setEntitlementsError] = useState<string | undefined>(undefined);
+  // The client's own real equipment register (/equipment) and the published classes
+  // they're entitled to (/catalog/equipment-classes) — both tenant-scoped off the
+  // caller's own token, so only fetched for the client role, same as realPlants.
+  const [realEquipment, setRealEquipment] = useState<EquipmentProfile[]>([]);
+  const [realEquipmentError, setRealEquipmentError] = useState<string | undefined>(undefined);
+  const [myEquipmentClasses, setMyEquipmentClasses] = useState<EquipmentClass[]>([]);
+  const [myEquipmentClassesError, setMyEquipmentClassesError] = useState<string | undefined>(undefined);
+  // The client's own devices (/inventory/mine) — fitted to a machine or not, for
+  // the signal-binding panel's "claim a device" step.
+  const [myDevices, setMyDevices] = useState<MyDevice[]>([]);
+  const [myDevicesError, setMyDevicesError] = useState<string | undefined>(undefined);
   // Things Alive's own staff (/platform/staff) — master admin only, same reasoning
   // as accounts: real data, not tenant data, so no client-id scoping anywhere here.
   const [platformStaff, setPlatformStaff] = useState<PlatformStaffMember[]>([]);
@@ -412,6 +432,97 @@ function AppData() {
         setEquipmentClassesError(undefined);
       } catch (err) {
         if (live) setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshEntitlements = async () => {
+    try {
+      setEntitlements(await apiListEntitlements());
+      setEntitlementsError(undefined);
+    } catch (err) {
+      setEntitlementsError(err instanceof ApiError ? err.message : 'Could not load entitlements.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListEntitlements();
+        if (!live) return;
+        setEntitlements(list);
+        setEntitlementsError(undefined);
+      } catch (err) {
+        if (live) setEntitlementsError(err instanceof ApiError ? err.message : 'Could not load entitlements.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshEquipment = async () => {
+    try {
+      setRealEquipment(await apiListEquipment());
+      setRealEquipmentError(undefined);
+    } catch (err) {
+      setRealEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'client') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListEquipment();
+        if (!live) return;
+        setRealEquipment(list);
+        setRealEquipmentError(undefined);
+      } catch (err) {
+        if (live) setRealEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'client') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListMyEquipmentClasses();
+        if (!live) return;
+        setMyEquipmentClasses(list);
+        setMyEquipmentClassesError(undefined);
+      } catch (err) {
+        if (live) setMyEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  const refreshMyDevices = async () => {
+    try {
+      setMyDevices(await apiListMyDevices());
+      setMyDevicesError(undefined);
+    } catch (err) {
+      setMyDevicesError(err instanceof ApiError ? err.message : 'Could not load devices.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'client') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListMyDevices();
+        if (!live) return;
+        setMyDevices(list);
+        setMyDevicesError(undefined);
+      } catch (err) {
+        if (live) setMyDevicesError(err instanceof ApiError ? err.message : 'Could not load devices.');
       }
     })();
     return () => { live = false; };
@@ -876,6 +987,73 @@ function AppData() {
       setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not retire.');
     }
   };
+
+  // The commercial boundary (entitlement.service.ts) — a tenant cannot grant
+  // itself a class, so this exists only on the master-admin side.
+  const handleGrantEntitlement = async (tenantId: string, equipmentClassSlug: string, note?: string) => {
+    const grant = await apiGrantEntitlement(tenantId, equipmentClassSlug, note);
+    await refreshEntitlements();
+    return grant;
+  };
+
+  const handleRevokeEntitlement = async (id: string) => {
+    const revoked = await apiRevokeEntitlement(id);
+    await refreshEntitlements();
+    return revoked;
+  };
+
+  const handleCreateEquipmentProfile = async (input: EquipmentInput) => {
+    const created = await apiCreateEquipment(input);
+    await refreshEquipment();
+    return created;
+  };
+
+  const handleUpdateEquipmentProfile = async (
+    sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
+  ) => {
+    const updated = await apiUpdateEquipment(sourceSystem, externalId, input);
+    await refreshEquipment();
+    return updated;
+  };
+
+  const handleMoveEquipmentProfile = async (
+    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
+  ) => {
+    const moved = await apiMoveEquipment(sourceSystem, externalId, toPlantId, reason);
+    await refreshEquipment();
+    return moved;
+  };
+
+  const handleRetireEquipmentProfile = async (sourceSystem: string, externalId: string, reason: string) => {
+    const retired = await apiRetireEquipment(sourceSystem, externalId, reason);
+    await refreshEquipment();
+    return retired;
+  };
+
+  const handleClaimDevice = async (imei: string, equipmentExternalId: string, sourceSystem: string) => {
+    const claimed = await apiClaimDevice(imei, equipmentExternalId, sourceSystem);
+    await refreshMyDevices();
+    return claimed;
+  };
+
+  const handleUnclaimDevice = async (imei: string, reason?: string) => {
+    const unclaimed = await apiUnclaimDevice(imei, reason);
+    await refreshMyDevices();
+    return unclaimed;
+  };
+
+  // Per-equipment, fetched on demand by the Signal Bindings panel — not lifted
+  // state, the same way nothing else in this file caches one machine's detail.
+  const handleGetEquipmentCoverage = (sourceSystem: string, externalId: string): Promise<CoverageResult> =>
+    apiGetEquipmentCoverage(sourceSystem, externalId);
+
+  const handleGetBindingDiscovery = (sourceSystem: string, externalId: string): Promise<DiscoveryResult> =>
+    apiGetBindingDiscovery(sourceSystem, externalId);
+
+  const handleProposeOrActivateBinding = (
+    sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
+  ): Promise<SignalBindingVersion> =>
+    apiProposeOrActivateBinding(sourceSystem, externalId, input);
 
   const handleCreateScenario = async (slug: string, equipmentClassSlug: string, input: ScenarioInput) => {
     const created = await apiCreateScenario(slug, equipmentClassSlug, input);
@@ -1384,14 +1562,31 @@ function AppData() {
                   onTogglePlantStatus={handleTogglePlantStatus}
                   devices={devices}
                   onDeleteDevice={handleDeleteDevice}
-                  equipmentList={equipmentList}
-                  onAddEquipment={handleAddEquipment}
+                  realEquipment={realEquipment}
+                  realEquipmentError={realEquipmentError}
+                  onCreateEquipment={handleCreateEquipmentProfile}
+                  onUpdateEquipment={handleUpdateEquipmentProfile}
+                  onMoveEquipment={handleMoveEquipmentProfile}
+                  onRetireEquipment={handleRetireEquipmentProfile}
+                  myEquipmentClasses={myEquipmentClasses}
+                  myEquipmentClassesError={myEquipmentClassesError}
+                  myDevices={myDevices}
+                  myDevicesError={myDevicesError}
+                  onClaimDevice={handleClaimDevice}
+                  onUnclaimDevice={handleUnclaimDevice}
+                  onGetEquipmentCoverage={handleGetEquipmentCoverage}
+                  onGetBindingDiscovery={handleGetBindingDiscovery}
+                  onProposeOrActivateBinding={handleProposeOrActivateBinding}
                   clients={clients}
                   accountsError={accountsError}
                   onCreateAccount={handleCreateAccount}
                   onUpdateAccount={handleUpdateAccount}
                   onResendInvitation={handleResendInvitation}
                   onToggleClientStatus={handleToggleClientStatus}
+                  entitlements={entitlements}
+                  entitlementsError={entitlementsError}
+                  onGrantEntitlement={handleGrantEntitlement}
+                  onRevokeEntitlement={handleRevokeEntitlement}
                   staff={platformStaff}
                   staffError={platformStaffError}
                   onInviteStaff={handleInviteStaff}

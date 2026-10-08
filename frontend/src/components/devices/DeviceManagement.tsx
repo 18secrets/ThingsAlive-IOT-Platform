@@ -8,7 +8,15 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { DeviceItem } from '../../types';
+
+const STATUS_OPTIONS = [
+  { label: 'Online', value: 'Online' },
+  { label: 'Offline', value: 'Offline' },
+];
+
+const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value: n }));
 
 interface DeviceManagementProps {
   devices: DeviceItem[];
@@ -53,33 +61,33 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
 
         <div className="flex flex-1 items-center gap-3 flex-wrap">
           {/* Search */}
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
+            <Input
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
+              onChange={(value) => {
+                setSearchTerm(value);
                 setCurrentPage(1);
               }}
               placeholder="Search Devices..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+              size="sm"
+              className="w-full pl-9! pr-4"
             />
           </div>
 
           {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => {
-              setSelectedStatus(e.target.value);
+          <SelectPicker
+            data={STATUS_OPTIONS}
+            value={selectedStatus === 'All' ? null : selectedStatus}
+            onChange={(value) => {
+              setSelectedStatus(value ?? 'All');
               setCurrentPage(1);
             }}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">Select Status (All)</option>
-            <option value="Online">Online</option>
-            <option value="Offline">Offline</option>
-          </select>
+            placeholder="Select Status (All)"
+            searchable={false}
+            cleanable={selectedStatus !== 'All'}
+            size="sm"
+          />
         </div>
 
         {/* Add Device Actions */}
@@ -180,18 +188,17 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span>Rows per page:</span>
-              <select
+              <SelectPicker
+                data={ROWS_PER_PAGE_OPTIONS}
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
+                onChange={(value) => {
+                  setRowsPerPage(Number(value ?? 10));
                   setCurrentPage(1);
                 }}
-                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-200 text-xs focus:outline-none"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
+                searchable={false}
+                cleanable={false}
+                size="sm"
+              />
             </div>
 
             <div className="flex items-center gap-1">

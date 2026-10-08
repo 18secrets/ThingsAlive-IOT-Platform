@@ -1,8 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Plus, UserPlus, AlertCircle } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { PooledDevice } from '../../lib/api';
 import { ClientAccount } from '../../types';
 import { AssignDeviceModal } from './AssignDeviceModal';
+
+const STATE_OPTIONS: { label: string; value: PooledDevice['state'] }[] = [
+  { label: 'In stock', value: 'in-stock' },
+  { label: 'Assigned', value: 'assigned' },
+  { label: 'Retired', value: 'retired' },
+];
 
 interface DevicePoolManagementProps {
   pool: PooledDevice[];
@@ -46,26 +53,25 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
     <div id="device-pool-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
+            <Input
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(value) => setSearchTerm(value)}
               placeholder="Search IMEI, model or tool profile..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+              size="sm"
+              className="w-full pl-9! pr-4"
             />
           </div>
-          <select
-            value={selectedState}
-            onChange={(e) => setSelectedState(e.target.value as 'All' | PooledDevice['state'])}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">All States</option>
-            <option value="in-stock">In stock</option>
-            <option value="assigned">Assigned</option>
-            <option value="retired">Retired</option>
-          </select>
+          <SelectPicker
+            data={STATE_OPTIONS}
+            value={selectedState === 'All' ? null : selectedState}
+            onChange={(value) => setSelectedState(value ?? 'All')}
+            placeholder="All States"
+            searchable={false}
+            cleanable={selectedState !== 'All'}
+            size="sm"
+          />
         </div>
 
         <button

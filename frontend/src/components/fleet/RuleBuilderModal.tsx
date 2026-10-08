@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CheckPicker, Input, InputNumber, SelectPicker } from 'rsuite';
 import { Modal } from '../common/Modal';
 import { ConfiguredRule, RuleOutcome, RuleSeverity, MOCK_RULES, upsertRule } from '../../data/configuredRulesMockData';
 import { FLEET, SENSOR_SPECS, evaluateRuleForThing } from '../../data/fleetMockData';
@@ -36,7 +37,6 @@ function draftFrom(rule: ConfiguredRule | undefined, defaultOutcome: RuleOutcome
   };
 }
 
-const fieldClass = 'w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
 const labelClass = 'text-xs font-medium text-slate-600 dark:text-slate-300';
 
 // Was a standalone routed page (RuleBuilderPage, reached via navigate('/rule-builder', {state})).
@@ -129,10 +129,10 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
                     <>
                       <label className="block space-y-1 max-w-xs">
                         <span className={labelClass}>Preview reading ({sensor.unit})</span>
-                        <input
-                          type="number" step="any" value={value}
-                          onChange={(e) => { setInputs({ ...inputs, [t.id]: Number(e.target.value) }); setReviewedFingerprint(''); }}
-                          className={fieldClass}
+                        <InputNumber
+                          value={value}
+                          onChange={(value) => { setInputs({ ...inputs, [t.id]: Number(value) }); setReviewedFingerprint(''); }}
+                          className="w-full"
                         />
                       </label>
                       <p className="text-[11px] text-slate-400 dark:text-slate-500">
@@ -174,47 +174,60 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
       <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setStep('review'); }}>
         <label className="block space-y-1">
           <span className={labelClass}>Name</span>
-          <input required value={draft.name} onChange={(e) => update({ name: e.target.value })} className={fieldClass} />
+          <Input required value={draft.name} onChange={(value) => update({ name: value })} />
         </label>
-        <label className="block space-y-1">
+        <div className="block space-y-1">
           <span className={labelClass}>Sensor</span>
-          <select value={draft.sensorKey} onChange={(e) => update({ sensorKey: e.target.value })} className={fieldClass}>
-            {SENSOR_SPECS.map((s) => <option key={s.key} value={s.key}>{s.label} ({s.unit})</option>)}
-          </select>
-        </label>
+          <SelectPicker
+            data={SENSOR_SPECS.map((s) => ({ label: `${s.label} (${s.unit})`, value: s.key }))}
+            value={draft.sensorKey}
+            onChange={(value) => update({ sensorKey: value ?? SENSOR_SPECS[0].key })}
+            searchable={false}
+            cleanable={false}
+            block
+          />
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block space-y-1">
+          <div className="block space-y-1">
             <span className={labelClass}>Condition</span>
-            <select value={draft.operator} onChange={(e) => update({ operator: e.target.value as '>' | '<' })} className={fieldClass}>
-              <option value=">">Greater than</option>
-              <option value="<">Less than</option>
-            </select>
-          </label>
+            <SelectPicker
+              data={[{ label: 'Greater than', value: '>' }, { label: 'Less than', value: '<' }]}
+              value={draft.operator}
+              onChange={(value) => update({ operator: (value ?? '>') as '>' | '<' })}
+              searchable={false}
+              cleanable={false}
+              block
+            />
+          </div>
           <label className="block space-y-1">
             <span className={labelClass}>Threshold</span>
-            <input type="number" step="any" required value={draft.threshold} onChange={(e) => update({ threshold: Number(e.target.value) })} className={fieldClass} />
+            <InputNumber required value={draft.threshold} onChange={(value) => update({ threshold: Number(value) })} className="w-full" />
           </label>
         </div>
-        <label className="block space-y-1">
+        <div className="block space-y-1">
           <span className={labelClass}>Severity</span>
-          <select value={draft.severity} onChange={(e) => update({ severity: e.target.value as RuleSeverity })} className={fieldClass}>
-            <option value="Warning">Warning</option>
-            <option value="Critical">Critical</option>
-          </select>
-        </label>
+          <SelectPicker
+            data={[{ label: 'Warning', value: 'Warning' }, { label: 'Critical', value: 'Critical' }]}
+            value={draft.severity}
+            onChange={(value) => update({ severity: (value ?? 'Warning') as RuleSeverity })}
+            searchable={false}
+            cleanable={false}
+            block
+          />
+        </div>
         <fieldset className="space-y-1.5">
           <legend className={labelClass}>Outcomes</legend>
-          <div className="flex items-center gap-5">
-            {(['kpi', 'alert', 'prediction'] as RuleOutcome[]).map((o) => (
-              <label key={o} className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-200">
-                <input type="checkbox" checked={draft.outcomes.includes(o)} onChange={() => toggleOutcome(o)} /> {o}
-              </label>
-            ))}
-          </div>
+          <CheckPicker
+            data={(['kpi', 'alert', 'prediction'] as RuleOutcome[]).map((o) => ({ label: o, value: o }))}
+            value={draft.outcomes}
+            onChange={(values) => update({ outcomes: values ?? [] })}
+            searchable={false}
+            block
+          />
         </fieldset>
         <label className="block space-y-1 max-w-xs">
           <span className={labelClass}>Prediction horizon (hours)</span>
-          <input type="number" min={1} max={168} value={draft.horizonHours} onChange={(e) => update({ horizonHours: Number(e.target.value) })} className={fieldClass} />
+          <InputNumber min={1} max={168} value={draft.horizonHours} onChange={(value) => update({ horizonHours: Number(value) })} className="w-full" />
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
           <input type="checkbox" checked={draft.enabled} onChange={(e) => update({ enabled: e.target.checked })} /> Enabled

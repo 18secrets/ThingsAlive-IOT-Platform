@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { DatePicker, Input, InputNumber, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
   COST_FIELD_LABELS, CostField, CostRole, CostScope, MOCK_COST_PROFILES, MockCostProfile, costFields, mayEditCost,
@@ -8,6 +9,23 @@ import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../components/
 import { Modal } from '../components/common/Modal';
 
 const SCOPE_ORDER: CostScope[] = ['administration', 'client', 'site', 'equipment'];
+
+// form.effectiveFrom is stored as a plain 'YYYY-MM-DD' string (it's compared with
+// string.localeCompare elsewhere); DatePicker works in Date objects, so these
+// convert at the edges rather than changing the stored representation.
+function parseIsoDate(value: string): Date | null {
+  if (!value) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 function blankProfile(role: CostRole, presetEquipmentId?: string): MockCostProfile {
   const base = {
@@ -37,7 +55,7 @@ export const CostAdministrationPage: React.FC = () => {
   }
 
   return (
-    <div id="cost-administration-view" className="space-y-6">
+    <div id="cost-administration-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-xl font-bold">Cost Administration</h2>
         <p className="text-sm text-sky-100">From machine signals to your next best action.</p>
@@ -62,18 +80,21 @@ export const CostAdministrationPage: React.FC = () => {
           </button>
         </div>
 
-        <label className="block space-y-1 max-w-xs">
+        <div className="block space-y-1 max-w-xs">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Demo role (not security permissions)</span>
-          <select
+          <SelectPicker
+            data={[
+              { label: 'Administration', value: 'administrator' },
+              { label: 'Client Admin', value: 'client-admin' },
+              { label: 'Operator (read-only)', value: 'operator' },
+            ]}
             value={role}
-            onChange={(e) => setRole(e.target.value as CostRole)}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm"
-          >
-            <option value="administrator">Administration</option>
-            <option value="client-admin">Client Admin</option>
-            <option value="operator">Operator (read-only)</option>
-          </select>
-        </label>
+            onChange={(value) => setRole((value ?? 'administrator') as CostRole)}
+            block
+            searchable={false}
+            cleanable={false}
+          />
+        </div>
         <p className="text-[12px] text-slate-400 dark:text-slate-500">Access: {role}</p>
         {notice && <p className="text-[13px] text-sky-700 dark:text-sky-400">{notice}</p>}
 
@@ -168,46 +189,59 @@ const CostProfileForm: React.FC<{
       {!editable && <p className="text-[13px] text-amber-600 dark:text-amber-400">The "{role}" demo role can&apos;t edit this scope.</p>}
       <fieldset disabled={!editable} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block space-y-1">
+          <div className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Scope</span>
-            <select
+            <SelectPicker
+              data={(role === 'administrator' ? SCOPE_ORDER : SCOPE_ORDER.filter((s) => s !== 'administration')).map((s) => ({ label: s, value: s }))}
               value={form.scope}
-              onChange={(e) => {
-                const next = e.target.value as CostScope;
+              onChange={(value) => {
+                const next = (value ?? form.scope) as CostScope;
                 update({ scope: next, target: next === 'administration' ? '*' : next === 'client' ? 'default' : next === 'site' ? (FLEET_LOCATIONS[0] || '') : (FLEET[0]?.id || '') });
               }}
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm"
-            >
-              {(role === 'administrator' ? SCOPE_ORDER : SCOPE_ORDER.filter((s) => s !== 'administration')).map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
+              block
+              searchable={false}
+              cleanable={false}
+            />
+          </div>
           {(form.scope === 'site' || form.scope === 'equipment') && (
-            <label className="block space-y-1">
+            <div className="block space-y-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Applies to</span>
-              <select value={form.target} onChange={(e) => update({ target: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm">
-                {(form.scope === 'site' ? FLEET_LOCATIONS.map((l) => ({ id: l, name: l })) : FLEET).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
+              <SelectPicker
+                data={(form.scope === 'site' ? FLEET_LOCATIONS.map((l) => ({ id: l, name: l })) : FLEET).map((t) => ({ label: t.name, value: t.id }))}
+                value={form.target}
+                onChange={(value) => update({ target: value ?? '' })}
+                block
+                searchable={false}
+                cleanable={false}
+              />
+            </div>
           )}
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Currency (client/site)</span>
-            <input required maxLength={3} value={form.currency} onChange={(e) => update({ currency: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+            <Input required maxLength={3} value={form.currency} onChange={(value) => update({ currency: value.toUpperCase() })} />
           </label>
-          <label className="block space-y-1">
+          <div className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Effective from</span>
-            <input type="date" required value={form.effectiveFrom} onChange={(e) => update({ effectiveFrom: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
-          </label>
+            <DatePicker
+              value={parseIsoDate(form.effectiveFrom)}
+              onChange={(date) => update({ effectiveFrom: date ? toIsoDate(date) : '' })}
+              format="yyyy-MM-dd"
+              oneTap
+              cleanable={false}
+              block
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {costFields.map((field) => (
             <label key={field} className="block space-y-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{COST_FIELD_LABELS[field as CostField]}</span>
-              <input
-                type="number" step="any" min="0" placeholder="Inherit / not configured"
-                value={form[field as CostField] ?? ''}
-                onChange={(e) => update({ [field]: e.target.value === '' ? null : Number(e.target.value) } as Partial<MockCostProfile>)}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm"
+              <InputNumber
+                min={0}
+                placeholder="Inherit / not configured"
+                value={form[field as CostField] ?? undefined}
+                onChange={(value) => update({ [field]: value === '' || value === undefined ? null : Number(value) } as Partial<MockCostProfile>)}
               />
             </label>
           ))}

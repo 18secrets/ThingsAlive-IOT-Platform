@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
+import { CheckPicker, Input } from 'rsuite';
 import { ApiError, EquipmentClass, EquipmentClassInput, ExpectedSignal, FailureMode } from '../../lib/api';
 
 interface AddCategoryModalProps {
@@ -154,14 +155,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Class Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 autoFocus
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(value) => handleNameChange(value)}
                 placeholder="e.g. Diesel Generator"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
 
@@ -169,14 +169,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Slug <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 disabled={isEditing}
                 value={slug}
-                onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+                onChange={(value) => { setSlug(value); setSlugTouched(true); }}
                 placeholder="e.g. diesel-generator"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400"
               />
               <p className="text-[10px] text-slate-400 mt-1">
                 {isEditing ? "Permanent — every scenario and activation references it." : 'What every scenario and activation will reference. Auto-filled from the name.'}
@@ -188,12 +187,11 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Category Tag <span className="text-slate-400 font-normal">(optional, coarse grouping)</span>
             </label>
-            <input
-              type="text"
+            <Input
+              size="sm"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(value) => setCategory(value)}
               placeholder="e.g. power, machining, fluid"
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
             />
           </div>
 
@@ -201,12 +199,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Description
             </label>
-            <textarea
-              rows={2}
+            <Input
+              as="textarea"
+              size="sm"
+              rows={3}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(value) => setDescription(value)}
               placeholder="What this class of machine is, and where it's used..."
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all resize-none leading-relaxed"
             />
           </div>
 
@@ -228,19 +227,17 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
 
             {signals.map((s, i) => (
               <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
-                <input
-                  type="text"
+                <Input
+                  size="sm"
                   value={s.signal}
-                  onChange={(e) => updateSignal(i, 'signal', e.target.value)}
+                  onChange={(value) => updateSignal(i, 'signal', value)}
                   placeholder="signal, e.g. coolant_temp"
-                  className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 font-mono"
                 />
-                <input
-                  type="text"
+                <Input
+                  size="sm"
                   value={s.unit ?? ''}
-                  onChange={(e) => updateSignal(i, 'unit', e.target.value)}
+                  onChange={(value) => updateSignal(i, 'unit', value)}
                   placeholder="unit, e.g. °C"
-                  className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
                 />
                 <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
                   <input
@@ -283,19 +280,17 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
             {failureModes.map((f, i) => (
               <div key={i} className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="grid grid-cols-[1fr_2fr_auto] gap-2 items-center">
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={f.code}
-                    onChange={(e) => updateFailureMode(i, 'code', e.target.value)}
+                    onChange={(value) => updateFailureMode(i, 'code', value)}
                     placeholder="code, e.g. overheat"
-                    className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 font-mono"
                   />
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={f.name}
-                    onChange={(e) => updateFailureMode(i, 'name', e.target.value)}
+                    onChange={(value) => updateFailureMode(i, 'name', value)}
                     placeholder="name, e.g. Coolant System Overheat"
-                    className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
                   />
                   <button
                     type="button"
@@ -306,29 +301,27 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <input
-                  type="text"
+                <Input
+                  size="sm"
                   value={f.symptom}
-                  onChange={(e) => updateFailureMode(i, 'symptom', e.target.value)}
+                  onChange={(value) => updateFailureMode(i, 'symptom', value)}
                   placeholder="symptom an operator would notice, e.g. Coolant temp climbs steadily under normal load"
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                   <span className="text-[10px] text-slate-400">Signals that move:</span>
-                  {signals.filter((s) => s.signal.trim()).length === 0 && (
+                  {signals.filter((s) => s.signal.trim()).length === 0 ? (
                     <span className="text-[10px] text-slate-400 italic">Add an expected signal above first</span>
+                  ) : (
+                    <CheckPicker
+                      size="sm"
+                      data={signals.filter((s) => s.signal.trim()).map((s) => ({ label: s.signal.trim(), value: s.signal.trim() }))}
+                      value={f.signals}
+                      onChange={(values) => setFailureModes((prev) => prev.map((ff, idx) => (idx === i ? { ...ff, signals: values ?? [] } : ff)))}
+                      placeholder="Select signals"
+                      searchable={false}
+                      style={{ minWidth: 220 }}
+                    />
                   )}
-                  {signals.filter((s) => s.signal.trim()).map((s) => (
-                    <label key={s.signal} className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={f.signals.includes(s.signal.trim())}
-                        onChange={() => toggleFailureModeSignal(i, s.signal.trim())}
-                        className="cursor-pointer"
-                      />
-                      <span className="font-mono">{s.signal.trim()}</span>
-                    </label>
-                  ))}
                 </div>
               </div>
             ))}

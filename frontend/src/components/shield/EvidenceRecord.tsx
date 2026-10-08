@@ -1,6 +1,26 @@
 import React, { useState } from 'react';
 import { Calendar, User, Pencil } from 'lucide-react';
+import { DatePicker, Input, SelectPicker } from 'rsuite';
 import { ShieldEvidenceRecord, ShieldResult, ShieldStatus } from '../../data/shieldMockData';
+
+// Evidence due dates are stored as plain 'YYYY-MM-DD' strings (matching the
+// native <input type="date"> this replaced) — parsed/formatted in local time
+// so the day shown in the picker is the day that gets saved, regardless of
+// the browser's UTC offset.
+function parseISODate(value: string): Date | null {
+  if (!value) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function formatISODate(date: Date | null): string {
+  if (!date) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 const STATUS_STYLE: Record<ShieldStatus, string> = {
   Current: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900',
@@ -72,37 +92,42 @@ export const EvidenceRecordForm: React.FC<{
     >
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Record title</span>
-        <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input required value={title} onChange={(value) => setTitle(value)} className="w-full" />
       </label>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Requirement / document reference</span>
-        <input value={reference} onChange={(e) => setReference(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input value={reference} onChange={(value) => setReference(value)} className="w-full" />
       </label>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Responsible owner</span>
-        <input value={owner} onChange={(e) => setOwner(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input value={owner} onChange={(value) => setOwner(value)} className="w-full" />
       </label>
-      <label className="block space-y-1">
+      <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Due date</span>
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
-      </label>
-      <label className="block space-y-1">
+        <DatePicker value={parseISODate(dueDate)} onChange={(date) => setDueDate(formatISODate(date))} format="yyyy-MM-dd" block />
+      </div>
+      <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Result</span>
-        <select value={result} onChange={(e) => setResult(e.target.value as typeof result)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm">
-          {RESULT_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </label>
+        <SelectPicker
+          data={RESULT_OPTIONS.map((r) => ({ label: r, value: r }))}
+          value={result}
+          onChange={(value) => setResult((value ?? 'Not assessed') as typeof result)}
+          searchable={false}
+          cleanable={false}
+          block
+        />
+      </div>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Evidence / inspection findings</span>
-        <textarea value={findings} onChange={(e) => setFindings(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input as="textarea" value={findings} onChange={(value) => setFindings(value)} rows={3} className="w-full" />
       </label>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Reviewer</span>
-        <input value={reviewer} onChange={(e) => setReviewer(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input value={reviewer} onChange={(value) => setReviewer(value)} className="w-full" />
       </label>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Recorded by</span>
-        <input value={recordedBy} onChange={(e) => setRecordedBy(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input value={recordedBy} onChange={(value) => setRecordedBy(value)} className="w-full" />
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">

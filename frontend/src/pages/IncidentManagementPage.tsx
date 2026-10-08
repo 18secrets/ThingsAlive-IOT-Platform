@@ -25,7 +25,7 @@ export const IncidentManagementPage: React.FC = () => {
   const investigatingCount = visibleIncidents.filter((i) => i.status === 'Investigating').length;
 
   return (
-    <div id="incident-management-view" className="space-y-6">
+    <div id="incident-management-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Security</span>

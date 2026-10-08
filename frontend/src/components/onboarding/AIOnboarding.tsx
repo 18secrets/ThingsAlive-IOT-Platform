@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, ListChecks, Check, Boxes, MessageCircleQuestion, BellRing, FileBarChart } from 'lucide-react';
+import { Input } from 'rsuite';
 
 interface ChatMessage {
   id: string;
@@ -210,12 +211,11 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
 
         {/* Message Input */}
         <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-xs pl-4 pr-1.5 py-1.5">
-          <input
-            type="text"
+          <Input
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(value) => setDraft(value)}
             placeholder="Add more details or ask a question..."
-            className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+            className="flex-1 bg-transparent"
           />
           <button
             type="submit"

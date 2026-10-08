@@ -67,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-slate-400">/</span>
             </>
           )}
-          <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
+          <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
             {title}
           </h1>
         </div>

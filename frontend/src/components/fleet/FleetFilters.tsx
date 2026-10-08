@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal, Search, X } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { FLEET_CATEGORIES, FLEET_LOCATIONS, FleetThing } from '../../data/fleetMockData';
 
 export interface FleetScope {
@@ -19,8 +20,6 @@ export function matchingFleet(things: FleetThing[], scope: FleetScope): FleetThi
     `${t.name} ${t.id} ${t.category} ${t.location}`.toLowerCase().includes(scope.query.trim().toLowerCase())
   );
 }
-
-const fieldClass = 'w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
 
 export const FleetFilters: React.FC<{
   scope: FleetScope;
@@ -86,17 +85,17 @@ export const FleetFilters: React.FC<{
       </button>
 
       {onSelectId && (
-        <label className="flex items-center gap-2 text-sm ml-auto">
+        <div className="flex items-center gap-2 text-sm ml-auto">
           <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">Selected Thing</span>
-          <select
-            className={`${fieldClass} w-auto min-w-[200px]`}
+          <SelectPicker
+            data={[{ label: 'All matching Things', value: 'all' }, ...visible.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))]}
             value={selectedId && visible.some((t) => t.id === selectedId) ? selectedId : 'all'}
-            onChange={(e) => onSelectId(e.target.value)}
-          >
-            <option value="all">All matching Things</option>
-            {visible.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
-          </select>
-        </label>
+            onChange={(value) => onSelectId(value ?? 'all')}
+            searchable={false}
+            cleanable={false}
+            className="min-w-[200px]"
+          />
+        </div>
       )}
 
       {open && (
@@ -116,37 +115,52 @@ export const FleetFilters: React.FC<{
 
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1">
+              <div className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Site / Plant</span>
-                <select className={fieldClass} value={draft.site} onChange={(e) => setDraft({ ...draft, site: e.target.value })}>
-                  <option value="all">All sites / plants</option>
-                  {FLEET_LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </label>
-              <label className="block space-y-1">
+                <SelectPicker
+                  data={[{ label: 'All sites / plants', value: 'all' }, ...FLEET_LOCATIONS.map((l) => ({ label: l, value: l }))]}
+                  value={draft.site}
+                  onChange={(value) => setDraft({ ...draft, site: value ?? 'all' })}
+                  searchable={false}
+                  cleanable={false}
+                  block
+                />
+              </div>
+              <div className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Thing type</span>
-                <select className={fieldClass} value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
-                  <option value="all">All Thing types</option>
-                  {FLEET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
-              <label className="block space-y-1">
+                <SelectPicker
+                  data={[{ label: 'All Thing types', value: 'all' }, ...FLEET_CATEGORIES.map((c) => ({ label: c, value: c }))]}
+                  value={draft.type}
+                  onChange={(value) => setDraft({ ...draft, type: value ?? 'all' })}
+                  searchable={false}
+                  cleanable={false}
+                  block
+                />
+              </div>
+              <div className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Connection status</span>
-                <select className={fieldClass} value={draft.connection} onChange={(e) => setDraft({ ...draft, connection: e.target.value as FleetScope['connection'] })}>
-                  <option value="all">All connections</option>
-                  <option value="online">Online</option>
-                  <option value="offline">Offline</option>
-                </select>
-              </label>
+                <SelectPicker
+                  data={[
+                    { label: 'All connections', value: 'all' },
+                    { label: 'Online', value: 'online' },
+                    { label: 'Offline', value: 'offline' },
+                  ]}
+                  value={draft.connection}
+                  onChange={(value) => setDraft({ ...draft, connection: (value ?? 'all') as FleetScope['connection'] })}
+                  searchable={false}
+                  cleanable={false}
+                  block
+                />
+              </div>
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Find a Thing</span>
                 <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
+                  <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 z-10" />
+                  <Input
                     value={draft.query}
-                    onChange={(e) => setDraft({ ...draft, query: e.target.value })}
+                    onChange={(value) => setDraft({ ...draft, query: value })}
                     placeholder="Name or Thing ID"
-                    className={`${fieldClass} pl-8`}
+                    className="pl-8!"
                   />
                 </div>
               </label>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { Input, InputNumber, SelectPicker } from 'rsuite';
 import {
   AlertParams, AlertRuleTemplate, AlertRuleTemplateInput, AlertTrigger, ApiError,
 } from '../../../lib/api';
@@ -19,6 +20,8 @@ const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const SEVERITIES: AlertRuleTemplate['severity'][] = ['low', 'medium', 'high', 'critical'];
+const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ label: s, value: s }));
+const SEVERITY_OR_ABOVE_OPTIONS = SEVERITIES.map((s) => ({ label: `${s} or above`, value: s }));
 // fuel-loss and chain-origin need a GPS fix / causal chain this authoring screen has
 // no data for — left out of the picker rather than half-modelled (see api.ts's comment).
 const TRIGGERS: AlertTrigger[] = ['signal-threshold', 'prediction-severity', 'no-telemetry'];
@@ -29,6 +32,7 @@ const TRIGGER_LABEL: Record<AlertTrigger, string> = {
   'fuel-loss': 'Fuel Loss',
   'chain-origin': 'Chain Origin',
 };
+const TRIGGER_OPTIONS = TRIGGERS.map((t) => ({ label: TRIGGER_LABEL[t], value: t }));
 
 function defaultParams(trigger: AlertTrigger, signals: string[]): AlertParams {
   switch (trigger) {
@@ -150,28 +154,25 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Rule Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(value) => handleNameChange(value)}
                 placeholder="e.g. Coolant Over Limit"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Slug <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 disabled={isEditing}
                 value={slug}
-                onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+                onChange={(value) => { setSlug(value); setSlugTouched(true); }}
                 placeholder="e.g. coolant-over-limit"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400"
+                className="font-mono"
               />
             </div>
           </div>
@@ -180,12 +181,12 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Description
             </label>
-            <textarea
+            <Input
+              as="textarea"
               rows={2}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(value) => setDescription(value)}
               placeholder="What this rule watches for, and why it matters..."
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all resize-none leading-relaxed"
             />
           </div>
 
@@ -194,25 +195,27 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Severity
               </label>
-              <select
+              <SelectPicker
+                data={SEVERITY_OPTIONS}
                 value={severity}
-                onChange={(e) => setSeverity(e.target.value as AlertRuleTemplate['severity'])}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all cursor-pointer"
-              >
-                {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+                onChange={(value) => setSeverity((value ?? 'high') as AlertRuleTemplate['severity'])}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Trigger
               </label>
-              <select
+              <SelectPicker
+                data={TRIGGER_OPTIONS}
                 value={trigger}
-                onChange={(e) => handleTriggerChange(e.target.value as AlertTrigger)}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all cursor-pointer"
-              >
-                {TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_LABEL[t]}</option>)}
-              </select>
+                onChange={(value) => handleTriggerChange((value ?? 'signal-threshold') as AlertTrigger)}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
           </div>
 
@@ -222,31 +225,29 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Signal</label>
-                  <select
+                  <SelectPicker
+                    data={availableSignals.map((s) => ({ label: s, value: s }))}
                     value={thresholdParams.signal ?? ''}
-                    onChange={(e) => setParams({ ...thresholdParams, signal: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 cursor-pointer"
-                  >
-                    {availableSignals.length === 0 && <option value="">no signals on this class</option>}
-                    {availableSignals.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                    onChange={(value) => setParams({ ...thresholdParams, signal: value ?? '' })}
+                    placeholder="no signals on this class"
+                    block
+                    searchable={false}
+                    cleanable={false}
+                    className="font-mono"
+                  />
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Min (optional)</label>
-                  <input
-                    type="number"
+                  <InputNumber
                     value={thresholdParams.min ?? ''}
-                    onChange={(e) => setParams({ ...thresholdParams, min: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
+                    onChange={(value) => setParams({ ...thresholdParams, min: value === '' ? null : Number(value) })}
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Max (optional)</label>
-                  <input
-                    type="number"
+                  <InputNumber
                     value={thresholdParams.max ?? ''}
-                    onChange={(e) => setParams({ ...thresholdParams, max: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600"
+                    onChange={(value) => setParams({ ...thresholdParams, max: value === '' ? null : Number(value) })}
                   />
                 </div>
               </div>
@@ -257,13 +258,14 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
           {trigger === 'prediction-severity' && (
             <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-3">
               <span className="text-xs font-bold text-slate-800 dark:text-white">Fires when a scenario reaches</span>
-              <select
+              <SelectPicker
+                data={SEVERITY_OR_ABOVE_OPTIONS}
                 value={severityParams.atLeast ?? 'high'}
-                onChange={(e) => setParams({ ...severityParams, atLeast: e.target.value as PredictionSeverityParamsLike['atLeast'] })}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 cursor-pointer"
-              >
-                {SEVERITIES.map((s) => <option key={s} value={s}>{s} or above</option>)}
-              </select>
+                onChange={(value) => setParams({ ...severityParams, atLeast: (value ?? 'high') as PredictionSeverityParamsLike['atLeast'] })}
+                block
+                searchable={false}
+                cleanable={false}
+              />
               <p className="text-[10px] text-slate-400">Watches every scenario on the machine — there's no single scenario to pin to at template authoring time.</p>
             </div>
           )}
