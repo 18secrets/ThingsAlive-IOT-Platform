@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, MapPin, ChevronRight, Sparkles } from 'lucide-react';
-import { FleetThing, isBreaching } from '../../data/fleetMockData';
+import { Box, MapPin, ChevronRight } from 'lucide-react';
+import { FleetThing } from '../../data/fleetMockData';
 
 // Illustrative construction-site scene, ported from the client-ui-new demo's
 // site-overview.tsx. Decorative only — not an actual site map or GPS layout.
@@ -53,23 +53,6 @@ export const SiteScene: React.FC<{ things: FleetThing[]; onOpen: (id: string) =>
       <div className="absolute bottom-2 left-2.5 bg-[#162a3be8] text-[#dce7ed] text-[9px] px-1.5 py-1 rounded">
         Click a machine or site-hierarchy label to open Thing details · illustrative layout
       </div>
-    </div>
-  );
-};
-
-export const SiteInsights: React.FC<{ things: FleetThing[]; onOpen: (id: string) => void }> = ({ things, onOpen }) => {
-  const alerts = things.filter(isBreaching).slice(0, 3);
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 h-[360px] overflow-auto">
-      <h4 className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-800 dark:text-slate-100"><Sparkles className="w-3.5 h-3.5" /> Things insights</h4>
-      <small className="block text-[10px] text-slate-400 mt-1">Filtered Things · current sample signals</small>
-      {alerts.length ? alerts.map((t) => (
-        <button key={t.id} onClick={() => onOpen(t.id)} className="w-full text-left border-b border-slate-100 dark:border-slate-800 py-2 space-y-0.5">
-          <span className="inline-block px-1.5 py-0.5 text-[9px] font-medium rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400">Alert</span>
-          <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">{t.id} · Coolant temperature</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">{t.coolantNowC.toFixed(2)} °C · outside configured range</p>
-        </button>
-      )) : <p className="text-[11px] text-slate-400 mt-3">No active alerts at this replay hour.</p>}
     </div>
   );
 };

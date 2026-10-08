@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Plus, ShieldCheck, AlertCircle, Mail } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import {
   ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
 } from '../../lib/api';
@@ -77,17 +78,17 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
   };
 
   return (
-    <div id="staff-management-view" className="space-y-6">
+    <div id="staff-management-view" className="space-y-3">
 
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Name or Email..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            className="pl-9!"
+            size="sm"
           />
         </div>
 
@@ -144,16 +145,16 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
 
             <div>
               <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Role</label>
-              <select
+              <SelectPicker
+                data={(Object.keys(ROLE_LABEL) as PlatformStaffRole[]).map((r) => ({ label: ROLE_LABEL[r], value: r }))}
                 value={s.role}
-                onChange={(e) => handleRoleChange(s.id, e.target.value as PlatformStaffRole)}
+                onChange={(value) => handleRoleChange(s.id, (value ?? s.role) as PlatformStaffRole)}
                 disabled={busyId === s.id}
-                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer disabled:opacity-50"
-              >
-                {(Object.keys(ROLE_LABEL) as PlatformStaffRole[]).map((r) => (
-                  <option key={r} value={r}>{ROLE_LABEL[r]}</option>
-                ))}
-              </select>
+                block
+                searchable={false}
+                cleanable={false}
+                size="sm"
+              />
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">

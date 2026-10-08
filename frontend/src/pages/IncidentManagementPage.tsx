@@ -25,12 +25,12 @@ export const IncidentManagementPage: React.FC = () => {
   const investigatingCount = visibleIncidents.filter((i) => i.status === 'Investigating').length;
 
   return (
-    <div id="incident-management-view" className="space-y-6">
+    <div id="incident-management-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold tracking-wider uppercase text-sky-100">People · Machines · Security</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">People · Machines · Security</span>
           <span title="Browser-local records · review identities are self-declared in this demo.">
-            <Info className="w-3.5 h-3.5 text-sky-200" />
+            <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
         <h2 className="text-xl font-bold">Incident Management</h2>
@@ -65,8 +65,8 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'warn' | 'bad' }>
       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800';
   return (
     <div className={`border rounded-xl p-4 shadow-xs ${boxClass}`}>
-      <div className={`text-xl font-bold ${toneClass}`}>{value}</div>
-      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );
 };

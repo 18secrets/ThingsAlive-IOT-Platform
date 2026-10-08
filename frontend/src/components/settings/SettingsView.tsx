@@ -73,10 +73,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
-    <div id="settings-view" className="space-y-6">
+    <div id="settings-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-lg font-bold">Account Settings</h2>
-        <p className="text-xs text-sky-100">Manage your profile information and account security.</p>
+        <h2 className="text-xl font-bold">Account Settings</h2>
+        <p className="text-sm text-sky-100">Manage your profile information and account security.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -88,25 +88,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               {initial}
             </div>
             <div className="min-w-0">
-              <div className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{displayName}</div>
-              <div className="text-xs text-slate-400">{authUser.username}</div>
+              <div className="font-semibold text-base text-slate-800 dark:text-slate-100 truncate">{displayName}</div>
+              <div className="text-sm text-slate-400">{authUser.username}</div>
             </div>
           </div>
 
-          <div className="p-5 space-y-3.5 text-xs">
+          <div className="p-5 space-y-3.5 text-sm">
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+                <ShieldCheck className="w-4 h-4 text-sky-600" />
                 Role
               </span>
-              <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 text-[11px]">
+              <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 text-xs">
                 {isMasterAdmin ? 'ThingsAlive Master Admin' : 'Client'}
               </span>
             </div>
 
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <UserCircle2 className="w-3.5 h-3.5 text-sky-600" />
+                <UserCircle2 className="w-4 h-4 text-sky-600" />
                 Username
               </span>
               <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{authUser.username}</span>
@@ -115,7 +115,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
             {!isMasterAdmin && (
               <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
                 <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <Briefcase className="w-3.5 h-3.5 text-sky-600" />
+                  <Briefcase className="w-4 h-4 text-sky-600" />
                   Client Organization
                 </span>
                 <span className="font-medium text-slate-700 dark:text-slate-200">{authUser.clientName || '—'}</span>
@@ -124,7 +124,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <CheckCircle2 className="w-3.5 h-3.5 text-sky-600" />
+                <CheckCircle2 className="w-4 h-4 text-sky-600" />
                 Account Status
               </span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
@@ -134,7 +134,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
             <div className="flex items-center justify-between py-1.5">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                <Calendar className="w-4 h-4 text-sky-600" />
                 {isMasterAdmin ? 'Access Level' : 'Client Since'}
               </span>
               <span className="font-medium text-slate-700 dark:text-slate-200">
@@ -147,12 +147,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
         {/* Change Password Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-              <KeyRound className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+              <KeyRound className="w-4.5 h-4.5" />
             </div>
             <div>
-              <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">Change Password</div>
-              <div className="text-xs text-slate-400">Update the password used to sign in</div>
+              <div className="font-semibold text-base text-slate-800 dark:text-slate-100">Change Password</div>
+              <div className="text-sm text-slate-400">Update the password used to sign in</div>
             </div>
           </div>
 
@@ -182,15 +182,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
             />
 
             {formError && (
-              <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{formError}</span>
               </div>
             )}
 
             {successMessage && (
-              <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{successMessage}</span>
               </div>
             )}

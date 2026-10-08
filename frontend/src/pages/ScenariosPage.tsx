@@ -12,7 +12,7 @@ export const ScenariosPage: React.FC = () => {
   const [builderRule, setBuilderRule] = useState<ConfiguredRule | 'new' | null>(null);
 
   return (
-    <div id="scenarios-view" className="space-y-6">
+    <div id="scenarios-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-xl font-bold">Things Scenarios</h2>
         <p className="text-sm text-sky-100">From machine signals to your next best action.</p>
@@ -20,10 +20,10 @@ export const ScenariosPage: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Reusable workflows &amp; outcomes</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Reusable workflows &amp; outcomes</h3>
           <button
             onClick={() => setBuilderRule('new')}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
+            className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
           >
             Create workflow
           </button>
@@ -33,7 +33,7 @@ export const ScenariosPage: React.FC = () => {
             {MOCK_RULES.map((r) => <RuleCard key={r.id} rule={r} onEdit={setBuilderRule} />)}
           </div>
         ) : (
-          <p className="text-[13px] text-slate-400">No configured outcomes yet. Create a rule in Alert Agent.</p>
+          <p className="text-sm text-slate-400">No configured outcomes yet. Create a rule in Alert Agent.</p>
         )}
       </div>
 

@@ -108,7 +108,7 @@ export const EquipmentTemplateDetailPage: React.FC<EquipmentTemplateDetailPagePr
   ];
 
   return (
-    <div className="space-y-6" data-purpose="equipment-template-detail">
+    <div className="space-y-3" data-purpose="equipment-template-detail">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>

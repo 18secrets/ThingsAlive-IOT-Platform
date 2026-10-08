@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { ApiError, Scenario, ScenarioInput } from '../../../lib/api';
 
 interface AddScenarioModalProps {
@@ -18,6 +19,12 @@ const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const SEVERITIES: Scenario['severity'][] = ['low', 'medium', 'high', 'critical'];
+const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ label: s, value: s }));
+const TIER_OPTIONS = [
+  { label: '1 — Rules on windows', value: 1 },
+  { label: '2 — Weak supervision', value: 2 },
+  { label: '3 — Trained model', value: 3 },
+];
 
 export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
   isOpen, onClose, equipmentClassSlug, availableSignals, onCreate, onUpdate, existingScenario,
@@ -123,28 +130,25 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Scenario Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(value) => handleNameChange(value)}
                 placeholder="e.g. Coolant Overheat"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Slug <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 disabled={isEditing}
                 value={slug}
-                onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+                onChange={(value) => { setSlug(value); setSlugTouched(true); }}
                 placeholder="e.g. coolant-overheat"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono disabled:bg-slate-50 dark:disabled:bg-slate-800/60 disabled:text-slate-400"
+                className="font-mono"
               />
             </div>
           </div>
@@ -153,12 +157,12 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Description
             </label>
-            <textarea
+            <Input
+              as="textarea"
               rows={2}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(value) => setDescription(value)}
               placeholder="What this scenario detects, and why it matters..."
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all resize-none leading-relaxed"
             />
           </div>
 
@@ -167,39 +171,37 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Severity
               </label>
-              <select
+              <SelectPicker
+                data={SEVERITY_OPTIONS}
                 value={severity}
-                onChange={(e) => setSeverity(e.target.value as Scenario['severity'])}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all cursor-pointer"
-              >
-                {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+                onChange={(value) => setSeverity((value ?? 'medium') as Scenario['severity'])}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Scoring Tier
               </label>
-              <select
+              <SelectPicker
+                data={TIER_OPTIONS}
                 value={tier}
-                onChange={(e) => setTier(Number(e.target.value) as Scenario['tier'])}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all cursor-pointer"
-              >
-                <option value={1}>1 — Rules on windows</option>
-                <option value={2}>2 — Weak supervision</option>
-                <option value={3}>3 — Trained model</option>
-              </select>
+                onChange={(value) => setTier((value ?? 1) as Scenario['tier'])}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Min. History (days)
               </label>
-              <input
-                type="number"
+              <InputNumber
                 min={0}
                 max={365}
                 value={minimumHistoryDays}
-                onChange={(e) => setMinimumHistoryDays(Math.max(0, Number(e.target.value) || 0))}
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
+                onChange={(value) => setMinimumHistoryDays(Math.max(0, Number(value) || 0))}
               />
             </div>
           </div>

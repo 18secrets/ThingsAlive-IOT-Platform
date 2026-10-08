@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, Copy, CheckCheck } from 'lucide-react';
+import { Input } from 'rsuite';
 import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
+import { copyToClipboard } from '../../lib/clipboard';
 
 interface InviteStaffModalProps {
   isOpen: boolean;
@@ -57,10 +59,12 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
   const handleCopyToken = () => {
     if (!invited) return;
-    navigator.clipboard?.writeText(invited.invitationToken).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    copyToClipboard(invited.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
   };
 
   return (
@@ -90,10 +94,10 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                 Invitation Token
               </label>
               <div className="relative">
-                <input
+                <Input
                   readOnly
                   value={invited.invitationToken}
-                  className="w-full px-3 py-2 pr-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 font-mono"
+                  className="pr-9 font-mono"
                 />
                 <button
                   type="button"
@@ -124,14 +128,12 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Full Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(value) => setFullName(value)}
                 placeholder="e.g. Deepak Rao"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 
@@ -139,13 +141,12 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Email <span className="text-rose-500">*</span>
               </label>
-              <input
+              <Input
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(value) => setEmail(value)}
                 placeholder="e.g. deepak@thingsalive.io"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 

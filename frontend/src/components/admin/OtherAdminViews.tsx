@@ -7,6 +7,7 @@ import {
   Trash2,
   MapPin,
 } from 'lucide-react';
+import { Input } from 'rsuite';
 import { IndustryTypeItem } from '../../types';
 import { ApiError, Plant, PlantInput } from '../../lib/api';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
@@ -37,18 +38,18 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   }, [items, searchTerm]);
 
   return (
-    <div id="industry-type-management-view" className="space-y-6">
+    <div id="industry-type-management-view" className="space-y-3">
 
       {/* Search & Add Action Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Industry Type Names or Codes..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            size="sm"
+            className="w-full pl-9!"
           />
         </div>
 
@@ -170,18 +171,18 @@ export const PlantView: React.FC<PlantViewProps> = ({
   }, [plants, searchTerm]);
 
   return (
-    <div id="plant-management-view" className="space-y-6">
+    <div id="plant-management-view" className="space-y-3">
 
       {/* Search & Add Action Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Plant Names, Codes, or Addresses..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            size="sm"
+            className="w-full pl-9!"
           />
         </div>
 

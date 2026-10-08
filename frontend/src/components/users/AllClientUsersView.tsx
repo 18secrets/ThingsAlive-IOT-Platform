@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, KeyRound, AlertCircle, Crown } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { ClientAccount, ClientUserItem, RoleDefinition } from '../../types';
 
 interface AllClientUsersViewProps {
@@ -33,28 +34,26 @@ export const AllClientUsersView: React.FC<AllClientUsersViewProps> = ({ clients,
   }, [clientUsers, searchTerm, clientFilter, clientNameById]);
 
   return (
-    <div id="all-client-users-view" className="space-y-6">
+    <div id="all-client-users-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+          <Input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="Search Name, Username, or Client..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+            className="pl-9!"
+            size="sm"
           />
         </div>
-        <select
+        <SelectPicker
+          data={[{ label: 'All Clients', value: 'All' }, ...clients.map((c) => ({ label: c.clientName, value: c.id }))]}
           value={clientFilter}
-          onChange={(e) => setClientFilter(e.target.value)}
-          className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer"
-        >
-          <option value="All">All Clients</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.clientName}</option>
-          ))}
-        </select>
+          onChange={(value) => setClientFilter(value ?? 'All')}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+        />
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">

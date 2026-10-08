@@ -319,13 +319,26 @@ export class CatalogAuthoringService {
       }
       if (formulas.length) await m.getRepository(EquipmentClassFormula).save(formulas);
 
+      // Exactly one version of a slug is ever the current published one. Without
+      // this, the version this publish is superseding stays `published` forever —
+      // every reader that narrows by `{ slug, status: 'published' }` expecting one
+      // row (the entitlement-filtered catalog read, the grant picker) gets two, and
+      // `retireClass` only finds out because it already defends against this with
+      // `.find()` instead of `.findOne()`. Publishing is the one place that should
+      // not have let it happen in the first place.
+      const classRepo = m.getRepository(EquipmentClassProfile);
+      const superseded = await classRepo.find({ where: { slug, status: 'published' } });
+      for (const row of superseded) row.status = 'retired';
+      if (superseded.length) await classRepo.save(superseded);
+
       draft.status = 'published';
       draft.publishedAt = now;
       this.logger.log(
         `${scope.userId} published template class "${slug}" v${draft.version}`
+          + `${superseded.length ? `, retiring v${superseded.map((r) => r.version).join(', v')}` : ''}`
           + `${formulas.length ? ` (${formulas.length} formula(s) compiled)` : ''}.`,
       );
-      return m.getRepository(EquipmentClassProfile).save(draft);
+      return classRepo.save(draft);
     }).catch(rethrowSensorContentError);
   }
 

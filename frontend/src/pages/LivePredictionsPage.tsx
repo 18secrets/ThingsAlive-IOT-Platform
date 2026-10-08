@@ -20,7 +20,7 @@ export const LivePredictionsPage: React.FC = () => {
   const predictionRules = rulesByOutcome('prediction');
 
   return (
-    <div id="live-predictions-view" className="space-y-6">
+    <div id="live-predictions-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <h2 className="text-xl font-bold">Things Predictions</h2>
         <p className="text-sm text-sky-100">From machine signals to your next best action.</p>
@@ -30,10 +30,10 @@ export const LivePredictionsPage: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Prediction scenarios</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Prediction scenarios</h3>
           <button
             onClick={() => setBuilderRule('new')}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
+            className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700"
           >
             Create prediction scenario
           </button>
@@ -43,7 +43,7 @@ export const LivePredictionsPage: React.FC = () => {
             {predictionRules.map((r) => <RuleCard key={r.id} rule={r} onEdit={setBuilderRule} />)}
           </div>
         ) : (
-          <p className="text-[13px] text-slate-400">No configured prediction outcomes for this selection.</p>
+          <p className="text-sm text-slate-400">No configured prediction outcomes for this selection.</p>
         )}
       </div>
 
@@ -55,8 +55,8 @@ export const LivePredictionsPage: React.FC = () => {
       />
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Prediction KPIs</h3>
-        <p className="text-[13px] text-slate-500 dark:text-slate-400 mb-4">Trend visibility with explicit limits on forecast confidence</p>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-base">Prediction KPIs</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Trend visibility with explicit limits on forecast confidence</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visible.map((t) => {
@@ -66,17 +66,17 @@ export const LivePredictionsPage: React.FC = () => {
                 <span className="inline-flex px-2 py-0.5 text-[10px] font-medium rounded border bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">
                   PLANNING ESTIMATE · {f.priority.toUpperCase()}
                 </span>
-                <h4 className="font-semibold text-slate-900 dark:text-white text-sm">{t.name}</h4>
-                <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{f.fuelL.toFixed(1)} L</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Next 8 running hours · fuel estimate from {f.samples} recent running-hour samples. Assumes the same load and idle pattern.
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base">{t.name}</h4>
+                <div className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{f.fuelL.toFixed(1)} L</div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Next 8h · from {f.samples} recent samples, same load assumed.
                 </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Recent idle share: {(f.idleShare * 100).toFixed(1)}%. {f.action}</p>
-                {t.offline && <p className="text-[11px] text-slate-400 dark:text-slate-500">Thing offline: forecast uses recorded history, not a live reading.</p>}
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">Rule-based planning estimate; not a validated failure prediction or remaining-life estimate.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Idle share {(f.idleShare * 100).toFixed(1)}% · {f.action}</p>
+                {t.offline && <p className="text-xs text-slate-400 dark:text-slate-500">Offline — using recorded history.</p>}
+                <p className="text-xs text-slate-400 dark:text-slate-500">Planning estimate, not a validated prediction.</p>
                 <div className="flex items-center gap-3 pt-1">
-                  <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-[12px] font-medium text-sky-700 dark:text-sky-400 hover:underline">
-                    <Sparkles className="w-3 h-3" /> Create work order
+                  <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline">
+                    <Sparkles className="w-3.5 h-3.5" /> Create work order
                   </button>
                 </div>
               </div>

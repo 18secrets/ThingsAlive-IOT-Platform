@@ -8,6 +8,7 @@ import {
   Layers,
   MapPin
 } from 'lucide-react';
+import { SelectPicker } from 'rsuite';
 import { ClientAccount, DeviceItem, EquipmentItem, OnboardingSessionItem } from '../../types';
 import { DeviceConnectivityChart, EquipmentStatusChart } from './AnalyticsCharts';
 
@@ -77,7 +78,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({
   );
 
   return (
-    <div id="master-admin-dashboard-view" className="space-y-6">
+    <div id="master-admin-dashboard-view" className="space-y-3">
 
       {/* Filters */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center gap-3">
@@ -86,25 +87,31 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({
           <span>Onboarding Activity Filters</span>
         </div>
         <div className="flex items-center gap-3 flex-wrap sm:ml-auto">
-          <select
+          <SelectPicker
+            data={[
+              { label: 'All Time', value: 'all' },
+              { label: 'Last 7 Days', value: 'week' },
+              { label: 'Last 30 Days', value: 'month' },
+            ]}
             value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="all">All Time</option>
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-          </select>
+            onChange={(value) => setTimeRange((value ?? 'all') as TimeRange)}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+          />
 
-          <select
+          <SelectPicker
+            data={[
+              { label: 'Select Status (All)', value: 'All' },
+              { label: 'Completed', value: 'Completed' },
+              { label: 'In Progress', value: 'In Progress' },
+            ]}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">Select Status (All)</option>
-            <option value="Completed">Completed</option>
-            <option value="In Progress">In Progress</option>
-          </select>
+            onChange={(value) => setStatusFilter((value ?? 'All') as StatusFilter)}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+          />
         </div>
       </div>
 

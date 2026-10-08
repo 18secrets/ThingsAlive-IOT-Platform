@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Pencil, Sigma, X, Check, Info, ShieldCheck } from 'lucide-react';
+import { Input } from 'rsuite';
 import { Sensor } from '../../../lib/api';
 import { TemplateKpiFormula } from '../../../types';
 
@@ -193,19 +194,19 @@ const AddKpiFormulaModal: React.FC<AddKpiFormulaModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Name <span className="text-rose-500">*</span></label>
-            <input
-              type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            <Input
+              required autoFocus value={name} onChange={(value) => setName(value)}
               placeholder="e.g. Fuel Efficiency"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Formula <span className="text-rose-500">*</span></label>
-            <textarea
-              rows={2} required value={formula} onChange={(e) => setFormula(e.target.value)}
+            <Input
+              as="textarea"
+              rows={2} required value={formula} onChange={(value) => setFormula(value)}
               placeholder="e.g. fuel_consumed_liters / running_hours"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-mono text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 resize-none"
+              className="font-mono"
             />
             {availableParameters.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -226,18 +227,17 @@ const AddKpiFormulaModal: React.FC<AddKpiFormulaModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Unit</label>
-            <input
-              type="text" value={unit} onChange={(e) => setUnit(e.target.value)}
+            <Input
+              value={unit} onChange={(value) => setUnit(value)}
               placeholder="e.g. L/hr"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
-            <textarea
-              rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 resize-none"
+            <Input
+              as="textarea"
+              rows={2} value={description} onChange={(value) => setDescription(value)}
             />
           </div>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
+import { Input, InputNumber, SelectPicker } from 'rsuite';
 import {
   ApiError, Sensor, SensorCategory, SensorInput, SensorParameterSpec,
 } from '../../lib/api';
@@ -114,27 +115,28 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Sensor Category <span className="text-red-500">*</span>
             </label>
-            <select
-              required
+            <SelectPicker
+              size="sm"
+              data={[
+                ...categories.map((c) => ({ label: c.name, value: c.id })),
+                { label: '+ Add new category…', value: NEW_CATEGORY },
+              ]}
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-sky-500 outline-none cursor-pointer"
-            >
-              <option value="">— Select Category —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-              <option value={NEW_CATEGORY}>+ Add new category…</option>
-            </select>
+              onChange={(value) => setCategoryId(value ?? '')}
+              placeholder="— Select Category —"
+              block
+              searchable={false}
+              cleanable={false}
+            />
             {categoryId === NEW_CATEGORY && (
-              <input
-                type="text"
+              <Input
+                size="sm"
                 autoFocus
                 required
                 value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
+                onChange={(value) => setNewCategoryName(value)}
                 placeholder="e.g. Engine, Hydraulics"
-                className="w-full mt-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none"
+                className="mt-2"
               />
             )}
           </div>
@@ -143,13 +145,12 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Sensor Name <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <Input
+              size="sm"
               required
               value={sensorName}
-              onChange={(e) => setSensorName(e.target.value)}
+              onChange={(value) => setSensorName(value)}
               placeholder="e.g. Hydraulic_Oil_Pressure_Sensor"
-              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none font-mono"
             />
           </div>
 
@@ -174,47 +175,47 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                   key={index}
                   className="grid grid-cols-12 gap-1.5 items-center bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-lg p-2"
                 >
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={spec.parameter}
-                    onChange={(e) => updateSpec(index, 'parameter', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'parameter', value)}
                     placeholder="Parameter (e.g. Engine RPM)"
-                    className="col-span-4 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-4"
                   />
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={spec.unit}
-                    onChange={(e) => updateSpec(index, 'unit', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'unit', value)}
                     placeholder="Unit"
-                    className="col-span-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-1"
                   />
-                  <input
-                    type="number"
+                  <InputNumber
+                    size="sm"
                     value={spec.min}
-                    onChange={(e) => updateSpec(index, 'min', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'min', String(value))}
                     placeholder="Min"
-                    className="col-span-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-1"
                   />
-                  <input
-                    type="number"
+                  <InputNumber
+                    size="sm"
                     value={spec.max}
-                    onChange={(e) => updateSpec(index, 'max', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'max', String(value))}
                     placeholder="Max"
-                    className="col-span-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-1"
                   />
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={spec.normalRange}
-                    onChange={(e) => updateSpec(index, 'normalRange', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'normalRange', value)}
                     placeholder="Normal Range"
-                    className="col-span-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-3"
                   />
-                  <input
-                    type="text"
+                  <Input
+                    size="sm"
                     value={spec.notes}
-                    onChange={(e) => updateSpec(index, 'notes', e.target.value)}
+                    onChange={(value) => updateSpec(index, 'notes', value)}
                     placeholder="Notes"
-                    className="col-span-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-md px-2 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-1"
                   />
                   <button
                     type="button"
@@ -234,12 +235,13 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               Description
             </label>
-            <textarea
+            <Input
+              as="textarea"
+              size="sm"
               rows={2}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(value) => setDescription(value)}
               placeholder="Operational sensor characteristics and telemetry frequency..."
-              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none resize-none"
             />
           </div>
 

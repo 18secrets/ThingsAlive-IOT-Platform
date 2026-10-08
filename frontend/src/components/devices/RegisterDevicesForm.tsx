@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Trash2, Info, CheckCircle2 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { ApiError, RegisterDeviceInput, ToolMapping } from '../../lib/api';
 
 interface RegisterDevicesFormProps {
@@ -29,6 +30,8 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
   const removeRow = (index: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
+  const toolMappingOptions = toolMappings.map((t) => ({ label: t.toolName, value: t.id }));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const devices: RegisterDeviceInput[] = rows
@@ -57,7 +60,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
   };
 
   return (
-    <div id="device-register-view" className="space-y-6 max-w-3xl mx-auto">
+    <div id="device-register-view" className="space-y-3 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -82,27 +85,24 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Tool Mapping <span className="text-slate-400 font-normal">(optional)</span>
               </label>
-              <select
-                value={toolMappingId}
-                onChange={(e) => setToolMappingId(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer"
-              >
-                <option value="">— No tool profile —</option>
-                {toolMappings.map((t) => (
-                  <option key={t.id} value={t.id}>{t.toolName}</option>
-                ))}
-              </select>
+              <SelectPicker
+                data={toolMappingOptions}
+                value={toolMappingId || null}
+                onChange={(value) => setToolMappingId(value ?? '')}
+                placeholder="— No tool profile —"
+                block
+                searchable={toolMappingOptions.length > 6}
+                cleanable
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Batch Reference <span className="text-slate-400 font-normal">(optional)</span>
               </label>
-              <input
-                type="text"
+              <Input
                 value={batchRef}
-                onChange={(e) => setBatchRef(e.target.value)}
+                onChange={(value) => setBatchRef(value)}
                 placeholder="e.g. PO-92"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
               />
             </div>
           </div>
@@ -124,20 +124,17 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
             <div className="space-y-2">
               {rows.map((row, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                  <input
-                    type="text"
-                    required
+                  <Input
                     value={row.imei}
-                    onChange={(e) => updateRow(index, 'imei', e.target.value)}
+                    onChange={(value) => updateRow(index, 'imei', value)}
                     placeholder="15-digit IMEI"
-                    className="col-span-7 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-7 font-mono"
                   />
-                  <input
-                    type="text"
+                  <Input
                     value={row.model}
-                    onChange={(e) => updateRow(index, 'model', e.target.value)}
+                    onChange={(value) => updateRow(index, 'model', value)}
                     placeholder="Model (optional)"
-                    className="col-span-4 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none"
+                    className="col-span-4"
                   />
                   <button
                     type="button"
@@ -157,11 +154,11 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Notes <span className="text-slate-400 font-normal">(optional)</span>
             </label>
-            <textarea
+            <Input
+              as="textarea"
               rows={2}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 resize-none"
+              onChange={(value) => setNotes(value)}
             />
           </div>
 

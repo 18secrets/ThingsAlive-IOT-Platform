@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { PlatformUserItem, PlatformUserRole } from '../../types';
 
 interface AddUserModalProps {
@@ -116,13 +117,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Employee ID <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 value={employeeId}
-                onChange={(e) => { setEmployeeId(e.target.value); setError(undefined); }}
+                onChange={(value) => { setEmployeeId(value); setError(undefined); }}
                 placeholder="e.g. EMP0009"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono"
+                className="font-mono"
               />
             </div>
 
@@ -130,13 +130,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Username <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 value={username}
-                onChange={(e) => { setUsername(e.target.value); setError(undefined); }}
+                onChange={(value) => { setUsername(value); setError(undefined); }}
                 placeholder="e.g. jsmith"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
           </div>
@@ -145,13 +143,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Email ID <span className="text-rose-500">*</span>
             </label>
-            <input
+            <Input
               type="email"
               required
               value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(undefined); }}
+              onChange={(value) => { setEmail(value); setError(undefined); }}
               placeholder="e.g. jsmith@thingsalive.io"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
             />
           </div>
 
@@ -160,28 +157,27 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Role <span className="text-rose-500">*</span>
               </label>
-              <select
+              <SelectPicker
+                data={ROLES.map((r) => ({ label: r, value: r }))}
                 value={role}
-                onChange={(e) => setRole(e.target.value as PlatformUserRole)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors cursor-pointer"
-              >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
+                onChange={(value) => setRole((value ?? 'Operational') as PlatformUserRole)}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Phone No <span className="text-rose-500">*</span>
               </label>
-              <input
+              <Input
                 type="tel"
                 required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(value) => setPhone(value)}
                 placeholder="e.g. 9898989898"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono"
+                className="font-mono"
               />
             </div>
           </div>

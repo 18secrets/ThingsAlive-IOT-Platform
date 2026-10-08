@@ -2,13 +2,15 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem,
-  EquipmentItem, DeviceItem, ClientAccount,
+  DeviceItem, ClientAccount,
 } from '../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
   EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
+  Entitlement, EquipmentProfile, EquipmentInput,
+  MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -67,8 +69,27 @@ interface AdminPageProps {
   onTogglePlantStatus: (id: string, currentStatus: Plant['status']) => void;
   devices: DeviceItem[];
   onDeleteDevice: (id: number) => void;
-  equipmentList: EquipmentItem[];
-  onAddEquipment: (equipment: EquipmentItem) => void;
+  realEquipment: EquipmentProfile[];
+  realEquipmentError?: string;
+  onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
+  onUpdateEquipment: (
+    sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
+  ) => Promise<EquipmentProfile>;
+  onMoveEquipment: (
+    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
+  ) => Promise<EquipmentProfile>;
+  onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
+  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClassesError?: string;
+  myDevices: MyDevice[];
+  myDevicesError?: string;
+  onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
+  onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
+  onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
+  onGetBindingDiscovery: (sourceSystem: string, externalId: string) => Promise<DiscoveryResult>;
+  onProposeOrActivateBinding: (
+    sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
+  ) => Promise<SignalBindingVersion>;
   clients: ClientAccount[];
   accountsError?: string;
   onCreateAccount: (
@@ -80,6 +101,10 @@ interface AdminPageProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  entitlements: Entitlement[];
+  entitlementsError?: string;
+  onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
+  onRevokeEntitlement: (id: string) => Promise<Entitlement>;
   staff: PlatformStaffMember[];
   staffError?: string;
   onInviteStaff: (input: {
@@ -103,9 +128,6 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
 
   const visiblePlants = restrictToClientAdmin ? props.plants.filter((p) => p.clientId === authUser.clientId) : props.plants;
   const visibleDevices = restrictToClientAdmin ? props.devices.filter((d) => d.clientId === authUser.clientId) : props.devices;
-  const visibleEquipment = restrictToClientAdmin
-    ? props.equipmentList.filter((e) => e.clientId === authUser.clientId)
-    : props.equipmentList;
   const modalClients = restrictToClientAdmin ? props.clients.filter((c) => c.id === authUser.clientId) : props.clients;
 
   return (
@@ -167,8 +189,21 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
         authUser.role === 'master-admin' ? undefined : () => navigate('/ai-onboarding?start=chat')
       }
       onDeleteDevice={props.onDeleteDevice}
-      equipmentList={visibleEquipment}
-      onAddEquipment={props.onAddEquipment}
+      realEquipment={props.realEquipment}
+      realEquipmentError={props.realEquipmentError}
+      onCreateEquipment={props.onCreateEquipment}
+      onUpdateEquipment={props.onUpdateEquipment}
+      onMoveEquipment={props.onMoveEquipment}
+      onRetireEquipment={props.onRetireEquipment}
+      myEquipmentClasses={props.myEquipmentClasses}
+      myEquipmentClassesError={props.myEquipmentClassesError}
+      myDevices={props.myDevices}
+      myDevicesError={props.myDevicesError}
+      onClaimDevice={props.onClaimDevice}
+      onUnclaimDevice={props.onUnclaimDevice}
+      onGetEquipmentCoverage={props.onGetEquipmentCoverage}
+      onGetBindingDiscovery={props.onGetBindingDiscovery}
+      onProposeOrActivateBinding={props.onProposeOrActivateBinding}
       activeSubTab={activeSubTab}
       onChangeSubTab={(tab) => navigate(`/admin/${tab}`)}
       clients={modalClients}
@@ -177,6 +212,10 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateAccount={props.onUpdateAccount}
       onResendInvitation={props.onResendInvitation}
       onToggleClientStatus={props.onToggleClientStatus}
+      entitlements={props.entitlements}
+      entitlementsError={props.entitlementsError}
+      onGrantEntitlement={props.onGrantEntitlement}
+      onRevokeEntitlement={props.onRevokeEntitlement}
       staff={props.staff}
       staffError={props.staffError}
       onInviteStaff={props.onInviteStaff}

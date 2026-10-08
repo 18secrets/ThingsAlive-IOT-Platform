@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Sparkles, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 
 interface AlertRuleRow {
   id: number;
@@ -219,34 +220,37 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
 
         <div className="flex flex-1 items-center gap-3 flex-wrap">
           {/* Search */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+            <Input
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
+              onChange={(value) => {
+                setSearchTerm(value);
                 setCurrentPage(1);
               }}
               placeholder="Search Alert Rules..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+              size="sm"
+              className="pl-9!"
             />
           </div>
 
           {/* Status Filter */}
-          <select
+          <SelectPicker
+            data={[
+              { label: 'Select Status (All)', value: 'All' },
+              { label: 'Deployed', value: 'Deployed' },
+              { label: 'Draft', value: 'Draft' },
+              { label: 'Disabled', value: 'Disabled' },
+            ]}
             value={selectedStatus}
-            onChange={(e) => {
-              setSelectedStatus(e.target.value);
+            onChange={(value) => {
+              setSelectedStatus(value ?? 'All');
               setCurrentPage(1);
             }}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">Select Status (All)</option>
-            <option value="Deployed">Deployed</option>
-            <option value="Draft">Draft</option>
-            <option value="Disabled">Disabled</option>
-          </select>
+            searchable={false}
+            cleanable={false}
+            size="sm"
+          />
         </div>
 
         {/* Add Alert — hands off to the AI Onboarding assistant, same as "Setup with AI" on Devices */}
@@ -326,18 +330,22 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span>Rows per page:</span>
-              <select
+              <SelectPicker
+                data={[
+                  { label: '10', value: 10 },
+                  { label: '20', value: 20 },
+                  { label: '50', value: 50 },
+                ]}
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
+                onChange={(value) => {
+                  setRowsPerPage(Number(value ?? 10));
                   setCurrentPage(1);
                 }}
-                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-200 text-xs focus:outline-none"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
+                searchable={false}
+                cleanable={false}
+                size="sm"
+                className="w-20"
+              />
             </div>
 
             <div className="flex items-center gap-1">

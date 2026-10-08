@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
@@ -65,7 +65,7 @@ export class CopyOnGrantService {
   ): Promise<CopyResult> {
     const template = await this.latestPublishedClass(templateSlug);
     if (!template) {
-      throw new Error(`No published template "${templateSlug}" to copy.`);
+      throw new BadRequestException(`No published template "${templateSlug}" to copy.`);
     }
 
     const scenarios = await this.latestPublishedScenarios(templateSlug);
@@ -89,7 +89,12 @@ export class CopyOnGrantService {
         // existing copy (merging what the tenant customised against what changed)
         // is a real feature this is not — that is QUPGRADE1's job.
         if ((existing.templateVersion ?? 0) < template.version) {
-          throw new Error(
+          // A plain Error here would 500 — this is a foreseeable refusal an HTTP
+          // caller (the master admin re-granting) needs to see as a 400, not a
+          // crash. test/formula-copy-on-grant.spec.ts calls this service directly
+          // and only matches the message, so BadRequestException (itself an Error)
+          // changes nothing there.
+          throw new BadRequestException(
             `Tenant ${tenantId} holds "${template.slug}" v${existing.templateVersion}, and v${template.version} `
               + 'is now published. Upgrading an existing copy to a newer class version is not built here — '
               + "that is QUPGRADE1's job. Nothing was changed.",

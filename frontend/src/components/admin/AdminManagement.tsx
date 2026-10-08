@@ -9,12 +9,14 @@ import {
   Briefcase,
   ShieldCheck
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, EquipmentItem, DeviceItem, ClientAccount } from '../../types';
+import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, DeviceItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
   EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
+  Entitlement, EquipmentProfile, EquipmentInput,
+  MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -95,8 +97,27 @@ interface AdminManagementProps {
   onNavigateToDeviceSetup: () => void;
   onNavigateToAISetup?: () => void;
   onDeleteDevice: (id: number) => void;
-  equipmentList: EquipmentItem[];
-  onAddEquipment: (equipment: EquipmentItem) => void;
+  realEquipment: EquipmentProfile[];
+  realEquipmentError?: string;
+  onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
+  onUpdateEquipment: (
+    sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
+  ) => Promise<EquipmentProfile>;
+  onMoveEquipment: (
+    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
+  ) => Promise<EquipmentProfile>;
+  onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
+  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClassesError?: string;
+  myDevices: MyDevice[];
+  myDevicesError?: string;
+  onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
+  onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
+  onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
+  onGetBindingDiscovery: (sourceSystem: string, externalId: string) => Promise<DiscoveryResult>;
+  onProposeOrActivateBinding: (
+    sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
+  ) => Promise<SignalBindingVersion>;
   activeSubTab: AdminSubTab;
   onChangeSubTab: (tab: AdminSubTab) => void;
   clients: ClientAccount[];
@@ -110,6 +131,10 @@ interface AdminManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  entitlements: Entitlement[];
+  entitlementsError?: string;
+  onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
+  onRevokeEntitlement: (id: string) => Promise<Entitlement>;
   staff: PlatformStaffMember[];
   staffError?: string;
   onInviteStaff: (input: {
@@ -180,8 +205,21 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onNavigateToDeviceSetup,
   onNavigateToAISetup,
   onDeleteDevice,
-  equipmentList,
-  onAddEquipment,
+  realEquipment,
+  realEquipmentError,
+  onCreateEquipment,
+  onUpdateEquipment,
+  onMoveEquipment,
+  onRetireEquipment,
+  myEquipmentClasses,
+  myEquipmentClassesError,
+  myDevices,
+  myDevicesError,
+  onClaimDevice,
+  onUnclaimDevice,
+  onGetEquipmentCoverage,
+  onGetBindingDiscovery,
+  onProposeOrActivateBinding,
   activeSubTab,
   onChangeSubTab,
   clients,
@@ -190,6 +228,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleClientStatus,
+  entitlements,
+  entitlementsError,
+  onGrantEntitlement,
+  onRevokeEntitlement,
   staff,
   staffError,
   onInviteStaff,
@@ -241,13 +283,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               key={tab.id}
               id={`admin-subtab-${tab.id}`}
               onClick={() => onChangeSubTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`px-4 py-2 text-base font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                 isActive
                   ? 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 shadow-xs font-semibold'
                   : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
+              <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -344,14 +386,22 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
         {restrictToClientAdmin && activeSubTab === 'equipment' && (
           <EquipmentManagement
-            equipmentList={equipmentList}
-            onAddEquipment={onAddEquipment}
-            categories={categories}
-            plants={plants}
-            toolMappings={toolMappings}
-            sensors={sensors}
-            clients={clients}
-            devices={devices}
+            equipment={realEquipment}
+            error={realEquipmentError}
+            onCreateEquipment={onCreateEquipment}
+            onUpdateEquipment={onUpdateEquipment}
+            onMoveEquipment={onMoveEquipment}
+            onRetireEquipment={onRetireEquipment}
+            equipmentClasses={myEquipmentClasses}
+            equipmentClassesError={myEquipmentClassesError}
+            plants={realPlants}
+            devices={myDevices}
+            devicesError={myDevicesError}
+            onClaimDevice={onClaimDevice}
+            onUnclaimDevice={onUnclaimDevice}
+            onGetCoverage={onGetEquipmentCoverage}
+            onGetDiscovery={onGetBindingDiscovery}
+            onProposeOrActivateBinding={onProposeOrActivateBinding}
           />
         )}
 
@@ -363,6 +413,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateAccount={onUpdateAccount}
             onResendInvitation={onResendInvitation}
             onToggleStatus={onToggleClientStatus}
+            equipmentClasses={equipmentClasses}
+            entitlements={entitlements}
+            entitlementsError={entitlementsError}
+            onGrantEntitlement={onGrantEntitlement}
+            onRevokeEntitlement={onRevokeEntitlement}
           />
         )}
 

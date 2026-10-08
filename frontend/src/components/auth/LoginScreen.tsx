@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Network, AlertCircle, Info, MailCheck } from 'lucide-react';
+import { AlertCircle, Info, MailCheck } from 'lucide-react';
+import { Input } from 'rsuite';
 import { PasswordField } from '../common/PasswordField';
 import { useAuth } from '../../lib/AuthProvider';
 import { ApiError } from '../../lib/api';
+import logoFull from '../../../assets/logo-icon.png';
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
@@ -41,35 +43,25 @@ export const LoginScreen: React.FC = () => {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-center text-[#00A4BD] mb-3">
-            <Network className="w-7 h-7 stroke-[2.2]" />
-          </div>
-          <span className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-100">
-            Things<span className="font-normal text-slate-700 dark:text-slate-300">Alive</span>
-          </span>
-          <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Telematics IoT OS</span>
+          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain mb-2" />
+          {/* <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Telematics IoT OS</span> */}
         </div>
 
         {/* Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-6">
-          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Sign in</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5">
-            Master Admin signs in with a username; everyone else signs in with their email.
-          </p>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-1 mb-5">Sign in</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Username or email
               </label>
-              <input
-                type="text"
+              <Input
                 required
                 autoFocus
                 value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                onChange={(value) => setIdentifier(value)}
                 placeholder="you@yourcompany.com"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
               />
             </div>
 
@@ -111,7 +103,7 @@ export const LoginScreen: React.FC = () => {
             src/identity/services/platform-credential.service.ts) — created
             via `npm run create:platform-user`, not hardcoded. Every login on
             this screen, including this one, goes to the real API. */}
-        <div className="mt-4">
+        {/* <div className="mt-4">
           <button
             type="button"
             onClick={() => setShowHints(!showHints)}
@@ -126,7 +118,7 @@ export const LoginScreen: React.FC = () => {
               <div><strong className="text-slate-700 dark:text-slate-300">Everyone else:</strong> a real email + password from the API's own database</div>
             </div>
           )}
-        </div>
+        </div> */}
       </div>
     </div>
   );

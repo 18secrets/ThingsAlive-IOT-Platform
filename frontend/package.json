@@ -23,6 +23,7 @@
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.18.4",
     "recharts": "^3.10.1",
+    "rsuite": "^6.2.5",
     "vite": "^6.2.3"
   },
   "devDependencies": {

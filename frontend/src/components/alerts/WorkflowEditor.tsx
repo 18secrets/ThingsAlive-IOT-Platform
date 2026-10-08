@@ -15,6 +15,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Input, SelectPicker } from 'rsuite';
 import { Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { WorkflowSpec, WorkflowOperator, WorkflowActionType } from '../../utils/workflowParser';
 import { FLEET } from '../../data/fleetMockData';
@@ -115,21 +116,29 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) 
     <div id="workflow-editor-view" className="space-y-4">
       {/* Toolbar */}
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <input
-            type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-w-[260px]"
-          />
-          <select
-            value={equipmentId}
-            onChange={(e) => setEquipmentId(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-w-[220px]"
-          >
-            <option value="">Select equipment…</option>
-            {FLEET.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
-          </select>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
+          <label className="block space-y-1 flex-1 min-w-[200px]">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Workflow name</span>
+            <Input
+              value={workflowName}
+              onChange={(value) => setWorkflowName(value)}
+              size="sm"
+              className="w-full"
+            />
+          </label>
+          <div className="block space-y-1 flex-1 min-w-[200px]">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment</span>
+            <SelectPicker
+              data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
+              value={equipmentId}
+              onChange={(value) => setEquipmentId(value ?? '')}
+              placeholder="Select equipment…"
+              searchable={false}
+              cleanable={false}
+              size="sm"
+              block
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -170,12 +179,12 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) 
         <div className="w-56 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 overflow-y-auto space-y-5">
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
+            <Input
               value={paletteSearch}
-              onChange={(e) => setPaletteSearch(e.target.value)}
+              onChange={(value) => setPaletteSearch(value)}
               placeholder="Search Nodes..."
-              className="w-full pl-7 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors"
+              size="sm"
+              className="pl-7!"
             />
           </div>
 
@@ -242,8 +251,6 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ spec, onDeploy }) 
   );
 };
 
-const fieldClass =
-  'w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 transition-colors';
 const labelClass = 'text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1';
 
 const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<WorkflowNodeData>) => void }> = ({
@@ -259,10 +266,10 @@ const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<Wo
       {data.kind === 'trigger' && (
         <label className="block">
           <span className={labelClass}>Schedule</span>
-          <input
-            className={fieldClass}
+          <Input
+            size="sm"
             value={data.scheduleLabel ?? ''}
-            onChange={(e) => onChange({ scheduleLabel: e.target.value })}
+            onChange={(value) => onChange({ scheduleLabel: value })}
             placeholder="Every 5 minutes"
           />
         </label>
@@ -271,10 +278,10 @@ const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<Wo
       {(data.kind === 'readSensor' || data.kind === 'condition') && (
         <label className="block">
           <span className={labelClass}>Sensor</span>
-          <input
-            className={fieldClass}
+          <Input
+            size="sm"
             value={data.sensor ?? ''}
-            onChange={(e) => onChange({ sensor: e.target.value })}
+            onChange={(value) => onChange({ sensor: value })}
             placeholder="converter_oil_temperature"
           />
         </label>
@@ -282,26 +289,24 @@ const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<Wo
 
       {data.kind === 'condition' && (
         <>
-          <label className="block">
+          <div className="block">
             <span className={labelClass}>Operator</span>
-            <select
-              className={fieldClass}
+            <SelectPicker
+              data={(['>', '<', '>=', '<=', '='] as WorkflowOperator[]).map((op) => ({ label: op, value: op }))}
               value={data.operator ?? '>'}
-              onChange={(e) => onChange({ operator: e.target.value as WorkflowOperator })}
-            >
-              {(['>', '<', '>=', '<=', '='] as WorkflowOperator[]).map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={(value) => onChange({ operator: (value ?? '>') as WorkflowOperator })}
+              searchable={false}
+              cleanable={false}
+              block
+              size="sm"
+            />
+          </div>
           <label className="block">
             <span className={labelClass}>Threshold</span>
-            <input
-              className={fieldClass}
+            <Input
+              size="sm"
               value={data.value ?? ''}
-              onChange={(e) => onChange({ value: e.target.value })}
+              onChange={(value) => onChange({ value })}
               placeholder="80"
             />
           </label>
@@ -312,19 +317,19 @@ const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<Wo
         <>
           <label className="block">
             <span className={labelClass}>Field</span>
-            <input
-              className={fieldClass}
+            <Input
+              size="sm"
               value={data.field ?? ''}
-              onChange={(e) => onChange({ field: e.target.value })}
+              onChange={(value) => onChange({ field: value })}
               placeholder="maintenance_mode"
             />
           </label>
           <label className="block">
             <span className={labelClass}>Value</span>
-            <input
-              className={fieldClass}
+            <Input
+              size="sm"
               value={data.value ?? ''}
-              onChange={(e) => onChange({ value: e.target.value })}
+              onChange={(value) => onChange({ value })}
               placeholder="OFF"
             />
           </label>
@@ -332,36 +337,39 @@ const NodeInspector: React.FC<{ node: WorkflowNode; onChange: (patch: Partial<Wo
       )}
 
       {data.kind === 'gate' && (
-        <label className="block">
+        <div className="block">
           <span className={labelClass}>Logic</span>
-          <select className={fieldClass} value={data.logic ?? 'AND'} onChange={(e) => onChange({ logic: e.target.value as 'AND' | 'OR' })}>
-            <option value="AND">AND</option>
-            <option value="OR">OR</option>
-          </select>
-        </label>
+          <SelectPicker
+            data={[{ label: 'AND', value: 'AND' }, { label: 'OR', value: 'OR' }]}
+            value={data.logic ?? 'AND'}
+            onChange={(value) => onChange({ logic: (value ?? 'AND') as 'AND' | 'OR' })}
+            searchable={false}
+            cleanable={false}
+            block
+            size="sm"
+          />
+        </div>
       )}
 
       {data.kind === 'action' && (
-        <label className="block">
+        <div className="block">
           <span className={labelClass}>Type</span>
-          <select
-            className={fieldClass}
+          <SelectPicker
+            data={(['Webhook', 'Email', 'SMS'] as WorkflowActionType[]).map((t) => ({ label: t, value: t }))}
             value={data.actionType ?? 'Webhook'}
-            onChange={(e) => onChange({ actionType: e.target.value as WorkflowActionType })}
-          >
-            {(['Webhook', 'Email', 'SMS'] as WorkflowActionType[]).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(value) => onChange({ actionType: (value ?? 'Webhook') as WorkflowActionType })}
+            searchable={false}
+            cleanable={false}
+            block
+            size="sm"
+          />
+        </div>
       )}
 
       {data.kind === 'processing' && (
         <label className="block">
           <span className={labelClass}>Label</span>
-          <input className={fieldClass} value={data.title ?? ''} onChange={(e) => onChange({ title: e.target.value })} />
+          <Input size="sm" value={data.title ?? ''} onChange={(value) => onChange({ title: value })} />
           <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
             Visual step only — not yet part of the saved alert logic.
           </p>

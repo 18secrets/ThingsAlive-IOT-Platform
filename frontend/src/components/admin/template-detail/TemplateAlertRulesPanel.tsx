@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Pencil, Bell, X, Check, ShieldCheck } from 'lucide-react';
+import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { Sensor } from '../../../lib/api';
 import { AlertCondition, AlertSeverity, TemplateAlertRule } from '../../../types';
 
@@ -197,6 +198,7 @@ interface AddAlertRuleModalProps {
 }
 
 const CONDITIONS: AlertCondition[] = ['>', '>=', '<', '<=', '==', '!='];
+const CONDITION_OPTIONS = CONDITIONS.map((c) => ({ label: c, value: c }));
 
 const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingRule, templateId, availableParameters,
@@ -254,37 +256,43 @@ const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Rule Name <span className="text-rose-500">*</span></label>
-            <input
-              type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            <Input
+              required autoFocus value={name} onChange={(value) => setName(value)}
               placeholder="e.g. High coolant temperature"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Parameter</label>
-              <select
-                value={parameter} onChange={(e) => setParameter(e.target.value)}
-                className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 cursor-pointer"
-              >
-                {availableParameters.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <SelectPicker
+                data={availableParameters.map((p) => ({ label: p, value: p }))}
+                value={parameter}
+                onChange={(value) => setParameter(value ?? '')}
+                block
+                size="sm"
+                searchable={false}
+                cleanable={false}
+              />
             </div>
             <div className="col-span-1">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Condition</label>
-              <select
-                value={condition} onChange={(e) => setCondition(e.target.value as AlertCondition)}
-                className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 cursor-pointer font-mono"
-              >
-                {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <SelectPicker
+                data={CONDITION_OPTIONS}
+                value={condition}
+                onChange={(value) => setCondition((value ?? '>') as AlertCondition)}
+                block
+                size="sm"
+                searchable={false}
+                cleanable={false}
+                className="font-mono"
+              />
             </div>
             <div className="col-span-1">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Threshold</label>
-              <input
-                type="number" required value={threshold} onChange={(e) => setThreshold(e.target.value)}
-                className="w-full px-2 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100"
+              <InputNumber
+                required value={threshold} onChange={(value) => setThreshold(String(value))}
+                size="sm"
               />
             </div>
           </div>
@@ -307,10 +315,10 @@ const AddAlertRuleModal: React.FC<AddAlertRuleModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Message</label>
-            <textarea
-              rows={2} value={message} onChange={(e) => setMessage(e.target.value)}
+            <Input
+              as="textarea"
+              rows={2} value={message} onChange={(value) => setMessage(value)}
               placeholder="What the operator sees when this fires..."
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 resize-none"
             />
           </div>
 

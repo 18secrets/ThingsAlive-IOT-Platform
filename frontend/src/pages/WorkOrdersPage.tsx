@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, ClipboardList } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { MOCK_WORK_ORDERS, MockWorkOrder, WorkOrderPriority, WorkOrderStatus } from '../data/clientOpsMockData';
 import { FLEET, excursionsFor, findThing, isBreaching } from '../data/fleetMockData';
@@ -51,7 +52,7 @@ export const WorkOrdersPage: React.FC = () => {
   }
 
   return (
-    <div id="work-orders-view" className="space-y-6">
+    <div id="work-orders-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-xl font-bold">Work Orders</h2>
@@ -80,19 +81,21 @@ export const WorkOrdersPage: React.FC = () => {
               <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <ClipboardList className="w-5 h-5 text-slate-400" />
-                  <select
+                  <SelectPicker
+                    data={STATUS_OPTIONS.map((s) => ({ label: s, value: s }))}
                     value={o.status}
-                    onChange={(e) => setStatus(o.id, e.target.value as WorkOrderStatus)}
-                    className={`text-[12px] font-medium rounded-lg border px-2 py-1 ${STATUS_STYLE[o.status]}`}
-                  >
-                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                    onChange={(value) => value && setStatus(o.id, value as WorkOrderStatus)}
+                    searchable={false}
+                    cleanable={false}
+                    size="sm"
+                    className={`text-sm font-medium rounded-lg border ${STATUS_STYLE[o.status]}`}
+                  />
                 </div>
-                <h4 className="font-semibold text-slate-900 dark:text-white text-sm">{o.title}</h4>
-                <p className="text-[12px] text-slate-500 dark:text-slate-400">{thing?.name ?? o.equipmentName}</p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">{o.channel} · {o.contact || 'Contact not specified'}</p>
-                {o.notes && <p className="text-[12px] text-slate-500 dark:text-slate-400">{o.notes}</p>}
-                <small className="block text-[11px] text-slate-400 dark:text-slate-500 pt-1">{new Date(o.createdAt).toLocaleString()} · Not dispatched</small>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{thing?.name ?? o.equipmentName}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{o.channel} · {o.contact || 'Contact not specified'}</p>
+                {o.notes && <p className="text-sm text-slate-500 dark:text-slate-400">{o.notes}</p>}
+                <small className="block text-xs text-slate-400 dark:text-slate-500 pt-1">{new Date(o.createdAt).toLocaleString()} · Not dispatched</small>
               </div>
             );
           })}
@@ -127,29 +130,36 @@ const CreateWorkOrderForm: React.FC<{
     >
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Task</span>
-        <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Inspect coolant sensor" />
+        <Input required value={title} onChange={(value) => setTitle(value)} placeholder="e.g. Inspect coolant sensor" />
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment code</span>
-          <input required value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. 4100460" />
+          <Input required value={equipmentCode} onChange={(value) => setEquipmentCode(value)} placeholder="e.g. 4100460" />
         </label>
         <label className="block space-y-1">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Equipment name</span>
-          <input value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" placeholder="e.g. Diesel Generator Set 320 kVA" />
+          <Input value={equipmentName} onChange={(value) => setEquipmentName(value)} placeholder="e.g. Diesel Generator Set 320 kVA" />
         </label>
       </div>
-      <label className="block space-y-1">
+      <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Priority</span>
-        <select value={priority} onChange={(e) => setPriority(e.target.value as WorkOrderPriority)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm">
-          <option value="Low">Low</option>
-          <option value="Medium">Medium</option>
-          <option value="High">High</option>
-        </select>
-      </label>
+        <SelectPicker
+          data={[
+            { label: 'Low', value: 'Low' },
+            { label: 'Medium', value: 'Medium' },
+            { label: 'High', value: 'High' },
+          ]}
+          value={priority}
+          onChange={(value) => setPriority((value ?? 'Medium') as WorkOrderPriority)}
+          block
+          searchable={false}
+          cleanable={false}
+        />
+      </div>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes</span>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm" />
+        <Input as="textarea" rows={3} value={notes} onChange={(value) => setNotes(value)} />
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">

@@ -13,7 +13,15 @@ import {
   SlidersHorizontal,
   Plus
 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { DeviceItem, ToolMappingItem, SensorItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
+
+const PROTOCOL_OPTIONS = [
+  { label: 'MODBUS TCP', value: 'MODBUS TCP' },
+  { label: 'CAN Bus (J1939)', value: 'CAN Bus (J1939)' },
+  { label: 'MQTT / TLS', value: 'MQTT / TLS' },
+  { label: 'RS-485 Modbus RTU', value: 'RS-485 Modbus RTU' },
+];
 
 interface DeviceSetupProps {
   onBack: () => void;
@@ -143,6 +151,27 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
 
   const effectiveProtocol = matchedTool ? matchedTool.protocol : manualProtocol;
 
+  const clientOptions = useMemo(
+    () => clients.map((c) => ({ label: c.clientName, value: c.id })),
+    [clients],
+  );
+  const toolMappingOptions = useMemo(
+    () => toolMappings.map((tool) => ({
+      label: `${tool.toolName} (${tool.identifier}) - ${tool.protocol}`,
+      value: tool.id,
+    })),
+    [toolMappings],
+  );
+  const plantOptions = useMemo(
+    () => filteredPlants.map((p) => ({ label: `${p.name} (${p.location})`, value: p.name })),
+    [filteredPlants],
+  );
+  const plantPlaceholder = !selectedClientId
+    ? 'Select a client first'
+    : filteredPlants.length === 0
+    ? 'No plants configured for this client'
+    : 'Select a plant';
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const selectedClientAccount = clients.find((c) => c.id === selectedClientId);
@@ -166,26 +195,7 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
   };
 
   return (
-    <div id="device-setup-view" className="space-y-6 max-w-4xl mx-auto" data-purpose="device-setup-page">
-      
-      {/* Top Breadcrumb & Action */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Device Management</span>
-        </button>
-
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-0.5 bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 text-xs font-medium rounded border border-sky-200 dark:border-sky-800">
-            Admin Master Data Bound
-          </span>
-          <span className="text-xs text-slate-400">Step 1 of 1 • Onboarding</span>
-        </div>
-      </div>
-
+    <div id="device-setup-view" className="space-y-3 max-w-4xl mx-auto" data-purpose="device-setup-page">
       {/* Main Setup Card */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xs overflow-hidden">
         
@@ -220,7 +230,7 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-3">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm font-sans">
             {/* Client */}
@@ -228,18 +238,16 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Client <span className="text-rose-500">*</span>
               </label>
-              <select
-                required
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+              <SelectPicker
+                data={clientOptions}
+                value={selectedClientId || null}
+                onChange={(value) => setSelectedClientId(value ?? '')}
                 disabled={clientLocked}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-              >
-                <option value="" disabled>Select a client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.clientName}</option>
-                ))}
-              </select>
+                placeholder="Select a client"
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
 
             {/* Tool Name (from Admin Tool Mappings) — this becomes the Device Name */}
@@ -255,19 +263,15 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
                   </span>
                 )}
               </div>
-              <select
-                required
-                value={selectedToolId}
-                onChange={(e) => setSelectedToolId(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer"
-              >
-                <option value="" disabled>Select a tool mapping</option>
-                {toolMappings.map((tool) => (
-                  <option key={tool.id} value={tool.id}>
-                    {tool.toolName} ({tool.identifier}) - {tool.protocol}
-                  </option>
-                ))}
-              </select>
+              <SelectPicker
+                data={toolMappingOptions}
+                value={selectedToolId || null}
+                onChange={(value) => setSelectedToolId(value ?? '')}
+                placeholder="Select a tool mapping"
+                block
+                searchable={toolMappingOptions.length > 6}
+                cleanable={false}
+              />
               <p className="text-[10px] text-slate-400 mt-1">
                 The Device Name is set to the selected Tool Name; its mapped sensors and parameters auto-populate below.
               </p>
@@ -278,13 +282,11 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 IMEI / Hardware Serial Number <span className="text-rose-500">*</span>
               </label>
-              <input 
-                type="text" 
-                required
+              <Input
                 value={imei}
-                onChange={(e) => setImei(e.target.value)}
-                placeholder="15-digit unique cellular hardware IMEI" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors font-mono"
+                onChange={(value) => setImei(value)}
+                placeholder="15-digit unique cellular hardware IMEI"
+                className="font-mono"
               />
             </div>
 
@@ -296,25 +298,16 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
                 </label>
                 <span className="text-[11px] text-sky-600 font-medium">Admin Only</span>
               </div>
-              <select
-                value={selectedPlant}
-                onChange={(e) => setSelectedPlant(e.target.value)}
-                required
-                disabled={!selectedClientId}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-              >
-                {!selectedClientId ? (
-                  <option value="">Select a client first</option>
-                ) : filteredPlants.length === 0 ? (
-                  <option value="">No plants configured for this client</option>
-                ) : (
-                  filteredPlants.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.location})
-                    </option>
-                  ))
-                )}
-              </select>
+              <SelectPicker
+                data={plantOptions}
+                value={selectedPlant || null}
+                onChange={(value) => setSelectedPlant(value ?? '')}
+                disabled={!selectedClientId || filteredPlants.length === 0}
+                placeholder={plantPlaceholder}
+                block
+                searchable={false}
+                cleanable={false}
+              />
             </div>
           </div>
 
@@ -529,17 +522,16 @@ export const DeviceSetup: React.FC<DeviceSetupProps> = ({
                   Communication Protocol: <strong className="font-semibold text-slate-800 dark:text-slate-200">{effectiveProtocol}</strong>
                 </span>
                 {!matchedTool && (
-                  <select
-                    value={manualProtocol}
-                    onChange={(e) => setManualProtocol(e.target.value)}
-                    className="ml-2 px-2 py-0.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs cursor-pointer text-slate-700 dark:text-slate-300"
-                  >
-                    <option value="">Select protocol</option>
-                    <option value="MODBUS TCP">MODBUS TCP</option>
-                    <option value="CAN Bus (J1939)">CAN Bus (J1939)</option>
-                    <option value="MQTT / TLS">MQTT / TLS</option>
-                    <option value="RS-485 Modbus RTU">RS-485 Modbus RTU</option>
-                  </select>
+                  <SelectPicker
+                    data={PROTOCOL_OPTIONS}
+                    value={manualProtocol || null}
+                    onChange={(value) => setManualProtocol(value ?? '')}
+                    placeholder="Select protocol"
+                    searchable={false}
+                    cleanable={false}
+                    size="sm"
+                    className="ml-2"
+                  />
                 )}
               </div>
               <span className="text-slate-400">Sampling: 1 Hz Real-time Continuous</span>

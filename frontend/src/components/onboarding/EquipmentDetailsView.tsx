@@ -1,6 +1,7 @@
-import React from 'react';
-import { Calendar, Settings } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { DateRangePicker } from 'rsuite';
 
 type LiveParamType = 'gauge' | 'value' | 'status';
 
@@ -147,7 +148,7 @@ const Gauge: React.FC<{ value: number; max: number; color: string }> = ({ value,
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute bottom-0 left-0 w-full text-center pb-0.5">
-        <span className="text-base font-bold text-[#03045e] dark:text-sky-300">{value}</span>
+        <span className="text-base font-semibold text-[#03045e] dark:text-sky-300">{value}</span>
       </div>
     </div>
   );
@@ -188,6 +189,7 @@ const AlertCard: React.FC<{ alert: AlertInsightItem }> = ({ alert }) => (
 
 export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equipment = SAMPLE_EQUIPMENT }) => {
   const eq = equipment;
+  const [dateRange, setDateRange] = useState<[Date, Date] | null>(null);
 
   return (
     <div id="equipment-details-view" className="space-y-4">
@@ -195,13 +197,15 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
          header above; this row carries the two controls that are specific to
          this screen. */}
       <div className="flex justify-end items-center gap-2">
-        <button
-          type="button"
-          className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          Select Date Range
-        </button>
+        <DateRangePicker
+          value={dateRange}
+          onChange={setDateRange}
+          placeholder="Select Date Range"
+          format="dd MMM yyyy"
+          character=" – "
+          placement="bottomEnd"
+          cleanable
+        />
       </div>
 
       {/* Info grid + location */}
@@ -267,13 +271,13 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
                 {p.type === 'gauge' && <Gauge value={p.value as number} max={p.max ?? 100} color={p.color ?? '#61a075'} />}
                 {p.type === 'value' && (
                   <div className="h-[70px] flex items-center">
-                    <span className="text-2xl font-extrabold text-[#03045e] dark:text-sky-300">{p.value}</span>
+                    <span className="text-2xl font-semibold text-[#03045e] dark:text-sky-300">{p.value}</span>
                   </div>
                 )}
                 {p.type === 'status' && (
                   <div className="h-[70px] flex items-center">
                     <span
-                      className={`px-3 py-1.5 rounded-md text-xl font-extrabold ${
+                      className={`px-3 py-1.5 rounded-md text-xl font-semibold ${
                         p.value === 'ON'
                           ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300'
                           : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300'

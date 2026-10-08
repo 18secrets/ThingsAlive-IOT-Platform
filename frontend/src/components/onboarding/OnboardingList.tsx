@@ -14,6 +14,7 @@ import {
   X,
   Printer
 } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
 import { OnboardingSessionItem } from '../../types';
 
 interface OnboardingListProps {
@@ -89,7 +90,7 @@ export const OnboardingList: React.FC<OnboardingListProps> = ({
   };
 
   return (
-    <div id="onboarding-list-view" className="space-y-6">
+    <div id="onboarding-list-view" className="space-y-3">
 
       {/* Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -139,26 +140,29 @@ export const OnboardingList: React.FC<OnboardingListProps> = ({
       {/* Search / Filter / Add Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+            <Input
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(value) => setSearchTerm(value)}
               placeholder="Search Onboarding Sessions..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+              size="sm"
+              className="pl-9!"
             />
           </div>
 
-          <select
+          <SelectPicker
+            data={[
+              { label: 'Select Status (All)', value: 'All' },
+              { label: 'Completed', value: 'Completed' },
+              { label: 'In Progress', value: 'In Progress' },
+            ]}
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="py-2 px-3 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            <option value="All">Select Status (All)</option>
-            <option value="Completed">Completed</option>
-            <option value="In Progress">In Progress</option>
-          </select>
+            onChange={(value) => setSelectedStatus(value ?? 'All')}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+          />
         </div>
 
         <button

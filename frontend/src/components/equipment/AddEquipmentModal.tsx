@@ -1,455 +1,248 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Check, Cpu, Layers, Radio, MapPin, Sparkles } from 'lucide-react';
-import { EquipmentItem, ToolMappingItem, SensorItem, CategoryItem, ClientAccount, PlantItem, DeviceItem } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { X, Check } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
+import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier } from '../../lib/api';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (equipment: EquipmentItem) => void;
-  categories: (CategoryItem | string)[];
-  plants: PlantItem[];
-  toolMappings: ToolMappingItem[];
-  sensors: SensorItem[];
-  clients: ClientAccount[];
-  devices: DeviceItem[];
+  onSave: (input: EquipmentInput) => Promise<void>;
+  onUpdate: (
+    sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
+  ) => Promise<void>;
+  /** Placement has its own route and needs a reason — throws to abort the whole
+   *  save if the person backs out of giving one. */
+  onMove: (sourceSystem: string, externalId: string, toPlantId: string | null) => Promise<void>;
+  equipmentClasses: EquipmentClass[];
+  plants: Plant[];
+  /** Present to edit that machine instead of registering a new one. */
+  existingEquipment?: EquipmentProfile | null;
 }
+
+const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
+const TIER_OPTIONS = TIERS.map((t) => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }));
 
 export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  categories,
+  onUpdate,
+  onMove,
+  equipmentClasses,
   plants,
-  toolMappings,
-  sensors,
-  clients,
-  devices,
+  existingEquipment,
 }) => {
-  // Normalize categories to handle both CategoryItem objects and string identifiers
-  const categoryItems = useMemo<CategoryItem[]>(() => {
-    return categories.map((cat, idx) => {
-      if (typeof cat === 'string') {
-        return {
-          id: `cat-${idx}`,
-          name: cat,
-          code: `CAT-${idx + 1}`,
-          engineType: 'Diesel (Internal Combustion)',
-          fuelTankCapacityLiters: 400,
-          description: '',
-          createdAt: '',
-          active: true,
-          equipmentCount: 0,
-        };
-      }
-      return cat;
-    });
-  }, [categories]);
-
-  const initialCat = categoryItems[0];
+  const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState(initialCat?.name || '');
-  const [maintPlant, setMaintPlant] = useState('');
+  const [equipmentClassSlug, setEquipmentClassSlug] = useState('');
+  const [plantId, setPlantId] = useState('');
   const [manufacturer, setManufacturer] = useState('');
-  const [engineType, setEngineType] = useState(initialCat?.engineType || 'Diesel (Internal Combustion)');
-  const [partNo, setPartNo] = useState('');
-  const [licensePlate, setLicensePlate] = useState('');
   const [modelNumber, setModelNumber] = useState('');
-  const [benchmark, setBenchmark] = useState('');
-  const [serialNo, setSerialNo] = useState('');
-  const [enginePower, setEnginePower] = useState('');
-  const [cclNumber, setCclNumber] = useState('');
-  const [clientId, setClientId] = useState(clients.length === 1 ? clients[0].id : '');
-  const clientLocked = clients.length === 1;
-  const [selectedDeviceId, setSelectedDeviceId] = useState<number | ''>('');
-  const [fuelCapacity, setFuelCapacity] = useState(
-    initialCat?.fuelTankCapacityLiters !== undefined && initialCat?.fuelTankCapacityLiters !== null
-      ? initialCat.fuelTankCapacityLiters.toString()
-      : '400'
-  );
-  const [justAutoFilled, setJustAutoFilled] = useState(false);
+  const [serialNumber, setSerialNumber] = useState('');
+  const [tier, setTier] = useState<ServiceTier>('basic');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
 
-  // Active category object
-  const currentSelectedCategory = useMemo(() => {
-    return categoryItems.find(c => c.name === category) || categoryItems[0];
-  }, [categoryItems, category]);
+  const isEditing = !!existingEquipment;
 
-  // Handle Category selection and automatically prefill Engine Type & Tank Capacity from Admin Category
-  const handleCategoryChange = (selectedCategoryName: string) => {
-    setCategory(selectedCategoryName);
-    const matchedCategory = categoryItems.find(c => c.name === selectedCategoryName);
-    if (matchedCategory) {
-      if (matchedCategory.engineType) {
-        setEngineType(matchedCategory.engineType);
-      }
-      if (matchedCategory.fuelTankCapacityLiters !== undefined && matchedCategory.fuelTankCapacityLiters !== null) {
-        setFuelCapacity(matchedCategory.fuelTankCapacityLiters.toString());
-      }
-      setJustAutoFilled(true);
-      setTimeout(() => setJustAutoFilled(false), 2500);
-    }
+  const equipmentClassOptions = equipmentClasses.map((ec) => ({ label: ec.name, value: ec.slug }));
+  const plantOptions = plants.map((p) => ({ label: p.name, value: p.id }));
+
+  const reset = () => {
+    setCode('');
+    setName('');
+    setDescription('');
+    setEquipmentClassSlug('');
+    setPlantId('');
+    setManufacturer('');
+    setModelNumber('');
+    setSerialNumber('');
+    setTier('basic');
+    setError(undefined);
   };
 
-  // Sync initial category and pre-fill specs when modal opens or category list updates
   useEffect(() => {
-    if (isOpen && categoryItems.length > 0) {
-      const activeCatName = category || categoryItems[0]?.name || '';
-      if (!category) {
-        setCategory(categoryItems[0].name);
-      }
-      const matched = categoryItems.find(c => c.name === activeCatName) || categoryItems[0];
-      if (matched) {
-        if (matched.engineType) {
-          setEngineType(matched.engineType);
-        }
-        if (matched.fuelTankCapacityLiters !== undefined && matched.fuelTankCapacityLiters !== null) {
-          setFuelCapacity(matched.fuelTankCapacityLiters.toString());
-        }
-      }
+    if (!isOpen) return;
+    if (existingEquipment) {
+      setCode(existingEquipment.externalId);
+      setName(existingEquipment.name ?? '');
+      setDescription(existingEquipment.description ?? '');
+      setEquipmentClassSlug(existingEquipment.equipmentClassSlug ?? '');
+      setPlantId(existingEquipment.plantId ?? '');
+      setManufacturer(existingEquipment.manufacturer ?? '');
+      setModelNumber(existingEquipment.modelNumber ?? '');
+      setSerialNumber(existingEquipment.serialNumber ?? '');
+      setTier(existingEquipment.tier);
+    } else {
+      reset();
     }
-  }, [isOpen, categoryItems]);
-
-  // Plants belonging to the selected client only
-  const filteredPlants = useMemo(() => {
-    if (!clientId) return [];
-    return plants.filter((p) => p.clientId === clientId);
-  }, [plants, clientId]);
-
-  // Whenever the Client changes, reset Maintenance Plant to the first plant of that client
-  useEffect(() => {
-    setMaintPlant(filteredPlants[0]?.name || '');
-  }, [clientId, filteredPlants]);
-
-  // Devices belonging to the selected client only
-  const filteredDevices = useMemo(() => {
-    if (!clientId) return [];
-    return devices.filter((d) => d.clientId === clientId);
-  }, [devices, clientId]);
-
-  // Whenever the Client changes, clear the Device selection — it belonged to the previous client
-  useEffect(() => {
-    setSelectedDeviceId('');
-  }, [clientId]);
-
-  const matchedDevice = useMemo(() => {
-    if (selectedDeviceId === '') return null;
-    return filteredDevices.find((d) => d.id === selectedDeviceId) || null;
-  }, [filteredDevices, selectedDeviceId]);
+    setError(undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, existingEquipment]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedClient = clients.find((c) => c.id === clientId);
-    if (!name || !cclNumber || !selectedClient) return;
+    const finalCode = code.trim();
+    const finalName = name.trim();
+    if (!finalCode || !finalName) return;
 
-    const newItem: EquipmentItem = {
-      id: Math.floor(20 + Math.random() * 80),
-      name: name.trim(),
-      description: description.trim() || 'Heavy industrial equipment onboarded to telematics network',
-      category: category || categoryItems[0]?.name || 'Industrial Category',
-      maintPlant: maintPlant || filteredPlants[0]?.name || 'Central Plant',
-      cclNumber: cclNumber.trim(),
-      manufacturer: manufacturer.trim() || 'OEM Standard',
-      modelNumber: modelNumber.trim() || 'HD-2026',
-      licensePlate: licensePlate.trim() || 'DL01EQ0001',
-      engine: engineType.trim() || 'Diesel Engine',
-      status: 'Active',
-      onboardStatus: 'Onboarded',
-      partNo: partNo.trim(),
-      serialNo: serialNo.trim(),
-      fuelCapacity: fuelCapacity ? Number(fuelCapacity) : undefined,
-      clientId: selectedClient.id,
-      clientName: selectedClient.clientName,
-      deviceId: matchedDevice?.id,
-      toolMapping: matchedDevice?.toolProfile || matchedDevice?.name,
-      assignedSensors: matchedDevice?.selectedSensors,
-    };
-
-    onSave(newItem);
-    onClose();
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (existingEquipment) {
+        const plantChanged = plantId !== (existingEquipment.plantId ?? '');
+        // Before any other edit — if the person backs out of giving a reason,
+        // nothing here should be half-applied.
+        if (plantChanged) {
+          await onMove(existingEquipment.sourceSystem, existingEquipment.externalId, plantId || null);
+        }
+        await onUpdate(existingEquipment.sourceSystem, existingEquipment.externalId, {
+          name: finalName,
+          description: description.trim() || undefined,
+          equipmentClassSlug: equipmentClassSlug || undefined,
+          manufacturer: manufacturer.trim() || undefined,
+          modelNumber: modelNumber.trim() || undefined,
+          serialNumber: serialNumber.trim() || undefined,
+          tier,
+        });
+      } else {
+        await onSave({
+          code: finalCode,
+          name: finalName,
+          description: description.trim() || undefined,
+          equipmentClassSlug: equipmentClassSlug || undefined,
+          plantId: plantId || undefined,
+          manufacturer: manufacturer.trim() || undefined,
+          modelNumber: modelNumber.trim() || undefined,
+          serialNumber: serialNumber.trim() || undefined,
+          tier,
+        });
+      }
+      reset();
+      onClose();
+    } catch (err) {
+      // The person backed out of the move's required reason prompt — not a
+      // failure, just nothing to report.
+      if (err instanceof Error && err.message === 'cancelled') return;
+      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'register'} this equipment.`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div 
+    <div
       id="addEquipmentModalOverlay"
       className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
     >
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
-        
-        {/* Modal Header */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-                Add New Equipment Setup
-              </h3>
-              <span className="px-2.5 py-0.5 bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 text-xs font-medium rounded border border-sky-200 dark:border-sky-800">
-                Admin Master Linked
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
-              Selecting a Category automatically pre-fills the Engine Type and Fuel Tank Capacity configured in Admin.
-            </p>
-          </div>
-          <button 
-            id="close-equipment-modal"
-            onClick={onClose}
+          <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
+            {isEditing ? 'Edit Equipment' : 'Add New Equipment'}
+          </h3>
+          <button
+            onClick={() => { reset(); onClose(); }}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-sm font-sans">
-          
-          {/* Admin Master Values Notice Banner */}
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-400">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-sky-600" />
-              <span>Synced with Admin: <strong className="text-slate-800 dark:text-slate-200">{categories.length} Categories</strong> • <strong className="text-slate-800 dark:text-slate-200">{plants.length} Plants</strong> • <strong className="text-slate-800 dark:text-slate-200">{toolMappings.length} Tool Mappings</strong></span>
-            </div>
-            <span className="text-xs text-sky-600 dark:text-sky-400 font-medium">Live Bound</span>
-          </div>
-
-          {/* Row 0: Client & Maintenance Plant */}
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Client <span className="text-rose-500">*</span>
+                Code <span className="text-rose-500">*</span>
               </label>
-              <select
-                required
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                disabled={clientLocked}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-              >
-                <option value="" disabled>Select a client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.clientName}</option>
-                ))}
-              </select>
+              <Input
+                autoFocus={!isEditing}
+                disabled={isEditing}
+                value={code}
+                onChange={(value) => setCode(value)}
+                placeholder="e.g. DG-01"
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isEditing
+                  ? "Permanent — this machine's identity, not changed here."
+                  : "This machine's permanent identity. Not changed later."}
+              </p>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Maintenance Plant (from Admin) <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[11px] text-sky-600 font-medium">Admin Only</span>
-              </div>
-              <select
-                value={maintPlant}
-                onChange={(e) => setMaintPlant(e.target.value)}
-                required
-                disabled={!clientId}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-              >
-                {!clientId ? (
-                  <option value="">Select a client first</option>
-                ) : filteredPlants.length === 0 ? (
-                  <option value="">No plants configured for this client</option>
-                ) : (
-                  filteredPlants.map((p) => (
-                    <option key={p.id} value={p.name}>{p.name}</option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
-
-          {/* Row 1: Name & Description */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Equipment Name <span className="text-rose-500">*</span>
               </label>
-              <input 
-                type="text" 
-                required
+              <Input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Komatsu PC210LC" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Description <span className="text-rose-500">*</span>
-              </label>
-              <input 
-                type="text" 
-                required
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Equipment role & function" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                onChange={(value) => setName(value)}
+                placeholder="e.g. Komatsu PC210LC"
               />
             </div>
           </div>
 
-          {/* Row 2: Category (Strictly from Admin) */}
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Category (from Admin) <span className="text-rose-500">*</span>
-                </label>
-                {currentSelectedCategory && (
-                  <span className="text-xs text-sky-600 dark:text-sky-400 flex items-center gap-1 font-medium">
-                    <Sparkles className="w-3 h-3 text-sky-500" />
-                    <span>Auto-fills Engine & Tank</span>
-                  </span>
-                )}
-              </div>
-              <select
-                value={category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                required
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer"
-              >
-                {categoryItems.length === 0 ? (
-                  <option value="">No categories defined in Admin</option>
-                ) : (
-                  categoryItems.map((cat) => (
-                    <option key={cat.id || cat.name} value={cat.name}>
-                      {cat.name} {cat.engineType ? `(${cat.engineType} • ${cat.fuelTankCapacityLiters}L)` : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-              {currentSelectedCategory && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span>Configured in Admin: <strong>{currentSelectedCategory.engineType || 'Standard'}</strong>, <strong>{currentSelectedCategory.fuelTankCapacityLiters}L</strong> tank</span>
-                </div>
-              )}
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Description
+            </label>
+            <Input
+              value={description}
+              onChange={(value) => setDescription(value)}
+              placeholder="Equipment role & function"
+            />
           </div>
 
-          {/* Row 2b: Device (from the selected Client's devices) */}
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Device
-                </label>
-                <span className="text-[11px] text-sky-600 font-medium">Admin Only</span>
-              </div>
-              <select
-                value={selectedDeviceId}
-                onChange={(e) => setSelectedDeviceId(e.target.value ? Number(e.target.value) : '')}
-                disabled={!clientId}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 cursor-pointer disabled:bg-slate-50 dark:disabled:bg-slate-800/40 disabled:cursor-not-allowed"
-              >
-                {!clientId ? (
-                  <option value="">Select a client first</option>
-                ) : filteredDevices.length === 0 ? (
-                  <option value="">No devices configured for this client</option>
-                ) : (
-                  <>
-                    <option value="">No device (configure later)</option>
-                    {filteredDevices.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} — IMEI {d.imei}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-
-              {matchedDevice && (
-                <div className="mt-2 p-3 bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900/50 rounded-lg">
-                  <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                    Sensors on this device:
-                  </div>
-                  {matchedDevice.selectedSensors && matchedDevice.selectedSensors.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {matchedDevice.selectedSensors.map((sName) => (
-                        <span
-                          key={sName}
-                          className="px-2 py-0.5 text-[11px] bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800"
-                        >
-                          {sName}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-400 italic">No sensors configured on this device.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Row 3: Engine Type (Auto-filled from Category) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Engine Type
-                </label>
-                <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                  <Check className="w-3 h-3 text-emerald-600" />
-                  <span>Pre-filled from Category</span>
-                </span>
-              </div>
-              <input
-                type="text"
-                value={engineType}
-                onChange={(e) => setEngineType(e.target.value)}
-                placeholder="e.g. Diesel, Electric Drive"
-                className={`w-full px-3 py-2 rounded-lg border text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none transition-all ${
-                  justAutoFilled
-                    ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-400 ring-2 ring-emerald-400/30'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
-                }`}
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Equipment Class
+              </label>
+              <SelectPicker
+                data={equipmentClassOptions}
+                value={equipmentClassSlug || null}
+                onChange={(value) => setEquipmentClassSlug(value ?? '')}
+                placeholder="Unclassified"
+                block
+                searchable={equipmentClassOptions.length > 6}
+                cleanable
+              />
+              {equipmentClasses.length === 0 && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  No equipment class has been granted to this account yet.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Plant
+              </label>
+              <SelectPicker
+                data={plantOptions}
+                value={plantId || null}
+                onChange={(value) => setPlantId(value ?? '')}
+                placeholder="Unassigned"
+                block
+                searchable={plantOptions.length > 6}
+                cleanable
               />
             </div>
           </div>
 
-          {/* Row 5: CCL Number, License Plate, Manufacturer, Model */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                CCL Number <span className="text-rose-500">*</span>
-              </label>
-              <input 
-                type="text" 
-                required
-                value={cclNumber}
-                onChange={(e) => setCclNumber(e.target.value)}
-                placeholder="e.g. CCL-LKO-009" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                License Plate
-              </label>
-              <input 
-                type="text" 
-                value={licensePlate}
-                onChange={(e) => setLicensePlate(e.target.value)}
-                placeholder="e.g. UP32CE9136" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Manufacturer
               </label>
-              <input 
-                type="text" 
+              <Input
                 value={manufacturer}
-                onChange={(e) => setManufacturer(e.target.value)}
-                placeholder="e.g. Komatsu, Volvo" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500"
+                onChange={(value) => setManufacturer(value)}
+                placeholder="e.g. Komatsu"
+                size="sm"
               />
             </div>
 
@@ -457,101 +250,68 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Model Number
               </label>
-              <input 
-                type="text" 
+              <Input
                 value={modelNumber}
-                onChange={(e) => setModelNumber(e.target.value)}
-                placeholder="e.g. EC210" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500"
+                onChange={(value) => setModelNumber(value)}
+                placeholder="e.g. EC210"
+                size="sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Serial Number
+              </label>
+              <Input
+                value={serialNumber}
+                onChange={(value) => setSerialNumber(value)}
+                placeholder="e.g. SER-4920"
+                className="font-mono"
+                size="sm"
               />
             </div>
           </div>
 
-          {/* Row 6: Part No, Serial No, Engine Power, Fuel Tank (L) */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Manufacturer Part No
-              </label>
-              <input 
-                type="text" 
-                value={partNo}
-                onChange={(e) => setPartNo(e.target.value)}
-                placeholder="e.g. PN-9948" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Serial No
-              </label>
-              <input 
-                type="text" 
-                value={serialNo}
-                onChange={(e) => setSerialNo(e.target.value)}
-                placeholder="e.g. SER-4920" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 font-mono text-xs focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Engine Power
-              </label>
-              <input 
-                type="text" 
-                value={enginePower}
-                onChange={(e) => setEnginePower(e.target.value)}
-                placeholder="e.g. 150 kW" 
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
-            {/* Fuel Tank Capacity: Pre-filled from selected Category */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Fuel Tank (L)
-                </label>
-                <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                  <Check className="w-3 h-3 text-emerald-600" />
-                  <span>Pre-filled</span>
-                </span>
-              </div>
-              <input 
-                type="number" 
-                value={fuelCapacity}
-                onChange={(e) => setFuelCapacity(e.target.value)}
-                placeholder="e.g. 400" 
-                className={`w-full px-3 py-2 rounded-lg border text-slate-800 dark:text-slate-100 text-xs focus:outline-none transition-all ${
-                  justAutoFilled 
-                    ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-400 ring-2 ring-emerald-400/30' 
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
-                }`}
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Service Tier
+            </label>
+            <SelectPicker
+              data={TIER_OPTIONS}
+              value={tier}
+              onChange={(value) => setTier((value ?? 'basic') as ServiceTier)}
+              block
+              searchable={false}
+              cleanable={false}
+            />
           </div>
 
-          {/* Action Buttons in ThingsAlive Theme */}
+          {error && (
+            <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
-            <button 
+            <button
               type="button"
-              onClick={onClose}
+              onClick={() => { reset(); onClose(); }}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
-              className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer"
+              disabled={busy}
+              className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Confirm Setup
+              <Check className="w-4 h-4" />
+              <span>
+                {busy ? (isEditing ? 'Saving…' : 'Registering…') : (isEditing ? 'Save Changes' : 'Register Equipment')}
+              </span>
             </button>
           </div>
-
         </form>
-
       </div>
     </div>
   );

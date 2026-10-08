@@ -47,9 +47,9 @@ export const IncidentManagementSection: React.FC<{
     <div className="space-y-4">
       {!hideHeading && (
         <div className="flex items-center gap-1.5">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Incident Management</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Incident Management</h3>
           <span title="People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.">
-            <Info className="w-3.5 h-3.5 text-slate-400" />
+            <Info className="w-4 h-4 text-slate-400" />
           </span>
         </div>
       )}

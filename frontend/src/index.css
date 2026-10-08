@@ -6,20 +6,59 @@
  * effect — see the same note that used to live on the React Flow rules below. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Matches the house font from ~/projects/iot_platform. Two variable-font
+ * files cover the whole weight range (100-900) instead of the ~20 static
+ * weight files also sitting in assets/fonts/ — same visual result, far
+ * fewer requests. */
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../assets/fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../assets/fonts/Montserrat-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 @layer base {
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     background-color: #F4F7FB;
     color: #1E293B;
   }
 }
 
+/* rsuite's picker/dropdown popups default to z-index 5-7 (meant for a page
+ * with no overlays of its own). Every modal in this app is a plain fixed
+ * div at Tailwind's z-50, so without this, a SelectPicker/CheckPicker/
+ * DatePicker opened inside any modal renders its menu behind the modal —
+ * not missing, just invisible underneath it.
+ *
+ * `!important` on purpose: rsuite's own `:root` block declares the same
+ * variables, and which `:root` block wins a plain same-specificity tie
+ * depends on source order — reliable in a production bundle, NOT reliable
+ * in Vite's dev server, which injects each CSS module as its own <style>
+ * tag at runtime (order can drift from the real import order after enough
+ * HMR updates). `!important` wins regardless of that order. */
+:root {
+  --rs-zindex-dropdown: 1100 !important;
+  --rs-zindex-picker-toggle: 1100 !important;
+  --rs-zindex-picker-input: 1100 !important;
+  --rs-zindex-picker-popup: 1100 !important;
+}
+
 .font-sans {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .font-serif {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .border-ink {

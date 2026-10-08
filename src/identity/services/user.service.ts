@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AppUser, UserStatus } from '../entities/app-user.entity';
@@ -136,8 +136,25 @@ export class UserService {
       });
       if (!role) throw new NotFoundException(`No role "${roleSlug}" in this account.`);
 
+      // The friendly, no-race-involved refusal. `ck_app_user_ceo_manager_retained`
+      // (SuperAdminRetention migration) is the actual backstop — this is only here
+      // so the common case gets a clean 400 instead of the trigger's raw message.
+      if (user.roleSlug === 'ceo-manager' && role.slug !== 'ceo-manager') {
+        const remaining = await repo.count({ where: { tenantId: scope.tenantId, roleSlug: 'ceo-manager' } });
+        if (remaining <= 1) {
+          throw new BadRequestException(`${user.fullName} is this account's only ceo-manager — leave at least one in place.`);
+        }
+      }
+
       user.roleSlug = role.slug;
-      return this.view(m, scope.tenantId, await repo.save(user));
+      try {
+        return this.view(m, scope.tenantId, await repo.save(user));
+      } catch (err) {
+        if (err instanceof QueryFailedError && /\(ck_app_user_ceo_manager_retained\)/.test(err.message)) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
+      }
     });
   }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
+import { Input } from 'rsuite';
 import { ApiError, Plant, PlantInput } from '../../lib/api';
 
 interface AddPlantModalProps {
@@ -102,14 +103,13 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Plant Name <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="text"
+            <Input
+              size="sm"
               required
               autoFocus
               value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={(value) => handleNameChange(value)}
               placeholder="e.g. Hyderabad Central Works"
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
             />
           </div>
 
@@ -118,12 +118,11 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Address <span className="text-slate-400 font-normal">(optional)</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(value) => setAddress(value)}
                 placeholder="e.g. Hyderabad, Telangana"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
               />
             </div>
 
@@ -131,13 +130,12 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Plant Code <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <Input
+                size="sm"
                 required
                 value={code}
-                onChange={(e) => { setCode(e.target.value); setCodeTouched(true); }}
+                onChange={(value) => { setCode(value); setCodeTouched(true); }}
                 placeholder="e.g. HYD-WKS"
-                className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all font-mono"
               />
               <p className="text-[11px] text-slate-400 mt-1">
                 Letters, digits, dots, hyphens or underscores — unique within your account.
@@ -149,12 +147,11 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Site Area <span className="text-slate-400 font-normal">(optional)</span>
             </label>
-            <input
-              type="text"
+            <Input
+              size="sm"
               value={siteArea}
-              onChange={(e) => setSiteArea(e.target.value)}
+              onChange={(value) => setSiteArea(value)}
               placeholder="e.g. 12 acres"
-              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-600 transition-all"
             />
           </div>
 
