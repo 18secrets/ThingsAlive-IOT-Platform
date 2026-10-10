@@ -809,6 +809,10 @@ export interface SignalThresholdParams {
   signal: string;
   max?: number | null;
   min?: number | null;
+  /** Tenant alert rules only — unsupported in class-level template authoring, which
+   *  has no live machine to default these against. */
+  lookbackReadings?: number;
+  requiredBreaches?: number;
 }
 
 export type AlertParams =
@@ -1491,6 +1495,861 @@ export function apiUpdateEquipmentTemplate(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+// ------------------------------------------------------------------------------ kpis
+
+/**
+ * Runtime KPI evaluation for one machine (`/equipment/:sourceSystem/:externalId/kpis`,
+ * `catalog.read`). Every KPI the equipment's class declares, each with its own
+ * readiness envelope — never a bare number for one that isn't ready to compute.
+ */
+export type KpiReadiness = "ready" | "blocked" | "not_configured" | "not_available";
+
+export type KpiReason =
+  | "unbound" | "stale" | "no_readings" | "mapping_required"
+  | "baseline_not_established" | "insufficient_coverage" | "undefined_result"
+  | "parameter_not_set" | "site_boundary_not_set";
+
+export interface KpiSeriesPoint { t: string; v: number | null }
+
+export interface KpiEnvelope {
+  formulaKey: string;
+  value: number | KpiSeriesPoint[] | null;
+  unit: string;
+  resultKind: "scalar" | "series";
+  window: { from: string; to: string };
+  readiness: KpiReadiness;
+  reason?: KpiReason;
+  /** Which client parameters have no value at any scope for this machine — only with `reason: 'parameter_not_set'`. */
+  missingParameters?: string[];
+  coverage: { expected: number; actual: number; ratio: number };
+}
+
+export function apiListEquipmentKpis(sourceSystem: string, externalId: string): Promise<KpiEnvelope[]> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/kpis`,
+  );
+}
+
+// ------------------------------------------------------------------------------ composed page
+
+/**
+ * The composed machine page (`/equipment/:sourceSystem/:externalId/page`,
+ * `catalog.read`): every widget the equipment's class layout declares, each
+ * filled or carrying why not. The page composes; it does not compute — a
+ * widget's `data` is only ever what its own producer already returns
+ * elsewhere (KPIs, coverage, alerts, work orders).
+ */
+export type PageWidgetType =
+  | "kpi_number" | "kpi_gauge" | "kpi_chart" | "signal_chart" | "readiness_list"
+  | "alert_list" | "work_order_list" | "service_due" | "failure_modes"
+  | "recommendations" | "machine_list" | "schematic";
+
+export type PageReadiness = KpiReadiness;
+
+export interface PageKpiWidgetData extends KpiEnvelope {
+  target: number | null;
+  targetMin: number | null;
+  targetMax: number | null;
+  targetDirection: string;
+}
+
+export interface PageSignalChartData {
+  signal: string;
+  unit: string | null;
+  points: { t: string; v: number | null }[];
+}
+
+export interface PageReadinessRow {
+  signal: string;
+  componentScope: string;
+  readiness: PageReadiness;
+  reason: string | null;
+  lastReadingAt: string | null;
+  secondsSinceLastReading: number | null;
+}
+
+export interface PageAlertRow {
+  id: string;
+  severity: string;
+  raisedAt: string;
+  signal: string | null;
+  message: string;
+  acknowledged: boolean;
+}
+
+export interface PageWorkOrderRow { id: string; status: string; title: string; assignedTo: string | null; dueAt: string | null }
+
+export interface PageServiceDueData { nextDueAt: string | null; hoursRemaining: number | null; basis: string | null }
+
+export type PageFailureModeStatus = "active" | "clear" | "unknown";
+
+export interface PageFailureModeRow {
+  code: string; name: string; symptom: string; severity: string | null; signals: string[]; status: PageFailureModeStatus;
+}
+
+export interface PageRecommendationRow { failureModeCode: string; action: string; urgency: string; estimatedHours: number | null }
+
+export interface PageMachineRow { sourceSystem: string; externalId: string; name: string | null; readiness: PageReadiness; openAlerts: number }
+
+export interface PageSchematicAnchor {
+  signal: string; hotspotX: number; hotspotY: number; label: string | null;
+  readiness: PageReadiness; reason: string | null; value: number | null; unit: string | null;
+}
+
+export interface PageSchematicData {
+  imageUrl: string;
+  width: number | null;
+  height: number | null;
+  anchors: PageSchematicAnchor[];
+  unplacedSignals: { signal: string; readiness: PageReadiness; reason: string | null }[];
+}
+
+export type PageWidgetData =
+  | PageKpiWidgetData | PageSignalChartData | PageReadinessRow[] | PageAlertRow[] | PageWorkOrderRow[]
+  | PageServiceDueData | PageFailureModeRow[] | PageRecommendationRow[] | PageMachineRow[] | PageSchematicData;
+
+export interface PageWidget {
+  widgetKey: string;
+  widgetType: PageWidgetType;
+  title: string | null;
+  position: number;
+  size: string;
+  /** Always null unless readiness is 'ready' — never 0, never [] standing in for nothing. */
+  data: PageWidgetData | null;
+  readiness: PageReadiness;
+  reason?: string;
+}
+
+export interface MachinePage {
+  equipment: {
+    sourceSystem: string; externalId: string; name: string | null;
+    classSlug: string | null; classVersion: number | null; plantId: string | null;
+  };
+  layout: { fallback: boolean };
+  widgets: PageWidget[];
+}
+
+export function apiGetMachinePage(sourceSystem: string, externalId: string): Promise<MachinePage> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`,
+  );
+}
+
+// --------------------------------------------------------------------- utilization
+
+/**
+ * How the fleet spent its time (`/utilization`, `utilization.read` — every role
+ * holds it; an operator's view is narrowed by which machines they can see, not by
+ * the capability). Availability is uptime against *scheduled shift hours* — not
+ * OEE, which would also need a performance and a quality figure this platform does
+ * not compute. Depends on `equipment_shift` rows existing; without one, readiness
+ * says so rather than inventing a number.
+ */
+export type UtilizationGroupBy = "equipment" | "plant" | "date" | "shift";
+
+export interface UtilizationSummaryRow {
+  key: string | null;
+  shifts: number;
+  totalSeconds: number;
+  productiveSeconds: number;
+  idleSeconds: number;
+  runningUnclassifiedSeconds: number;
+  offSeconds: number;
+  unknownSeconds: number;
+  engineOnSeconds: number;
+  coverage: number;
+  utilizationRate: number | null;
+  productiveRate: number | null;
+  unobservedShifts: number;
+}
+
+export interface UtilizationShiftRow {
+  shiftId: string;
+  shiftName: string;
+  sourceSystem: string;
+  externalId: string;
+  plantId: string | null;
+  equipmentClassSlug: string | null;
+  localDate: string;
+  windowStart: string;
+  windowEnd: string;
+  totalSeconds: number;
+  productiveSeconds: number;
+  idleSeconds: number;
+  offSeconds: number;
+  utilizationRate: number | null;
+  productiveRate: number | null;
+}
+
+export type AvailabilityReadiness = "ready" | "not_configured" | "not_available";
+export type AvailabilityReason = "no_shift_schedule" | "no_readings";
+
+export interface Availability {
+  scheduledHours: number;
+  uptimeHours: number | null;
+  downtimeHours: number | null;
+  unscheduledRunningHours: number | null;
+  availability: number | null;
+  readiness: AvailabilityReadiness;
+  reason?: AvailabilityReason;
+}
+
+export interface EquipmentAvailability extends Availability {
+  sourceSystem: string;
+  externalId: string;
+}
+
+export interface FleetAvailability extends Availability {
+  machinesMeasured: number;
+  excluded: { noShiftSchedule: number; noReadings: number };
+  machines: EquipmentAvailability[];
+}
+
+export function apiGetUtilizationSummary(
+  filters: { groupBy?: UtilizationGroupBy; from?: string; to?: string; plantId?: string } = {},
+): Promise<UtilizationSummaryRow[]> {
+  const params = new URLSearchParams();
+  if (filters.groupBy) params.set("groupBy", filters.groupBy);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.plantId) params.set("plantId", filters.plantId);
+  const qs = params.toString();
+  return authFetch(`/utilization/summary${qs ? `?${qs}` : ""}`);
+}
+
+export function apiGetEquipmentUtilization(
+  sourceSystem: string, externalId: string, range: { from?: string; to?: string } = {},
+): Promise<UtilizationShiftRow[]> {
+  const params = new URLSearchParams();
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  const qs = params.toString();
+  return authFetch(
+    `/utilization/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}${qs ? `?${qs}` : ""}`,
+  );
+}
+
+/** `from`/`to` are both required — availability is a ratio over a stated period. */
+export function apiGetFleetAvailability(from: string, to: string): Promise<FleetAvailability> {
+  return authFetch(`/utilization/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+
+export function apiGetEquipmentAvailability(
+  sourceSystem: string, externalId: string, from: string, to: string,
+): Promise<EquipmentAvailability> {
+  return authFetch(
+    `/utilization/availability/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`
+      + `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  );
+}
+
+// -------------------------------------------------------------------- device health
+
+/**
+ * Which loggers are in trouble, and what kind (`/device-health`, `device.read` —
+ * every role holds it). The closest real equivalent to an "online/offline" filter:
+ * `dark` is offline, `healthy` is online, everything between is a logger that's
+ * reporting but degraded — collapsed to online/offline at the UI boundary rather
+ * than losing the distinction here.
+ */
+export type DeviceLinkState = 'dark' | 'partial' | 'intermittent' | 'buffering' | 'weak-signal' | 'healthy' | 'unknown';
+
+export interface FleetLinkRow {
+  imei: string;
+  externalId: string;
+  state: DeviceLinkState;
+  detail: string;
+  windowStart: string;
+  windowEnd: string;
+  windowsInState: number;
+  signalBand: string | null;
+  signalWorstBand: string | null;
+  longestGapSeconds: number | null;
+  medianLagSeconds: number | null;
+  missingSignals: string[];
+}
+
+export function apiGetDeviceHealthFleet(
+  filters: { states?: DeviceLinkState[]; days?: number } = {},
+): Promise<FleetLinkRow[]> {
+  const params = new URLSearchParams();
+  if (filters.states?.length) params.set("state", filters.states.join(","));
+  if (filters.days) params.set("days", String(filters.days));
+  const qs = params.toString();
+  return authFetch(`/device-health${qs ? `?${qs}` : ""}`);
+}
+
+// ------------------------------------------------------------------------------ shifts
+
+/**
+ * When a machine is worked (`/equipment/:sourceSystem/:externalId/shifts`,
+ * `equipment.write` to change, `catalog.read` to list). Hours are wall-clock in the
+ * shift's own `timeZone`, never a UTC offset. `days`: 0 = Sunday … 6 = Saturday.
+ * Everything utilization/availability reports depends on at least one of these
+ * existing — a machine with none is "not_configured", not a zero.
+ */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type ShiftStatus = "active" | "retired";
+
+export interface EquipmentShift {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  name: string;
+  startMinute: number;
+  endMinute: number;
+  days: Weekday[];
+  timeZone: string;
+  status: ShiftStatus;
+  scoredThrough: string | null;
+  arrivalsThrough: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShiftInput {
+  name: string;
+  startMinute: number;
+  endMinute: number;
+  days: Weekday[];
+  timeZone: string;
+}
+
+export type ShiftPatchInput = Partial<ShiftInput>;
+
+export type ShiftRunStatus = "scored" | "nothing-to-score" | "not-running" | "failed";
+
+export interface ShiftRun {
+  id: string;
+  shiftId: string;
+  shiftName: string;
+  sourceSystem: string;
+  externalId: string;
+  localDate: string;
+  windowStart: string;
+  windowEnd: string;
+  status: ShiftRunStatus;
+  detail: string | null;
+  readings: number;
+  predictions: number;
+  jobsRaised: number;
+  alertsFired: number;
+  durationMs: number | null;
+  ranAt: string;
+}
+
+export function apiListShifts(sourceSystem: string, externalId: string): Promise<EquipmentShift[]> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts`);
+}
+
+export function apiGetShiftRuns(sourceSystem: string, externalId: string): Promise<ShiftRun[]> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/runs`);
+}
+
+export function apiCreateShift(sourceSystem: string, externalId: string, input: ShiftInput): Promise<EquipmentShift> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function apiUpdateShift(
+  sourceSystem: string, externalId: string, id: string, input: ShiftPatchInput,
+): Promise<EquipmentShift> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function apiRetireShift(sourceSystem: string, externalId: string, id: string): Promise<EquipmentShift> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/${encodeURIComponent(id)}/retire`,
+    { method: "POST" },
+  );
+}
+
+export function apiReinstateShift(sourceSystem: string, externalId: string, id: string): Promise<EquipmentShift> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/${encodeURIComponent(id)}/reinstate`,
+    { method: "POST" },
+  );
+}
+
+// -------------------------------------------------------------------------- predictions
+
+/**
+ * Deterministic Tier-1 scoring (`/predictions`, `prediction.read` / `prediction.run`).
+ * `riskScore` is a composite 0–100 (70% worst signal + 30% mean, rule-based — never a
+ * fabricated probability). There is deliberately no remaining-useful-life field
+ * anywhere in this module or its entity (`docs/ai/START-HERE.md` G07: "No fabricated
+ * probabilities, RUL, OEM limits or labels") — a RUL-shaped UI has nothing real to
+ * read here.
+ */
+export type PredictionSeverity = "none" | "low" | "medium" | "high" | "critical";
+export type PredictionConfidence = "full" | "partial" | "none";
+export type SignalState = "normal" | "warning" | "critical" | "unscored";
+
+export interface SignalVerdict {
+  signal: string;
+  state: SignalState;
+  z: number | null;
+  value: number | null;
+  mean: number | null;
+  stddev: number | null;
+  reason?: string;
+}
+
+export interface Prediction {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  clientScenarioSlug: string;
+  severity: PredictionSeverity;
+  riskScore: number;
+  abnormalCount: number;
+  highPriority: boolean;
+  confidence: PredictionConfidence;
+  signals: SignalVerdict[];
+  windowDays: number;
+  modelRef: string;
+  modelTier: number;
+  source: "live" | "replayed";
+  occurredAt: string;
+  computedAt: string;
+}
+
+export type PredictionSkipReason = "no-device" | "no-readings" | "scenario-missing" | "scenario-disabled";
+
+export interface ScoreResult {
+  written: Prediction[];
+  skipped: { clientScenarioSlug: string; reason: PredictionSkipReason }[];
+  raised: { clientScenarioSlug: string; workOrderId: string }[];
+}
+
+/** The latest row per active scenario — a machine with several active scenarios gets
+ *  several rows, each explained on its own. */
+export function apiGetLatestPredictions(sourceSystem: string, externalId: string): Promise<Prediction[]> {
+  return authFetch(`/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`);
+}
+
+export function apiGetPredictionHistory(
+  sourceSystem: string, externalId: string, clientScenarioSlug: string, take?: number,
+): Promise<Prediction[]> {
+  const qs = take ? `?take=${take}` : "";
+  return authFetch(
+    `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/${encodeURIComponent(clientScenarioSlug)}/history${qs}`,
+  );
+}
+
+/** Scores every active scenario on this asset right now, rather than waiting for the
+ *  next arrival to trigger it — the one case the route exists for. */
+export function apiScorePredictionsNow(sourceSystem: string, externalId: string): Promise<ScoreResult> {
+  return authFetch(`/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/score`, {
+    method: "POST",
+  });
+}
+
+// ------------------------------------------------------------------- client scenarios
+
+/**
+ * A client's own copy of a prediction scenario (`/my-catalog/scenarios`,
+ * `client-catalog.read`) — what `apiActivationTransition` turns on and off per machine.
+ * Edited and owned by the client once copied; nothing here is bounds-checked
+ * against the template it came from.
+ */
+export interface ClientScenario {
+  id: string;
+  slug: string;
+  clientEquipmentClassSlug: string;
+  name: string;
+  description: string | null;
+  severity: "none" | "low" | "medium" | "high" | "critical";
+  tier: 1 | 2 | 3;
+  requiredSignals: string[];
+  minimumHistoryDays: number;
+  parameters: ScenarioParameter[];
+  enabled: boolean;
+  templateSlug: string | null;
+  templateVersion: number | null;
+  status: "active" | "retired";
+  updatedAt: string;
+}
+
+export function apiListMyCatalogScenarios(equipmentClassSlug?: string): Promise<ClientScenario[]> {
+  const qs = equipmentClassSlug ? `?class=${encodeURIComponent(equipmentClassSlug)}` : "";
+  return authFetch(`/my-catalog/scenarios${qs}`);
+}
+
+// ----------------------------------------------------------------------- activation
+
+/**
+ * Turning a client scenario on and off for one machine (`/activations`,
+ * `scenario.activate` to write; `client-catalog.read` to list). One shared `action`
+ * call rather than five exports, mirroring the backend's own single
+ * `apply(scope, action, dto)` shape — propose/pause/deactivate take a reason,
+ * activate/resume don't need one.
+ */
+export type ActivationState = "proposed" | "active" | "paused" | "deactivated";
+export type ActivationAction = "propose" | "activate" | "pause" | "resume" | "deactivate";
+
+export type ActivationBlocker =
+  | { code: "unclassified" }
+  | { code: "class-not-in-account" }
+  | { code: "scenario-disabled" }
+  | { code: "no-device" }
+  | { code: "missing-signals"; signals: string[] }
+  | { code: "insufficient-history"; haveDays: number; needDays: number }
+  | { code: "tier-too-low"; have: string; needs: 1 | 2 | 3 };
+
+export interface ResolvedActivationParameter {
+  key: string;
+  value: unknown;
+  source: "scenario-default" | "asset-override";
+}
+
+export interface ActivationView {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  clientScenarioSlug: string;
+  state: ActivationState;
+  parameterOverrides: Record<string, unknown>;
+  blockersAtActivation: ActivationBlocker[];
+  activatedBy: string | null;
+  activatedAt: string | null;
+  stateChangedBy: string | null;
+  stateChangedAt: string | null;
+  stateReason: string | null;
+  lastEvaluatedAt: string | null;
+  resolvedParameters: ResolvedActivationParameter[];
+}
+
+export function apiListActivations(
+  filters: { sourceSystem?: string; externalId?: string; state?: ActivationState } = {},
+): Promise<ActivationView[]> {
+  const params = new URLSearchParams();
+  if (filters.sourceSystem) params.set("sourceSystem", filters.sourceSystem);
+  if (filters.externalId) params.set("externalId", filters.externalId);
+  if (filters.state) params.set("state", filters.state);
+  const qs = params.toString();
+  return authFetch(`/activations${qs ? `?${qs}` : ""}`);
+}
+
+export function apiActivationTransition(
+  action: ActivationAction,
+  input: {
+    sourceSystem: string;
+    externalId: string;
+    clientScenarioSlug: string;
+    reason?: string;
+    parameterOverrides?: Record<string, unknown>;
+  },
+): Promise<ActivationView> {
+  return authFetch(`/activations/${action}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// --------------------------------------------------------------------- work orders
+
+/**
+ * Jobs on machines (`/work-orders`, `action.work`/`action.assign`). Status and
+ * assignment move through their own routes, never a bare PATCH — `complete`,
+ * `cancel` and `reopen` all require a note; see `apiActOnWorkOrder`.
+ */
+export type WorkOrderStatus = "created" | "in-progress" | "completed" | "cancelled";
+export type WorkOrderPriority = "low" | "normal" | "high" | "urgent";
+export type WorkOrderOrigin = "manual" | "prediction";
+export type WorkOrderAction = "start" | "complete" | "cancel" | "reopen";
+
+export interface WorkOrder {
+  id: string;
+  reference: string;
+  sourceSystem: string;
+  externalId: string;
+  title: string;
+  description: string | null;
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  assignedToUserId: string | null;
+  predictionId: string | null;
+  origin: WorkOrderOrigin;
+  raisedForScenario: string | null;
+  dueAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  resolution: string | null;
+  raisedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkOrderEventKind =
+  | "raised" | "assigned" | "unassigned" | "started" | "completed" | "cancelled" | "reopened" | "edited";
+
+export interface WorkOrderEvent {
+  id: string;
+  workOrderId: string;
+  kind: WorkOrderEventKind;
+  fromStatus: WorkOrderStatus | null;
+  toStatus: WorkOrderStatus | null;
+  fromAssignee: string | null;
+  toAssignee: string | null;
+  note: string | null;
+  actorUserId: string;
+  at: string;
+}
+
+export interface RaiseWorkOrderInput {
+  sourceSystem: string;
+  externalId: string;
+  title: string;
+  description?: string;
+  priority?: WorkOrderPriority;
+  assignedToUserId?: string;
+  predictionId?: string;
+  dueAt?: string;
+}
+
+export interface EditWorkOrderInput {
+  title?: string;
+  description?: string;
+  priority?: WorkOrderPriority;
+  dueAt?: string;
+}
+
+export function apiListWorkOrders(
+  filters: { status?: WorkOrderStatus[]; equipment?: string; mine?: boolean; overdue?: boolean } = {},
+): Promise<WorkOrder[]> {
+  const params = new URLSearchParams();
+  if (filters.status?.length) params.set("status", filters.status.join(","));
+  if (filters.equipment) params.set("equipment", filters.equipment);
+  if (filters.mine) params.set("mine", "true");
+  if (filters.overdue) params.set("overdue", "true");
+  const qs = params.toString();
+  return authFetch(`/work-orders${qs ? `?${qs}` : ""}`);
+}
+
+export function apiRaiseWorkOrder(input: RaiseWorkOrderInput): Promise<WorkOrder> {
+  return authFetch("/work-orders", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiGetWorkOrderHistory(id: string): Promise<WorkOrderEvent[]> {
+  return authFetch(`/work-orders/${encodeURIComponent(id)}/history`);
+}
+
+export function apiEditWorkOrder(id: string, input: EditWorkOrderInput): Promise<WorkOrder> {
+  return authFetch(`/work-orders/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function apiAssignWorkOrder(id: string, userId: string | null, note?: string): Promise<WorkOrder> {
+  return authFetch(`/work-orders/${encodeURIComponent(id)}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ userId, note }),
+  });
+}
+
+/** `complete`, `cancel` and `reopen` throw if `note` is blank — the state machine
+ *  requires a reason for each (a completed job with no note is, a month later,
+ *  indistinguishable from an abandoned one). `start` takes an optional one. */
+export function apiActOnWorkOrder(id: string, action: WorkOrderAction, note?: string): Promise<WorkOrder> {
+  return authFetch(`/work-orders/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+// --------------------------------------------------------------------------- alerts
+
+/**
+ * A client's own standing rules (`/alerts/rules`, `alert.author` to write,
+ * `prediction.read` to list) and what they've fired (`/alerts`, `action.work` to
+ * acknowledge/resolve). Distinct from the catalog's `AlertRuleTemplate` above —
+ * this is the tenant's copy, scoped to their account/plant/equipment.
+ */
+export type AlertRuleSeverity = "none" | "low" | "medium" | "high" | "critical";
+export type AlertAppliesTo = "account" | "plant" | "equipment" | "equipment-class";
+export type AlertState = "open" | "acknowledged" | "resolved";
+
+export interface AlertRule {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  trigger: AlertTrigger;
+  params: AlertParams;
+  appliesTo: AlertAppliesTo;
+  plantId: string | null;
+  sourceSystem: string | null;
+  externalId: string | null;
+  equipmentClassSlug: string | null;
+  severity: AlertRuleSeverity;
+  enabled: boolean;
+  templateSlug: string | null;
+  templateVersion: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertRuleInput {
+  slug: string;
+  name: string;
+  description?: string;
+  trigger: AlertTrigger;
+  params: AlertParams;
+  appliesTo?: Exclude<AlertAppliesTo, "equipment-class">;
+  plantId?: string;
+  sourceSystem?: string;
+  externalId?: string;
+  severity?: AlertRuleSeverity;
+}
+
+export type AlertRulePatch = Partial<AlertRuleInput>;
+
+export interface AlertEvent {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  sourceSystem: string;
+  externalId: string;
+  severity: AlertRuleSeverity;
+  summary: string;
+  evidence: Record<string, unknown>;
+  shiftLocalDate: string | null;
+  windowStart: string | null;
+  windowEnd: string | null;
+  predictionId: string | null;
+  state: AlertState;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+  firedAt: string;
+}
+
+export function apiListAlerts(filters: { state?: AlertState[]; equipment?: string } = {}): Promise<AlertEvent[]> {
+  const params = new URLSearchParams();
+  if (filters.state?.length) params.set("state", filters.state.join(","));
+  if (filters.equipment) params.set("equipment", filters.equipment);
+  const qs = params.toString();
+  return authFetch(`/alerts${qs ? `?${qs}` : ""}`);
+}
+
+export function apiAcknowledgeAlert(id: string): Promise<AlertEvent> {
+  return authFetch(`/alerts/${encodeURIComponent(id)}/acknowledge`, { method: "POST" });
+}
+
+export function apiResolveAlert(id: string, note: string): Promise<AlertEvent> {
+  return authFetch(`/alerts/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function apiListAlertRules(): Promise<AlertRule[]> {
+  return authFetch("/alerts/rules");
+}
+
+export function apiCreateAlertRule(input: AlertRuleInput): Promise<AlertRule> {
+  return authFetch("/alerts/rules", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiUpdateAlertRule(id: string, input: AlertRulePatch): Promise<AlertRule> {
+  return authFetch(`/alerts/rules/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function apiDisableAlertRule(id: string): Promise<AlertRule> {
+  return authFetch(`/alerts/rules/${encodeURIComponent(id)}/disable`, { method: "POST" });
+}
+
+export function apiEnableAlertRule(id: string): Promise<AlertRule> {
+  return authFetch(`/alerts/rules/${encodeURIComponent(id)}/enable`, { method: "POST" });
+}
+
+// ------------------------------------------------------------------------- parameters
+
+/**
+ * The client's own cost/operational parameters (`/parameters`, `parameters.read` /
+ * `parameters.write`). Client-owned, append-only, effective-dated — there is no
+ * platform scope and no platform default (D39): a value Things Alive chose would be
+ * a number the customer never agreed to. `name` is a closed, platform-declared list
+ * (`parameter-catalog.ts`) plus whatever this account's own formulas require.
+ */
+export type ParameterScope = "client" | "site" | "equipment_class" | "equipment";
+
+export interface ParameterCatalogEntry {
+  name: string;
+  unit: string | null;
+  kind: "number" | "currency_code";
+  costTyped: boolean;
+  description: string | null;
+  source: "operational" | "formula";
+  requiredBy: { classSlug: string; formulaKey: string }[];
+}
+
+export interface EffectiveParameter {
+  name: string;
+  value: number | string | null;
+  unit: string | null;
+  source: { scope: ParameterScope; scopeRef: string | null; effectiveFrom: string } | null;
+}
+
+export interface TenantParameterRow {
+  id: string;
+  scope: ParameterScope;
+  /** Null for client; the plant id for site; the class slug for equipment_class;
+   *  the equipment profile's own id (not sourceSystem/externalId) for equipment. */
+  scopeRef: string | null;
+  name: string;
+  value: number | string | null;
+  unit: string | null;
+  effectiveFrom: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface CurrencyResult {
+  currency: string | null;
+  changed: boolean;
+  effectiveFrom: string | null;
+}
+
+export function apiGetParameterCatalog(): Promise<ParameterCatalogEntry[]> {
+  return authFetch("/parameters/catalog");
+}
+
+export function apiGetEffectiveParameters(
+  target: { scope: ParameterScope; scopeRef?: string },
+): Promise<EffectiveParameter[]> {
+  const params = new URLSearchParams({ scope: target.scope });
+  if (target.scopeRef) params.set("scopeRef", target.scopeRef);
+  return authFetch(`/parameters?${params.toString()}`);
+}
+
+export function apiGetParameterHistory(
+  name: string, target?: { scope: ParameterScope; scopeRef?: string },
+): Promise<TenantParameterRow[]> {
+  const params = new URLSearchParams({ name });
+  if (target?.scope) params.set("scope", target.scope);
+  if (target?.scopeRef) params.set("scopeRef", target.scopeRef);
+  return authFetch(`/parameters/history?${params.toString()}`);
+}
+
+/** `value: null` clears this scope's value — the next scope up answers from then on. */
+export function apiSetParameter(input: {
+  scope: ParameterScope; scopeRef?: string; name: string; value: number | null; unit?: string;
+}): Promise<TenantParameterRow> {
+  return authFetch("/parameters", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Refused while any cost-typed value exists anywhere in the account. */
+export function apiSetCurrency(currency: string | null): Promise<CurrencyResult> {
+  return authFetch("/parameters/currency", { method: "POST", body: JSON.stringify({ currency }) });
 }
 
 // ------------------------------------------------------------------- my permissions

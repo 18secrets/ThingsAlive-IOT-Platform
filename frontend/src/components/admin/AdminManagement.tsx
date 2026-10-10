@@ -17,6 +17,7 @@ import {
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -118,6 +119,13 @@ interface AdminManagementProps {
   onProposeOrActivateBinding: (
     sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
   ) => Promise<SignalBindingVersion>;
+  onListEquipmentKpis: (sourceSystem: string, externalId: string) => Promise<KpiEnvelope[]>;
+  onListMyCatalogScenarios: (equipmentClassSlug?: string) => Promise<ClientScenario[]>;
+  onListActivations: (sourceSystem: string, externalId: string) => Promise<ActivationView[]>;
+  onActivationTransition: (
+    action: ActivationAction,
+    input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
+  ) => Promise<ActivationView>;
   activeSubTab: AdminSubTab;
   onChangeSubTab: (tab: AdminSubTab) => void;
   clients: ClientAccount[];
@@ -220,6 +228,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onGetEquipmentCoverage,
   onGetBindingDiscovery,
   onProposeOrActivateBinding,
+  onListEquipmentKpis,
+  onListMyCatalogScenarios,
+  onListActivations,
+  onActivationTransition,
   activeSubTab,
   onChangeSubTab,
   clients,
@@ -267,7 +279,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant', 'equipment', 'industry', 'tool-mapping', 'devices', 'equipment-template'].includes(tab.id)
+      !['plant','equipment-template'].includes(tab.id)
     ));
 
   return (
@@ -369,7 +381,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <DeviceManagement
             devices={devices}
             onNavigateToSetup={onNavigateToDeviceSetup}
-            onNavigateToAISetup={onNavigateToAISetup}
+            // onNavigateToAISetup={onNavigateToAISetup}
             onDeleteDevice={onDeleteDevice}
           />
         )}
@@ -402,6 +414,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onGetCoverage={onGetEquipmentCoverage}
             onGetDiscovery={onGetBindingDiscovery}
             onProposeOrActivateBinding={onProposeOrActivateBinding}
+            onListEquipmentKpis={onListEquipmentKpis}
+            onListMyCatalogScenarios={onListMyCatalogScenarios}
+            onListActivations={onListActivations}
+            onActivationTransition={onActivationTransition}
           />
         )}
 

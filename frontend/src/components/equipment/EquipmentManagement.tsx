@@ -4,6 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import {
   ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile,
   MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
@@ -38,6 +39,13 @@ interface EquipmentManagementProps {
   onProposeOrActivateBinding: (
     sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
   ) => Promise<SignalBindingVersion>;
+  onListEquipmentKpis: (sourceSystem: string, externalId: string) => Promise<KpiEnvelope[]>;
+  onListMyCatalogScenarios: (equipmentClassSlug?: string) => Promise<ClientScenario[]>;
+  onListActivations: (sourceSystem: string, externalId: string) => Promise<ActivationView[]>;
+  onActivationTransition: (
+    action: ActivationAction,
+    input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
+  ) => Promise<ActivationView>;
 }
 
 export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
@@ -57,6 +65,10 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   onGetCoverage,
   onGetDiscovery,
   onProposeOrActivateBinding,
+  onListEquipmentKpis,
+  onListMyCatalogScenarios,
+  onListActivations,
+  onActivationTransition,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -374,6 +386,10 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         onGetCoverage={onGetCoverage}
         onGetDiscovery={onGetDiscovery}
         onProposeOrActivateBinding={onProposeOrActivateBinding}
+        onListEquipmentKpis={onListEquipmentKpis}
+        onListMyCatalogScenarios={onListMyCatalogScenarios}
+        onListActivations={onListActivations}
+        onActivationTransition={onActivationTransition}
       />
     </div>
   );

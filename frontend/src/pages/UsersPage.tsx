@@ -1,13 +1,17 @@
 import React from 'react';
-import { ClientAccount, ClientUserItem, PlatformUserItem, RoleDefinition } from '../types';
+import { ClientAccount, ClientUserItem, RoleDefinition } from '../types';
+import { InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole } from '../lib/api';
 import { UsersHub } from '../components/users/UsersHub';
 
 interface UsersPageProps {
-  users: PlatformUserItem[];
-  onAddUser: (user: PlatformUserItem) => void;
-  onUpdateUser: (user: PlatformUserItem) => void;
-  onDeleteUser: (id: number) => void;
-  onToggleUserStatus: (id: number) => void;
+  staff: PlatformStaffMember[];
+  staffError?: string;
+  onInviteStaff: (input: {
+    email: string; fullName: string; role: PlatformStaffRole;
+  }) => Promise<InvitePlatformStaffResult>;
+  onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
+  onSuspendStaff: (id: string, reason: string) => Promise<void>;
+  onReinstateStaff: (id: string) => Promise<void>;
   clients: ClientAccount[];
   clientUsers: ClientUserItem[];
   roles: RoleDefinition[];

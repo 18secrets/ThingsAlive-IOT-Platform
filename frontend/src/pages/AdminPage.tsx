@@ -11,6 +11,7 @@ import {
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -90,6 +91,13 @@ interface AdminPageProps {
   onProposeOrActivateBinding: (
     sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
   ) => Promise<SignalBindingVersion>;
+  onListEquipmentKpis: (sourceSystem: string, externalId: string) => Promise<KpiEnvelope[]>;
+  onListMyCatalogScenarios: (equipmentClassSlug?: string) => Promise<ClientScenario[]>;
+  onListActivations: (sourceSystem: string, externalId: string) => Promise<ActivationView[]>;
+  onActivationTransition: (
+    action: ActivationAction,
+    input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
+  ) => Promise<ActivationView>;
   clients: ClientAccount[];
   accountsError?: string;
   onCreateAccount: (
@@ -204,6 +212,10 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onGetEquipmentCoverage={props.onGetEquipmentCoverage}
       onGetBindingDiscovery={props.onGetBindingDiscovery}
       onProposeOrActivateBinding={props.onProposeOrActivateBinding}
+      onListEquipmentKpis={props.onListEquipmentKpis}
+      onListMyCatalogScenarios={props.onListMyCatalogScenarios}
+      onListActivations={props.onListActivations}
+      onActivationTransition={props.onActivationTransition}
       activeSubTab={activeSubTab}
       onChangeSubTab={(tab) => navigate(`/admin/${tab}`)}
       clients={modalClients}

@@ -14,7 +14,6 @@ import {
   PlantItem,
   IndustryTypeItem,
   ClientAccount,
-  PlatformUserItem,
   ClientUserItem,
   RoleDefinition,
   TemplateAlertRule,
@@ -30,7 +29,6 @@ import {
   INITIAL_INDUSTRY_TYPES,
   INITIAL_PLANTS,
   INITIAL_ONBOARDING_SESSIONS,
-  INITIAL_USERS,
   INITIAL_CLIENT_USERS,
   INITIAL_ROLES,
   INITIAL_TEMPLATE_SENSOR_LINKS,
@@ -47,6 +45,7 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
+import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
@@ -83,6 +82,7 @@ import {
   apiListMyEquipmentClasses, apiListEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
   apiListMyDevices, apiClaimDevice, apiUnclaimDevice,
   apiGetEquipmentCoverage, apiGetBindingDiscovery, apiProposeOrActivateBinding,
+  apiListEquipmentKpis, apiListMyCatalogScenarios, apiListActivations, apiActivationTransition,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
   apiSuspendPlatformStaff, apiReinstatePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
@@ -98,6 +98,7 @@ import {
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput, EquipmentProfile, EquipmentInput,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
 } from './lib/api';
 
@@ -313,7 +314,6 @@ function AppData() {
   const [industryTypes, setIndustryTypes] = useState<IndustryTypeItem[]>(INITIAL_INDUSTRY_TYPES);
   const [plants, setPlants] = useState<PlantItem[]>(INITIAL_PLANTS);
   const [onboardingSessions, setOnboardingSessions] = useState(INITIAL_ONBOARDING_SESSIONS);
-  const [users, setUsers] = useState<PlatformUserItem[]>(INITIAL_USERS);
 
   const refreshAccounts = async () => {
     try {
@@ -914,11 +914,6 @@ function AppData() {
     await refreshRoles();
   };
 
-  const handleAddUser = (newUser: PlatformUserItem) => setUsers((prev) => [newUser, ...prev]);
-  const handleUpdateUser = (updatedUser: PlatformUserItem) => setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-  const handleDeleteUser = (id: number) => setUsers((prev) => prev.filter((u) => u.id !== id));
-  const handleToggleUserStatus = (id: number) => setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, active: !u.active } : u)));
-
   // POST /device-catalog/sensors and friends, for real — Master Admin's own
   // reference data for wiring a device before it exists.
   const handleCreateSensorCategory = async (name: string) => {
@@ -1054,6 +1049,23 @@ function AppData() {
     sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
   ): Promise<SignalBindingVersion> =>
     apiProposeOrActivateBinding(sourceSystem, externalId, input);
+
+  // Same on-demand shape as the bindings handlers above — fetched by the Signal
+  // Bindings modal's new Scenarios/KPIs sections, not lifted state.
+  const handleListEquipmentKpis = (sourceSystem: string, externalId: string): Promise<KpiEnvelope[]> =>
+    apiListEquipmentKpis(sourceSystem, externalId);
+
+  const handleListMyCatalogScenarios = (equipmentClassSlug?: string): Promise<ClientScenario[]> =>
+    apiListMyCatalogScenarios(equipmentClassSlug);
+
+  const handleListActivations = (sourceSystem: string, externalId: string): Promise<ActivationView[]> =>
+    apiListActivations({ sourceSystem, externalId });
+
+  const handleActivationTransition = (
+    action: ActivationAction,
+    input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
+  ): Promise<ActivationView> =>
+    apiActivationTransition(action, input);
 
   const handleCreateScenario = async (slug: string, equipmentClassSlug: string, input: ScenarioInput) => {
     const created = await apiCreateScenario(slug, equipmentClassSlug, input);
@@ -1506,6 +1518,7 @@ function AppData() {
                 />
               )}
             />
+            <Route path="equipment/:sourceSystem/:externalId/page" element={<EquipmentPagePage />} />
             <Route
               path=":subTab"
               element={
@@ -1577,6 +1590,10 @@ function AppData() {
                   onGetEquipmentCoverage={handleGetEquipmentCoverage}
                   onGetBindingDiscovery={handleGetBindingDiscovery}
                   onProposeOrActivateBinding={handleProposeOrActivateBinding}
+                  onListEquipmentKpis={handleListEquipmentKpis}
+                  onListMyCatalogScenarios={handleListMyCatalogScenarios}
+                  onListActivations={handleListActivations}
+                  onActivationTransition={handleActivationTransition}
                   clients={clients}
                   accountsError={accountsError}
                   onCreateAccount={handleCreateAccount}
@@ -1610,12 +1627,12 @@ function AppData() {
           />
 
           <Route path="things-care" element={<ThingsCarePage />} />
-          <Route path="things-care/:thingId" element={<ThingsCareDetailPage />} />
+          <Route path="things-care/:sourceSystem/:externalId" element={<ThingsCareDetailPage />} />
           <Route path="things-shield" element={<ThingsShieldPage />} />
           <Route path="things-shield/:thingId" element={<ThingsShieldDetailPage />} />
           <Route path="incident-management" element={<IncidentManagementPage />} />
           <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
-          <Route path="production-monitoring/:thingId" element={<ProductionMonitoringDetailPage />} />
+          <Route path="production-monitoring/:sourceSystem/:externalId" element={<ProductionMonitoringDetailPage />} />
           <Route path="alert-agent" element={<AlertAgentPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="predictions" element={<LivePredictionsPage />} />
@@ -1627,11 +1644,12 @@ function AppData() {
             path="users"
             element={
               <UsersPage
-                users={users}
-                onAddUser={handleAddUser}
-                onUpdateUser={handleUpdateUser}
-                onDeleteUser={handleDeleteUser}
-                onToggleUserStatus={handleToggleUserStatus}
+                staff={platformStaff}
+                staffError={platformStaffError}
+                onInviteStaff={handleInviteStaff}
+                onSetStaffRole={handleSetStaffRole}
+                onSuspendStaff={handleSuspendStaff}
+                onReinstateStaff={handleReinstateStaff}
                 clients={clients}
                 clientUsers={clientUsers}
                 roles={roles}

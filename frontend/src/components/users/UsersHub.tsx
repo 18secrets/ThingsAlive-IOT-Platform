@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { Building2, ShieldCheck } from 'lucide-react';
-import { PlatformUserItem, ClientAccount, ClientUserItem, RoleDefinition } from '../../types';
-import { UserManagement } from './UserManagement';
+import { ClientAccount, ClientUserItem, RoleDefinition } from '../../types';
+import { InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole } from '../../lib/api';
+import { StaffManagement } from '../staff/StaffManagement';
 import { AllClientUsersView } from './AllClientUsersView';
 
 interface UsersHubProps {
-  users: PlatformUserItem[];
-  onAddUser: (user: PlatformUserItem) => void;
-  onUpdateUser: (user: PlatformUserItem) => void;
-  onDeleteUser: (id: number) => void;
-  onToggleUserStatus: (id: number) => void;
+  staff: PlatformStaffMember[];
+  staffError?: string;
+  onInviteStaff: (input: {
+    email: string; fullName: string; role: PlatformStaffRole;
+  }) => Promise<InvitePlatformStaffResult>;
+  onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
+  onSuspendStaff: (id: string, reason: string) => Promise<void>;
+  onReinstateStaff: (id: string) => Promise<void>;
   clients: ClientAccount[];
   clientUsers: ClientUserItem[];
   roles: RoleDefinition[];
@@ -19,11 +23,12 @@ interface UsersHubProps {
 type UsersSubTab = 'platform' | 'clients';
 
 export const UsersHub: React.FC<UsersHubProps> = ({
-  users,
-  onAddUser,
-  onUpdateUser,
-  onDeleteUser,
-  onToggleUserStatus,
+  staff,
+  staffError,
+  onInviteStaff,
+  onSetStaffRole,
+  onSuspendStaff,
+  onReinstateStaff,
   clients,
   clientUsers,
   roles,
@@ -60,12 +65,13 @@ export const UsersHub: React.FC<UsersHubProps> = ({
       </div>
 
       {subTab === 'platform' ? (
-        <UserManagement
-          users={users}
-          onAddUser={onAddUser}
-          onUpdateUser={onUpdateUser}
-          onDeleteUser={onDeleteUser}
-          onToggleUserStatus={onToggleUserStatus}
+        <StaffManagement
+          staff={staff}
+          error={staffError}
+          onInvite={onInviteStaff}
+          onSetRole={onSetStaffRole}
+          onSuspend={onSuspendStaff}
+          onReinstate={onReinstateStaff}
         />
       ) : (
         <AllClientUsersView
