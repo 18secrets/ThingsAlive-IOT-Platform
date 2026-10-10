@@ -124,6 +124,19 @@ export async function apiAcceptInvitation(
   }
 }
 
+/**
+ * Always resolves the same way, known account or not — the response can't be
+ * allowed to tell someone whether an email address has an account here.
+ */
+export async function apiForgotPassword(email: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  await parse(res);
+}
+
 /** Exchanges the stored refresh token for a fresh access token. False means the session is dead. */
 export async function apiResume(): Promise<SignedInUser | null> {
   const refreshToken = sessionStorage.getItem(REFRESH_KEY);
@@ -381,6 +394,13 @@ export function apiReinstatePlatformStaff(id: string): Promise<PlatformStaffMemb
  * tenant is asking, decided by the session, never by a client picker. Master
  * Admin has no plants of their own to see or manage here.
  */
+/** A single outer ring, no holes — all this app's boundary editor produces or needs. */
+export interface GeoJsonPolygon {
+  type: "Polygon";
+  /** [longitude, latitude] pairs. The first ring must close: its last position repeats its first. */
+  coordinates: [number, number][][];
+}
+
 export interface Plant {
   id: string;
   code: string;
@@ -394,6 +414,7 @@ export interface Plant {
   status: "active" | "retired";
   sourceSystem: string | null;
   externalId: string | null;
+  boundary: GeoJsonPolygon | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -409,10 +430,12 @@ export interface PlantInput {
   description?: string;
 }
 
-export function apiListPlants(includeRetired = true): Promise<Plant[]> {
-  return authFetch(
-    `/equipment/plants${includeRetired ? "?includeRetired=true" : ""}`,
-  );
+export function apiListPlants(includeRetired = true, tenantId?: string): Promise<Plant[]> {
+  const params = new URLSearchParams();
+  if (includeRetired) params.set("includeRetired", "true");
+  if (tenantId) params.set("tenantId", tenantId);
+  const qs = params.toString();
+  return authFetch(`/equipment/plants${qs ? `?${qs}` : ""}`);
 }
 
 export function apiCreatePlant(input: PlantInput): Promise<Plant> {
@@ -440,6 +463,29 @@ export function apiRetirePlant(id: string): Promise<Plant> {
 
 export function apiReopenPlant(id: string): Promise<Plant> {
   return authFetch(`/equipment/plants/${encodeURIComponent(id)}/reopen`, {
+    method: "POST",
+  });
+}
+
+/** Set or clear (pass null) a site's geofence. Validated server-side — a
+ *  refused shape comes back as the exact rule it broke, not a generic error. */
+export function apiSetPlantBoundary(id: string, boundary: GeoJsonPolygon | null): Promise<Plant> {
+  return authFetch(`/equipment/plants/${encodeURIComponent(id)}/boundary`, {
+    method: "PUT",
+    body: JSON.stringify({ boundary }),
+  });
+}
+
+export interface ImportResult {
+  imported: number;
+  alreadyKnown: number;
+  unplaced: number;
+}
+
+/** Adopt every machine the legacy platform's mirror already knows about for
+ *  this source system, once. Synchronous, no review step — same tenant only. */
+export function apiImportEquipmentFromMirror(sourceSystem: string): Promise<ImportResult> {
+  return authFetch(`/equipment/import/${encodeURIComponent(sourceSystem)}`, {
     method: "POST",
   });
 }
@@ -634,16 +680,27 @@ export interface EquipmentInput {
   tier?: ServiceTier;
   commissionedAt?: string;
   serviceIntervalHours?: number;
+  /** Master Admin only — acts on this account instead of their own (they have none). */
+  tenantId?: string;
 }
 
 export function apiListEquipment(
-  filters: { plantId?: string; includeRetired?: boolean } = {},
+  filters: { plantId?: string; includeRetired?: boolean; tenantId?: string } = {},
 ): Promise<EquipmentProfile[]> {
   const params = new URLSearchParams();
   if (filters.plantId) params.set("plantId", filters.plantId);
   if (filters.includeRetired) params.set("includeRetired", "true");
+  if (filters.tenantId) params.set("tenantId", filters.tenantId);
   const qs = params.toString();
   return authFetch(`/equipment${qs ? `?${qs}` : ""}`);
+}
+
+/** Every account's equipment register in one read (`GET /equipment/all`) — Master
+ *  Admin only, for the Equipment sidebar page. Each row still carries its own
+ *  `tenantId`; resolve the client name from the already-fetched accounts list,
+ *  the same way the device pool does. */
+export function apiListAllEquipment(): Promise<EquipmentProfile[]> {
+  return authFetch("/equipment/all");
 }
 
 export function apiCreateEquipment(input: EquipmentInput): Promise<EquipmentProfile> {
@@ -668,29 +725,57 @@ export function apiUpdateEquipment(
 }
 
 /** Move a machine to another site (or null to take it off site). Requires a
- *  reason — this is the edit that changes who can see the asset. */
+ *  reason — this is the edit that changes who can see the asset. `tenantId` is
+ *  Master Admin's own override. */
 export function apiMoveEquipment(
   sourceSystem: string,
   externalId: string,
   toPlantId: string | null,
   reason: string,
+  tenantId?: string,
 ): Promise<EquipmentProfile> {
   return authFetch(
     `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/move`,
-    { method: "POST", body: JSON.stringify({ toPlantId, reason }) },
+    { method: "POST", body: JSON.stringify({ toPlantId, reason, tenantId }) },
+  );
+}
+
+/** Where a machine has been, and who moved it (`/equipment/:sourceSystem/:externalId/placements`,
+ *  `catalog.read`) — oldest first. `fromPlantId`/`toPlantId` are null for "no site". */
+export interface EquipmentPlacementEvent {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  fromPlantId: string | null;
+  toPlantId: string | null;
+  reason: string | null;
+  actorUserId: string;
+  at: string;
+}
+
+export function apiGetEquipmentPlacementHistory(
+  sourceSystem: string,
+  externalId: string,
+  tenantId?: string,
+): Promise<EquipmentPlacementEvent[]> {
+  const qs = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : "";
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/placements${qs}`,
   );
 }
 
 /** There is no hard delete — a machine leaves its site and stops counting as
- *  active, but the row (and its placement/binding history) stays. */
+ *  active, but the row (and its placement/binding history) stays. `tenantId` is
+ *  Master Admin's own override. */
 export function apiRetireEquipment(
   sourceSystem: string,
   externalId: string,
   reason: string,
+  tenantId?: string,
 ): Promise<EquipmentProfile> {
   return authFetch(
     `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/retire`,
-    { method: "POST", body: JSON.stringify({ reason }) },
+    { method: "POST", body: JSON.stringify({ reason, tenantId }) },
   );
 }
 
@@ -777,6 +862,48 @@ export function apiPublishScenario(slug: string): Promise<Scenario> {
   });
 }
 
+// ------------------------------------------------------------------- signal aliases
+
+/**
+ * Which upstream spelling of a measurement maps to its canonical signal name
+ * (`catalog.write` — Things Alive only). Platform-owned, like the rest of the
+ * catalog: an alias is a fact about a device family, not about a customer.
+ */
+export interface SignalAlias {
+  id: string;
+  sourceSystem: string;
+  alias: string;
+  canonical: string;
+  unit: string | null;
+  note: string | null;
+}
+
+export interface SignalAliasInput {
+  sourceSystem: string;
+  alias: string;
+  canonical: string;
+  unit?: string;
+  note?: string;
+}
+
+export function apiListSignalAliases(): Promise<SignalAlias[]> {
+  return authFetch(`/catalog/authoring/signal-aliases`);
+}
+
+/** Create-or-update, keyed by (sourceSystem, alias) — there is no separate update route. */
+export function apiUpsertSignalAlias(input: SignalAliasInput): Promise<SignalAlias> {
+  return authFetch(`/catalog/signal-aliases`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function apiDeleteSignalAlias(sourceSystem: string, alias: string): Promise<void> {
+  return authFetch(`/catalog/signal-aliases/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(alias)}`, {
+    method: "DELETE",
+  });
+}
+
 // -------------------------------------------------------------- alert rule templates
 
 /**
@@ -786,12 +913,11 @@ export function apiPublishScenario(slug: string): Promise<Scenario> {
  * rows, which the client then owns and edits — this file has no route for that copy,
  * only for the template it was copied from.
  *
- * Only the two triggers a class-level template author can meaningfully set up without
- * a live machine in front of them are modelled here: a threshold against one of the
- * class's expected signals, or "this scenario said so". `no-telemetry` needs no
- * params. `fuel-loss` and `chain-origin` need a GPS fix and a causal chain
- * respectively — neither exists in this authoring context, so they're left out of the
- * picker rather than half-modelled.
+ * `fuel-loss` needs a live GPS fix this authoring context never has, so it stays out
+ * of the picker. `chain-origin` now has somewhere to get a chain from — the Causal
+ * Chains tab alongside this one on the same class — so it is modelled like the rest:
+ * `atLeast` and an optional `stageSignal`/`chainSlug`, both left to "watch everything"
+ * when unset, the same way `prediction-severity`'s `clientScenarioSlug` already does.
  */
 export type AlertTrigger =
   | "prediction-severity"
@@ -815,9 +941,20 @@ export interface SignalThresholdParams {
   requiredBreaches?: number;
 }
 
+/** Fires on where a causal chain says a fault entered — not just that a number is
+ *  high, but that it is high because something upstream explains it. */
+export interface ChainOriginParams {
+  atLeast: "warning" | "critical";
+  /** Left unset to watch every chain bound to the machine's class. */
+  chainSlug?: string | null;
+  /** Restrict to a fault entering at one particular stage. */
+  stageSignal?: string | null;
+}
+
 export type AlertParams =
   | PredictionSeverityParams
   | SignalThresholdParams
+  | ChainOriginParams
   | Record<string, unknown>;
 
 export interface AlertRuleTemplate {
@@ -894,6 +1031,171 @@ export function apiRetireAlertTemplate(
     `/catalog/alert-templates/${encodeURIComponent(slug)}/retire`,
     { method: "POST" },
   );
+}
+
+// ------------------------------------------------------------------- causal chains
+
+/**
+ * The physical layer behind a `chain-origin` alert and a diagnosis (`catalog.write`
+ * to author, Things Alive only — a chain is a claim about how a kind of machine
+ * behaves, part of what Things Alive sells). Each stage predicts one signal from its
+ * own upstream drivers; a stage whose residual is off its own curve is where a fault
+ * entered, which is a different question from "is this number high".
+ */
+export type ChainDirection = "above" | "below" | "either";
+
+export interface ChainDriver {
+  /** An upstream stage's signal, or an exogenous input like load or ambient. */
+  signal: string;
+  /** Units of this stage per unit of the driver. */
+  coefficient: number;
+  /** How long the driver takes to show up here. */
+  lagSeconds?: number;
+}
+
+export interface ChainNode {
+  /** The signal this stage predicts. */
+  signal: string;
+  label?: string;
+  /** Expected value when every driver reads zero. */
+  intercept: number;
+  drivers: ChainDriver[];
+  /** Residual magnitude at which this stage is off its curve. */
+  warnAbove: number;
+  criticalAbove: number;
+  direction?: ChainDirection;
+}
+
+export interface CausalChain {
+  id: string;
+  slug: string;
+  version: number;
+  equipmentClassSlug: string;
+  scenarioSlug: string | null;
+  name: string;
+  description: string | null;
+  outcome: string | null;
+  nodes: ChainNode[];
+  alignmentSeconds: number | null;
+  provenance: string | null;
+  status: "draft" | "published" | "retired";
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface CausalChainInput {
+  equipmentClassSlug: string;
+  scenarioSlug?: string;
+  name: string;
+  description?: string;
+  outcome?: string;
+  nodes: ChainNode[];
+  alignmentSeconds?: number;
+  provenance?: string;
+}
+
+/** Published chains for a class — what a `chain-origin` rule actually runs against. */
+export function apiListCausalChains(equipmentClassSlug: string): Promise<CausalChain[]> {
+  return authFetch(`/intelligence/chains?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}`);
+}
+
+/** Every version, draft and published, across one class. */
+export function apiListAuthoringCausalChains(equipmentClassSlug?: string): Promise<CausalChain[]> {
+  const query = equipmentClassSlug ? `?equipmentClassSlug=${encodeURIComponent(equipmentClassSlug)}` : "";
+  return authFetch(`/intelligence/authoring/chains${query}`);
+}
+
+/** Validated whole — cycles, self-driving stages and unreachable thresholds are the
+ *  database's to catch, not this form's. */
+export function apiDraftCausalChain(slug: string, input: CausalChainInput): Promise<CausalChain> {
+  return authFetch(`/intelligence/chains/${encodeURIComponent(slug)}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function apiPublishCausalChain(slug: string): Promise<CausalChain> {
+  return authFetch(`/intelligence/chains/${encodeURIComponent(slug)}/publish`, {
+    method: "POST",
+  });
+}
+
+// ---------------------------------------------------------------- named formulas
+
+/**
+ * Physics, authored once and shared by every equipment class that needs it
+ * (`/platform/catalog/named-formulas`, `catalog.write` to author, `catalog.publish`
+ * to publish — Things Alive only). Written against roles (`fuel_rate / power_output`),
+ * never signal names directly; a class binds each role to one of its own signals
+ * separately. Immutable once published, same as an equipment class.
+ */
+export interface NamedFormulaRoleInput {
+  role: string;
+  dimension: string;
+  description?: string;
+  expectedParameters?: string[];
+}
+
+export interface NamedFormula {
+  id: string;
+  slug: string;
+  version: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  expression: string;
+  inputs: NamedFormulaRoleInput[];
+  resultDimension: string | null;
+  resultKind: "scalar" | "series" | null;
+  status: "draft" | "published";
+  publishedAt: string | null;
+  createdBy: string | null;
+  updatedAt: string;
+  resultUnit: string | null;
+}
+
+export interface NamedFormulaInput {
+  name?: string;
+  description?: string;
+  category?: string;
+  expression?: string;
+  inputs?: NamedFormulaRoleInput[];
+  resultDimension?: string;
+  resultKind?: "scalar" | "series";
+}
+
+export function apiListNamedFormulas(status?: string, category?: string): Promise<NamedFormula[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  return authFetch(`/platform/catalog/named-formulas${qs ? `?${qs}` : ""}`);
+}
+
+export function apiGetNamedFormulaVersions(slug: string): Promise<NamedFormula[]> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}`);
+}
+
+export function apiCreateNamedFormula(slug: string, input: NamedFormulaInput): Promise<NamedFormula> {
+  return authFetch("/platform/catalog/named-formulas", {
+    method: "POST",
+    body: JSON.stringify({ slug, ...input }),
+  });
+}
+
+/** Refused once that version is published. */
+export function apiEditNamedFormula(slug: string, version: number, input: NamedFormulaInput): Promise<NamedFormula> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${version}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Compiles and publishes. Immutable from this point on. */
+export function apiPublishNamedFormula(slug: string, version: number): Promise<NamedFormula> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${version}/publish`, {
+    method: "POST",
+  });
 }
 
 // ------------------------------------------------------------------ catalog import
@@ -1068,6 +1370,8 @@ export async function apiDownloadCatalogTemplate(): Promise<Blob> {
 export interface SensorCategory {
   id: string;
   name: string;
+  retiredAt: string | null;
+  retiredBy: string | null;
 }
 
 export interface SensorParameterSpec {
@@ -1082,10 +1386,13 @@ export interface SensorParameterSpec {
 export interface Sensor {
   id: string;
   sensorName: string;
+  slug: string;
   categoryId: string | null;
   description: string | null;
   protocol: string | null;
   parameterSpecs: SensorParameterSpec[];
+  retiredAt: string | null;
+  retiredBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1098,8 +1405,8 @@ export interface SensorInput {
   parameterSpecs?: SensorParameterSpec[];
 }
 
-export function apiListSensorCategories(): Promise<SensorCategory[]> {
-  return authFetch("/device-catalog/categories");
+export function apiListSensorCategories(includeRetired = false): Promise<SensorCategory[]> {
+  return authFetch(`/device-catalog/categories${includeRetired ? "?includeRetired=true" : ""}`);
 }
 
 export function apiCreateSensorCategory(name: string): Promise<SensorCategory> {
@@ -1109,8 +1416,20 @@ export function apiCreateSensorCategory(name: string): Promise<SensorCategory> {
   });
 }
 
-export function apiListSensors(): Promise<Sensor[]> {
-  return authFetch("/device-catalog/sensors");
+export function apiRetireSensorCategory(id: string): Promise<SensorCategory> {
+  return authFetch(`/device-catalog/categories/${encodeURIComponent(id)}/retire`, { method: "POST" });
+}
+
+export function apiUnretireSensorCategory(id: string): Promise<SensorCategory> {
+  return authFetch(`/device-catalog/categories/${encodeURIComponent(id)}/unretire`, { method: "POST" });
+}
+
+export function apiDeleteSensorCategory(id: string): Promise<void> {
+  return authFetch(`/device-catalog/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function apiListSensors(includeRetired = false): Promise<Sensor[]> {
+  return authFetch(`/device-catalog/sensors${includeRetired ? "?includeRetired=true" : ""}`);
 }
 
 export function apiCreateSensor(input: SensorInput): Promise<Sensor> {
@@ -1128,6 +1447,18 @@ export function apiUpdateSensor(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function apiRetireSensor(id: string): Promise<Sensor> {
+  return authFetch(`/device-catalog/sensors/${encodeURIComponent(id)}/retire`, { method: "POST" });
+}
+
+export function apiUnretireSensor(id: string): Promise<Sensor> {
+  return authFetch(`/device-catalog/sensors/${encodeURIComponent(id)}/unretire`, { method: "POST" });
+}
+
+export function apiDeleteSensor(id: string): Promise<void> {
+  return authFetch(`/device-catalog/sensors/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 /** A sensor mapped onto a tool profile, resolved to its name — never stored, only read. */
@@ -1174,6 +1505,38 @@ export function apiUpdateToolMapping(
   return authFetch(`/device-catalog/tool-mappings/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+// ------------------------------------------------------------------- signal states
+
+/**
+ * What a categorical signal's codes mean, e.g. `utilization_status`: 0=off, 1=idle,
+ * 2=working (`device-catalog.read`/`.write` — platform reference data).
+ */
+export interface SignalStateVocabEntry {
+  measurementRole: string;
+  state: string;
+  code: number;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+export interface SignalStateCode {
+  state: string;
+  code: number;
+}
+
+export function apiListSignalStates(role?: string): Promise<SignalStateVocabEntry[]> {
+  const qs = role ? `?role=${encodeURIComponent(role)}` : "";
+  return authFetch(`/device-catalog/signal-states${qs}`);
+}
+
+/** Replaces a role's whole vocabulary — there is no per-state edit, only a full swap. */
+export function apiReplaceSignalStates(role: string, states: SignalStateCode[]): Promise<SignalStateVocabEntry[]> {
+  return authFetch(`/device-catalog/signal-states/${encodeURIComponent(role)}`, {
+    method: "PUT",
+    body: JSON.stringify({ states }),
   });
 }
 
@@ -1264,6 +1627,15 @@ export function apiRetireDevices(
   return authFetch("/inventory/retire", {
     method: "POST",
     body: JSON.stringify({ imeis, reason }),
+  });
+}
+
+export function apiReturnDevicesToStock(
+  imeis: string[],
+): Promise<{ imei: string; outcome: DeviceBatchOutcome }[]> {
+  return authFetch("/inventory/return-to-stock", {
+    method: "POST",
+    body: JSON.stringify({ imeis }),
   });
 }
 
@@ -1637,6 +2009,18 @@ export function apiGetMachinePage(sourceSystem: string, externalId: string): Pro
   );
 }
 
+/** The composed dashboard for one site (`GET /sites/:plantId/page`) — every machine
+ *  on it in one read, aggregated the same way a machine page is, just one level up. */
+export interface SitePage {
+  site: { plantId: string; code: string; name: string; siteClass: { slug: string; version: number } };
+  layout: { fallback: boolean };
+  widgets: PageWidget[];
+}
+
+export function apiGetSitePage(plantId: string): Promise<SitePage> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/page`);
+}
+
 // --------------------------------------------------------------------- utilization
 
 /**
@@ -1878,6 +2262,98 @@ export function apiReinstateShift(sourceSystem: string, externalId: string, id: 
   );
 }
 
+export type ServiceKind = "scheduled" | "unscheduled" | "overhaul" | "meter-replaced";
+export type RuntimeUnit = "hours" | "minutes" | "seconds";
+
+export interface EquipmentServiceRecord {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  performedAt: string;
+  kind: ServiceKind;
+  meterReading: number | null;
+  meterUnit: RuntimeUnit | null;
+  workOrderId: string | null;
+  notes: string | null;
+  recordedBy: string | null;
+  recordedAt: string;
+}
+
+export interface RecordServiceInput {
+  performedAt?: string;
+  kind?: ServiceKind;
+  meterReading?: number;
+  meterUnit?: RuntimeUnit;
+  workOrderId?: string;
+  notes?: string;
+}
+
+export function apiGetServiceHistory(sourceSystem: string, externalId: string): Promise<EquipmentServiceRecord[]> {
+  return authFetch(`/service/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`);
+}
+
+export function apiRecordService(
+  sourceSystem: string, externalId: string, input: RecordServiceInput,
+): Promise<EquipmentServiceRecord> {
+  return authFetch(`/service/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export type ServiceStatus = "overdue" | "due" | "approaching" | "ok";
+
+export interface Calibration {
+  unit: RuntimeUnit | null;
+  confidence: "high" | "low" | "none";
+  reason?: "no-usable-windows" | "too-few-windows" | "no-unit-matches" | "disagreement";
+  usable: number;
+  considered: number;
+  medianRatio: number | null;
+  agreement: number | null;
+}
+
+export interface FleetComparison {
+  hoursPerDay: number | null;
+  fleetHoursPerDay: number | null;
+  ratio: number | null;
+  outrunning: boolean;
+  peers: number;
+  reason?: "too-few-peers" | "no-rate";
+}
+
+/** Next service per machine — the same computation that backs the Equipment
+ *  Page's "service_due" widget, here returned for the whole fleet at once. */
+export interface AssetForecast {
+  status: ServiceStatus | null;
+  intervalHours: number | null;
+  intervalSource: "equipment" | "class" | null;
+  hoursSinceDatum: number | null;
+  hoursRemaining: number | null;
+  hoursPerDay: number | null;
+  dueAt: string | null;
+  daysRemaining: number | null;
+  datum: "service-record" | "commissioning" | null;
+  missing: ("interval" | "meter-unit" | "meter-reading" | "datum" | "rate")[];
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  equipmentClassSlug: string | null;
+  plantId: string | null;
+  fleet: FleetComparison;
+  lastServiceAt: string | null;
+  meterReadingAt: string | null;
+}
+
+export interface ServiceForecastResponse {
+  calibration: Calibration;
+  assets: AssetForecast[];
+}
+
+export function apiGetServiceForecast(): Promise<ServiceForecastResponse> {
+  return authFetch(`/service/forecast`);
+}
+
 // -------------------------------------------------------------------------- predictions
 
 /**
@@ -1952,6 +2428,127 @@ export function apiScorePredictionsNow(sourceSystem: string, externalId: string)
   });
 }
 
+/** The per-signal mean/stddev Tier-1 scoring measures every value against — a derived
+ *  cache, not a system of record. `mean`/`stddev`/`z` already surface per-signal on
+ *  each Prediction; this is the provenance behind those numbers (sample count,
+ *  coverage, when it was last computed) plus the manual recompute action for "just
+ *  fitted a sensor, want fresh numbers now". */
+export interface PredictionBaseline {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  signal: string;
+  windowDays: number;
+  mean: number;
+  stddev: number;
+  sampleCount: number;
+  coverageRatio: number;
+  firstSampleAt: string;
+  lastSampleAt: string;
+  source: "live" | "replayed" | "mixed";
+  computedAt: string;
+}
+
+export function apiGetPredictionBaselines(
+  sourceSystem: string, externalId: string, windowDays?: number,
+): Promise<PredictionBaseline[]> {
+  const qs = windowDays ? `?windowDays=${windowDays}` : "";
+  return authFetch(`/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/baselines${qs}`);
+}
+
+export function apiRefreshPredictionBaselines(
+  sourceSystem: string, externalId: string, windowDays?: number,
+): Promise<PredictionBaseline[]> {
+  const qs = windowDays ? `?windowDays=${windowDays}` : "";
+  return authFetch(
+    `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/baselines/refresh${qs}`,
+    { method: "POST" },
+  );
+}
+
+// -------------------------------------------------------------- client equipment classes
+
+/**
+ * The tenant's own copy of an equipment class (`/my-catalog/equipment-classes`,
+ * `client-catalog.read` / `client-catalog.write`) — separate from `/catalog`, which
+ * serves Things Alive's templates. Reads are open to every role in the account;
+ * writes are super admin alone.
+ */
+export interface MyEquipmentClass {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  expectedSignals: ExpectedSignal[];
+  failureModes: FailureMode[];
+  defaultThresholds: Record<string, unknown>;
+  templateSlug: string | null;
+  templateVersion: number | null;
+  status: "active" | "retired";
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EditMyEquipmentClassInput {
+  name?: string;
+  description?: string;
+  category?: string;
+  expectedSignals?: ExpectedSignal[];
+  failureModes?: FailureMode[];
+  defaultThresholds?: Record<string, unknown>;
+}
+
+export function apiListMyCatalogEquipmentClasses(): Promise<(MyEquipmentClass & { provenance: ScenarioProvenance })[]> {
+  return authFetch("/my-catalog/equipment-classes");
+}
+
+export function apiGetMyCatalogEquipmentClass(slug: string): Promise<MyEquipmentClass> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}`);
+}
+
+export function apiEditMyCatalogEquipmentClass(slug: string, input: EditMyEquipmentClassInput): Promise<MyEquipmentClass> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface MyClassLayoutWidget {
+  widgetType: string;
+  widgetKey: string;
+  boundTo: string | null;
+  title: string | null;
+  position: number;
+  size: string;
+  hidden: boolean;
+  /** True once the tenant has moved it — a deliberate change, never silently reverted
+   *  when the class is next upgraded. */
+  positionCustom: boolean;
+}
+
+export function apiGetMyCatalogClassLayout(
+  slug: string,
+): Promise<{ fallback: boolean; widgets: MyClassLayoutWidget[] }> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/layout`);
+}
+
+export function apiSetMyCatalogWidgetHidden(slug: string, widgetKey: string, hidden: boolean) {
+  return authFetch(
+    `/my-catalog/equipment-classes/${encodeURIComponent(slug)}/layout/${encodeURIComponent(widgetKey)}`,
+    { method: "PATCH", body: JSON.stringify({ hidden }) },
+  );
+}
+
+/** Every widget key, in the order wanted — not a partial move. */
+export function apiReorderMyCatalogLayout(slug: string, widgetKeys: string[]) {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/layout/order`, {
+    method: "PUT",
+    body: JSON.stringify({ widgetKeys }),
+  });
+}
+
 // ------------------------------------------------------------------- client scenarios
 
 /**
@@ -1981,6 +2578,42 @@ export interface ClientScenario {
 export function apiListMyCatalogScenarios(equipmentClassSlug?: string): Promise<ClientScenario[]> {
   const qs = equipmentClassSlug ? `?class=${encodeURIComponent(equipmentClassSlug)}` : "";
   return authFetch(`/my-catalog/scenarios${qs}`);
+}
+
+/** Answers the two questions that matter about a copy: is it still what was shipped,
+ *  and is a newer template available. */
+export interface ScenarioProvenance {
+  templateSlug: string | null;
+  templateVersion: number | null;
+  unchangedSinceCopy: boolean;
+  newerTemplateAvailable: boolean;
+  newerTemplateVersion: number | null;
+  copiedAt: string | null;
+}
+
+export function apiGetMyCatalogScenario(slug: string): Promise<ClientScenario & { provenance: ScenarioProvenance }> {
+  return authFetch(`/my-catalog/scenarios/${encodeURIComponent(slug)}`);
+}
+
+export interface EditClientScenarioInput {
+  name?: string;
+  description?: string;
+  severity?: "none" | "low" | "medium" | "high" | "critical";
+  tier?: 1 | 2 | 3;
+  requiredSignals?: string[];
+  minimumHistoryDays?: number;
+  parameters?: ScenarioParameter[];
+  enabled?: boolean;
+}
+
+export function apiEditMyCatalogScenario(slug: string, input: EditClientScenarioInput): Promise<ClientScenario> {
+  return authFetch(`/my-catalog/scenarios/${encodeURIComponent(slug)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Discards every local edit and replaces this copy with the latest published
+ *  template version. */
+export function apiAdoptLatestScenarioTemplate(slug: string): Promise<ClientScenario> {
+  return authFetch(`/my-catalog/scenarios/${encodeURIComponent(slug)}/adopt-latest-template`, { method: "POST" });
 }
 
 // ----------------------------------------------------------------------- activation
@@ -2052,6 +2685,58 @@ export function apiActivationTransition(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** Who turned what on and off for this asset, and why — across every scenario,
+ *  newest first (`/activations/history/:sourceSystem/:externalId`). */
+export interface ActivationHistoryEvent {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  clientScenarioSlug: string;
+  action: ActivationAction;
+  fromState: ActivationState | null;
+  toState: ActivationState;
+  reason: string | null;
+  blockers: ActivationBlocker[];
+  actorUserId: string;
+  actorRoles: string[];
+  at: string;
+}
+
+export function apiGetActivationHistory(
+  sourceSystem: string,
+  externalId: string,
+): Promise<ActivationHistoryEvent[]> {
+  return authFetch(
+    `/activations/history/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`,
+  );
+}
+
+/** Which scenarios this asset can run right now, and what's stopping the rest
+ *  (`/catalog/equipment/:sourceSystem/:externalId/recommendations`, `catalog.read`) —
+ *  computed fresh from recorded metadata every call, unlike `ActivationView.blockersAtActivation`
+ *  which is a snapshot from whenever activation was last attempted. */
+export type RecommendationBucket = "availableNow" | "availableLater" | "notApplicable";
+
+export interface EquipmentRecommendation {
+  scenarioSlug: string;
+  scenarioVersion: number;
+  name: string;
+  severity: string;
+  tier: 1 | 2 | 3;
+  bucket: RecommendationBucket;
+  blockedBy: ActivationBlocker[];
+  estimatedReadyDate: string | null;
+}
+
+export function apiGetEquipmentRecommendations(
+  sourceSystem: string,
+  externalId: string,
+): Promise<{ equipmentClassSlug: string | null; recommendations: EquipmentRecommendation[] }> {
+  return authFetch(
+    `/catalog/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/recommendations`,
+  );
 }
 
 // --------------------------------------------------------------------- work orders
@@ -2354,6 +3039,23 @@ export function apiSetCurrency(currency: string | null): Promise<CurrencyResult>
 
 // ------------------------------------------------------------------- my permissions
 
+export interface MeDiagnostics {
+  tenantId: string;
+  userId: string;
+  roles: string[];
+  isPlatformRole: boolean;
+  scope: {
+    plants: string[] | "unrestricted";
+    equipment: string[] | "unrestricted";
+    devices: string[] | "unrestricted";
+  };
+}
+
+/** GET /me — the resolved scope for this token, raw. A support/debugging aid. */
+export function apiGetMe(): Promise<MeDiagnostics> {
+  return authFetch("/me");
+}
+
 /** GET /me/permissions — what the signed-in caller may do, and which pages they see. */
 export function apiMyPermissions(): Promise<{
   tenantId: string;
@@ -2490,6 +3192,26 @@ export function apiSetUserRole(
   return authFetch(`/identity/users/${encodeURIComponent(userId)}/role`, {
     method: "PUT",
     body: JSON.stringify({ roleSlug }),
+  });
+}
+
+/** Replaces this person's site/machine assignments wholesale (`PUT /identity/users/:id/access`).
+ *  Only meaningful for a role whose `scopeShape` is "plant" or "equipment" — a
+ *  "tenant"-scoped role ignores these rows entirely and always sees everything.
+ *  Leaving a field empty does not mean "unrestricted": it means this person is
+ *  assigned to nothing of that kind and sees nothing of that kind. */
+export interface SetUserAccessInput {
+  plants?: { plantId: string }[];
+  equipment?: { sourceSystem: string; equipmentExternalId: string }[];
+}
+
+export function apiSetUserAccess(
+  userId: string,
+  input: SetUserAccessInput,
+): Promise<TenantUser> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/access`, {
+    method: "PUT",
+    body: JSON.stringify(input),
   });
 }
 

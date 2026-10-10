@@ -1,14 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, ClipboardList, AlertCircle, Clock3 } from 'lucide-react';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
-  ApiError, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, WorkOrder, WorkOrderPriority, WorkOrderStatus,
-  apiActOnWorkOrder, apiGetDeviceHealthFleet, apiListEquipment, apiListPlants, apiListWorkOrders, apiRaiseWorkOrder,
+  ApiError, AssetForecast, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus, WorkOrder,
+  WorkOrderPriority, WorkOrderStatus, apiActOnWorkOrder, apiGetDeviceHealthFleet, apiGetServiceForecast,
+  apiListEquipment, apiListPlants, apiListWorkOrders, apiRaiseWorkOrder,
 } from '../lib/api';
+
+const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'emerald'> = {
+  overdue: 'rose', due: 'amber', approaching: 'sky', ok: 'emerald',
+};
+const SERVICE_STATUS_LABEL: Record<ServiceStatus, string> = {
+  overdue: 'Overdue', due: 'Due', approaching: 'Approaching', ok: 'Ok',
+};
 
 const STATUS_OPTIONS: WorkOrderStatus[] = ['created', 'in-progress', 'completed', 'cancelled'];
 const STATUS_LABEL: Record<WorkOrderStatus, string> = {
@@ -29,12 +37,14 @@ export const WorkOrdersPage: React.FC = () => {
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [linkHealth, setLinkHealth] = useState<FleetLinkRow[]>([]);
+  const [serviceDue, setServiceDue] = useState<AssetForecast[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
+  const [prefill, setPrefill] = useState<{ equipmentKey: string; title: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -54,6 +64,7 @@ export const WorkOrdersPage: React.FC = () => {
     apiListEquipment().then((e) => { if (live) setEquipment(e); }).catch(() => {});
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiGetDeviceHealthFleet().then((rows) => { if (live) setLinkHealth(rows); }).catch(() => {});
+    apiGetServiceForecast().then((r) => { if (live) setServiceDue(r.assets); }).catch(() => {});
     apiListWorkOrders()
       .then((o) => { if (live) { setOrders(o); setError(undefined); } })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load work orders.'); })
@@ -79,6 +90,22 @@ export const WorkOrdersPage: React.FC = () => {
     () => equipment.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId, label: `${e.name ?? e.externalId} (${e.externalId})` })),
     [equipment],
   );
+
+  // Ok and incomplete (no status at all — missing an interval, a meter, or a rate)
+  // forecasts aren't worth a fitter's attention here; only the three that call for
+  // action, already sorted overdue-first by the backend.
+  const dueAssets = useMemo(
+    () => serviceDue.filter((a): a is AssetForecast & { status: Exclude<ServiceStatus, 'ok'> } => !!a.status && a.status !== 'ok'),
+    [serviceDue],
+  );
+
+  function raiseForService(asset: AssetForecast) {
+    setPrefill({
+      equipmentKey: `${asset.sourceSystem}|${asset.externalId}`,
+      title: `Service — ${asset.name ?? asset.externalId}`,
+    });
+    setCreating(true);
+  }
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
@@ -133,12 +160,44 @@ export const WorkOrdersPage: React.FC = () => {
           <p className="text-sm text-sky-100">Jobs raised against your equipment</p>
         </div>
         <button
-          onClick={() => setCreating(true)}
+          onClick={() => { setPrefill(null); setCreating(true); }}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-white text-sky-700 hover:bg-sky-50 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Create work order
         </button>
       </div>
+
+      {dueAssets.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-xl p-4 shadow-xs space-y-2">
+          <div className="flex items-center gap-2">
+            <Wrench className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Service due</h3>
+          </div>
+          <div className="space-y-1.5">
+            {dueAssets.map((a) => (
+              <div key={`${a.sourceSystem}/${a.externalId}`} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
+                <div className="min-w-0">
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">{a.name ?? a.externalId}</span>
+                  <span className="text-slate-400 ml-1.5">
+                    {a.status === 'overdue' && a.hoursRemaining != null
+                      ? `${Math.abs(a.hoursRemaining)}h overdue`
+                      : a.hoursRemaining != null ? `${a.hoursRemaining}h remaining` : 'interval or meter not set'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Chip tone={SERVICE_STATUS_TONE[a.status]}>{SERVICE_STATUS_LABEL[a.status]}</Chip>
+                  <button
+                    onClick={() => raiseForService(a)}
+                    className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer"
+                  >
+                    Raise work order
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
@@ -219,8 +278,8 @@ export const WorkOrdersPage: React.FC = () => {
         </div>
       )}
 
-      <Modal isOpen={creating} onClose={() => setCreating(false)} title="Create work order" subtitle="New Maintenance Task" maxWidth="max-w-xl">
-        <CreateWorkOrderForm equipment={equipment} onCancel={() => setCreating(false)} onCreate={createOrder} />
+      <Modal isOpen={creating} onClose={() => { setCreating(false); setPrefill(null); }} title="Create work order" subtitle="New Maintenance Task" maxWidth="max-w-xl">
+        <CreateWorkOrderForm equipment={equipment} initial={prefill} onCancel={() => { setCreating(false); setPrefill(null); }} onCreate={createOrder} />
       </Modal>
     </div>
   );
@@ -228,11 +287,12 @@ export const WorkOrdersPage: React.FC = () => {
 
 const CreateWorkOrderForm: React.FC<{
   equipment: EquipmentProfile[];
+  initial?: { equipmentKey: string; title: string } | null;
   onCancel: () => void;
   onCreate: (input: RaiseWorkOrderInput) => void;
-}> = ({ equipment, onCancel, onCreate }) => {
-  const [title, setTitle] = useState('');
-  const [equipmentKey, setEquipmentKey] = useState<string | null>(null);
+}> = ({ equipment, initial, onCancel, onCreate }) => {
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [equipmentKey, setEquipmentKey] = useState<string | null>(initial?.equipmentKey ?? null);
   const [priority, setPriority] = useState<WorkOrderPriority>('normal');
   const [description, setDescription] = useState('');
   const [dueAt, setDueAt] = useState('');

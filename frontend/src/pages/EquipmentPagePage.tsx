@@ -1,305 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Bell, CheckCircle2, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
+import { AlertTriangle, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
-  ApiError, EquipmentShift, MachinePage, PageWidget, ShiftInput, ShiftRun, Weekday, apiCreateShift,
-  apiGetMachinePage, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRetireShift,
-  PageKpiWidgetData, PageSignalChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
-  PageServiceDueData, PageFailureModeRow, PageRecommendationRow, PageMachineRow, PageSchematicData,
+  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
+  ShiftInput, ShiftRun, Weekday, apiCreateShift, apiGetMachinePage, apiGetServiceHistory, apiGetShiftRuns,
+  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
-import { RingGauge } from '../components/common/RingGauge';
-import { Sparkline } from '../components/dashboard/Sparkline';
 import { Modal } from '../components/common/Modal';
-
-const REASON_LABEL: Record<string, string> = {
-  unbound: 'Unbound', stale: 'Stale', no_readings: 'No readings', mapping_required: 'Mapping required',
-  baseline_not_established: 'Baseline not established', insufficient_coverage: 'Insufficient coverage',
-  undefined_result: 'Undefined result', parameter_not_set: 'Parameter not set',
-  site_boundary_not_set: 'Site boundary not set', unclassified: 'Equipment not classified',
-  formula_not_in_account: "Formula not in this account's catalog", not_ready: 'Not ready',
-  no_requirements: 'No signal requirements declared', no_device: 'No device assigned',
-  not_forecast: 'Not in the service forecast', no_visual: 'No equipment image configured',
-  upload_pending: 'Image upload pending', assets_unavailable: 'Image storage not configured',
-  not_on_this_page: 'Not available on this page',
-};
-
-const reasonText = (reason?: string | null) => (reason ? REASON_LABEL[reason] ?? reason : 'Not available');
-
-const READINESS_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
-  ready: 'emerald', not_available: 'amber', blocked: 'rose', not_configured: 'slate',
-};
-
-const Unfilled: React.FC<{ reason?: string }> = ({ reason }) => (
-  <p className="text-xs text-slate-400 dark:text-slate-500">{reasonText(reason)}</p>
-);
-
-const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-    {title && <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{title}</h3>}
-    {children}
-  </div>
-);
-
-function KpiWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const data = widget.data as PageKpiWidgetData;
-  if (data.resultKind === 'series') {
-    const points = (data.value as { t: string; v: number | null }[] ?? []).map((p) => p.v).filter((v): v is number => v != null);
-    const latest = points[points.length - 1];
-    return (
-      <WidgetShell title={widget.title}>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
-              {latest != null ? latest.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">{data.window.from.slice(0, 10)} – {data.window.to.slice(0, 10)}</p>
-          </div>
-          {points.length >= 2 && <Sparkline values={points} colorClass="text-sky-600 dark:text-sky-400" />}
-        </div>
-      </WidgetShell>
-    );
-  }
-  const value = data.value as number | null;
-  const showGauge = widget.widgetType === 'kpi_gauge' && data.unit === '%';
-  return (
-    <WidgetShell title={widget.title}>
-      <div className="flex items-center gap-4">
-        {showGauge && <RingGauge value={value} />}
-        <div>
-          <div className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">
-            {value != null ? value.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
-          </div>
-          {data.target != null && <p className="text-[11px] text-slate-400">Target: {data.target} {data.unit}</p>}
-          {(data.targetMin != null || data.targetMax != null) && (
-            <p className="text-[11px] text-slate-400">Range: {data.targetMin ?? '—'} – {data.targetMax ?? '—'} {data.unit}</p>
-          )}
-        </div>
-      </div>
-    </WidgetShell>
-  );
-}
-
-function SignalChartWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const data = widget.data as PageSignalChartData;
-  const values = data.points.map((p) => p.v).filter((v): v is number => v != null);
-  const latest = values[values.length - 1];
-  return (
-    <WidgetShell title={widget.title ?? data.signal}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
-          {latest != null ? latest.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
-        </div>
-        {values.length >= 2 && <Sparkline values={values} colorClass="text-sky-600 dark:text-sky-400" />}
-      </div>
-      <p className="text-[11px] text-slate-400">Last 24 hours</p>
-    </WidgetShell>
-  );
-}
-
-function ReadinessListWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Signal readiness'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const rows = widget.data as PageReadinessRow[];
-  return (
-    <WidgetShell title={widget.title ?? 'Signal readiness'}>
-      <div className="space-y-1.5">
-        {rows.map((r, i) => (
-          <div key={`${r.signal}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300 truncate">{r.signal}</span>
-            <Chip tone={READINESS_TONE[r.readiness]}>{r.readiness === 'ready' ? 'Ready' : reasonText(r.reason)}</Chip>
-          </div>
-        ))}
-      </div>
-    </WidgetShell>
-  );
-}
-
-function AlertListWidget({ widget }: { widget: PageWidget }) {
-  const rows = (widget.data as PageAlertRow[] | null) ?? [];
-  return (
-    <WidgetShell title={widget.title ?? 'Alerts'}>
-      {widget.readiness !== 'ready' ? (
-        <Unfilled reason={widget.reason} />
-      ) : rows.length === 0 ? (
-        <Chip icon={CheckCircle2} tone="emerald">No open alerts</Chip>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((a) => (
-            <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <div>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-[11px] text-slate-400">{a.signal ?? 'no signal'} · {new Date(a.raisedAt).toLocaleString()}</p>
-              </div>
-              <Chip icon={AlertTriangle} tone={a.severity === 'critical' ? 'rose' : 'amber'}>{a.severity}</Chip>
-            </div>
-          ))}
-        </div>
-      )}
-    </WidgetShell>
-  );
-}
-
-function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
-  const rows = (widget.data as PageWorkOrderRow[] | null) ?? [];
-  return (
-    <WidgetShell title={widget.title ?? 'Work orders'}>
-      {widget.readiness !== 'ready' ? (
-        <Unfilled reason={widget.reason} />
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-slate-400">No open work orders.</p>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((o) => (
-            <div key={o.id} className="flex items-center gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-[11px] text-slate-400">{o.status}{o.dueAt ? ` · due ${new Date(o.dueAt).toLocaleDateString()}` : ''}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </WidgetShell>
-  );
-}
-
-function ServiceDueWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Service due'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const data = widget.data as PageServiceDueData;
-  return (
-    <WidgetShell title={widget.title ?? 'Service due'}>
-      <div className="text-xl font-bold text-slate-800 dark:text-slate-100">
-        {data.hoursRemaining != null ? `${data.hoursRemaining.toFixed(0)} h remaining` : '—'}
-      </div>
-      <p className="text-[11px] text-slate-400">
-        {data.nextDueAt ? `Due ${new Date(data.nextDueAt).toLocaleDateString()}` : 'No due date'} · {data.basis ?? 'basis unknown'}
-      </p>
-    </WidgetShell>
-  );
-}
-
-const FAILURE_TONE: Record<string, 'rose' | 'emerald' | 'slate'> = { active: 'rose', clear: 'emerald', unknown: 'slate' };
-
-function FailureModesWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Failure modes'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const rows = widget.data as PageFailureModeRow[];
-  return (
-    <WidgetShell title={widget.title ?? 'Failure modes'}>
-      <div className="space-y-2">
-        {rows.map((f) => (
-          <div key={f.code} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-            <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{f.name}</p>
-              <p className="text-[11px] text-slate-400">{f.symptom}</p>
-            </div>
-            <Chip tone={FAILURE_TONE[f.status]}>{f.status}</Chip>
-          </div>
-        ))}
-        {rows.length === 0 && <p className="text-xs text-slate-400">No failure modes declared for this class.</p>}
-      </div>
-    </WidgetShell>
-  );
-}
-
-function RecommendationsWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Recommendations'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const rows = widget.data as PageRecommendationRow[];
-  return (
-    <WidgetShell title={widget.title ?? 'Recommendations'}>
-      <div className="space-y-2">
-        {rows.map((r, i) => (
-          <div key={i} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{r.action}</p>
-            <p className="text-[11px] text-slate-400">{r.urgency}{r.estimatedHours != null ? ` · ~${r.estimatedHours}h` : ''}</p>
-          </div>
-        ))}
-        {rows.length === 0 && <p className="text-xs text-slate-400">No recommendations for this class.</p>}
-      </div>
-    </WidgetShell>
-  );
-}
-
-function MachineListWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Machines'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const rows = widget.data as PageMachineRow[];
-  return (
-    <WidgetShell title={widget.title ?? 'Machines'}>
-      <div className="space-y-1.5">
-        {rows.map((m) => (
-          <div key={`${m.sourceSystem}/${m.externalId}`} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300 truncate">{m.name ?? m.externalId}</span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {m.openAlerts > 0 && <Chip icon={Bell} tone="rose">{m.openAlerts}</Chip>}
-              <Chip tone={READINESS_TONE[m.readiness]}>{m.readiness}</Chip>
-            </div>
-          </div>
-        ))}
-      </div>
-    </WidgetShell>
-  );
-}
-
-function SchematicWidget({ widget }: { widget: PageWidget }) {
-  if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? 'Schematic'}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-  const data = widget.data as PageSchematicData;
-  return (
-    <WidgetShell title={widget.title ?? 'Schematic'}>
-      <div className="relative rounded-lg overflow-hidden border border-slate-100 dark:border-slate-800">
-        <img src={data.imageUrl} alt={widget.title ?? 'Equipment schematic'} className="w-full h-auto block" />
-        {data.anchors.map((a) => (
-          <span
-            key={a.signal}
-            title={`${a.label ?? a.signal}${a.value != null ? `: ${a.value} ${a.unit ?? ''}` : ` — ${reasonText(a.reason)}`}`}
-            style={{ left: `${a.hotspotX}%`, top: `${a.hotspotY}%` }}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow ${
-              a.readiness === 'ready' ? 'bg-emerald-500' : a.readiness === 'blocked' ? 'bg-rose-500' : 'bg-amber-500'
-            }`}
-          />
-        ))}
-      </div>
-      {data.unplacedSignals.length > 0 && (
-        <p className="text-[11px] text-slate-400">{data.unplacedSignals.length} signal(s) not placed on the image.</p>
-      )}
-    </WidgetShell>
-  );
-}
-
-function Widget({ widget }: { widget: PageWidget }) {
-  switch (widget.widgetType) {
-    case 'kpi_number': case 'kpi_gauge': case 'kpi_chart': return <KpiWidget widget={widget} />;
-    case 'signal_chart': return <SignalChartWidget widget={widget} />;
-    case 'readiness_list': return <ReadinessListWidget widget={widget} />;
-    case 'alert_list': return <AlertListWidget widget={widget} />;
-    case 'work_order_list': return <WorkOrderListWidget widget={widget} />;
-    case 'service_due': return <ServiceDueWidget widget={widget} />;
-    case 'failure_modes': return <FailureModesWidget widget={widget} />;
-    case 'recommendations': return <RecommendationsWidget widget={widget} />;
-    case 'machine_list': return <MachineListWidget widget={widget} />;
-    case 'schematic': return <SchematicWidget widget={widget} />;
-    default: return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
-  }
-}
+import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
 
 const DAY_LABEL: Record<Weekday, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
 const DAY_OPTIONS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
@@ -489,6 +200,163 @@ const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) 
   );
 };
 
+const KIND_LABEL: Record<ServiceKind, string> = {
+  scheduled: 'Scheduled', unscheduled: 'Unscheduled', overhaul: 'Overhaul', 'meter-replaced': 'Meter replaced',
+};
+const KIND_TONE: Record<ServiceKind, 'emerald' | 'amber' | 'rose' | 'slate'> = {
+  scheduled: 'emerald', unscheduled: 'amber', overhaul: 'rose', 'meter-replaced': 'slate',
+};
+const KIND_OPTIONS: ServiceKind[] = ['scheduled', 'unscheduled', 'overhaul', 'meter-replaced'];
+const UNIT_OPTIONS: RuntimeUnit[] = ['hours', 'minutes', 'seconds'];
+
+function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const [records, setRecords] = useState<EquipmentServiceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [recording, setRecording] = useState(false);
+
+  const refresh = () => apiGetServiceHistory(sourceSystem, externalId).then(setRecords);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    apiGetServiceHistory(sourceSystem, externalId)
+      .then((r) => { if (live) { setRecords(r); setError(undefined); } })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the service history.'); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSystem, externalId]);
+
+  async function record(input: RecordServiceInput) {
+    try {
+      await apiRecordService(sourceSystem, externalId, input);
+      setRecording(false);
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not record this service.');
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Service history</h3>
+        <button onClick={() => setRecording(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
+          <Wrench className="w-3.5 h-3.5" /> Record service
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {loading ? (
+        <p className="text-xs text-slate-400">Loading…</p>
+      ) : records.length === 0 ? (
+        <p className="text-xs text-slate-400">No service recorded yet. The forecast above falls back to commissioning as its datum until one is.</p>
+      ) : (
+        <div className="space-y-2">
+          {records.map((r) => (
+            <div key={r.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  {new Date(r.performedAt).toLocaleDateString()}
+                  {r.meterReading != null && r.meterUnit && (
+                    <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
+                  )}
+                </p>
+                {r.notes && <p className="text-[11px] text-slate-400 mt-0.5">{r.notes}</p>}
+              </div>
+              <Chip tone={KIND_TONE[r.kind]}>{KIND_LABEL[r.kind]}</Chip>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal isOpen={recording} onClose={() => setRecording(false)} title="Record service" subtitle="Service history" maxWidth="max-w-md">
+        <ServiceRecordForm onCancel={() => setRecording(false)} onRecord={record} />
+      </Modal>
+    </div>
+  );
+}
+
+const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: RecordServiceInput) => void }> = ({ onCancel, onRecord }) => {
+  const [performedAt, setPerformedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [kind, setKind] = useState<ServiceKind>('scheduled');
+  const [meterReading, setMeterReading] = useState('');
+  const [meterUnit, setMeterUnit] = useState<RuntimeUnit | null>(null);
+  const [notes, setNotes] = useState('');
+
+  const valid = useMemo(() => {
+    const hasReading = meterReading.trim() !== '';
+    if (hasReading !== !!meterUnit) return false;
+    if (hasReading && (Number.isNaN(Number(meterReading)) || Number(meterReading) < 0)) return false;
+    return !!performedAt;
+  }, [meterReading, meterUnit, performedAt]);
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!valid) return;
+        onRecord({
+          performedAt: new Date(performedAt).toISOString(),
+          kind,
+          meterReading: meterReading.trim() === '' ? undefined : Number(meterReading),
+          meterUnit: meterUnit ?? undefined,
+          notes: notes.trim() === '' ? undefined : notes.trim(),
+        });
+      }}
+    >
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Date performed</span>
+        <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+      </label>
+      <div className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Kind</span>
+        <SelectPicker
+          data={KIND_OPTIONS.map((k) => ({ label: KIND_LABEL[k], value: k }))}
+          value={kind}
+          onChange={(value) => setKind((value ?? 'scheduled') as ServiceKind)}
+          block
+          searchable={false}
+          cleanable={false}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Meter reading</span>
+          <Input value={meterReading} onChange={(value) => setMeterReading(value)} placeholder="e.g. 1420" />
+        </label>
+        <div className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Unit</span>
+          <SelectPicker
+            data={UNIT_OPTIONS.map((u) => ({ label: u, value: u }))}
+            value={meterUnit}
+            onChange={(value) => setMeterUnit((value ?? null) as RuntimeUnit | null)}
+            block
+            searchable={false}
+          />
+        </div>
+      </div>
+      {meterReading.trim() !== '' !== !!meterUnit && (
+        <p className="text-[11px] text-rose-500">A meter reading needs its unit, and a unit needs a reading.</p>
+      )}
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes</span>
+        <Input as="textarea" rows={3} value={notes} onChange={(value) => setNotes(value)} placeholder="What was done" />
+      </label>
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+          Cancel
+        </button>
+        <button type="submit" disabled={!valid} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
+          Record service
+        </button>
+      </div>
+    </form>
+  );
+};
+
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
@@ -523,7 +391,7 @@ export const EquipmentPagePage: React.FC = () => {
   }
   if (!page) return null;
 
-  const gauges = page.widgets.filter((w) => ['kpi_number', 'kpi_gauge', 'kpi_chart', 'signal_chart', 'service_due'].includes(w.widgetType));
+  const gauges = page.widgets.filter((w) => GAUGE_WIDGET_TYPES.includes(w.widgetType));
   const lists = page.widgets.filter((w) => !gauges.includes(w));
 
   return (
@@ -553,6 +421,7 @@ export const EquipmentPagePage: React.FC = () => {
       </div>
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+      <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
     </div>
   );
 };

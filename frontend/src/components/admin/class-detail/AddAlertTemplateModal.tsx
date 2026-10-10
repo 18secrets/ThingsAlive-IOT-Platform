@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import {
-  AlertParams, AlertRuleTemplate, AlertRuleTemplateInput, AlertTrigger, ApiError,
+  AlertParams, AlertRuleTemplate, AlertRuleTemplateInput, AlertTrigger, ApiError, ChainOriginParams,
 } from '../../../lib/api';
 
 interface AddAlertTemplateModalProps {
@@ -22,9 +22,9 @@ const slugify = (name: string) =>
 const SEVERITIES: AlertRuleTemplate['severity'][] = ['low', 'medium', 'high', 'critical'];
 const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ label: s, value: s }));
 const SEVERITY_OR_ABOVE_OPTIONS = SEVERITIES.map((s) => ({ label: `${s} or above`, value: s }));
-// fuel-loss and chain-origin need a GPS fix / causal chain this authoring screen has
-// no data for — left out of the picker rather than half-modelled (see api.ts's comment).
-const TRIGGERS: AlertTrigger[] = ['signal-threshold', 'prediction-severity', 'no-telemetry'];
+// fuel-loss needs a live GPS fix this authoring screen has no data for — left out of
+// the picker rather than half-modelled (see api.ts's comment).
+const TRIGGERS: AlertTrigger[] = ['signal-threshold', 'prediction-severity', 'no-telemetry', 'chain-origin'];
 const TRIGGER_LABEL: Record<AlertTrigger, string> = {
   'signal-threshold': 'Signal Threshold',
   'prediction-severity': 'Prediction Severity',
@@ -40,6 +40,8 @@ function defaultParams(trigger: AlertTrigger, signals: string[]): AlertParams {
       return { signal: signals[0] ?? '', max: null, min: null };
     case 'prediction-severity':
       return { atLeast: 'high', clientScenarioSlug: null };
+    case 'chain-origin':
+      return { atLeast: 'warning', chainSlug: null, stageSignal: null };
     default:
       return {};
   }
@@ -120,6 +122,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
 
   const thresholdParams = params as SignalThresholdParamsLike;
   const severityParams = params as PredictionSeverityParamsLike;
+  const chainParams = params as ChainOriginParams;
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
@@ -274,6 +277,50 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
             <p className="text-[11px] text-slate-400 italic">
               Nothing to configure — fires when a shift produced no readings at all.
             </p>
+          )}
+
+          {trigger === 'chain-origin' && (
+            <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-3">
+              <span className="text-xs font-bold text-slate-800 dark:text-white">Fires when a chain's origin stage reaches</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Severity</label>
+                  <SelectPicker
+                    data={[{ label: 'warning', value: 'warning' }, { label: 'critical', value: 'critical' }]}
+                    value={chainParams.atLeast ?? 'warning'}
+                    onChange={(value) => setParams({ ...chainParams, atLeast: (value ?? 'warning') as ChainOriginParams['atLeast'] })}
+                    block
+                    searchable={false}
+                    cleanable={false}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Stage signal (optional)</label>
+                  <SelectPicker
+                    data={availableSignals.map((s) => ({ label: s, value: s }))}
+                    value={chainParams.stageSignal ?? null}
+                    onChange={(value) => setParams({ ...chainParams, stageSignal: value ?? null })}
+                    placeholder="any stage"
+                    block
+                    searchable={false}
+                    className="font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Chain slug (optional)</label>
+                  <Input
+                    value={chainParams.chainSlug ?? ''}
+                    onChange={(value) => setParams({ ...chainParams, chainSlug: value.trim() || null })}
+                    placeholder="any published chain"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Left unset, watches every published chain bound to this class — narrow to one stage or one
+                chain once there's a reason to route it differently.
+              </p>
+            </div>
           )}
 
           <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">

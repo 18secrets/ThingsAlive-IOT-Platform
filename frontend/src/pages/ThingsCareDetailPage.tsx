@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, Bell, CheckCircle2, ExternalLink, Gauge, Plus, RefreshCw, Wrench } from 'lucide-react';
+import {
+  AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Gauge, Plus, RefreshCw, Wrench,
+} from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import { Sparkline } from '../components/dashboard/Sparkline';
 import {
-  ApiError, EquipmentProfile, Prediction, PredictionSeverity, WorkOrder,
-  apiGetLatestPredictions, apiGetPredictionHistory, apiListEquipment, apiListWorkOrders, apiScorePredictionsNow,
+  ApiError, EquipmentProfile, Prediction, PredictionBaseline, PredictionSeverity, WorkOrder,
+  apiGetLatestPredictions, apiGetPredictionBaselines, apiGetPredictionHistory, apiListEquipment, apiListWorkOrders,
+  apiRefreshPredictionBaselines, apiScorePredictionsNow,
 } from '../lib/api';
 
 const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -16,6 +19,111 @@ const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | '
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   normal: 'emerald', warning: 'amber', critical: 'rose', unscored: 'slate',
 };
+
+/** The provenance behind each signal's mean/stddev (already shown per-prediction
+ *  above) — collapsed by default, a support/diagnostic aid rather than a screen an
+ *  operator visits for its own sake. */
+function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const [open, setOpen] = useState(false);
+  const [baselines, setBaselines] = useState<PredictionBaseline[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    apiGetPredictionBaselines(sourceSystem, externalId)
+      .then((rows) => { setBaselines(rows); setError(undefined); })
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load baselines.'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!open || baselines || loading) return;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function recompute() {
+    setRefreshing(true);
+    try {
+      const rows = await apiRefreshPredictionBaselines(sourceSystem, externalId);
+      setBaselines(rows);
+      setError(undefined);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not recompute baselines.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-4 py-3 flex items-center justify-between gap-2.5 cursor-pointer"
+      >
+        <div className="text-left">
+          <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">Baselines</div>
+          <div className="text-xs text-slate-400">What each signal's mean/stddev is measured against</div>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 text-xs space-y-2">
+          <div className="flex items-center justify-end">
+            <button
+              onClick={recompute}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Recompute
+            </button>
+          </div>
+
+          {loading && <p className="text-slate-400">Loading…</p>}
+          {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
+
+          {baselines && baselines.length === 0 && (
+            <p className="text-slate-400">No baseline computed yet for this machine.</p>
+          )}
+
+          {baselines && baselines.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="text-slate-400 font-semibold">
+                  <tr>
+                    <th className="py-1.5 pr-3">Signal</th>
+                    <th className="py-1.5 pr-3">Mean</th>
+                    <th className="py-1.5 pr-3">Stddev</th>
+                    <th className="py-1.5 pr-3">Samples</th>
+                    <th className="py-1.5 pr-3">Coverage</th>
+                    <th className="py-1.5 pr-3">Source</th>
+                    <th className="py-1.5">Computed</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                  {baselines.map((b) => (
+                    <tr key={b.signal}>
+                      <td className="py-1.5 pr-3 font-sans text-slate-700 dark:text-slate-200">{b.signal}</td>
+                      <td className="py-1.5 pr-3">{b.mean.toFixed(2)}</td>
+                      <td className="py-1.5 pr-3">{b.stddev.toFixed(2)}</td>
+                      <td className="py-1.5 pr-3">{b.sampleCount}</td>
+                      <td className="py-1.5 pr-3">{(b.coverageRatio * 100).toFixed(0)}%</td>
+                      <td className="py-1.5 pr-3 font-sans">{b.source}</td>
+                      <td className="py-1.5 font-sans text-slate-400">{new Date(b.computedAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
@@ -113,6 +221,8 @@ export const ThingsCareDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {sourceSystem && externalId && <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />}
 
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">Active scenarios</h3>

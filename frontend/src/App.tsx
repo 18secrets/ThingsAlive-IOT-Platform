@@ -42,10 +42,12 @@ import { RequireAuth, GuestOnly } from './routes/guards';
 import { Shell } from './shell/Shell';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen';
+import { ForgotPasswordScreen } from './components/auth/ForgotPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
 import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
+import { SitePagePage } from './pages/SitePagePage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
@@ -71,35 +73,47 @@ import { SettingsPage } from './pages/SettingsPage';
 import {
   apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount,
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
+  apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
   apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula,
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
+  apiListAuthoringCausalChains, apiDraftCausalChain, apiPublishCausalChain,
   apiPublishAlertTemplate, apiRetireAlertTemplate,
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
   apiApplyCatalogImport, apiDiscardCatalogImport, apiReviewCatalogImportSensors, apiDownloadCatalogTemplate,
   apiListEntitlements, apiGrantEntitlement, apiRevokeEntitlement,
-  apiListMyEquipmentClasses, apiListEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
+  apiListMyEquipmentClasses, apiListEquipment, apiListAllEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
+  apiGetEquipmentPlacementHistory,
   apiListMyDevices, apiClaimDevice, apiUnclaimDevice,
   apiGetEquipmentCoverage, apiGetBindingDiscovery, apiProposeOrActivateBinding,
   apiListEquipmentKpis, apiListMyCatalogScenarios, apiListActivations, apiActivationTransition,
+  apiGetActivationHistory, apiGetEquipmentRecommendations,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
   apiSuspendPlatformStaff, apiReinstatePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
+  apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory,
+  apiRetireSensor, apiUnretireSensor, apiDeleteSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
+  apiListSignalAliases, apiUpsertSignalAlias, apiDeleteSignalAlias,
+  apiListSignalStates, apiReplaceSignalStates,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
+  apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock,
   apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
   apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
-  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser,
+  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiSetUserAccess,
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
-  Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput,
+  Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput,
   CatalogImportBatch, SensorReviewSelection, Entitlement, PlatformStaffMember, PlatformStaffRole, InvitePlatformStaffResult,
-  SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
+  NamedFormula, NamedFormulaInput,
+  SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, SignalAlias, SignalAliasInput,
+  SignalStateVocabEntry, SignalStateCode, GeoJsonPolygon, ImportResult, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput, EquipmentProfile, EquipmentInput,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
-  TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput,
+  TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput, SetUserAccessInput,
 } from './lib/api';
 
 const CLIENT_USERS_KEY = 'ta_client_users';
@@ -205,9 +219,10 @@ function accountToClient(a: Account): ClientAccount {
 /** `/admin` on its own picks a sensible default subtab for whoever is signed in. */
 function AdminIndexRedirect() {
   const { authUser } = useAuth();
-  // 'industry' is hidden from Master Admin's tab bar for now, so their default
-  // landing tab is 'clients' instead.
-  const subTab = authUser?.role === 'client' ? 'plant' : 'clients';
+  // Clients/Staff/Devices/Equipment moved to their own sidebar entries
+  // (2026-10-10, Shell.tsx's ADMIN_PROMOTED_SUBTABS) — landing on bare
+  // /admin now defaults to a tab that's actually still in the sub-tab bar.
+  const subTab = authUser?.role === 'client' ? 'plant' : 'category';
   return <Navigate to={`/admin/${subTab}`} replace />;
 }
 
@@ -231,6 +246,10 @@ function AppData() {
   // which still feeds Equipment's still-mock "category" picker.
   const [equipmentClasses, setEquipmentClasses] = useState<EquipmentClass[]>([]);
   const [equipmentClassesError, setEquipmentClassesError] = useState<string | undefined>(undefined);
+  // Physics shared across classes (Named Formulas admin screen) — platform-owned,
+  // same shape as equipmentClasses above.
+  const [namedFormulas, setNamedFormulas] = useState<NamedFormula[]>([]);
+  const [namedFormulasError, setNamedFormulasError] = useState<string | undefined>(undefined);
   // Prediction scenarios across every class (task: wire the Templates-styled
   // detail UI to the real catalog instead of the mock TemplatePredictiveRule
   // localStorage layer). Same shape as equipmentClasses: platform-owned,
@@ -239,6 +258,8 @@ function AppData() {
   const [scenariosError, setScenariosError] = useState<string | undefined>(undefined);
   // Alert rule templates across every class — same shape as scenarios above.
   const [alertTemplates, setAlertTemplates] = useState<AlertRuleTemplate[]>([]);
+  const [causalChains, setCausalChains] = useState<CausalChain[]>([]);
+  const [causalChainsError, setCausalChainsError] = useState<string | undefined>(undefined);
   const [alertTemplatesError, setAlertTemplatesError] = useState<string | undefined>(undefined);
   // Recently uploaded catalog-import workbooks — same platform-owned shape as the
   // classes/scenarios/alert templates above.
@@ -253,6 +274,11 @@ function AppData() {
   // caller's own token, so only fetched for the client role, same as realPlants.
   const [realEquipment, setRealEquipment] = useState<EquipmentProfile[]>([]);
   const [realEquipmentError, setRealEquipmentError] = useState<string | undefined>(undefined);
+  // Every account's equipment in one read (GET /equipment/all) — Master Admin's own
+  // Equipment sidebar page, separate from realEquipment above which is tenant-scoped
+  // and empty for a platform role.
+  const [allEquipment, setAllEquipment] = useState<EquipmentProfile[]>([]);
+  const [allEquipmentError, setAllEquipmentError] = useState<string | undefined>(undefined);
   const [myEquipmentClasses, setMyEquipmentClasses] = useState<EquipmentClass[]>([]);
   const [myEquipmentClassesError, setMyEquipmentClassesError] = useState<string | undefined>(undefined);
   // The client's own devices (/inventory/mine) — fitted to a machine or not, for
@@ -269,9 +295,14 @@ function AppData() {
   // Devices tab.
   const [sensorCategories, setSensorCategories] = useState<SensorCategory[]>([]);
   const [realSensors, setRealSensors] = useState<Sensor[]>([]);
+  const [showRetiredSensors, setShowRetiredSensors] = useState(false);
   const [sensorsError, setSensorsError] = useState<string | undefined>(undefined);
   const [realToolMappings, setRealToolMappings] = useState<ToolMapping[]>([]);
   const [toolMappingsError, setToolMappingsError] = useState<string | undefined>(undefined);
+  const [signalAliases, setSignalAliases] = useState<SignalAlias[]>([]);
+  const [signalAliasesError, setSignalAliasesError] = useState<string | undefined>(undefined);
+  const [signalStates, setSignalStates] = useState<SignalStateVocabEntry[]>([]);
+  const [signalStatesError, setSignalStatesError] = useState<string | undefined>(undefined);
   const [devicePool, setDevicePool] = useState<PooledDevice[]>([]);
   const [devicePoolError, setDevicePoolError] = useState<string | undefined>(undefined);
   // Onboarding-convenience templates — separate from `equipmentClasses` above,
@@ -437,6 +468,31 @@ function AppData() {
     return () => { live = false; };
   }, [authUser, restoringSession]);
 
+  const refreshNamedFormulas = async () => {
+    try {
+      setNamedFormulas(await apiListNamedFormulas());
+      setNamedFormulasError(undefined);
+    } catch (err) {
+      setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not load named formulas.');
+    }
+  };
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListNamedFormulas();
+        if (!live) return;
+        setNamedFormulas(list);
+        setNamedFormulasError(undefined);
+      } catch (err) {
+        if (live) setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not load named formulas.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
   const refreshEntitlements = async () => {
     try {
       setEntitlements(await apiListEntitlements());
@@ -471,6 +527,15 @@ function AppData() {
     }
   };
 
+  const refreshAllEquipment = async () => {
+    try {
+      setAllEquipment(await apiListAllEquipment());
+      setAllEquipmentError(undefined);
+    } catch (err) {
+      setAllEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+    }
+  };
+
   useEffect(() => {
     if (restoringSession || authUser?.role !== 'client') return;
     let live = true;
@@ -482,6 +547,22 @@ function AppData() {
         setRealEquipmentError(undefined);
       } catch (err) {
         if (live) setRealEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+      }
+    })();
+    return () => { live = false; };
+  }, [authUser, restoringSession]);
+
+  useEffect(() => {
+    if (restoringSession || authUser?.role !== 'master-admin') return;
+    let live = true;
+    (async () => {
+      try {
+        const list = await apiListAllEquipment();
+        if (!live) return;
+        setAllEquipment(list);
+        setAllEquipmentError(undefined);
+      } catch (err) {
+        if (live) setAllEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
       }
     })();
     return () => { live = false; };
@@ -562,6 +643,15 @@ function AppData() {
     }
   };
 
+  const refreshCausalChains = async () => {
+    try {
+      setCausalChains(await apiListAuthoringCausalChains());
+      setCausalChainsError(undefined);
+    } catch (err) {
+      setCausalChainsError(err instanceof ApiError ? err.message : 'Could not load causal chains.');
+    }
+  };
+
   useEffect(() => {
     if (restoringSession || authUser?.role !== 'master-admin') return;
     let live = true;
@@ -573,6 +663,15 @@ function AppData() {
         setAlertTemplatesError(undefined);
       } catch (err) {
         if (live) setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
+      }
+
+      try {
+        const chains = await apiListAuthoringCausalChains();
+        if (!live) return;
+        setCausalChains(chains);
+        setCausalChainsError(undefined);
+      } catch (err) {
+        if (live) setCausalChainsError(err instanceof ApiError ? err.message : 'Could not load causal chains.');
       }
     })();
     return () => { live = false; };
@@ -628,9 +727,12 @@ function AppData() {
     return () => { live = false; };
   }, [authUser, restoringSession]);
 
-  const refreshSensorCatalog = async () => {
+  const refreshSensorCatalog = async (includeRetired = showRetiredSensors) => {
     try {
-      const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()]);
+      const [cats, list] = await Promise.all([
+        apiListSensorCategories(includeRetired),
+        apiListSensors(includeRetired),
+      ]);
       setSensorCategories(cats);
       setRealSensors(list);
       setSensorsError(undefined);
@@ -639,12 +741,35 @@ function AppData() {
     }
   };
 
+  const handleToggleShowRetiredSensors = (next: boolean) => {
+    setShowRetiredSensors(next);
+    refreshSensorCatalog(next);
+  };
+
   const refreshToolMappings = async () => {
     try {
       setRealToolMappings(await apiListToolMappings());
       setToolMappingsError(undefined);
     } catch (err) {
       setToolMappingsError(err instanceof ApiError ? err.message : 'Could not load tool mappings.');
+    }
+  };
+
+  const refreshSignalAliases = async () => {
+    try {
+      setSignalAliases(await apiListSignalAliases());
+      setSignalAliasesError(undefined);
+    } catch (err) {
+      setSignalAliasesError(err instanceof ApiError ? err.message : 'Could not load signal aliases.');
+    }
+  };
+
+  const refreshSignalStates = async () => {
+    try {
+      setSignalStates(await apiListSignalStates());
+      setSignalStatesError(undefined);
+    } catch (err) {
+      setSignalStatesError(err instanceof ApiError ? err.message : 'Could not load signal states.');
     }
   };
 
@@ -713,6 +838,20 @@ function AppData() {
         if (live) { setDevicePool(pool); setDevicePoolError(undefined); }
       } catch (err) {
         if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+      }
+
+      try {
+        const aliases = await apiListSignalAliases();
+        if (live) { setSignalAliases(aliases); setSignalAliasesError(undefined); }
+      } catch (err) {
+        if (live) setSignalAliasesError(err instanceof ApiError ? err.message : 'Could not load signal aliases.');
+      }
+
+      try {
+        const vocab = await apiListSignalStates();
+        if (live) { setSignalStates(vocab); setSignalStatesError(undefined); }
+      } catch (err) {
+        if (live) setSignalStatesError(err instanceof ApiError ? err.message : 'Could not load signal states.');
       }
     })();
     return () => { live = false; };
@@ -872,6 +1011,12 @@ function AppData() {
     return updated;
   };
 
+  const handleSetUserAccess = async (userId: string, input: SetUserAccessInput) => {
+    const updated = await apiSetUserAccess(userId, input);
+    await refreshTenantUsers();
+    return updated;
+  };
+
   const handleSuspendUser = async (userId: string, reason: string) => {
     const updated = await apiSuspendUser(userId, reason);
     await refreshTenantUsers();
@@ -931,6 +1076,34 @@ function AppData() {
     await refreshSensorCatalog();
     return updated;
   };
+  const handleRetireSensorCategory = async (id: string) => {
+    const retired = await apiRetireSensorCategory(id);
+    await refreshSensorCatalog();
+    return retired;
+  };
+  const handleUnretireSensorCategory = async (id: string) => {
+    const restored = await apiUnretireSensorCategory(id);
+    await refreshSensorCatalog();
+    return restored;
+  };
+  const handleDeleteSensorCategory = async (id: string) => {
+    await apiDeleteSensorCategory(id);
+    await refreshSensorCatalog();
+  };
+  const handleRetireSensor = async (id: string) => {
+    const retired = await apiRetireSensor(id);
+    await refreshSensorCatalog();
+    return retired;
+  };
+  const handleUnretireSensor = async (id: string) => {
+    const restored = await apiUnretireSensor(id);
+    await refreshSensorCatalog();
+    return restored;
+  };
+  const handleDeleteSensor = async (id: string) => {
+    await apiDeleteSensor(id);
+    await refreshSensorCatalog();
+  };
   const handleCreateToolMapping = async (input: ToolMappingInput) => {
     const created = await apiCreateToolMapping(input);
     await refreshToolMappings();
@@ -941,6 +1114,20 @@ function AppData() {
     await refreshToolMappings();
     return updated;
   };
+  const handleUpsertSignalAlias = async (input: SignalAliasInput) => {
+    const saved = await apiUpsertSignalAlias(input);
+    await refreshSignalAliases();
+    return saved;
+  };
+  const handleDeleteSignalAlias = async (sourceSystem: string, alias: string) => {
+    await apiDeleteSignalAlias(sourceSystem, alias);
+    await refreshSignalAliases();
+  };
+  const handleReplaceSignalStates = async (role: string, states: SignalStateCode[]) => {
+    const saved = await apiReplaceSignalStates(role, states);
+    await refreshSignalStates();
+    return saved;
+  };
   const handleRegisterDevices = async (devicesToRegister: RegisterDeviceInput[]) => {
     const result = await apiRegisterDevices(devicesToRegister);
     await refreshDevicePool();
@@ -948,6 +1135,49 @@ function AppData() {
   };
   const handleAssignDevice = async (imei: string, tenantId: string) => {
     await apiAssignDevices([imei], tenantId);
+    await refreshDevicePool();
+  };
+
+  // Release/retire need a reason — the API requires one and audits it — same
+  // browser-prompt stand-in handleToggleClientStatus already uses for account
+  // suspension, until this screen gets a proper dialog.
+  const reportBadOutcome = (results: { imei: string; outcome: string }[]) => {
+    const bad = results.filter((r) => r.outcome !== 'assigned');
+    if (bad.length) {
+      setDevicePoolError(bad.map((r) => `${r.imei}: ${r.outcome}`).join('; '));
+    } else {
+      setDevicePoolError(undefined);
+    }
+  };
+
+  const handleReleaseDevice = async (imei: string) => {
+    const reason = window.prompt(`Why is ${imei} being taken back into stock?`);
+    if (!reason) return;
+    try {
+      reportBadOutcome(await apiReleaseDevices([imei], reason));
+    } catch (err) {
+      setDevicePoolError(err instanceof ApiError ? err.message : 'Could not release the device.');
+    }
+    await refreshDevicePool();
+  };
+
+  const handleRetireDevice = async (imei: string) => {
+    const reason = window.prompt(`Why is ${imei} being retired?`);
+    if (!reason) return;
+    try {
+      reportBadOutcome(await apiRetireDevices([imei], reason));
+    } catch (err) {
+      setDevicePoolError(err instanceof ApiError ? err.message : 'Could not retire the device.');
+    }
+    await refreshDevicePool();
+  };
+
+  const handleReturnDeviceToStock = async (imei: string) => {
+    try {
+      reportBadOutcome(await apiReturnDevicesToStock([imei]));
+    } catch (err) {
+      setDevicePoolError(err instanceof ApiError ? err.message : 'Could not return the device to stock.');
+    }
     await refreshDevicePool();
   };
   // POST /catalog/equipment-classes, for real — Master Admin authors the
@@ -983,6 +1213,27 @@ function AppData() {
     }
   };
 
+  const handleCreateNamedFormula = async (slug: string, input: NamedFormulaInput) => {
+    const created = await apiCreateNamedFormula(slug, input);
+    await refreshNamedFormulas();
+    return created;
+  };
+
+  const handleUpdateNamedFormula = async (slug: string, version: number, input: NamedFormulaInput) => {
+    const updated = await apiEditNamedFormula(slug, version, input);
+    await refreshNamedFormulas();
+    return updated;
+  };
+
+  const handlePublishNamedFormula = async (slug: string, version: number) => {
+    try {
+      await apiPublishNamedFormula(slug, version);
+      await refreshNamedFormulas();
+    } catch (err) {
+      setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
   // The commercial boundary (entitlement.service.ts) — a tenant cannot grant
   // itself a class, so this exists only on the master-admin side.
   const handleGrantEntitlement = async (tenantId: string, equipmentClassSlug: string, note?: string) => {
@@ -997,9 +1248,18 @@ function AppData() {
     return revoked;
   };
 
+  // `input.tenantId`/an explicit `tenantId` arg means Master Admin acting on another
+  // account (see EquipmentInput and apiMoveEquipment/apiRetireEquipment) — refreshes
+  // the cross-tenant list instead of the caller's own, which stays empty for them.
+  const handleImportEquipmentFromMirror = async (sourceSystem: string) => {
+    const result = await apiImportEquipmentFromMirror(sourceSystem);
+    await refreshEquipment();
+    return result;
+  };
+
   const handleCreateEquipmentProfile = async (input: EquipmentInput) => {
     const created = await apiCreateEquipment(input);
-    await refreshEquipment();
+    await (input.tenantId ? refreshAllEquipment() : refreshEquipment());
     return created;
   };
 
@@ -1007,23 +1267,30 @@ function AppData() {
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
   ) => {
     const updated = await apiUpdateEquipment(sourceSystem, externalId, input);
-    await refreshEquipment();
+    await (input.tenantId ? refreshAllEquipment() : refreshEquipment());
     return updated;
   };
 
   const handleMoveEquipmentProfile = async (
-    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
+    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string, tenantId?: string,
   ) => {
-    const moved = await apiMoveEquipment(sourceSystem, externalId, toPlantId, reason);
-    await refreshEquipment();
+    const moved = await apiMoveEquipment(sourceSystem, externalId, toPlantId, reason, tenantId);
+    await (tenantId ? refreshAllEquipment() : refreshEquipment());
     return moved;
   };
 
-  const handleRetireEquipmentProfile = async (sourceSystem: string, externalId: string, reason: string) => {
-    const retired = await apiRetireEquipment(sourceSystem, externalId, reason);
-    await refreshEquipment();
+  const handleGetEquipmentPlacementHistory = (sourceSystem: string, externalId: string, tenantId?: string) =>
+    apiGetEquipmentPlacementHistory(sourceSystem, externalId, tenantId);
+
+  const handleRetireEquipmentProfile = async (
+    sourceSystem: string, externalId: string, reason: string, tenantId?: string,
+  ) => {
+    const retired = await apiRetireEquipment(sourceSystem, externalId, reason, tenantId);
+    await (tenantId ? refreshAllEquipment() : refreshEquipment());
     return retired;
   };
+
+  const handleListPlantsForTenant = (tenantId: string) => apiListPlants(true, tenantId);
 
   const handleClaimDevice = async (imei: string, equipmentExternalId: string, sourceSystem: string) => {
     const claimed = await apiClaimDevice(imei, equipmentExternalId, sourceSystem);
@@ -1067,6 +1334,12 @@ function AppData() {
   ): Promise<ActivationView> =>
     apiActivationTransition(action, input);
 
+  const handleGetActivationHistory = (sourceSystem: string, externalId: string) =>
+    apiGetActivationHistory(sourceSystem, externalId);
+
+  const handleGetEquipmentRecommendations = (sourceSystem: string, externalId: string) =>
+    apiGetEquipmentRecommendations(sourceSystem, externalId);
+
   const handleCreateScenario = async (slug: string, equipmentClassSlug: string, input: ScenarioInput) => {
     const created = await apiCreateScenario(slug, equipmentClassSlug, input);
     await refreshScenarios();
@@ -1108,6 +1381,21 @@ function AppData() {
       await refreshAlertTemplates();
     } catch (err) {
       setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not publish.');
+    }
+  };
+
+  const handleCreateCausalChain = async (slug: string, input: CausalChainInput) => {
+    const created = await apiDraftCausalChain(slug, input);
+    await refreshCausalChains();
+    return created;
+  };
+
+  const handlePublishCausalChain = async (slug: string) => {
+    try {
+      await apiPublishCausalChain(slug);
+      await refreshCausalChains();
+    } catch (err) {
+      setCausalChainsError(err instanceof ApiError ? err.message : 'Could not publish.');
     }
   };
 
@@ -1350,6 +1638,12 @@ function AppData() {
       setPlantsError(err instanceof ApiError ? err.message : 'That action failed.');
     }
   };
+
+  const handleSetPlantBoundary = async (id: string, boundary: GeoJsonPolygon | null) => {
+    const updated = await apiSetPlantBoundary(id, boundary);
+    await refreshPlants();
+    return updated;
+  };
   const handleAddIndustryType = (newType: IndustryTypeItem) => setIndustryTypes([newType, ...industryTypes]);
   const handleUpdateIndustryType = (updatedType: IndustryTypeItem) =>
     setIndustryTypes(industryTypes.map((i) => (i.id === updatedType.id ? updatedType : i)));
@@ -1384,6 +1678,7 @@ function AppData() {
     <Routes>
       <Route element={<GuestOnly />}>
         <Route path="/sign-in" element={<LoginScreen />} />
+        <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/accept-invitation" element={<AcceptInvitationScreen />} />
       </Route>
 
@@ -1459,6 +1754,10 @@ function AppData() {
                   onUpdateAlertTemplate={handleUpdateAlertTemplate}
                   onPublishAlertTemplate={handlePublishAlertTemplate}
                   onRetireAlertTemplate={handleRetireAlertTemplate}
+                  causalChains={causalChains}
+                  causalChainsError={causalChainsError}
+                  onCreateCausalChain={handleCreateCausalChain}
+                  onPublishCausalChain={handlePublishCausalChain}
                 />
               }
             />
@@ -1519,6 +1818,7 @@ function AppData() {
               )}
             />
             <Route path="equipment/:sourceSystem/:externalId/page" element={<EquipmentPagePage />} />
+            <Route path="sites/:plantId/page" element={<SitePagePage />} />
             <Route
               path=":subTab"
               element={
@@ -1531,17 +1831,35 @@ function AppData() {
                   sensorCategories={sensorCategories}
                   realSensors={realSensors}
                   sensorsError={sensorsError}
+                  showRetiredSensors={showRetiredSensors}
+                  onToggleShowRetiredSensors={handleToggleShowRetiredSensors}
                   onCreateSensor={handleCreateSensor}
                   onUpdateSensor={handleUpdateSensor}
+                  onRetireSensor={handleRetireSensor}
+                  onUnretireSensor={handleUnretireSensor}
+                  onDeleteSensor={handleDeleteSensor}
                   onCreateSensorCategory={handleCreateSensorCategory}
+                  onRetireSensorCategory={handleRetireSensorCategory}
+                  onUnretireSensorCategory={handleUnretireSensorCategory}
+                  onDeleteSensorCategory={handleDeleteSensorCategory}
                   realToolMappings={realToolMappings}
                   toolMappingsError={toolMappingsError}
                   onCreateToolMapping={handleCreateToolMapping}
                   onUpdateToolMapping={handleUpdateToolMapping}
+                  signalAliases={signalAliases}
+                  signalAliasesError={signalAliasesError}
+                  onUpsertSignalAlias={handleUpsertSignalAlias}
+                  onDeleteSignalAlias={handleDeleteSignalAlias}
+                  signalStates={signalStates}
+                  signalStatesError={signalStatesError}
+                  onReplaceSignalStates={handleReplaceSignalStates}
                   devicePool={devicePool}
                   devicePoolError={devicePoolError}
-                  onNavigateToRegisterDevice={() => navigate('/admin/devices/new')}
+                  onRegisterDevices={handleRegisterDevices}
                   onAssignDevice={handleAssignDevice}
+                  onReleaseDevice={handleReleaseDevice}
+                  onRetireDevice={handleRetireDevice}
+                  onReturnDeviceToStock={handleReturnDeviceToStock}
                   equipmentClasses={equipmentClasses}
                   equipmentClassesError={equipmentClassesError}
                   onCreateEquipmentClass={handleCreateEquipmentClass}
@@ -1550,6 +1868,11 @@ function AppData() {
                   onRetireEquipmentClass={handleRetireEquipmentClass}
                   onOpenEquipmentClass={handleOpenEquipmentClass}
                   onOpenCatalogImport={handleOpenCatalogImport}
+                  namedFormulas={namedFormulas}
+                  namedFormulasError={namedFormulasError}
+                  onCreateNamedFormula={handleCreateNamedFormula}
+                  onUpdateNamedFormula={handleUpdateNamedFormula}
+                  onPublishNamedFormula={handlePublishNamedFormula}
                   equipmentTemplates={equipmentTemplates}
                   equipmentTemplatesError={equipmentTemplatesError}
                   onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
@@ -1573,14 +1896,17 @@ function AppData() {
                   onCreatePlant={handleCreatePlant}
                   onUpdatePlant={handleUpdatePlantReal}
                   onTogglePlantStatus={handleTogglePlantStatus}
-                  devices={devices}
-                  onDeleteDevice={handleDeleteDevice}
+                  onSetPlantBoundary={handleSetPlantBoundary}
                   realEquipment={realEquipment}
                   realEquipmentError={realEquipmentError}
+                  allEquipment={allEquipment}
+                  allEquipmentError={allEquipmentError}
+                  onListPlantsForTenant={handleListPlantsForTenant}
                   onCreateEquipment={handleCreateEquipmentProfile}
                   onUpdateEquipment={handleUpdateEquipmentProfile}
                   onMoveEquipment={handleMoveEquipmentProfile}
                   onRetireEquipment={handleRetireEquipmentProfile}
+                  onGetEquipmentPlacementHistory={handleGetEquipmentPlacementHistory}
                   myEquipmentClasses={myEquipmentClasses}
                   myEquipmentClassesError={myEquipmentClassesError}
                   myDevices={myDevices}
@@ -1594,6 +1920,9 @@ function AppData() {
                   onListMyCatalogScenarios={handleListMyCatalogScenarios}
                   onListActivations={handleListActivations}
                   onActivationTransition={handleActivationTransition}
+                  onGetActivationHistory={handleGetActivationHistory}
+                  onGetEquipmentRecommendations={handleGetEquipmentRecommendations}
+                  onImportEquipmentFromMirror={handleImportEquipmentFromMirror}
                   clients={clients}
                   accountsError={accountsError}
                   onCreateAccount={handleCreateAccount}
@@ -1671,6 +2000,9 @@ function AppData() {
                 onSetUserRole={handleSetUserRole}
                 onSuspendUser={handleSuspendUser}
                 onReinstateUser={handleReinstateUser}
+                plants={realPlants}
+                equipment={realEquipment}
+                onSetUserAccess={handleSetUserAccess}
               />
             }
           />

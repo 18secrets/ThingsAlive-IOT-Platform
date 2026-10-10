@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, AlertCircle, CheckCircle2, Radio, Unplug, Link2, Gauge, Zap, ExternalLink } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2, Radio, Unplug, Link2, Gauge, Zap, ExternalLink, History, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { SelectPicker } from 'rsuite';
 import {
   ApiError, CoverageResult, DiscoveryCandidate, DiscoveryResult, EquipmentProfile,
   MyDevice, ProposeOrActivateBindingInput, SignalBindingDiscoveredBy, SignalBindingVersion,
-  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
+  Plant, EquipmentPlacementEvent,
 } from '../../lib/api';
 
 interface EquipmentBindingsModalProps {
@@ -28,7 +29,25 @@ interface EquipmentBindingsModalProps {
     action: ActivationAction,
     input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
   ) => Promise<ActivationView>;
+  onGetActivationHistory: (sourceSystem: string, externalId: string) => Promise<ActivationHistoryEvent[]>;
+  onGetEquipmentRecommendations: (
+    sourceSystem: string, externalId: string,
+  ) => Promise<{ equipmentClassSlug: string | null; recommendations: EquipmentRecommendation[] }>;
+  plants: Plant[];
+  onGetEquipmentPlacementHistory: (sourceSystem: string, externalId: string) => Promise<EquipmentPlacementEvent[]>;
 }
+
+const BUCKET_STYLE: Record<EquipmentRecommendation['bucket'], string> = {
+  availableNow: 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
+  availableLater: 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300',
+  notApplicable: 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300',
+};
+
+const BUCKET_LABEL: Record<EquipmentRecommendation['bucket'], string> = {
+  availableNow: 'ready',
+  availableLater: 'not yet',
+  notApplicable: 'not applicable',
+};
 
 const reasonLabel: Record<string, string> = {
   unbound: 'Unbound',
@@ -68,6 +87,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
   isOpen, onClose, equipment, devices, devicesError,
   onClaimDevice, onUnclaimDevice, onGetCoverage, onGetDiscovery, onProposeOrActivateBinding,
   onListEquipmentKpis, onListMyCatalogScenarios, onListActivations, onActivationTransition,
+  onGetActivationHistory, onGetEquipmentRecommendations, plants, onGetEquipmentPlacementHistory,
 }) => {
   const navigate = useNavigate();
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -75,10 +95,19 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
   const [kpis, setKpis] = useState<KpiEnvelope[]>([]);
   const [scenarios, setScenarios] = useState<ClientScenario[]>([]);
   const [activations, setActivations] = useState<ActivationView[]>([]);
+  const [recommendations, setRecommendations] = useState<EquipmentRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [claimImei, setClaimImei] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<ActivationHistoryEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | undefined>(undefined);
+  const [placementsOpen, setPlacementsOpen] = useState(false);
+  const [placements, setPlacements] = useState<EquipmentPlacementEvent[]>([]);
+  const [placementsLoading, setPlacementsLoading] = useState(false);
+  const [placementsError, setPlacementsError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!isOpen || !equipment) return;
@@ -87,12 +116,13 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
     setError(undefined);
     (async () => {
       try {
-        const [cov, disc, kpiList, scenarioList, activationList] = await Promise.all([
+        const [cov, disc, kpiList, scenarioList, activationList, recs] = await Promise.all([
           onGetCoverage(equipment.sourceSystem, equipment.externalId),
           onGetDiscovery(equipment.sourceSystem, equipment.externalId),
           onListEquipmentKpis(equipment.sourceSystem, equipment.externalId),
           onListMyCatalogScenarios(equipment.equipmentClassSlug ?? undefined),
           onListActivations(equipment.sourceSystem, equipment.externalId),
+          onGetEquipmentRecommendations(equipment.sourceSystem, equipment.externalId),
         ]);
         if (!live) return;
         setCoverage(cov);
@@ -100,6 +130,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
         setKpis(kpiList);
         setScenarios(scenarioList);
         setActivations(activationList);
+        setRecommendations(recs.recommendations);
       } catch (err) {
         if (live) setError(err instanceof ApiError ? err.message : 'Could not load bindings.');
       } finally {
@@ -109,6 +140,20 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, equipment?.sourceSystem, equipment?.externalId, equipment?.equipmentClassSlug]);
+
+  useEffect(() => {
+    setHistoryOpen(false);
+    setHistory([]);
+    setHistoryError(undefined);
+    setPlacementsOpen(false);
+    setPlacements([]);
+    setPlacementsError(undefined);
+  }, [isOpen, equipment?.sourceSystem, equipment?.externalId]);
+
+  const plantName = useMemo(() => {
+    const byId = new Map(plants.map((p) => [p.id, p.name]));
+    return (plantId: string | null) => (plantId ? byId.get(plantId) ?? plantId : 'No site');
+  }, [plants]);
 
   const fittedDevices = useMemo(
     () => (equipment ? devices.filter((d) => d.equipmentExternalId === equipment.externalId) : []),
@@ -126,16 +171,18 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
   if (!isOpen || !equipment) return null;
 
   const refresh = async () => {
-    const [cov, disc, kpiList, activationList] = await Promise.all([
+    const [cov, disc, kpiList, activationList, recs] = await Promise.all([
       onGetCoverage(equipment.sourceSystem, equipment.externalId),
       onGetDiscovery(equipment.sourceSystem, equipment.externalId),
       onListEquipmentKpis(equipment.sourceSystem, equipment.externalId),
       onListActivations(equipment.sourceSystem, equipment.externalId),
+      onGetEquipmentRecommendations(equipment.sourceSystem, equipment.externalId),
     ]);
     setCoverage(cov);
     setDiscovery(disc);
     setKpis(kpiList);
     setActivations(activationList);
+    setRecommendations(recs.recommendations);
   };
 
   const handleClaim = async () => {
@@ -220,6 +267,36 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
       setError(err instanceof ApiError ? err.message : `Could not ${action} this scenario.`);
     } finally {
       setBusyKey(null);
+    }
+  };
+
+  const handleToggleHistory = async () => {
+    if (historyOpen) { setHistoryOpen(false); return; }
+    setHistoryOpen(true);
+    if (history.length || historyLoading) return;
+    setHistoryLoading(true);
+    setHistoryError(undefined);
+    try {
+      setHistory(await onGetActivationHistory(equipment.sourceSystem, equipment.externalId));
+    } catch (err) {
+      setHistoryError(err instanceof ApiError ? err.message : 'Could not load activation history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleTogglePlacements = async () => {
+    if (placementsOpen) { setPlacementsOpen(false); return; }
+    setPlacementsOpen(true);
+    if (placements.length || placementsLoading) return;
+    setPlacementsLoading(true);
+    setPlacementsError(undefined);
+    try {
+      setPlacements(await onGetEquipmentPlacementHistory(equipment.sourceSystem, equipment.externalId));
+    } catch (err) {
+      setPlacementsError(err instanceof ApiError ? err.message : 'Could not load placement history.');
+    } finally {
+      setPlacementsLoading(false);
     }
   };
 
@@ -373,6 +450,43 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Placement history */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-sky-600" /> Site
+                  </h4>
+                  <button
+                    onClick={handleTogglePlacements}
+                    className="text-[11px] font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{plantName(equipment.plantId)}</span>
+                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                    <span>History</span>
+                    {placementsOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                </div>
+
+                {placementsOpen && (
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
+                    {placementsLoading && <p className="text-[11px] text-slate-400">Loading…</p>}
+                    {placementsError && <p className="text-[11px] text-rose-600 dark:text-rose-400">{placementsError}</p>}
+                    {!placementsLoading && !placementsError && placements.length === 0 && (
+                      <p className="text-[11px] text-slate-400">No placement history for this asset yet.</p>
+                    )}
+                    {placements.map((p) => (
+                      <div key={p.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                        <span>
+                          {plantName(p.fromPlantId)} → {plantName(p.toPlantId)}
+                          {p.reason ? `: "${p.reason}"` : ''}
+                        </span>
+                        <span className="text-slate-400 shrink-0">{new Date(p.at).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Discovery */}
               {discovery && (discovery.matched.length > 0 || discovery.expectedNotMapped.length > 0 || discovery.mappedNotExpected.length > 0) && (
                 <div className="space-y-3">
@@ -402,9 +516,42 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
 
               {/* Scenarios */}
               <div>
-                <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-sky-600" /> Scenarios
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-sky-600" /> Scenarios
+                  </h4>
+                  <button
+                    onClick={handleToggleHistory}
+                    className="text-[11px] font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>History</span>
+                    {historyOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                </div>
+
+                {historyOpen && (
+                  <div className="mb-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
+                    {historyLoading && <p className="text-[11px] text-slate-400">Loading…</p>}
+                    {historyError && <p className="text-[11px] text-rose-600 dark:text-rose-400">{historyError}</p>}
+                    {!historyLoading && !historyError && history.length === 0 && (
+                      <p className="text-[11px] text-slate-400">No activation history for this asset yet.</p>
+                    )}
+                    {history.map((h) => (
+                      <div key={h.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                        <span>
+                          <span className="font-medium text-slate-800 dark:text-slate-100">{h.clientScenarioSlug}</span>
+                          {' — '}
+                          {h.action}
+                          {h.fromState ? ` (${h.fromState} → ${h.toState})` : ` (→ ${h.toState})`}
+                          {h.reason ? `: "${h.reason}"` : ''}
+                        </span>
+                        <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {scenarios.length === 0 ? (
                   <p className="text-xs text-slate-400">
                     {equipment.equipmentClassSlug ? 'No scenarios adopted for this class.' : 'Not classified — no scenarios to activate.'}
@@ -414,25 +561,40 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                     {scenarios.map((s) => {
                       const activation = activations.find((a) => a.clientScenarioSlug === s.slug);
                       const state = activation?.state;
+                      const recommendation = recommendations.find((r) => r.scenarioSlug === s.slug);
                       return (
                         <li key={s.slug} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-xs space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-slate-800 dark:text-slate-100">{s.name}</span>
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                state === 'active'
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                                  : state === 'paused'
-                                    ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
-                              }`}
-                            >
-                              {state ?? 'not requested'}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {!state && recommendation && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${BUCKET_STYLE[recommendation.bucket]}`}>
+                                  {BUCKET_LABEL[recommendation.bucket]}
+                                </span>
+                              )}
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  state === 'active'
+                                    ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                    : state === 'paused'
+                                      ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
+                                }`}
+                              >
+                                {state ?? 'not requested'}
+                              </span>
+                            </div>
                           </div>
                           {!!activation?.blockersAtActivation.length && (
                             <ul className="space-y-0.5">
                               {activation.blockersAtActivation.map((b, i) => (
+                                <li key={i} className="text-[11px] text-amber-700 dark:text-amber-400">{blockerLabel(b)}</li>
+                              ))}
+                            </ul>
+                          )}
+                          {!state && !!recommendation?.blockedBy.length && (
+                            <ul className="space-y-0.5">
+                              {recommendation.blockedBy.map((b, i) => (
                                 <li key={i} className="text-[11px] text-amber-700 dark:text-amber-400">{blockerLabel(b)}</li>
                               ))}
                             </ul>

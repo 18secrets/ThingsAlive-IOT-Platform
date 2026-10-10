@@ -22,6 +22,13 @@ const TAB_LABELS: Record<NavigationTab, string> = {
   users: 'Users',
   'client-users': 'Client Users',
   roles: 'Roles & Permissions',
+  // Master Admin's own sidebar pages — never offered here since they're not
+  // in CLIENT_ASSIGNABLE_TABS, but Record<NavigationTab, string> is
+  // exhaustive over the whole union.
+  clients: 'Clients',
+  staff: 'Staff',
+  devices: 'Devices',
+  equipment: 'Equipment',
 };
 
 interface RoleManagementProps {

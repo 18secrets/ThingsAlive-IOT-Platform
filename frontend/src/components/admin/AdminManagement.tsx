@@ -7,26 +7,33 @@ import {
   Wrench,
   Cpu,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  FunctionSquare
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, DeviceItem, ClientAccount } from '../../types';
+import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
-  Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice,
+  Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
   EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
-  Entitlement, EquipmentProfile, EquipmentInput,
+  Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
-  KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
+  NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
+  SignalStateVocabEntry, SignalStateCode,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
+import { SignalAliasTable } from './SignalAliasTable';
+import { SignalStateTable } from './SignalStateTable';
 import { CategoryView } from './CategoryView';
+import { NamedFormulaView } from './NamedFormulaView';
 import { EquipmentTemplateView } from './EquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
-import { DeviceManagement } from '../devices/DeviceManagement';
+import { ClientDeviceManagement } from '../devices/ClientDeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
+import { MasterEquipmentManagement } from '../equipment/MasterEquipmentManagement';
 import { ClientManagement } from '../clients/ClientManagement';
 import { StaffManagement } from '../staff/StaffManagement';
 
@@ -42,20 +49,38 @@ interface AdminManagementProps {
   sensorCategories: SensorCategory[];
   realSensors: Sensor[];
   sensorsError?: string;
+  showRetiredSensors: boolean;
+  onToggleShowRetiredSensors: (next: boolean) => void;
   onCreateSensor: (input: SensorInput) => Promise<Sensor>;
   onUpdateSensor: (id: string, input: SensorInput) => Promise<Sensor>;
+  onRetireSensor: (id: string) => Promise<Sensor>;
+  onUnretireSensor: (id: string) => Promise<Sensor>;
+  onDeleteSensor: (id: string) => Promise<void>;
   onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
+  onRetireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onUnretireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onDeleteSensorCategory: (id: string) => Promise<void>;
   realToolMappings: ToolMapping[];
   toolMappingsError?: string;
   onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  signalAliases: SignalAlias[];
+  signalAliasesError?: string;
+  onUpsertSignalAlias: (input: SignalAliasInput) => Promise<SignalAlias>;
+  onDeleteSignalAlias: (sourceSystem: string, alias: string) => Promise<void>;
+  signalStates: SignalStateVocabEntry[];
+  signalStatesError?: string;
+  onReplaceSignalStates: (role: string, states: SignalStateCode[]) => Promise<SignalStateVocabEntry[]>;
   /** The real device pool (GET /inventory/pool) — Master Admin only. Separate
    *  from the mock `devices` below, which still feeds Equipment's picker and
    *  the client's own still-mock Devices tab. */
   devicePool: PooledDevice[];
   devicePoolError?: string;
-  onNavigateToRegisterDevice: () => void;
+  onRegisterDevices: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
+  onReleaseDevice: (imei: string) => Promise<void>;
+  onRetireDevice: (imei: string) => Promise<void>;
+  onReturnDeviceToStock: (imei: string) => Promise<void>;
   /** The real catalog — platform-owned template classes, Master Admin only. */
   equipmentClasses: EquipmentClass[];
   equipmentClassesError?: string;
@@ -65,6 +90,12 @@ interface AdminManagementProps {
   onRetireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
   onOpenCatalogImport: () => void;
+  /** Physics shared across classes, Master Admin only. */
+  namedFormulas: NamedFormula[];
+  namedFormulasError?: string;
+  onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
+  onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
+  onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
   /** Common onboarding fields, Master Admin only — deliberately separate from
    *  the prediction catalog above; see EquipmentTemplate's own comment. */
   equipmentTemplates: EquipmentTemplate[];
@@ -94,20 +125,33 @@ interface AdminManagementProps {
   onCreatePlant: (input: PlantInput) => Promise<Plant>;
   onUpdatePlant: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
   onTogglePlantStatus: (id: string, currentStatus: Plant['status']) => void;
-  devices: DeviceItem[];
-  onNavigateToDeviceSetup: () => void;
+  onSetPlantBoundary: (id: string, boundary: GeoJsonPolygon | null) => Promise<Plant>;
+  onImportEquipmentFromMirror: (sourceSystem: string) => Promise<ImportResult>;
+  onOpenSitePage: (plantId: string) => void;
   onNavigateToAISetup?: () => void;
-  onDeleteDevice: (id: number) => void;
   realEquipment: EquipmentProfile[];
   realEquipmentError?: string;
+  /** Every account's register in one read (`GET /equipment/all`) — Master Admin's
+   *  own Equipment sidebar page. Separate from `realEquipment`, which is
+   *  tenant-scoped and empty for them. */
+  allEquipment: EquipmentProfile[];
+  allEquipmentError?: string;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
   ) => Promise<EquipmentProfile>;
+  // `tenantId` is Master Admin's own override — optional because the client-scoped
+  // EquipmentManagement below never passes one.
   onMoveEquipment: (
-    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
+    sourceSystem: string, externalId: string, toPlantId: string | null, reason: string, tenantId?: string,
   ) => Promise<EquipmentProfile>;
-  onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
+  onRetireEquipment: (
+    sourceSystem: string, externalId: string, reason: string, tenantId?: string,
+  ) => Promise<EquipmentProfile>;
+  onGetEquipmentPlacementHistory: (
+    sourceSystem: string, externalId: string, tenantId?: string,
+  ) => Promise<EquipmentPlacementEvent[]>;
+  onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
   myEquipmentClasses: EquipmentClass[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
@@ -126,6 +170,10 @@ interface AdminManagementProps {
     action: ActivationAction,
     input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
   ) => Promise<ActivationView>;
+  onGetActivationHistory: (sourceSystem: string, externalId: string) => Promise<ActivationHistoryEvent[]>;
+  onGetEquipmentRecommendations: (
+    sourceSystem: string, externalId: string,
+  ) => Promise<{ equipmentClassSlug: string | null; recommendations: EquipmentRecommendation[] }>;
   activeSubTab: AdminSubTab;
   onChangeSubTab: (tab: AdminSubTab) => void;
   clients: ClientAccount[];
@@ -157,6 +205,12 @@ interface AdminManagementProps {
 
 const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
 
+// Master Admin only (task: move to the sidebar, 2026-10-10) — see Shell.tsx's
+// ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
+// component at the same /admin/<subtab> routes; only the sub-tab bar and the
+// sidebar highlighting changed.
+const PROMOTED_SUBTABS: AdminSubTab[] = ['clients', 'staff', 'devices', 'equipment'];
+
 export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensors,
   toolMappings,
@@ -166,16 +220,34 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensorCategories,
   realSensors,
   sensorsError,
+  showRetiredSensors,
+  onToggleShowRetiredSensors,
   onCreateSensor,
   onUpdateSensor,
+  onRetireSensor,
+  onUnretireSensor,
+  onDeleteSensor,
   onCreateSensorCategory,
+  onRetireSensorCategory,
+  onUnretireSensorCategory,
+  onDeleteSensorCategory,
   realToolMappings,
   toolMappingsError,
   onCreateToolMapping,
   onUpdateToolMapping,
+  signalAliases,
+  signalAliasesError,
+  onUpsertSignalAlias,
+  onDeleteSignalAlias,
+  signalStates,
+  signalStatesError,
+  onReplaceSignalStates,
   devicePool,
+  onReleaseDevice,
+  onRetireDevice,
+  onReturnDeviceToStock,
   devicePoolError,
-  onNavigateToRegisterDevice,
+  onRegisterDevices,
   onAssignDevice,
   equipmentClasses,
   equipmentClassesError,
@@ -185,6 +257,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onRetireEquipmentClass,
   onOpenEquipmentClass,
   onOpenCatalogImport,
+  namedFormulas,
+  namedFormulasError,
+  onCreateNamedFormula,
+  onUpdateNamedFormula,
+  onPublishNamedFormula,
   equipmentTemplates,
   equipmentTemplatesError,
   onCreateEquipmentTemplate,
@@ -209,15 +286,19 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreatePlant,
   onUpdatePlant,
   onTogglePlantStatus,
-  devices,
-  onNavigateToDeviceSetup,
+  onSetPlantBoundary,
+  onImportEquipmentFromMirror,
+  onOpenSitePage,
   onNavigateToAISetup,
-  onDeleteDevice,
   realEquipment,
   realEquipmentError,
+  allEquipment,
+  allEquipmentError,
+  onListPlantsForTenant,
   onCreateEquipment,
   onUpdateEquipment,
   onMoveEquipment,
+  onGetEquipmentPlacementHistory,
   onRetireEquipment,
   myEquipmentClasses,
   myEquipmentClassesError,
@@ -232,6 +313,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onListMyCatalogScenarios,
   onListActivations,
   onActivationTransition,
+  onGetActivationHistory,
+  onGetEquipmentRecommendations,
   activeSubTab,
   onChangeSubTab,
   clients,
@@ -258,34 +341,42 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'staff', label: 'Staff', icon: ShieldCheck },
     { id: 'plant', label: 'Plant', icon: Building2 },
     { id: 'category', label: 'Equipment Classes', icon: LayoutGrid },
+    { id: 'named-formula', label: 'Named Formulas', icon: FunctionSquare },
     { id: 'sensor', label: 'Sensor', icon: Disc },
     { id: 'tool-mapping', label: 'Tool Mapping', icon: Wrench },
+    { id: 'signal-alias', label: 'Signal Aliases', icon: Disc },
+    { id: 'signal-state', label: 'Signal States', icon: Disc },
     { id: 'devices', label: 'Devices', icon: Cpu },
     { id: 'equipment', label: 'Equipment', icon: Wrench },
     { id: 'equipment-template', label: 'Equipment Templates', icon: LayoutGrid },
   ];
 
-  // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read — the
-  // same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement), and no Equipment or Industry Type tab. Tool Mapping and
-  // Devices are hidden for now too, by request — re-enable later. Equipment
-  // Classes is Master Admin's own screen (catalog.write, Things Alive only)
-  // and belongs in this branch, not the client one.
-  //
-  // Equipment Templates is removed from the client tab bar entirely (by
-  // request) — a client no longer has a "my templates" entry point in
-  // Administration. Master Admin's own Equipment Templates tab stays hidden
-  // too, as it already was (see the filter below), independent of this.
+  // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —
+  // the same reason "Manage Access" doesn't exist for them either, see
+  // ClientManagement) and no Equipment Templates (client-only "my templates"
+  // entry point). Clients/Staff/Devices/Equipment moved out of this bar
+  // entirely (2026-10-10) — they're promoted to their own sidebar entries
+  // (see Shell.tsx's ADMIN_PROMOTED_SUBTABS) because the bar had grown too
+  // crowded; PROMOTED_SUBTABS below is what's left of that filter. A client's
+  // own Devices/Equipment are untouched by this — CLIENT_VISIBLE_ADMIN_SUBTABS
+  // is a separate list that still names them.
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant','equipment-template'].includes(tab.id)
+      !['plant', 'equipment-template', ...PROMOTED_SUBTABS].includes(tab.id)
     ));
+
+  // A promoted tab (Master Admin only) is reached directly from the sidebar
+  // now, not from this bar — showing the bar above it would offer tabs that
+  // visually imply it's still nested under Administration, which it no
+  // longer is.
+  const isPromotedTab = !restrictToClientAdmin && PROMOTED_SUBTABS.includes(activeSubTab);
 
   return (
     <div id="admin-module" className="space-y-5">
-      
+
       {/* Admin Navigation Sub-Tabs */}
+      {!isPromotedTab && (
       <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
         {subTabs.map((tab) => {
           const Icon = tab.icon;
@@ -307,6 +398,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Sub-tab Views */}
       <div className="pt-1">
@@ -316,9 +408,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             sensors={realSensors}
             error={sensorsError}
             categories={sensorCategories}
+            showRetired={showRetiredSensors}
+            onToggleShowRetired={onToggleShowRetiredSensors}
             onCreateSensor={onCreateSensor}
             onUpdateSensor={onUpdateSensor}
+            onRetireSensor={onRetireSensor}
+            onUnretireSensor={onUnretireSensor}
+            onDeleteSensor={onDeleteSensor}
             onCreateCategory={onCreateSensorCategory}
+            onRetireCategory={onRetireSensorCategory}
+            onUnretireCategory={onUnretireSensorCategory}
+            onDeleteCategory={onDeleteSensorCategory}
           />
         )}
 
@@ -332,6 +432,23 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
+        {!restrictToClientAdmin && activeSubTab === 'signal-alias' && (
+          <SignalAliasTable
+            aliases={signalAliases}
+            error={signalAliasesError}
+            onUpsertAlias={onUpsertSignalAlias}
+            onDeleteAlias={onDeleteSignalAlias}
+          />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'signal-state' && (
+          <SignalStateTable
+            states={signalStates}
+            error={signalStatesError}
+            onReplaceStates={onReplaceSignalStates}
+          />
+        )}
+
         {!restrictToClientAdmin && activeSubTab === 'category' && (
           <CategoryView
             classes={equipmentClasses}
@@ -342,6 +459,16 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onRetireClass={onRetireEquipmentClass}
             onOpenClass={onOpenEquipmentClass}
             onOpenBulkImport={onOpenCatalogImport}
+          />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'named-formula' && (
+          <NamedFormulaView
+            formulas={namedFormulas}
+            error={namedFormulasError}
+            onCreateFormula={onCreateNamedFormula}
+            onUpdateFormula={onUpdateNamedFormula}
+            onPublishFormula={onPublishNamedFormula}
           />
         )}
 
@@ -374,15 +501,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreatePlant={onCreatePlant}
             onUpdatePlant={onUpdatePlant}
             onToggleStatus={onTogglePlantStatus}
+            onOpenSitePage={onOpenSitePage}
+            onSetPlantBoundary={onSetPlantBoundary}
           />
         )}
 
         {restrictToClientAdmin && activeSubTab === 'devices' && (
-          <DeviceManagement
-            devices={devices}
-            onNavigateToSetup={onNavigateToDeviceSetup}
-            // onNavigateToAISetup={onNavigateToAISetup}
-            onDeleteDevice={onDeleteDevice}
+          <ClientDeviceManagement
+            devices={myDevices}
+            error={myDevicesError}
+            equipment={realEquipment}
+            onUnclaimDevice={onUnclaimDevice}
           />
         )}
 
@@ -391,8 +520,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             pool={devicePool}
             error={devicePoolError}
             clients={clients}
-            onNavigateToRegister={onNavigateToRegisterDevice}
+            toolMappings={realToolMappings}
+            onRegister={onRegisterDevices}
             onAssign={onAssignDevice}
+            onRelease={onReleaseDevice}
+            onRetire={onRetireDevice}
+            onReturnToStock={onReturnDeviceToStock}
           />
         )}
 
@@ -403,6 +536,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreateEquipment={onCreateEquipment}
             onUpdateEquipment={onUpdateEquipment}
             onMoveEquipment={onMoveEquipment}
+            onGetEquipmentPlacementHistory={onGetEquipmentPlacementHistory}
             onRetireEquipment={onRetireEquipment}
             equipmentClasses={myEquipmentClasses}
             equipmentClassesError={myEquipmentClassesError}
@@ -418,6 +552,23 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onListMyCatalogScenarios={onListMyCatalogScenarios}
             onListActivations={onListActivations}
             onActivationTransition={onActivationTransition}
+            onGetActivationHistory={onGetActivationHistory}
+            onGetEquipmentRecommendations={onGetEquipmentRecommendations}
+            onImportEquipmentFromMirror={onImportEquipmentFromMirror}
+          />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'equipment' && (
+          <MasterEquipmentManagement
+            equipment={allEquipment}
+            error={allEquipmentError}
+            clients={clients}
+            onCreateEquipment={onCreateEquipment}
+            onUpdateEquipment={onUpdateEquipment}
+            onMoveEquipment={onMoveEquipment}
+            onRetireEquipment={onRetireEquipment}
+            onGetEquipmentPlacementHistory={onGetEquipmentPlacementHistory}
+            onListPlantsForTenant={onListPlantsForTenant}
           />
         )}
 

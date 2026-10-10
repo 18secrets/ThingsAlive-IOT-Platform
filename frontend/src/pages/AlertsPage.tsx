@@ -6,8 +6,8 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import {
-  AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError, EquipmentProfile, Plant,
-  SignalThresholdParams, PredictionSeverityParams,
+  AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
+  EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
   apiAcknowledgeAlert, apiCreateAlertRule, apiDisableAlertRule, apiEnableAlertRule, apiListAlertRules,
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
@@ -23,9 +23,10 @@ const TRIGGER_LABEL: Record<AlertTrigger, string> = {
   'fuel-loss': 'Fuel loss',
   'chain-origin': 'Chain origin',
 };
-// This form only authors the three trigger kinds a client can set up without extra
-// context (a live GPS fix for fuel-loss, a resolved causal chain for chain-origin).
-// Existing rules of any trigger still display; creating/editing stays to these three.
+// The real backend whitelist for POST/PATCH /alerts/rules (alert.controller.ts's own
+// TRIGGERS) excludes fuel-loss and chain-origin from tenant-authored rules entirely —
+// both only ever reach an account by being copied down from a published class
+// template (chain-origin: ClassAlertTemplatesPanel), never hand-authored here.
 const CREATABLE_TRIGGERS: AlertTrigger[] = ['prediction-severity', 'signal-threshold', 'no-telemetry'];
 
 function slugify(name: string): string {
