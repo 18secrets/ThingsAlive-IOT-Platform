@@ -15,7 +15,10 @@ import {
   HeartPulse,
   ShieldCheck,
   Siren,
-  Factory
+  Factory,
+  Briefcase,
+  Cpu,
+  Wrench
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 import logoFull from '../../assets/logo-icon.png';
@@ -35,12 +38,19 @@ interface SidebarProps {
 }
 
 // Master Admin's own allowlist. 'users' (Platform Users / Client Users) is
-// hidden for now, by request.
-const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>(['dashboard', 'admin', 'settings']);
+// hidden for now, by request. 'clients'/'staff'/'devices'/'equipment' used to
+// be sub-tabs inside Administration — promoted to their own sidebar entries
+// 2026-10-10 because the Administration sub-tab bar had grown too crowded.
+const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>([
+  'dashboard', 'admin', 'clients', 'staff', 'devices', 'equipment', 'settings',
+]);
 
 // Never shown under the client role, Super Admin or not — Platform Users is
-// a ThingsAlive-staff screen, not a client page at all.
-const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users']);
+// a ThingsAlive-staff screen, not a client page at all, and the promoted
+// Clients/Staff/Devices/Equipment pages are Master Admin's own screens (a
+// client's own Devices/Equipment stay inside their Administration sub-tabs,
+// reached via 'admin', not these).
+const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff', 'devices', 'equipment']);
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, isCollapsed, onToggleCollapsed,
@@ -61,6 +71,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
     { id: 'cost-administration', label: 'Cost Administration', icon: Receipt },
     { id: 'admin', label: 'Administration', icon: UserCheck },
+    { id: 'clients', label: 'Clients', icon: Briefcase },
+    { id: 'staff', label: 'Staff', icon: ShieldCheck },
+    { id: 'devices', label: 'Devices', icon: Cpu },
+    { id: 'equipment', label: 'Equipment', icon: Wrench },
     { id: 'client-users', label: 'Client Users', icon: UserCog },
     { id: 'roles', label: 'Roles & Permissions', icon: KeyRound },
     { id: 'users', label: 'Users', icon: Users },

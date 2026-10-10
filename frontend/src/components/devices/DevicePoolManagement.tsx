@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, UserPlus, AlertCircle } from 'lucide-react';
+import { Search, Plus, UserPlus, AlertCircle, Undo2, Archive, RotateCcw } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { PooledDevice } from '../../lib/api';
+import { PooledDevice, RegisterDeviceInput, ToolMapping } from '../../lib/api';
 import { ClientAccount } from '../../types';
 import { AssignDeviceModal } from './AssignDeviceModal';
+import { RegisterDevicesModal } from './RegisterDevicesModal';
 
 const STATE_OPTIONS: { label: string; value: PooledDevice['state'] }[] = [
   { label: 'In stock', value: 'in-stock' },
@@ -15,8 +16,12 @@ interface DevicePoolManagementProps {
   pool: PooledDevice[];
   error?: string;
   clients: ClientAccount[];
-  onNavigateToRegister: () => void;
+  toolMappings: ToolMapping[];
+  onRegister: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssign: (imei: string, tenantId: string) => Promise<void>;
+  onRelease: (imei: string) => Promise<void>;
+  onRetire: (imei: string) => Promise<void>;
+  onReturnToStock: (imei: string) => Promise<void>;
 }
 
 const STATE_STYLE: Record<PooledDevice['state'], string> = {
@@ -26,11 +31,22 @@ const STATE_STYLE: Record<PooledDevice['state'], string> = {
 };
 
 export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
-  pool, error, clients, onNavigateToRegister, onAssign,
+  pool, error, clients, toolMappings, onRegister, onAssign, onRelease, onRetire, onReturnToStock,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedState, setSelectedState] = useState<'All' | PooledDevice['state']>('All');
   const [assigning, setAssigning] = useState<PooledDevice | null>(null);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [busyImei, setBusyImei] = useState<string | null>(null);
+
+  const withBusy = async (imei: string, action: () => Promise<void>) => {
+    setBusyImei(imei);
+    try {
+      await action();
+    } finally {
+      setBusyImei(null);
+    }
+  };
 
   const clientName = useMemo(() => {
     const byId = new Map(clients.map((c) => [c.id, c.clientName]));
@@ -76,7 +92,7 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
 
         <button
           id="register-device-btn"
-          onClick={onNavigateToRegister}
+          onClick={() => setIsRegisterOpen(true)}
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -120,15 +136,58 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
                       {clientName(d.tenantId) || <span className="text-slate-400 italic">Unassigned</span>}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {d.state === 'in-stock' && (
-                        <button
-                          onClick={() => setAssigning(d)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer inline-flex items-center gap-1"
-                          title="Assign to a client"
-                        >
-                          <UserPlus className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <div className="flex items-center justify-center gap-1.5">
+                        {d.state === 'in-stock' && (
+                          <>
+                            <button
+                              onClick={() => setAssigning(d)}
+                              disabled={busyImei === d.imei}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                              title="Assign to a client"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => withBusy(d.imei, () => onRetire(d.imei))}
+                              disabled={busyImei === d.imei}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                              title="Retire: dead, lost or written off"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        {d.state === 'assigned' && (
+                          <>
+                            <button
+                              onClick={() => withBusy(d.imei, () => onRelease(d.imei))}
+                              disabled={busyImei === d.imei}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-600 hover:border-amber-300 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                              title="Take back into stock"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => withBusy(d.imei, () => onRetire(d.imei))}
+                              disabled={busyImei === d.imei}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                              title="Retire: dead, lost or written off"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        {d.state === 'retired' && (
+                          <button
+                            onClick={() => withBusy(d.imei, () => onReturnToStock(d.imei))}
+                            disabled={busyImei === d.imei}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-50"
+                            title="Repaired — bring back into stock"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -153,6 +212,13 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
         clients={clients}
         onClose={() => setAssigning(null)}
         onAssign={onAssign}
+      />
+
+      <RegisterDevicesModal
+        isOpen={isRegisterOpen}
+        onClose={() => setIsRegisterOpen(false)}
+        toolMappings={toolMappings}
+        onRegister={onRegister}
       />
     </div>
   );

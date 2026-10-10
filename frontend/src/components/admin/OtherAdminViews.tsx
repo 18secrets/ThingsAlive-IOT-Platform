@@ -6,12 +6,15 @@ import {
   Edit2,
   Trash2,
   MapPin,
+  LayoutDashboard,
+  Hexagon,
 } from 'lucide-react';
 import { Input } from 'rsuite';
 import { IndustryTypeItem } from '../../types';
-import { ApiError, Plant, PlantInput } from '../../lib/api';
+import { ApiError, GeoJsonPolygon, Plant, PlantInput } from '../../lib/api';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
 import { AddPlantModal } from './AddPlantModal';
+import { EditPlantBoundaryModal } from './EditPlantBoundaryModal';
 
 interface IndustryTypeViewProps {
   items: IndustryTypeItem[];
@@ -152,14 +155,17 @@ interface PlantViewProps {
   onCreatePlant: (input: PlantInput) => Promise<Plant>;
   onUpdatePlant: (id: string, input: Partial<PlantInput>) => Promise<Plant>;
   onToggleStatus: (id: string, currentStatus: Plant['status']) => void;
+  onOpenSitePage: (plantId: string) => void;
+  onSetPlantBoundary: (id: string, boundary: GeoJsonPolygon | null) => Promise<Plant>;
 }
 
 export const PlantView: React.FC<PlantViewProps> = ({
-  plants, error, onCreatePlant, onUpdatePlant, onToggleStatus,
+  plants, error, onCreatePlant, onUpdatePlant, onToggleStatus, onOpenSitePage, onSetPlantBoundary,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
+  const [boundaryPlant, setBoundaryPlant] = useState<Plant | null>(null);
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.toLowerCase();
@@ -258,6 +264,28 @@ export const PlantView: React.FC<PlantViewProps> = ({
               )}
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onOpenSitePage(plant.id)}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Site Page</span>
+              </button>
+              <button
+                onClick={() => setBoundaryPlant(plant)}
+                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                  plant.boundary
+                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
+                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                }`}
+                title={plant.boundary ? 'Boundary set' : 'No boundary set'}
+              >
+                <Hexagon className="w-3.5 h-3.5" />
+                <span>{plant.boundary ? 'Boundary Set' : 'Set Boundary'}</span>
+              </button>
+            </div>
+
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
               <span className={`font-semibold text-xs ${plant.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                 {plant.status === 'active' ? '• Active' : '• Retired'}
@@ -285,6 +313,13 @@ export const PlantView: React.FC<PlantViewProps> = ({
         onCreate={onCreatePlant}
         onUpdate={onUpdatePlant}
         existingPlant={editingPlant}
+      />
+
+      <EditPlantBoundaryModal
+        isOpen={!!boundaryPlant}
+        onClose={() => setBoundaryPlant(null)}
+        plant={boundaryPlant}
+        onSave={onSetPlantBoundary}
       />
     </div>
   );

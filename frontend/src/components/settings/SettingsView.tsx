@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AuthUser, ClientAccount } from '../../types';
 import { PasswordField } from '../common/PasswordField';
+import { SessionDiagnostics } from './SessionDiagnostics';
 
 interface SettingsViewProps {
   authUser: AuthUser;
@@ -206,6 +207,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
           </form>
         </div>
       </div>
+
+      <SessionDiagnostics />
     </div>
   );
 };

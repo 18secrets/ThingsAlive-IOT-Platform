@@ -1,7 +1,7 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
-import { withTenantSession } from '../../scope/tenant-session';
+import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
 import {
   CLIENT_SOURCE_SYSTEM, EquipmentProfile, EquipmentStatus, ServiceTier,
@@ -58,12 +58,15 @@ export class EquipmentService {
   constructor(private readonly ds: DataSource) {}
 
   async list(
-    scope: RequestScope, filters: { plantId?: string; includeRetired?: boolean } = {},
+    scope: RequestScope,
+    filters: { plantId?: string; includeRetired?: boolean } = {},
+    onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, (m) =>
       m.getRepository(EquipmentProfile).find({
         where: {
-          tenantId: scope.tenantId,
+          tenantId,
           ...(filters.plantId ? { plantId: filters.plantId } : {}),
           ...(filters.includeRetired ? {} : { status: 'active' as EquipmentStatus }),
         },
@@ -71,24 +74,39 @@ export class EquipmentService {
       }));
   }
 
-  async create(scope: RequestScope, input: EquipmentInput): Promise<EquipmentProfile> {
+  /**
+   * Every account's register in one read — Master Admin only (task: Equipment on the
+   * sidebar handles any client, 2026-10-10). `runTenantSpanning` because there is no
+   * single tenant to scope to; the caller resolves which row belongs to which account
+   * from `tenantId` itself, the same way the device pool resolves it client-side.
+   */
+  async listAcrossTenants(scope: RequestScope): Promise<EquipmentProfile[]> {
+    this.requirePlatform(scope, 'read every account\'s equipment');
+    return runTenantSpanning(this.ds, `equipment list-all by ${scope.userId}`, (m) =>
+      m.getRepository(EquipmentProfile).find({ order: { tenantId: 'ASC', externalId: 'ASC' } }));
+  }
+
+  async create(
+    scope: RequestScope, input: EquipmentInput, onBehalfOfTenantId?: string,
+  ): Promise<EquipmentProfile> {
     if (!CODE_PATTERN.test(input.code ?? '')) {
       throw new BadRequestException(
         'An equipment code is letters, digits, dots, hyphens or underscores, up to 64 '
         + 'characters. It becomes part of the machine\'s identity and is not changed later.',
       );
     }
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
 
-    return withTenantSession(this.ds, scope, async (m) => {
+    return withTenantId(this.ds, tenantId, async (m) => {
       const repo = m.getRepository(EquipmentProfile);
       const existing = await repo.findOne({
-        where: { tenantId: scope.tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: input.code },
+        where: { tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: input.code },
       });
       if (existing) throw new ConflictException(`Equipment "${input.code}" already exists.`);
 
-      const plantId = await this.resolvePlant(m, scope, input.plantId ?? null);
+      const plantId = await this.resolvePlant(m, tenantId, input.plantId ?? null);
       const saved = await repo.save(repo.create({
-        tenantId: scope.tenantId,
+        tenantId,
         sourceSystem: CLIENT_SOURCE_SYSTEM,
         externalId: input.code,
         origin: 'client',
@@ -110,17 +128,18 @@ export class EquipmentService {
       }));
 
       if (plantId) {
-        await this.recordPlacement(m, scope, saved, null, plantId, 'created here');
+        await this.recordPlacement(m, scope, tenantId, saved, null, plantId, 'created here');
       }
       return saved;
     });
   }
 
   async update(
-    scope: RequestScope, ref: AssetRef, input: Partial<EquipmentInput>,
+    scope: RequestScope, ref: AssetRef, input: Partial<EquipmentInput>, onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile> {
-    return withTenantSession(this.ds, scope, async (m) => {
-      const asset = await this.find(m, scope, ref);
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
 
       for (const key of ['name', 'manufacturer', 'modelNumber', 'serialNumber',
         'description', 'equipmentClassSlug', 'commissionedAt', 'serviceIntervalHours'] as const) {
@@ -142,7 +161,7 @@ export class EquipmentService {
    * commits — and "why did this disappear from my site" is the question that follows.
    */
   async move(
-    scope: RequestScope, ref: AssetRef, toPlantId: string | null, reason: string,
+    scope: RequestScope, ref: AssetRef, toPlantId: string | null, reason: string, onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile> {
     if (!reason?.trim()) {
       throw new BadRequestException(
@@ -150,36 +169,43 @@ export class EquipmentService {
         + 'and somebody will ask why it left their site.',
       );
     }
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
 
-    return withTenantSession(this.ds, scope, async (m) => {
-      const asset = await this.find(m, scope, ref);
-      const resolved = await this.resolvePlant(m, scope, toPlantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const resolved = await this.resolvePlant(m, tenantId, toPlantId);
       if (resolved === asset.plantId) return asset;
 
       const from = asset.plantId;
       asset.plantId = resolved;
       asset.updatedBy = scope.userId;
       const saved = await m.getRepository(EquipmentProfile).save(asset);
-      await this.recordPlacement(m, scope, saved, from, resolved, reason);
+      await this.recordPlacement(m, scope, tenantId, saved, from, resolved, reason);
       return saved;
     });
   }
 
   /** Where this machine has been. */
-  async placementHistory(scope: RequestScope, ref: AssetRef): Promise<EquipmentPlacementEvent[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+  async placementHistory(
+    scope: RequestScope, ref: AssetRef, onBehalfOfTenantId?: string,
+  ): Promise<EquipmentPlacementEvent[]> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, (m) =>
       m.getRepository(EquipmentPlacementEvent).find({
-        where: { tenantId: scope.tenantId, ...ref },
+        where: { tenantId, ...ref },
         order: { at: 'ASC' },
       }));
   }
 
-  async retire(scope: RequestScope, ref: AssetRef, reason: string): Promise<EquipmentProfile> {
+  async retire(
+    scope: RequestScope, ref: AssetRef, reason: string, onBehalfOfTenantId?: string,
+  ): Promise<EquipmentProfile> {
     if (!reason?.trim()) {
       throw new BadRequestException('A reason is required to retire a machine.');
     }
-    return withTenantSession(this.ds, scope, async (m) => {
-      const asset = await this.find(m, scope, ref);
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
       const from = asset.plantId;
       asset.status = 'retired';
       // A retired machine is not standing anywhere, and leaving it placed would keep
@@ -187,7 +213,7 @@ export class EquipmentService {
       asset.plantId = null;
       asset.updatedBy = scope.userId;
       const saved = await m.getRepository(EquipmentProfile).save(asset);
-      if (from) await this.recordPlacement(m, scope, saved, from, null, `retired: ${reason}`);
+      if (from) await this.recordPlacement(m, scope, tenantId, saved, from, null, `retired: ${reason}`);
       return saved;
     });
   }
@@ -205,7 +231,7 @@ export class EquipmentService {
    * worse than an obvious gap somebody fills in.
    */
   async importFromMirror(scope: RequestScope, sourceSystem: string): Promise<ImportResult> {
-    return withTenantSession(this.ds, scope, async (m) => {
+    return withTenantId(this.ds, scope.tenantId, async (m) => {
       const mirrored = await m.getRepository(EquipmentProjection).find({
         where: { tenantId: scope.tenantId, sourceSystem, status: 'live' },
       });
@@ -242,7 +268,7 @@ export class EquipmentService {
           createdBy: scope.userId, updatedBy: scope.userId,
         }));
         if (plantId) {
-          await this.recordPlacement(m, scope, saved, null, plantId, 'adopted from the existing platform');
+          await this.recordPlacement(m, scope, scope.tenantId, saved, null, plantId, 'adopted from the existing platform');
         }
         result.imported += 1;
       }
@@ -253,11 +279,30 @@ export class EquipmentService {
 
   // ----------------------------------------------------------------------- shared
 
+  /**
+   * `onBehalfOfTenantId` is Master Admin's own override (task: Equipment on the
+   * sidebar handles any client, 2026-10-10) — refused for anyone else, because an
+   * ordinary tenant capability like `equipment.write` is shared with Master Admin's
+   * role and must not let a regular caller redirect a write to another account by
+   * supplying the field.
+   */
+  private resolveTenant(scope: RequestScope, onBehalfOfTenantId?: string): string {
+    if (!onBehalfOfTenantId) return scope.tenantId;
+    this.requirePlatform(scope, 'act on another account\'s equipment');
+    return onBehalfOfTenantId;
+  }
+
+  private requirePlatform(scope: RequestScope, action: string): void {
+    if (!scope.isPlatformRole) {
+      throw new ForbiddenException(`Only Things Alive staff can ${action}.`);
+    }
+  }
+
   private async find(
-    m: EntityManager, scope: RequestScope, ref: AssetRef,
+    m: EntityManager, tenantId: string, ref: AssetRef,
   ): Promise<EquipmentProfile> {
     const asset = await m.getRepository(EquipmentProfile).findOne({
-      where: { tenantId: scope.tenantId, ...ref },
+      where: { tenantId, ...ref },
     });
     if (!asset) throw new NotFoundException('No such equipment in this account.');
     return asset;
@@ -265,11 +310,11 @@ export class EquipmentService {
 
   /** A site in this account, or nothing. Never a site id from somebody else's. */
   private async resolvePlant(
-    m: EntityManager, scope: RequestScope, plantId: string | null,
+    m: EntityManager, tenantId: string, plantId: string | null,
   ): Promise<string | null> {
     if (!plantId) return null;
     const plant = await m.getRepository(Plant).findOne({
-      where: { tenantId: scope.tenantId, id: plantId },
+      where: { tenantId, id: plantId },
     });
     if (!plant) throw new NotFoundException('No such site in this account.');
     if (plant.status === 'retired') {
@@ -279,12 +324,12 @@ export class EquipmentService {
   }
 
   private async recordPlacement(
-    m: EntityManager, scope: RequestScope, asset: EquipmentProfile,
+    m: EntityManager, scope: RequestScope, tenantId: string, asset: EquipmentProfile,
     fromPlantId: string | null, toPlantId: string | null, reason: string,
   ): Promise<void> {
     const repo = m.getRepository(EquipmentPlacementEvent);
     await repo.save(repo.create({
-      tenantId: scope.tenantId,
+      tenantId,
       sourceSystem: asset.sourceSystem,
       externalId: asset.externalId,
       fromPlantId, toPlantId, reason,

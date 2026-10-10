@@ -1,28 +1,42 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Eye, Edit2, AlertCircle, ChevronsUpDown } from 'lucide-react';
+import { Search, Plus, Eye, Edit2, AlertCircle, ChevronsUpDown, Archive, RotateCcw, Trash2, Tags } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { Sensor, SensorCategory, SensorInput } from '../../lib/api';
+import { ApiError, Sensor, SensorCategory, SensorInput } from '../../lib/api';
 import { compareByCategoryOrder, sortByCategory } from '../../lib/sensorCategoryOrder';
 import { AddSensorModal } from './AddSensorModal';
 import { SensorDetailModal } from './SensorDetailModal';
+import { ManageSensorCategoriesModal } from './ManageSensorCategoriesModal';
 
 interface SensorTableProps {
   sensors: Sensor[];
   error?: string;
   categories: SensorCategory[];
+  showRetired: boolean;
+  onToggleShowRetired: (next: boolean) => void;
   onCreateSensor: (input: SensorInput) => Promise<Sensor>;
   onUpdateSensor: (id: string, input: SensorInput) => Promise<Sensor>;
+  onRetireSensor: (id: string) => Promise<Sensor>;
+  onUnretireSensor: (id: string) => Promise<Sensor>;
+  onDeleteSensor: (id: string) => Promise<void>;
   onCreateCategory: (name: string) => Promise<SensorCategory>;
+  onRetireCategory: (id: string) => Promise<SensorCategory>;
+  onUnretireCategory: (id: string) => Promise<SensorCategory>;
+  onDeleteCategory: (id: string) => Promise<void>;
 }
 
 export const SensorTable: React.FC<SensorTableProps> = ({
-  sensors, error, categories, onCreateSensor, onUpdateSensor, onCreateCategory,
+  sensors, error, categories, showRetired, onToggleShowRetired,
+  onCreateSensor, onUpdateSensor, onRetireSensor, onUnretireSensor, onDeleteSensor,
+  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
   const [viewingSensor, setViewingSensor] = useState<Sensor | null>(null);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | undefined>(undefined);
 
   const categoryName = useMemo(() => {
     const byId = new Map(categories.map((c) => [c.id, c.name]));
@@ -54,6 +68,18 @@ export const SensorTable: React.FC<SensorTableProps> = ({
     [sortedCategories],
   );
 
+  const withBusy = async (id: string, action: () => Promise<unknown>) => {
+    setBusyId(id);
+    setActionError(undefined);
+    try {
+      await action();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'That action failed.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div id="sensor-management-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -77,6 +103,25 @@ export const SensorTable: React.FC<SensorTableProps> = ({
             searchable={categoryOptions.length > 6}
             cleanable={false}
           />
+
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showRetired}
+              onChange={(e) => onToggleShowRetired(e.target.checked)}
+              className="accent-sky-600"
+            />
+            Show retired
+          </label>
+
+          <button
+            onClick={() => setIsCategoriesModalOpen(true)}
+            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:border-sky-300 hover:text-sky-600 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Manage sensor categories"
+          >
+            <Tags className="w-3.5 h-3.5" />
+            Categories
+          </button>
         </div>
 
         <button
@@ -89,10 +134,10 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         </button>
       </div>
 
-      {error && (
+      {(error || actionError) && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{error}</span>
+          <span>{error ?? actionError}</span>
         </div>
       )}
 
@@ -109,6 +154,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                 </th>
                 <th className="py-3 px-6 font-medium">Sensor Name</th>
                 <th className="py-3 px-6 font-medium">Parameters</th>
+                <th className="py-3 px-6 font-medium">Status</th>
                 <th className="py-3 px-6 font-medium">Updated At</th>
                 <th className="py-3 px-4 font-medium text-center">View</th>
                 <th className="py-3 px-4 font-medium text-center">Actions</th>
@@ -116,12 +162,23 @@ export const SensorTable: React.FC<SensorTableProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-sm">
               {filteredSensors.length > 0 ? (
-                filteredSensors.map((sensor) => (
+                filteredSensors.map((sensor) => {
+                  const retired = !!sensor.retiredAt;
+                  return (
                   <tr key={sensor.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-6 font-normal">{categoryName(sensor.categoryId)}</td>
                     <td className="py-3.5 px-6 font-normal text-slate-800 dark:text-slate-200">{sensor.sensorName}</td>
                     <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
                       {sensor.parameterSpecs.length}
+                    </td>
+                    <td className="py-3.5 px-6">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        retired
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        {retired ? 'Retired' : 'Live'}
+                      </span>
                     </td>
                     <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
                       {new Date(sensor.updatedAt).toLocaleDateString()}
@@ -136,19 +193,38 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                       </button>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
-                        className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
-                        title="Edit Sensor"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
+                          className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
+                          title="Edit Sensor"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => (retired ? onUnretireSensor(sensor.id) : onRetireSensor(sensor.id)))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title={retired ? 'Return to live use' : 'Retire: hidden from new work, still resolves where already used'}
+                        >
+                          {retired ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => onDeleteSensor(sensor.id))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title="Delete — refused while any tool mapping references it"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-slate-400 text-sm">
+                  <td colSpan={7} className="py-10 text-center text-slate-400 text-sm">
                     No sensors match your search filter.
                   </td>
                 </tr>
@@ -167,7 +243,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         onClose={() => { setIsAddModalOpen(false); setEditingSensor(null); }}
         onCreate={onCreateSensor}
         onUpdate={onUpdateSensor}
-        categories={categories}
+        categories={categories.filter((c) => !c.retiredAt || c.id === editingSensor?.categoryId)}
         onCreateCategory={onCreateCategory}
         existingSensor={editingSensor}
       />
@@ -176,6 +252,17 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         sensor={viewingSensor}
         categoryName={viewingSensor ? categoryName(viewingSensor.categoryId) : undefined}
         onClose={() => setViewingSensor(null)}
+      />
+
+      <ManageSensorCategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        categories={categories}
+        showRetired={showRetired}
+        onToggleShowRetired={onToggleShowRetired}
+        onRetire={onRetireCategory}
+        onUnretire={onUnretireCategory}
+        onDelete={onDeleteCategory}
       />
     </div>
   );

@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw,
+  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, MapPin,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { ApiError, InviteUserInput, InviteUserResult, TenantRole, TenantUser } from '../../lib/api';
+import {
+  ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, SetUserAccessInput, TenantRole, TenantUser,
+} from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { EditUserAccessModal } from './EditUserAccessModal';
 
 interface ClientUserManagementProps {
   users: TenantUser[];
@@ -14,6 +17,9 @@ interface ClientUserManagementProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  plants: Plant[];
+  equipment: EquipmentProfile[];
+  onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
 }
 
 const STATUS_STYLE: Record<TenantUser['status'], string> = {
@@ -24,11 +30,13 @@ const STATUS_STYLE: Record<TenantUser['status'], string> = {
 
 export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
   users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
+  plants, equipment, onSetUserAccess,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
+  const [accessUser, setAccessUser] = useState<TenantUser | null>(null);
 
   const roleName = useMemo(() => {
     const byId = new Map(roles.map((r) => [r.slug, r.name]));
@@ -113,6 +121,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                 const superAdmin = isSuperAdminUser(u);
                 const lastCeoManager = isLastCeoManager(u);
                 const busy = busyId === u.id;
+                const userScopeShape = roles.find((r) => r.slug === u.roleSlug)?.scopeShape;
                 return (
                   <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
@@ -142,6 +151,15 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-2">
+                        {userScopeShape && userScopeShape !== 'tenant' && (
+                          <button
+                            onClick={() => setAccessUser(u)}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                            title={`Edit which ${userScopeShape === 'plant' ? 'sites' : 'machines'} this person can see`}
+                          >
+                            <MapPin className="w-4 h-4" />
+                          </button>
+                        )}
                         {u.status === 'suspended' ? (
                           <button
                             onClick={() => runAction(u.id, () => onReinstateUser(u.id))}
@@ -190,6 +208,16 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
         onClose={() => setIsModalOpen(false)}
         onInvite={onInviteUser}
         roles={roles}
+      />
+
+      <EditUserAccessModal
+        isOpen={!!accessUser}
+        onClose={() => setAccessUser(null)}
+        user={accessUser}
+        roles={roles}
+        plants={plants}
+        equipment={equipment}
+        onSetAccess={onSetUserAccess}
       />
     </div>
   );

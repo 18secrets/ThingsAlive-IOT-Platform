@@ -12,6 +12,10 @@ export type NavigationTab =
   | 'work-orders'
   | 'cost-administration'
   | 'admin'
+  | 'clients'
+  | 'staff'
+  | 'devices'
+  | 'equipment'
   | 'users'
   | 'settings'
   | 'client-users'
@@ -26,7 +30,11 @@ export type NavigationTab =
 // are structural Super Admin capabilities, never assignable to a custom role
 // (a role can't grant the ability to manage roles). 'users' (Platform Users)
 // and 'administrator' are ThingsAlive-side screens and never apply to a
-// client role either.
+// client role either. 'clients'/'staff'/'devices'/'equipment' are Master
+// Admin's own promoted-to-sidebar pages (task: move them out of
+// Administration's sub-tab bar, 2026-10-10) — a client's own Devices/Equipment
+// stay inside their Administration sub-tabs, under the 'admin' tab, never
+// these.
 export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = [
   'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
 ];
@@ -112,9 +120,12 @@ export type AdminSubTab =
   | 'category'
   | 'plant'
   | 'tool-mapping'
+  | 'signal-alias'
+  | 'signal-state'
   | 'devices'
   | 'equipment'
   | 'equipment-template'
+  | 'named-formula'
   | 'clients'
   | 'staff';
 

@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronLeft, ChevronRight, AlertCircle, Radio, Edit2, Ban } from 'lucide-react';
+import { Search, Plus, ChevronLeft, ChevronRight, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import {
-  ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile,
-  MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
+  ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile, EquipmentPlacementEvent,
+  ImportResult, MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
@@ -26,6 +27,7 @@ interface EquipmentManagementProps {
     sourceSystem: string, externalId: string, toPlantId: string | null, reason: string,
   ) => Promise<EquipmentProfile>;
   onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
+  onGetEquipmentPlacementHistory: (sourceSystem: string, externalId: string) => Promise<EquipmentPlacementEvent[]>;
   equipmentClasses: EquipmentClass[];
   equipmentClassesError?: string;
   plants: Plant[];
@@ -38,6 +40,18 @@ interface EquipmentManagementProps {
   onProposeOrActivateBinding: (
     sourceSystem: string, externalId: string, input: ProposeOrActivateBindingInput,
   ) => Promise<SignalBindingVersion>;
+  onListEquipmentKpis: (sourceSystem: string, externalId: string) => Promise<KpiEnvelope[]>;
+  onListMyCatalogScenarios: (equipmentClassSlug?: string) => Promise<ClientScenario[]>;
+  onListActivations: (sourceSystem: string, externalId: string) => Promise<ActivationView[]>;
+  onActivationTransition: (
+    action: ActivationAction,
+    input: { sourceSystem: string; externalId: string; clientScenarioSlug: string; reason?: string },
+  ) => Promise<ActivationView>;
+  onGetActivationHistory: (sourceSystem: string, externalId: string) => Promise<ActivationHistoryEvent[]>;
+  onGetEquipmentRecommendations: (
+    sourceSystem: string, externalId: string,
+  ) => Promise<{ equipmentClassSlug: string | null; recommendations: EquipmentRecommendation[] }>;
+  onImportEquipmentFromMirror: (sourceSystem: string) => Promise<ImportResult>;
 }
 
 export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
@@ -47,6 +61,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   onUpdateEquipment,
   onMoveEquipment,
   onRetireEquipment,
+  onGetEquipmentPlacementHistory,
   equipmentClasses,
   equipmentClassesError,
   plants,
@@ -57,6 +72,13 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   onGetCoverage,
   onGetDiscovery,
   onProposeOrActivateBinding,
+  onListEquipmentKpis,
+  onListMyCatalogScenarios,
+  onListActivations,
+  onActivationTransition,
+  onGetActivationHistory,
+  onGetEquipmentRecommendations,
+  onImportEquipmentFromMirror,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -67,6 +89,8 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   const [bindingsEquipment, setBindingsEquipment] = useState<EquipmentProfile | null>(null);
   const [retiringId, setRetiringId] = useState<string | null>(null);
   const [retireError, setRetireError] = useState<string | undefined>(undefined);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | undefined>(undefined);
 
   const classBySlug = useMemo(
     () => new Map(equipmentClasses.map((ec) => [ec.slug, ec])),
@@ -134,6 +158,28 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     }
   };
 
+  const handleImport = async () => {
+    const sourceSystem = window.prompt(
+      'Source system to adopt machines from (the existing platform this account already uses)?',
+      'iot-platform-1',
+    );
+    if (!sourceSystem?.trim()) return;
+    setImporting(true);
+    setImportError(undefined);
+    try {
+      const result = await onImportEquipmentFromMirror(sourceSystem.trim());
+      window.alert(
+        `Imported ${result.imported} machine${result.imported === 1 ? '' : 's'}.\n`
+        + `${result.alreadyKnown} already known.\n`
+        + `${result.unplaced} imported with no site — their upstream site isn't registered here yet.`,
+      );
+    } catch (err) {
+      setImportError(err instanceof ApiError ? err.message : 'Could not import from that source system.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div id="equipment-management-view" className="space-y-4">
 
@@ -171,21 +217,34 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           />
         </div>
 
-        {/* Add Equipment Button */}
-        <button
-          id="add-equipment-btn"
-          onClick={() => { setEditingEquipment(null); setIsModalOpen(true); }}
-          className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Equipment</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            id="import-equipment-btn"
+            disabled={importing}
+            onClick={handleImport}
+            title="Adopt the machines the existing platform already knows about"
+            className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>{importing ? 'Importing…' : 'Import from Legacy'}</span>
+          </button>
+
+          {/* Add Equipment Button */}
+          <button
+            id="add-equipment-btn"
+            onClick={() => { setEditingEquipment(null); setIsModalOpen(true); }}
+            className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Equipment</span>
+          </button>
+        </div>
       </div>
 
-      {(error || equipmentClassesError || retireError) && (
+      {(error || equipmentClassesError || retireError || importError) && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{error || equipmentClassesError || retireError}</span>
+          <span>{error || equipmentClassesError || retireError || importError}</span>
         </div>
       )}
 
@@ -374,6 +433,14 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         onGetCoverage={onGetCoverage}
         onGetDiscovery={onGetDiscovery}
         onProposeOrActivateBinding={onProposeOrActivateBinding}
+        onListEquipmentKpis={onListEquipmentKpis}
+        onListMyCatalogScenarios={onListMyCatalogScenarios}
+        onListActivations={onListActivations}
+        onActivationTransition={onActivationTransition}
+        onGetActivationHistory={onGetActivationHistory}
+        plants={plants}
+        onGetEquipmentPlacementHistory={onGetEquipmentPlacementHistory}
+        onGetEquipmentRecommendations={onGetEquipmentRecommendations}
       />
     </div>
   );

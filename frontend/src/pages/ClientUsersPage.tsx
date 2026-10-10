@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  InviteUserInput, InviteUserResult, TenantRole, TenantUser,
+  InviteUserInput, InviteUserResult, TenantRole, TenantUser, Plant, EquipmentProfile, SetUserAccessInput,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { ClientUserManagement } from '../components/clients/ClientUserManagement';
@@ -17,11 +17,14 @@ interface ClientUsersPageProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  plants: Plant[];
+  equipment: EquipmentProfile[];
+  onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
 }
 
 export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   users, roles, error, manageAccessClientId, onBackToClients,
-  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
+  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, plants, equipment, onSetUserAccess,
 }) => {
   const { authUser } = useAuth();
   if (!authUser) return null;
@@ -47,6 +50,9 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
       onSetUserRole={onSetUserRole}
       onSuspendUser={onSuspendUser}
       onReinstateUser={onReinstateUser}
+      plants={plants}
+      equipment={equipment}
+      onSetUserAccess={onSetUserAccess}
     />
   );
 };

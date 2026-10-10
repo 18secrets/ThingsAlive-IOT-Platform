@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Activity, Bell } from 'lucide-react';
+import { ArrowLeft, Activity, Bell, GitBranch } from 'lucide-react';
 import {
-  AlertRuleTemplate, AlertRuleTemplateInput, EquipmentClass, Scenario, ScenarioInput,
+  AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput, EquipmentClass, Scenario, ScenarioInput,
 } from '../lib/api';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { ClassScenariosPanel } from '../components/admin/class-detail/ClassScenariosPanel';
 import { ClassAlertTemplatesPanel } from '../components/admin/class-detail/ClassAlertTemplatesPanel';
+import { ClassCausalChainsPanel } from '../components/admin/class-detail/ClassCausalChainsPanel';
 
-type DetailTab = 'predictions' | 'alerts';
+type DetailTab = 'predictions' | 'alerts' | 'chains';
 
 interface EquipmentClassDetailPageProps {
   classes: EquipmentClass[];
@@ -23,6 +24,10 @@ interface EquipmentClassDetailPageProps {
   onUpdateAlertTemplate: (slug: string, input: AlertRuleTemplateInput) => Promise<AlertRuleTemplate>;
   onPublishAlertTemplate: (slug: string) => Promise<void>;
   onRetireAlertTemplate: (slug: string) => Promise<void>;
+  causalChains: CausalChain[];
+  causalChainsError?: string;
+  onCreateCausalChain: (slug: string, input: CausalChainInput) => Promise<CausalChain>;
+  onPublishCausalChain: (slug: string) => Promise<void>;
 }
 
 /** The draft in progress if any, else the latest published version, else whatever's left. */
@@ -37,6 +42,7 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
   classes, scenarios, scenariosError, onCreateScenario, onUpdateScenario, onPublishScenario,
   alertTemplates, alertTemplatesError, onCreateAlertTemplate, onUpdateAlertTemplate,
   onPublishAlertTemplate, onRetireAlertTemplate,
+  causalChains, causalChainsError, onCreateCausalChain, onPublishCausalChain,
 }) => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -63,11 +69,13 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
 
   const scenariosForClass = scenarios.filter((s) => s.equipmentClassSlug === cls.slug);
   const alertTemplatesForClass = alertTemplates.filter((t) => t.equipmentClassSlug === cls.slug);
+  const causalChainsForClass = causalChains.filter((c) => c.equipmentClassSlug === cls.slug);
   const availableSignals = cls.expectedSignals.map((s) => s.signal);
 
   const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count: number }[] = [
     { id: 'predictions', label: 'Predictive Maintenance', icon: Activity, count: scenariosForClass.length },
     { id: 'alerts', label: 'Alert Rules', icon: Bell, count: alertTemplatesForClass.length },
+    { id: 'chains', label: 'Causal Chains', icon: GitBranch, count: causalChainsForClass.length },
   ];
 
   return (
@@ -130,6 +138,16 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
           onUpdate={onUpdateAlertTemplate}
           onPublish={onPublishAlertTemplate}
           onRetire={onRetireAlertTemplate}
+        />
+      )}
+      {tab === 'chains' && (
+        <ClassCausalChainsPanel
+          equipmentClassSlug={cls.slug}
+          availableSignals={availableSignals}
+          chains={causalChainsForClass}
+          error={causalChainsError}
+          onCreate={onCreateCausalChain}
+          onPublish={onPublishCausalChain}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { NavigationTab } from '../types';
+import { NavigationTab, UserRole } from '../types';
 import { useAuth } from '../lib/AuthProvider';
 import { PageHeaderConfig, usePageHeaderValue } from '../lib/PageHeaderContext';
 import { Sidebar } from '../components/Sidebar';
@@ -14,7 +14,9 @@ interface ShellProps {
   onSidebarNavigate?: () => void;
 }
 
-function tabFromPath(pathname: string, state: unknown): NavigationTab {
+const ADMIN_PROMOTED_SUBTABS: NavigationTab[] = ['clients', 'staff', 'devices', 'equipment'];
+
+function tabFromPath(pathname: string, state: unknown, role?: UserRole): NavigationTab {
   const first = pathname.split('/')[1];
   // Reached from Alerts/Predictions/Scenarios/a Thing detail page's "Create
   // alert with AI" button — see AlertAgentPage.tsx's nav state. It has no
@@ -22,7 +24,16 @@ function tabFromPath(pathname: string, state: unknown): NavigationTab {
   // from. (The alert/scenario/prediction rule form itself is a modal now,
   // not a route, so it never changes the URL and needs no entry here.)
   const backTo = (state as { backTo?: string } | null)?.backTo;
-  if (first === 'alert-agent' && backTo) return tabFromPath(backTo, null);
+  if (first === 'alert-agent' && backTo) return tabFromPath(backTo, null, role);
+  // Master Admin's Clients/Staff/Devices/Equipment are still served by
+  // AdminPage at /admin/<subtab> (task: move them to the sidebar, 2026-10-10)
+  // — only their nav highlighting is promoted above 'Administration'. A
+  // client's own /admin/devices or /admin/equipment sub-tab must keep
+  // highlighting 'admin', since those stay inside their Administration page.
+  if (first === 'admin' && role === 'master-admin') {
+    const second = pathname.split('/')[2] as NavigationTab | undefined;
+    if (second && ADMIN_PROMOTED_SUBTABS.includes(second)) return second;
+  }
   const known: NavigationTab[] = [
     'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
     'admin', 'client-users', 'roles', 'users', 'settings',
@@ -35,6 +46,10 @@ function tabFromPath(pathname: string, state: unknown): NavigationTab {
 function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeaderConfig {
   switch (tab) {
     case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
+    case 'clients': return { title: 'Clients', subtitle: 'Accounts & Entitlements' };
+    case 'staff': return { title: 'Staff', subtitle: 'Things Alive Team' };
+    case 'devices': return { title: 'Devices', subtitle: 'Stock & Assignment' };
+    case 'equipment': return { title: 'Equipment', subtitle: 'Fleet Register' };
     case 'things-care': return { title: 'ThingsCare', subtitle: 'Health & Prognostics' };
     case 'things-shield': return { title: 'ThingsShield', subtitle: 'Safety, Compliance & Risk' };
     case 'incident-management': return { title: 'Incident Management', subtitle: 'People, Machine Wellbeing & Security' };
@@ -119,15 +134,18 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
 
   if (!authUser) return null; // RequireAuth guarantees this never renders signed out.
 
-  const currentTab = tabFromPath(location.pathname, location.state);
+  const currentTab = tabFromPath(location.pathname, location.state, authUser.role);
   const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin');
 
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
     if (tab === 'admin') {
-      // 'industry' is hidden from Master Admin's tab bar for now — see
-      // AdminIndexRedirect's own comment in App.tsx, which this must match.
-      navigate(`/admin/${authUser.role === 'client' ? 'plant' : 'clients'}`);
+      // Master Admin's default landing sub-tab — see AdminIndexRedirect's own
+      // comment in App.tsx, which this must match. Not 'clients'/'staff' etc.
+      // any more: those are promoted to their own sidebar entries below.
+      navigate(`/admin/${authUser.role === 'client' ? 'plant' : 'category'}`);
+    } else if (ADMIN_PROMOTED_SUBTABS.includes(tab)) {
+      navigate(`/admin/${tab}`);
     } else {
       navigate(`/${tab}`);
     }
