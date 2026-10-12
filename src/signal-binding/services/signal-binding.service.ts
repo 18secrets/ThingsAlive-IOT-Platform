@@ -170,13 +170,17 @@ export class SignalBindingService {
         // stale on one screen and fresh on another.
         const tenantStaleAfter = await tenantStaleAfterSeconds(m, scope.tenantId, profile, at);
 
+        // One read for every requirement (task QPERF-COVERAGE §2), grouped below by the
+        // same (role, component) the per-requirement query used to filter on.
+        const allRows = requirements.length ? await m.getRepository(SignalBindingVersion).find({
+          where: {
+            tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+            measurementRole: In([...new Set(requirements.map((r) => r.measurementRole))]),
+          },
+        }) : [];
+
         for (const req of requirements) {
-          const rows = await m.getRepository(SignalBindingVersion).find({
-            where: {
-              tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
-              measurementRole: req.measurementRole, componentId: req.componentScope,
-            },
-          });
+          const rows = allRows.filter((r) => r.measurementRole === req.measurementRole && r.componentId === req.componentScope);
 
           const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
           const activeCount = activeNow.length;

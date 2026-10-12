@@ -30,6 +30,10 @@ const segmentParams = (segments: TelemetrySegment[]) => [
   segments.map((s) => s.from), segments.map((s) => s.to),
 ];
 
+const latestParams = (tenantId: string, segments: TelemetrySegment[], at: Date) => [
+  tenantId, ...segmentParams(segments), new Date(Math.min(...segments.map((s) => s.from.getTime()))), at,
+];
+
 /** The segments joined as a set, so one query reads every (signal, device, window). */
 const SEGMENTS_JOIN = `
   JOIN unnest($2::text[], $3::text[], $4::timestamptz[], $5::timestamptz[]) AS seg(signal, imei, seg_from, seg_to)
@@ -173,6 +177,37 @@ export class TelemetryWindowReader {
     return bySignal;
   }
 
+  /**
+   * One index probe per segment (task QPERF-COVERAGE): the newest reading inside it,
+   * then the newest across a signal's segments — a signal moved between devices has
+   * several.
+   *
+   * It used to join every reading in the segments and sort them to keep one per
+   * signal: 77,766 rows sorted for 6 on one demo machine, and growing with every day of
+   * history. Walking `ix_telemetry_reading_lookup` backwards and stopping at the first
+   * row reads one row per segment however long the machine has been reporting.
+   *
+   * The upper bound is `< COALESCE(seg_to, 'infinity')`, not `seg_to IS NULL OR ...`:
+   * the OR form cannot bound the index scan, so a closed segment on a device still
+   * reporting elsewhere would walk back through every later reading to find its own.
+   * `$6`/`$7` stay as plain bounds so the planner prunes partitions outside the
+   * bindings, as the other two queries here do.
+   */
+  private static readonly LATEST_QUERY = `
+    SELECT seg.signal, max(latest.ts) AS latest
+      FROM unnest($2::text[], $3::text[], $4::timestamptz[], $5::timestamptz[]) AS seg(signal, imei, seg_from, seg_to)
+      CROSS JOIN LATERAL (
+        SELECT r."source_timestamp" AS ts
+          FROM "telemetry_reading" r
+         WHERE r."tenant_id" = $1 AND r."imei" = seg.imei AND r."signal" = seg.signal
+           AND r."source_timestamp" >= seg.seg_from
+           AND r."source_timestamp" < COALESCE(seg.seg_to, 'infinity'::timestamptz)
+           AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
+         ORDER BY r."source_timestamp" DESC
+         LIMIT 1
+      ) latest
+     GROUP BY seg.signal`;
+
   /** The latest reading per signal that this machine's bindings account for, up to
    * `at` — bounded below by the earliest binding, because a device's readings from
    * before it was fitted here belong to the machine it was on then. */
@@ -181,16 +216,22 @@ export class TelemetryWindowReader {
   ): Promise<Map<string, Date>> {
     const result = new Map<string, Date>();
     if (!segments.length) return result;
-    const earliest = new Date(Math.min(...segments.map((s) => s.from.getTime())));
     const rows: { signal: string; latest: Date }[] = await m.query(
-      `SELECT DISTINCT ON (r."signal") r."signal", r."source_timestamp" AS latest
-         FROM "telemetry_reading" r ${SEGMENTS_JOIN}
-        WHERE r."tenant_id" = $1 AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
-        ORDER BY r."signal", r."source_timestamp" DESC`,
-      [tenantId, ...segmentParams(segments), earliest, at],
+      TelemetryWindowReader.LATEST_QUERY, latestParams(tenantId, segments, at),
     );
     for (const r of rows) result.set(r.signal, new Date(r.latest));
     return result;
+  }
+
+  /** `EXPLAIN (ANALYZE, BUFFERS)` of exactly what `latestPerSignalInSegments` issues —
+   * how the spec shows the work is one probe per segment rather than asserting a time. */
+  async explainLatest(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[], at: Date,
+  ): Promise<string> {
+    const rows: { 'QUERY PLAN': string }[] = await m.query(
+      `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${TelemetryWindowReader.LATEST_QUERY}`, latestParams(tenantId, segments, at),
+    );
+    return rows.map((r) => r['QUERY PLAN']).join('\n');
   }
 
   async readBucketedSegments(
