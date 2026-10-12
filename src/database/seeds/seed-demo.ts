@@ -233,6 +233,7 @@ export async function seedDemo(
     await s.entitlements.grant(PLATFORM, DEMO_TENANT, DEMO_CLASS, 'Demo tenant only (seed-only class).');
     await seedSiteAndMachines(ds, now);
     await seedTelemetry(ds, now);
+    await analyzeTelemetry(ds);
     await raiseAlerts(ds, s.alerts, now);
     return { created: true, counts: await countDemoRows(ds), invitationToken: provisioned.invitationToken, adminEmail };
   } finally {
@@ -683,7 +684,19 @@ export async function topUpDemo(
       trimmed += Array.isArray(result) ? Number(result[1] ?? 0) : 0;
     }
   }
+  await analyzeTelemetry(ds);
   return { written, trimmed };
+}
+
+/**
+ * Statistics for what was just bulk-loaded (task QPERF-COVERAGE §3). Until autovacuum
+ * gets to the new rows the planner believes the partitions are near-empty and picks
+ * plans to match: `coverage()` measured 299 ms on a fresh seed against 81 ms once
+ * analyzed — and a fresh seed is exactly when testers first open the demo. Continuous
+ * ingest needs nothing like this; autovacuum's thresholds are right for a trickle.
+ */
+async function analyzeTelemetry(ds: DataSource): Promise<void> {
+  await ds.query(`ANALYZE "telemetry_reading"`);
 }
 
 // ========================================================================== reset

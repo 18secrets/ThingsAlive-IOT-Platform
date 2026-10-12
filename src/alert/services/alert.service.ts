@@ -342,20 +342,11 @@ export class AlertService {
           select: { plantId: true, equipmentClassSlug: true },
         })
       : null;
-    const plantId = profile?.plantId ?? null;
-    const classSlug = profile?.equipmentClassSlug ?? null;
-
-    return rules.filter((rule) => {
-      if (rule.appliesTo === 'account') return true;
-      if (rule.appliesTo === 'plant') return !!plantId && rule.plantId === plantId;
-      // A machine with no class matches no class-scoped rule. Not an oversight: an
-      // unclassified machine has nothing the rule was written about, and treating the
-      // missing class as a match would fire generator rules on anything unlabelled.
-      if (rule.appliesTo === 'equipment-class') {
-        return !!classSlug && rule.equipmentClassSlug === classSlug;
-      }
-      return rule.sourceSystem === context.sourceSystem && rule.externalId === context.externalId;
-    });
+    const machine = {
+      sourceSystem: context.sourceSystem, externalId: context.externalId,
+      plantId: profile?.plantId ?? null, equipmentClassSlug: profile?.equipmentClassSlug ?? null,
+    };
+    return rules.filter((rule) => ruleCoversMachine(rule, machine));
   }
 
   private async validate(scope: RequestScope, input: RuleInput): Promise<void> {
@@ -394,4 +385,24 @@ export class AlertService {
       if (!exists) throw new NotFoundException('No such machine in this account.');
     }
   }
+}
+
+/**
+ * Whether a rule is written about this machine. Exported so onboarding status
+ * (QONBOARD-STATUS) answers "does an alert cover it" with the engine's own rule, not a
+ * copy that drifts the first time a new `applies_to` is added.
+ */
+export function ruleCoversMachine(
+  rule: Pick<AlertRule, 'appliesTo' | 'plantId' | 'equipmentClassSlug' | 'sourceSystem' | 'externalId'>,
+  machine: { sourceSystem: string; externalId: string; plantId: string | null; equipmentClassSlug: string | null },
+): boolean {
+  if (rule.appliesTo === 'account') return true;
+  if (rule.appliesTo === 'plant') return !!machine.plantId && rule.plantId === machine.plantId;
+  // A machine with no class matches no class-scoped rule. Not an oversight: an
+  // unclassified machine has nothing the rule was written about, and treating the
+  // missing class as a match would fire generator rules on anything unlabelled.
+  if (rule.appliesTo === 'equipment-class') {
+    return !!machine.equipmentClassSlug && rule.equipmentClassSlug === machine.equipmentClassSlug;
+  }
+  return rule.sourceSystem === machine.sourceSystem && rule.externalId === machine.externalId;
 }
