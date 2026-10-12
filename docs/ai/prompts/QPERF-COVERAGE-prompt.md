@@ -127,3 +127,35 @@ worktree off `origin/main`, naming the base SHA; full suite on the branch. **Rep
    against a Railway database, which `CLAUDE.md` allows (read-only), but it needs a
    connection string. Recommendation: run it if one is available; if not, the oracle and
    row-count tests above stand on their own.
+
+## Recorded at implementation (2026-10-12)
+
+The §0 table again, same seed and machine (EX-01), local Postgres, median of five. "Before"
+was measured on a worktree off `origin/main` (`d828bc1`).
+
+| | `coverage()` | `machinePage()` |
+|---|---|---|
+| before, fresh seed (never analyzed) | 297.2 ms | 560.2 ms |
+| before, analyzed | 76.1 ms | 166.6 ms |
+| after, seeder's ANALYZE removed | 4.3 ms | 205.2 ms |
+| **after, as shipped** | **2.9 ms** | **105.0 ms** |
+
+Both halves earn their place. The query is most of `coverage()`'s cost; statistics are most
+of the rest of the page's, since its series and bucketed reads also plan badly on an
+unanalyzed load: the new query without ANALYZE still loses to the old one with it.
+
+The new query on the demo machine, `EXPLAIN (ANALYZE, BUFFERS)`: a nested loop over the 6
+segments, each a `Limit 1` over an `Append` of `Index Only Scan Backward using
+…_tenant_id_imei_signal_source_time_idx`, one row each, 24 buffers in all. **Execution
+0.099 ms**, against 54.8 ms for the old plan (a parallel sequential scan of all four
+partitions, 77,766 rows sorted). Older partitions appear in the plan and contribute no rows:
+each probe stops at its first hit.
+
+- §7 Q3 was not answered by measurement. Reading the Railway database's plan was refused
+  by the session's permission check (production reads), and was not retried. The oracle,
+  rows-read and pruning tests stand on their own, as the decision allowed.
+- The per-requirement binding read (§2) loads all rows for the machine's required roles in
+  one query and filters by `(measurement_role, component_scope)` in memory, the exact
+  filter the loop used.
+- Mutation-checked: restoring the old query fails the rows-read test; restoring the old
+  loop fails the query-count test. The old query passes the oracle tests, as it must.
