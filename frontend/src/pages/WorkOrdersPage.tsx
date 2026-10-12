@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, UserRound } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
-  ApiError, AssetForecast, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus, WorkOrder,
-  WorkOrderPriority, WorkOrderStatus, apiActOnWorkOrder, apiGetDeviceHealthFleet, apiGetServiceForecast,
-  apiListEquipment, apiListPlants, apiListWorkOrders, apiRaiseWorkOrder,
+  ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput,
+  ServiceStatus, TenantUser, WorkOrder, WorkOrderEvent, WorkOrderEventKind, WorkOrderPriority, WorkOrderStatus,
+  apiActOnWorkOrder, apiAssignWorkOrder, apiEditWorkOrder, apiGetDeviceHealthFleet, apiGetServiceForecast,
+  apiGetWorkOrderHistory, apiListEquipment, apiListPlants, apiListTenantUsers, apiListWorkOrders, apiRaiseWorkOrder,
 } from '../lib/api';
 
 const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'emerald'> = {
@@ -30,6 +31,13 @@ const STATUS_STYLE: Record<WorkOrderStatus, string> = {
 };
 const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 
+const EVENT_LABEL: Record<WorkOrderEventKind, string> = {
+  raised: 'Raised', assigned: 'Assigned', unassigned: 'Unassigned', started: 'Started',
+  completed: 'Completed', cancelled: 'Cancelled', reopened: 'Reopened', edited: 'Edited',
+};
+
+const ACTION_BUTTON = 'px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 cursor-pointer';
+
 export const WorkOrdersPage: React.FC = () => {
   usePageHeader({ title: 'Work Orders', subtitle: 'Maintenance Tasks' });
 
@@ -46,6 +54,13 @@ export const WorkOrdersPage: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [prefill, setPrefill] = useState<{ equipmentKey: string; title: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // null, not [], when the list can't be read: GET /identity/users needs user.manage,
+  // which a manager who may assign jobs (action.assign) doesn't necessarily hold — the
+  // assign form has to tell "nobody to pick" apart from "not allowed to see who".
+  const [users, setUsers] = useState<TenantUser[] | null>(null);
+  const [editing, setEditing] = useState<WorkOrder | null>(null);
+  const [assigning, setAssigning] = useState<WorkOrder | null>(null);
+  const [historyOf, setHistoryOf] = useState<WorkOrder | null>(null);
 
   const refresh = async () => {
     try {
@@ -65,6 +80,7 @@ export const WorkOrdersPage: React.FC = () => {
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiGetDeviceHealthFleet().then((rows) => { if (live) setLinkHealth(rows); }).catch(() => {});
     apiGetServiceForecast().then((r) => { if (live) setServiceDue(r.assets); }).catch(() => {});
+    apiListTenantUsers().then((u) => { if (live) setUsers(u); }).catch(() => {});
     apiListWorkOrders()
       .then((o) => { if (live) { setOrders(o); setError(undefined); } })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load work orders.'); })
@@ -75,6 +91,7 @@ export const WorkOrdersPage: React.FC = () => {
   const profileOf = (sourceSystem: string, externalId: string) =>
     equipment.find((e) => e.sourceSystem === sourceSystem && e.externalId === externalId);
   const equipmentName = (sourceSystem: string, externalId: string) => profileOf(sourceSystem, externalId)?.name ?? externalId;
+  const userName = (id: string) => users?.find((u) => u.id === id)?.fullName ?? 'a user';
   const connectionOf = (externalId: string): 'online' | 'offline' | null => {
     const row = linkHealth.find((r) => r.externalId === externalId);
     if (!row) return null;
@@ -139,6 +156,26 @@ export const WorkOrdersPage: React.FC = () => {
       window.alert(err instanceof ApiError ? err.message : 'Could not update this job.');
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function editOrder(order: WorkOrder, input: EditWorkOrderInput) {
+    try {
+      await apiEditWorkOrder(order.id, input);
+      setEditing(null);
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not save this job.');
+    }
+  }
+
+  async function assignOrder(order: WorkOrder, userId: string | null, note?: string) {
+    try {
+      await apiAssignWorkOrder(order.id, userId, note);
+      setAssigning(null);
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not assign this job.');
     }
   }
 
@@ -247,6 +284,12 @@ export const WorkOrdersPage: React.FC = () => {
               <p className="text-sm text-slate-500 dark:text-slate-400">{equipmentName(o.sourceSystem, o.externalId)}</p>
               {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}
               {o.resolution && <p className="text-xs text-slate-400 dark:text-slate-500">Resolution: {o.resolution}</p>}
+              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                <UserRound className="w-3.5 h-3.5" />
+                {o.assignedToUserId ? userName(o.assignedToUserId) : 'Unassigned'}
+                <span className="text-slate-300 dark:text-slate-600">·</span>
+                <span className="capitalize">{o.priority}</span>
+              </p>
               <small className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 pt-1">
                 <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString()}
                 {o.dueAt ? ` · due ${new Date(o.dueAt).toLocaleDateString()}` : ''}
@@ -255,23 +298,34 @@ export const WorkOrdersPage: React.FC = () => {
                 {(o.status === 'created' || o.status === 'in-progress') && (
                   <>
                     {o.status === 'created' && (
-                      <button disabled={busyId === o.id} onClick={() => act(o, 'start')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+                      <button disabled={busyId === o.id} onClick={() => act(o, 'start')} className={`${ACTION_BUTTON} hover:border-sky-300`}>
                         Start
                       </button>
                     )}
-                    <button disabled={busyId === o.id} onClick={() => act(o, 'complete')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
+                    <button disabled={busyId === o.id} onClick={() => act(o, 'complete')} className={`${ACTION_BUTTON} hover:border-emerald-300`}>
                       Complete
                     </button>
-                    <button disabled={busyId === o.id} onClick={() => act(o, 'cancel')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-rose-300 disabled:opacity-50 cursor-pointer">
+                    <button disabled={busyId === o.id} onClick={() => act(o, 'cancel')} className={`${ACTION_BUTTON} hover:border-rose-300`}>
                       Cancel
+                    </button>
+                    {/* Open and in-progress only: the backend refuses to reassign a
+                        closed job until it is reopened. */}
+                    <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className={`${ACTION_BUTTON} hover:border-sky-300`}>
+                      Assign
                     </button>
                   </>
                 )}
                 {(o.status === 'completed' || o.status === 'cancelled') && (
-                  <button disabled={busyId === o.id} onClick={() => act(o, 'reopen')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+                  <button disabled={busyId === o.id} onClick={() => act(o, 'reopen')} className={`${ACTION_BUTTON} hover:border-sky-300`}>
                     Reopen
                   </button>
                 )}
+                <button disabled={busyId === o.id} onClick={() => setEditing(o)} className={`${ACTION_BUTTON} hover:border-sky-300`}>
+                  Edit
+                </button>
+                <button onClick={() => setHistoryOf(o)} className={`${ACTION_BUTTON} hover:border-sky-300`}>
+                  History
+                </button>
               </div>
             </div>
           ))}
@@ -281,7 +335,193 @@ export const WorkOrdersPage: React.FC = () => {
       <Modal isOpen={creating} onClose={() => { setCreating(false); setPrefill(null); }} title="Create work order" subtitle="New Maintenance Task" maxWidth="max-w-xl">
         <CreateWorkOrderForm equipment={equipment} initial={prefill} onCancel={() => { setCreating(false); setPrefill(null); }} onCreate={createOrder} />
       </Modal>
+
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit work order" subtitle={editing?.reference} maxWidth="max-w-xl">
+        {editing && <EditWorkOrderForm key={editing.id} order={editing} onCancel={() => setEditing(null)} onSave={(input) => editOrder(editing, input)} />}
+      </Modal>
+
+      <Modal isOpen={!!assigning} onClose={() => setAssigning(null)} title="Assign work order" subtitle={assigning?.reference} maxWidth="max-w-md">
+        {assigning && (
+          <AssignWorkOrderForm
+            key={assigning.id}
+            order={assigning}
+            users={users}
+            onCancel={() => setAssigning(null)}
+            onAssign={(userId, note) => assignOrder(assigning, userId, note)}
+          />
+        )}
+      </Modal>
+
+      <Modal isOpen={!!historyOf} onClose={() => setHistoryOf(null)} title="Work order history" subtitle={historyOf ? `${historyOf.reference} · ${historyOf.title}` : undefined} maxWidth="max-w-xl">
+        {historyOf && <WorkOrderHistory key={historyOf.id} order={historyOf} userName={userName} />}
+      </Modal>
     </div>
+  );
+};
+
+const EditWorkOrderForm: React.FC<{
+  order: WorkOrder;
+  onCancel: () => void;
+  onSave: (input: EditWorkOrderInput) => void;
+}> = ({ order, onCancel, onSave }) => {
+  const [title, setTitle] = useState(order.title);
+  const [priority, setPriority] = useState<WorkOrderPriority>(order.priority);
+  const [description, setDescription] = useState(order.description ?? '');
+  const [dueAt, setDueAt] = useState(order.dueAt ? order.dueAt.slice(0, 10) : '');
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!title.trim()) return;
+        onSave({
+          title: title.trim(),
+          priority,
+          description: description.trim(),
+          // Only sent when set: PATCH /work-orders/:id treats a missing or empty dueAt
+          // as "leave it", so a due date can be moved but not removed from here.
+          dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
+        });
+      }}
+    >
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Task</span>
+        <Input required value={title} onChange={(value) => setTitle(value)} />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Priority</span>
+          <SelectPicker
+            data={PRIORITY_OPTIONS.map((p) => ({ label: p, value: p }))}
+            value={priority}
+            onChange={(value) => setPriority((value ?? 'normal') as WorkOrderPriority)}
+            block
+            searchable={false}
+            cleanable={false}
+          />
+        </div>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Due date</span>
+          <input
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
+          />
+          {order.dueAt && <span className="block text-[11px] text-slate-400">Left empty, the current due date stays.</span>}
+        </label>
+      </div>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Description</span>
+        <Input as="textarea" rows={3} value={description} onChange={(value) => setDescription(value)} />
+      </label>
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+          Cancel
+        </button>
+        <button type="submit" disabled={!title.trim()} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
+          Save changes
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const UNASSIGNED = '__unassigned__';
+
+const AssignWorkOrderForm: React.FC<{
+  order: WorkOrder;
+  users: TenantUser[] | null;
+  onCancel: () => void;
+  onAssign: (userId: string | null, note?: string) => void;
+}> = ({ order, users, onCancel, onAssign }) => {
+  const [choice, setChoice] = useState<string>(order.assignedToUserId ?? UNASSIGNED);
+  const [note, setNote] = useState('');
+  // Suspended and invited users can't open the job, so they aren't offered; the backend
+  // separately refuses anyone whose site/machine access doesn't cover this machine.
+  const options = (users ?? []).filter((u) => u.status === 'active');
+  const unchanged = choice === (order.assignedToUserId ?? UNASSIGNED);
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (unchanged) return;
+        onAssign(choice === UNASSIGNED ? null : choice, note.trim() || undefined);
+      }}
+    >
+      {users === null && (
+        <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+          Your role can't list this account's users, so only unassigning is available here.
+        </p>
+      )}
+      <div className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Assign to</span>
+        <SelectPicker
+          data={[
+            { label: 'Unassigned', value: UNASSIGNED },
+            ...options.map((u) => ({ label: `${u.fullName} (${u.email})`, value: u.id })),
+          ]}
+          value={choice}
+          onChange={(value) => setChoice(value ?? UNASSIGNED)}
+          block
+          searchable
+          cleanable={false}
+        />
+      </div>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Note (optional)</span>
+        <Input value={note} onChange={(value) => setNote(value)} placeholder="e.g. On site Thursday" />
+      </label>
+      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+          Cancel
+        </button>
+        <button type="submit" disabled={unchanged} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
+          {choice === UNASSIGNED ? 'Unassign' : 'Assign'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const WorkOrderHistory: React.FC<{ order: WorkOrder; userName: (id: string) => string }> = ({ order, userName }) => {
+  const [events, setEvents] = useState<WorkOrderEvent[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetWorkOrderHistory(order.id)
+      .then((e) => { if (live) setEvents(e); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load history.'); });
+    return () => { live = false; };
+  }, [order.id]);
+
+  if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!events) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (events.length === 0) return <p className="text-sm text-slate-400">No history recorded.</p>;
+
+  // Oldest first, as the backend returns it — the story of a job reads top to bottom.
+  return (
+    <ol className="space-y-2">
+      {events.map((ev) => (
+        <li key={ev.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-0.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{EVENT_LABEL[ev.kind]}</span>
+            <span className="text-slate-400">{new Date(ev.at).toLocaleString()}</span>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400">
+            by {userName(ev.actorUserId)}
+            {ev.fromStatus && ev.toStatus && ev.fromStatus !== ev.toStatus && ` · ${STATUS_LABEL[ev.fromStatus]} → ${STATUS_LABEL[ev.toStatus]}`}
+            {ev.kind === 'assigned' && ev.toAssignee && ` · to ${userName(ev.toAssignee)}`}
+            {ev.kind === 'unassigned' && ev.fromAssignee && ` · from ${userName(ev.fromAssignee)}`}
+          </p>
+          {ev.note && ev.kind !== 'raised' && <p className="text-slate-600 dark:text-slate-300">“{ev.note}”</p>}
+        </li>
+      ))}
+    </ol>
   );
 };
 
