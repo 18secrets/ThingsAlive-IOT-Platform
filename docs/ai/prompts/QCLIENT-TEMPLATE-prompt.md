@@ -138,3 +138,23 @@ The report names the four template-detail panels the UI must re-point to `my-cat
 5. **Delete, or archive?** Recommendation: delete. Nothing references a template after it
    is copied into equipment (§1), so there is no history to protect, and an archive state
    would be a lifecycle this table was designed not to have.
+
+## Recorded at implementation (2026-10-12)
+
+- Platform roles are refused in the service, not only by the capability gate: Master Admin
+  holds both `equipment.write` and `equipment-template.read` in the static table, so the
+  gate alone would have let it in. Tested at the service and over HTTP.
+- `equipment-template.read` is Master Admin's alone in the static table; tenant users get it
+  from their role rows (the three role templates carry it). A client role edited to drop it
+  loses the list along with Master Admin's library. Same capability, same answer.
+- `copied_from_id` is not a foreign key. Master Admin's template may be edited or go away;
+  the client's copy is theirs regardless.
+- A second copy of the same master needs its own name (the unique index); the copy route
+  takes an optional `name` for that.
+- A fractional `serviceIntervalHours` is refused by the DTO (`@IsInt`) with a 400, and by
+  the database's integer column if anything gets past it.
+- **For the UI team:** the template detail page's sensors, alert rules, KPI formulas and
+  predictive rules panels (`TemplateAlertRulesPanel`, `TemplateKpiFormulasPanel`,
+  `TemplatePredictiveRulesPanel`, and the sensor links kept in
+  `ta_client_template_sensor_links`) have no backend here by design. Alerts and KPIs that
+  run belong on the client's class copy under `/my-catalog`.
