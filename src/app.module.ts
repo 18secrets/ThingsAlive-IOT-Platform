@@ -18,6 +18,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
 import { IncidentModule } from './incident/incident.module';
+import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
 import { PageModule } from './page/page.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
@@ -93,6 +94,7 @@ export class AppModule {
               KpiModule,
       PageModule,
       IncidentModule,
+      OnboardingStatusModule,
       AssetsModule,
               WorkModule,
               ShiftModule,

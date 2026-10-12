@@ -125,3 +125,30 @@ No migration expected; if one turns out to be needed, say why before writing it.
 5. **`access` done means what?** Recommendation: at least one user other than super admins
    can see the machine. A super admin sees everything, so counting them would make the step
    done for every machine from day one and tell nobody anything.
+
+## Recorded at implementation (2026-10-12)
+
+- **§3's "must not issue a coverage query per machine" was not met, deliberately.**
+  `SignalBindingService.coverage` runs roughly a dozen queries for one machine, and
+  batching it means rewriting its loading and the telemetry reader's latest-reading
+  query: the code the machine page, the site page and the KPI evaluator share so that a
+  signal cannot be fresh on one screen and stale on another. The site page already calls
+  it once per machine (`PageService.machineReadiness`). This endpoint does the same, and
+  reads everything else in a fixed number of queries. The test holds both halves: a
+  constant query count from 6 to 50 machines with coverage stubbed, and exactly one
+  coverage call per classified machine.
+- **Measured locally on the demo tenant** (median of three): summary of 6 machines
+  355 ms; one machine 345 ms; `coverage()` alone for one demo machine 348 ms. The
+  endpoint costs what coverage costs. The same 348 ms sits inside every machine page; that
+  is coverage's own cost and worth a task of its own (a batched coverage, or an index for
+  its latest-reading query), not something to work around here.
+- Alert coverage is the engine's own check, `ruleCoversMachine`, now exported from
+  `alert.service.ts` rather than copied. The engine calls the same function.
+- `device` is done when a device in `assigned` state is claimed onto the machine. The
+  inventory keys a claim by external id alone, with no source system, so that is the key.
+- `access` counts explicit equipment or site grants held by users who are not suspended
+  (invited counts). Tenant-wide roles need no grant and are not counted.
+- A class that declares no required signals makes `mapping` `blocked` with reason
+  `no_requirements` and no step named: it is waiting on the library, not on the person.
+- A machine whose site the caller cannot see is grouped under `site: null` rather than
+  naming that site.
