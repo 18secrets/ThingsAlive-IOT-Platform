@@ -49,6 +49,10 @@ export const OPERATIONAL_PARAMETERS: readonly OperationalParameter[] = [
     name: 'stale_after_seconds', unit: 's', kind: 'number', costTyped: false,
     description: 'How long without a reading before a signal is stale. Overrides the class requirement.',
   },
+  {
+    name: 'shield_due_soon_days', unit: 'd', kind: 'number', costTyped: false,
+    description: 'How many days before an evidence record falls due it reads "due soon" on ThingsShield.',
+  },
 ];
 
 export const COST_PARAMETER_NAMES: readonly string[] = OPERATIONAL_PARAMETERS

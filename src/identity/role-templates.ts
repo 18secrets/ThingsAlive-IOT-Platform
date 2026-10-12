@@ -38,6 +38,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'device.read', 'device.claim',
       'equipment-template.read', 'device-catalog.read',
       'parameters.read', 'parameters.write',
+      'shield.read', 'shield.write',
     ],
     // The account's own administrator gets every page the console has, not a
     // curated subset — "CEO/Manager" is this account's Super Admin (holds
@@ -60,6 +61,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'device.read', 'device.claim',
       'equipment-template.read', 'device-catalog.read',
       'parameters.read',
+      'shield.read', 'shield.write',
     ],
     allowedTabs: ['dashboard', 'ai-onboarding', 'predictions', 'admin', 'settings'],
   },
@@ -74,6 +76,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'action.work', 'catalog.read', 'client-catalog.read',
       'prediction.read', 'utilization.read', 'device.read',
       'equipment-template.read', 'device-catalog.read',
+      'shield.read',
     ],
     allowedTabs: ['dashboard', 'settings'],
   },
