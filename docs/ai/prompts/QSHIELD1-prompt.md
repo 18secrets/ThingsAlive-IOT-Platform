@@ -143,3 +143,25 @@ The user accepted the recommendation on all five.
 5. **Revision:** any holder of `shield.write` may revise any record in scope. Nothing is
    lost by this, because the original stays and `recorded_by` names who revised it. Narrow
    this to the author and admins only if real use shows it is needed.
+
+## Recorded at implementation (2026-10-12)
+
+- The parameter is `shield_due_soon_days`, not `shield.due_soon_days`: every operational
+  parameter name is snake_case, and the database's value check now gives it the same
+  positive-whole-number arm as `stale_after_seconds`.
+- **Standing record per category:** the latest check by `performed_at` among records
+  nothing has corrected. An older check followed by a newer one is history, not a second
+  status. A machine with two different checks in one category (a guard inspection and an
+  extinguisher check, both `safety`) shows only the latest. If that turns out wrong in use,
+  the fix is a check type, not a different rule here.
+- Status precedence: `action_required` > `overdue` > `due_soon` > `current`. The due-soon
+  edge is inclusive.
+- The revision key carries tenant, machine and category, so a revision cannot move any of
+  them — refused by a composite foreign key, not by the service.
+- `ta_app` holds SELECT and INSERT only. With no UPDATE grant it cannot `SELECT ... FOR
+  UPDATE`, so the unique `(tenant_id, supersedes_id)` index decides a revision race.
+- `src/identity/role-templates.ts` changed as well: ceo-manager and site-manager get both
+  capabilities, operator gets `shield.read`. The migration grants the same to existing
+  roles still exactly at the template default, compared as a set. `allowedTabs` is
+  untouched — whether a role sees the ThingsShield tab stays the client's choice.
+- A profile with evidence cannot be deleted (no cascade); evidence outlives a profile.

@@ -36,7 +36,9 @@ export type Capability =
   | 'parameters.read'
   | 'parameters.write'
   | 'entitlement.grant'
-  | 'platform.admin';
+  | 'platform.admin'
+  | 'shield.read'
+  | 'shield.write';
 
 /** The four consumer roles, plus the Things Alive roles that act across tenants. */
 const GRANTS: Record<Capability, readonly string[]> = {
@@ -148,6 +150,15 @@ const GRANTS: Record<Capability, readonly string[]> = {
   'parameters.write': ['super admin'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
+  // ThingsShield evidence: inspections and checks on the client's own machines (task
+  // QSHIELD1). Reading is every role inside the tenant — whether a guard was found
+  // loose is something the operator standing next to it most needs to know. No
+  // platform role: a customer's safety record reached from Things Alive goes through
+  // the audited cross-tenant path, not an ordinary read.
+  'shield.read': ['super admin', 'admin', 'operational', 'support'],
+  // Recording and correcting it. Not `action.work`: an operator closes jobs, but
+  // signing off a safety check is an attestation the account's own admins make.
+  'shield.write': ['super admin', 'admin'],
 };
 
 /**
