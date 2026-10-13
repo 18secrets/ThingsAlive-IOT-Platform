@@ -183,6 +183,12 @@ predates the point the two branches diverged, so merging it brought no decision 
 deliberate or otherwise. `frontend/` is the only front end and is what ships. No UI pages
 are authored from the backend side.
 
+Amended 2026-10-13: for the dashboard-testing fixes (issues 1 to 11 of *Dashboard testing
+new 1*), Tapas asked for the matching `frontend/` changes to ship with the backend fix
+rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The rule above
+still holds everywhere else: no new pages are authored from the backend side, and any
+other `frontend/` change needs the same explicit ask.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
