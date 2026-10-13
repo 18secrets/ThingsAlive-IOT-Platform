@@ -109,8 +109,11 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                 <button
                   onClick={() => { setEditingTemplate(tpl); setIsModalOpen(true); }}
                   className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
+                  title={tpl.status === 'published'
+                    ? `Saving creates v${tpl.version + 1} as a draft. v${tpl.version} stays published until the new one is.`
+                    : undefined}
                 >
-                  Edit draft
+                  {tpl.status === 'published' ? 'Edit as new version' : 'Edit draft'}
                 </button>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{tpl.name}</h4>

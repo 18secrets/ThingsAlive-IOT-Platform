@@ -5,6 +5,7 @@ import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
 import { slugify } from '../../catalog-import/services/sensor-review';
+import { assignDefined } from '../../common/assign-defined';
 import { retiredSensorProblem } from './sensor-retirement';
 
 export interface ResolvedMappedSensor {
@@ -21,19 +22,6 @@ type SensorDraft = Partial<Pick<Sensor, 'sensorName' | 'categoryId' | 'descripti
 type ToolMappingDraft = Partial<Pick<ToolMapping, 'toolName' | 'industryType' | 'protocol'>> & {
   mappedSensors?: MappedSensorRef[];
 };
-
-/**
- * `draft` is a class-validator DTO: every optional field TypeScript declares is
- * defined as an own property (value `undefined`) at construction time, even when the
- * request body omitted it — an ordinary Object.assign would copy those `undefined`s
- * onto the entity and null out fields the caller never touched.
- */
-function assignDefined<T extends object>(target: T, draft: Partial<T>): T {
-  for (const [key, value] of Object.entries(draft)) {
-    if (value !== undefined) (target as unknown as Record<string, unknown>)[key] = value;
-  }
-  return target;
-}
 
 /**
  * Master Admin's reference data for wiring a device before it exists (task: complete

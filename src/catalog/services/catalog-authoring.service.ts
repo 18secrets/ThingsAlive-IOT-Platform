@@ -4,6 +4,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { assignDefined } from '../../common/assign-defined';
 import { compileClassFormulas } from '../formula/formula-compiler';
 import {
   checkDimensions, checkSuspiciousBindings, substituteExpression,
@@ -102,7 +103,7 @@ export class CatalogAuthoringService {
     const working = await this.workingClass(slug);
     const previous = working.id ? working.expectedSignals : [];
     const forked = !working.id;
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     await this.requireSaneSignals(working.expectedSignals, previous);
     this.logger.log(`${scope.userId} edited template class "${slug}" v${working.version}.`);
     return this.classes.manager.transaction(async (m) => {
@@ -380,7 +381,7 @@ export class CatalogAuthoringService {
     const working = await this.workingScenario(slug);
     const classSlug = draft.equipmentClassSlug ?? working.equipmentClassSlug;
     if (draft.requiredSignals) await this.requireDeclaredSignals(classSlug, draft.requiredSignals);
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     this.logger.log(`${scope.userId} edited template scenario "${slug}" v${working.version}.`);
     return this.scenarios.save(working);
   }
@@ -481,7 +482,7 @@ export class CatalogAuthoringService {
     scope: RequestScope, slug: string, draft: AlertTemplateDraft,
   ): Promise<AlertRuleTemplate> {
     const working = await this.workingAlertTemplate(slug);
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     await this.requireAlertTemplateSane(working.equipmentClassSlug, working);
     this.logger.log(`${scope.userId} edited alert template "${slug}" v${working.version}.`);
     return this.alertTemplates.save(working);
