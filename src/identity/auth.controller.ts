@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 import { Public } from '../auth/decorators/public.decorator';
 import { CredentialService } from './services/credential.service';
+import { PasswordService } from './services/password.service';
 import { PlatformCredentialService } from './services/platform-credential.service';
 
 export class SignInDto {
@@ -36,6 +37,7 @@ export class AuthController {
   constructor(
     private readonly credentials: CredentialService,
     private readonly platformCredentials: PlatformCredentialService,
+    private readonly passwords: PasswordService,
   ) {}
 
   @Post('sign-in')
@@ -46,14 +48,19 @@ export class AuthController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent?: string,
   ) {
-    // Checked first, by a cheap indexed lookup on an email that already identifies a
-    // person across the whole platform (see UserService's own comment on app_user.
-    // email) — a platform credential and a tenant one for the same address would be
-    // two accounts nobody could tell apart at sign-in, so this order is what makes
-    // that collision fail loudly (a unique-email check at platform-user creation, not
-    // built yet) rather than picking one silently.
+    // Staff first, by a cheap indexed lookup. An address can no longer be both a staff
+    // and a client login (LoginEmailUnclaimed1759500000000), but pairs created before
+    // that rule still exist, and taking the staff account for them locked the client
+    // user out with "password incorrect" (dashboard testing, issue 2). For such a pair
+    // the password decides: the staff account if it is theirs, otherwise the client
+    // one, whose own lockout then counts the attempt. The check reads the hash only,
+    // so a client signing in never adds failures to the staff account.
     const platformUser = await this.platformCredentials.findByEmail(body.email);
     if (platformUser) {
+      const clientTwin = await this.credentials.hasAccount(body.email);
+      if (clientTwin && !this.passwords.verify(body.password, platformUser.passwordHash)) {
+        return this.credentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
+      }
       return this.platformCredentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
     }
     return this.credentials.signIn(body.email, body.password, { ipAddress: ip, userAgent });
