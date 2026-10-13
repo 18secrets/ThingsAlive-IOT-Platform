@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { DataSource } from 'typeorm';
 import { PlatformRole } from '../../auth/platform-roles';
 import { PlatformUser, PlatformUserStatus } from '../entities/platform-user.entity';
+import { rethrowDeleteRefusal } from '../delete-refusal';
 import { PlatformCredentialService } from './platform-credential.service';
 
 export interface InviteStaffInput {
@@ -117,6 +118,18 @@ export class PlatformStaffService {
     user.suspendedAt = null;
     user.suspendedReason = null;
     return this.view(await repo.save(user));
+  }
+
+  /**
+   * Remove somebody who never signed in: an invitation that went nowhere, or one
+   * suspended before it was accepted (dashboard testing, issue 6). Their email is
+   * free again afterwards. The rule is `delete_unused_platform_user`'s; this service
+   * cannot delete a staff row any other way.
+   */
+  async remove(id: string): Promise<void> {
+    const [row] = await this.ds.query('SELECT delete_unused_platform_user($1::uuid) AS deleted', [id])
+      .catch((err) => rethrowDeleteRefusal(err));
+    if (!row.deleted) throw new NotFoundException('No such platform user.');
   }
 
   private view(user: PlatformUser): PlatformStaffView {

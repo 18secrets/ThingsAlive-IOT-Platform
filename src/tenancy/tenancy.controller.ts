@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ArrayMaxSize, IsArray, IsEmail, IsNotEmpty, IsOptional, IsString, ValidateNested,
@@ -121,5 +121,13 @@ export class TenancyController {
   @ApiOperation({ summary: 'Let the account back in, exactly as it was' })
   reinstate(@CurrentScope() scope: RequestScope, @Param('tenantId') tenantId: string) {
     return this.provisioning.reinstate(scope, tenantId);
+  }
+
+  @Delete(':tenantId')
+  @HttpCode(204)
+  @Requires('tenant.provision')
+  @ApiOperation({ summary: 'Delete a suspended account nobody ever signed in to and that holds no data' })
+  remove(@CurrentScope() scope: RequestScope, @Param('tenantId') tenantId: string) {
+    return this.provisioning.remove(scope, tenantId);
   }
 }
