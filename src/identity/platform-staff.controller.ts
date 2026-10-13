@@ -77,4 +77,12 @@ export class PlatformStaffController {
   reinstate(@Param('id') id: string) {
     return this.staff.reinstate(id);
   }
+
+  @Post(':id/resend-invitation')
+  @Requires('platform.admin')
+  @ApiOperation({ summary: 'A new invitation for somebody who lost theirs. The old one stops working' })
+  async resendInvitation(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    const { email, token, expiresAt } = await this.credentials.reissueInvitation(id, scope.userId);
+    return { email, invitationToken: token, invitationExpiresAt: expiresAt };
+  }
 }
