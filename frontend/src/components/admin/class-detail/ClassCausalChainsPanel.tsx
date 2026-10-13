@@ -100,7 +100,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {chain.nodes.map((n) => (
+              {chain.nodes.filter((n) => typeof n?.signal === 'string').map((n) => (
                 <span
                   key={n.signal}
                   className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
@@ -109,7 +109,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
                   {n.signal}
                 </span>
               ))}
-              {chain.nodes.length === 0 && <span className="text-[11px] text-slate-400 italic">No stages yet</span>}
+              {!chain.nodes.some((n) => typeof n?.signal === 'string') && <span className="text-[11px] text-slate-400 italic">No stages yet</span>}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
