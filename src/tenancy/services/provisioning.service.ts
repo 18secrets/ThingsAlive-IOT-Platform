@@ -6,6 +6,8 @@ import { DomainEvent } from '../../events/domain-event.entity';
 import { AppUser, UserStatus } from '../../identity/entities/app-user.entity';
 import { TenantRole } from '../../identity/entities/tenant-role.entity';
 import { UserInvitation } from '../../identity/entities/user-invitation.entity';
+import { loginEmailTaken, rethrowLoginEmailClash } from '../../identity/login-email';
+import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { ROLE_TEMPLATES } from '../../identity/role-templates';
 import { PasswordService } from '../../identity/services/password.service';
 import { TenantMap } from '../../projection/entities/tenant-map.entity';
@@ -109,10 +111,10 @@ export class ProvisioningService {
         );
       }
 
-      // Email is unique platform-wide, and finding out after the account exists would
-      // leave exactly the half-provisioned state this transaction is here to prevent.
-      const taken = await m.getRepository(AppUser).findOne({ where: { email }, select: { id: true } });
-      if (taken) throw new ConflictException(`${email} already has a login.`);
+      // Email is unique platform-wide, staff included, and finding out after the account
+      // exists would leave exactly the half-provisioned state this transaction is here
+      // to prevent.
+      if (await loginEmailTaken(m, email)) throw new ConflictException(`${email} already has a login.`);
 
       const tenant = await this.createTenant(m, scope, tenantId, input, now);
       await this.mapExternalClients(m, tenantId, input, now);
@@ -153,6 +155,21 @@ export class ProvisioningService {
   ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
     this.requirePlatform(scope);
     return this.setStatus(scope, tenantId, 'active', null, now);
+  }
+
+  /**
+   * Delete an account that was never used (dashboard testing, issue 6): created,
+   * perhaps mistyped, and never signed in to. It must be suspended first, nobody in
+   * it may have set a password, and it may hold nothing beyond what provisioning
+   * wrote. Those rules are `delete_unused_tenant`'s, which is the only way the
+   * application can delete an account. Anything that has been used stays suspended,
+   * because its machines and history belong to a customer.
+   */
+  async remove(scope: RequestScope, tenantId: string): Promise<void> {
+    this.requirePlatform(scope);
+    const [row] = await this.ds.query('SELECT delete_unused_tenant($1) AS deleted', [tenantId])
+      .catch((err) => rethrowDeleteRefusal(err));
+    if (!row.deleted) throw new NotFoundException(`No account "${tenantId}".`);
   }
 
   async list(scope: RequestScope): Promise<(Tenant & { superAdmin: SuperAdminContact | null })[]> {
@@ -234,12 +251,11 @@ export class ProvisioningService {
         if (input.superAdmin.email !== undefined) {
           const email = input.superAdmin.email.trim().toLowerCase();
           if (email !== admin.email) {
-            const taken = await users.findOne({ where: { email }, select: { id: true } });
-            if (taken) throw new ConflictException(`${email} already has a login.`);
+            if (await loginEmailTaken(m, email)) throw new ConflictException(`${email} already has a login.`);
             admin.email = email;
           }
         }
-        await users.save(admin);
+        await users.save(admin).catch((err) => rethrowLoginEmailClash(err, admin.email));
         superAdmin = { fullName: admin.fullName, email: admin.email, phone: admin.phone, status: admin.status };
       }
 
@@ -361,7 +377,7 @@ export class ProvisioningService {
       failedAttempts: 0, lockedUntil: null,
       invitedBy: by, invitedAt: now, activatedAt: null,
       suspendedAt: null, suspendedReason: null,
-    }));
+    })).catch((err) => rethrowLoginEmailClash(err, email));
   }
 
   private async inviteSuperAdmin(

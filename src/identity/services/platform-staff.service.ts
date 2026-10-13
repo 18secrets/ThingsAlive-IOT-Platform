@@ -1,7 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { PlatformRole } from '../../auth/platform-roles';
+import { runTenantSpanning } from '../../scope/tenant-session';
+import { AppUser } from '../entities/app-user.entity';
 import { PlatformUser, PlatformUserStatus } from '../entities/platform-user.entity';
+import { rethrowLoginEmailClash } from '../login-email';
+import { rethrowDeleteRefusal } from '../delete-refusal';
 import { PlatformCredentialService } from './platform-credential.service';
 
 export interface InviteStaffInput {
@@ -65,11 +69,18 @@ export class PlatformStaffService {
     const existing = await repo.findOne({ where: { email }, select: { id: true } });
     if (existing) throw new ConflictException(`${email} already has a platform credential.`);
 
+    // A client user on the same address would lose their login the moment this one
+    // existed: sign-in tries staff first. Client users sit behind row-level security
+    // and this request has no tenant, so the look has to span every account.
+    const client = await runTenantSpanning(this.ds, `staff invite uniqueness check by ${by}`, (m) =>
+      m.getRepository(AppUser).exists({ where: { email } }));
+    if (client) throw new ConflictException(`${email} already has a login.`);
+
     const user = await repo.save(repo.create({
       email, fullName: input.fullName.trim(), role: input.role,
       status: 'invited', passwordHash: null,
       invitedBy: by, invitedAt: now, activatedAt: null,
-    }));
+    })).catch((err) => rethrowLoginEmailClash(err, email));
     return this.view(user);
   }
 
@@ -117,6 +128,18 @@ export class PlatformStaffService {
     user.suspendedAt = null;
     user.suspendedReason = null;
     return this.view(await repo.save(user));
+  }
+
+  /**
+   * Remove somebody who never signed in: an invitation that went nowhere, or one
+   * suspended before it was accepted (dashboard testing, issue 6). Their email is
+   * free again afterwards. The rule is `delete_unused_platform_user`'s; this service
+   * cannot delete a staff row any other way.
+   */
+  async remove(id: string): Promise<void> {
+    const [row] = await this.ds.query('SELECT delete_unused_platform_user($1::uuid) AS deleted', [id])
+      .catch((err) => rethrowDeleteRefusal(err));
+    if (!row.deleted) throw new NotFoundException('No such platform user.');
   }
 
   private view(user: PlatformUser): PlatformStaffView {

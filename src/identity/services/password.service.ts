@@ -66,7 +66,11 @@ export class PasswordService {
     }
     const local = email?.split('@')[0]?.toLowerCase();
     if (local && local.length > 2 && value.toLowerCase().includes(local)) {
-      throw new BadRequestException('A password should not contain your own email address.');
+      // Name the part that matched. "Test@sbi123" against sbi@gmail.com looked like a
+      // false alarm to the person typing it, because nothing in it reads as an email.
+      throw new BadRequestException(
+        `A password should not contain your own email address, including "${local}", the part before the @.`,
+      );
     }
   }
 
