@@ -7,6 +7,7 @@ import { AppUser, UserStatus } from '../../identity/entities/app-user.entity';
 import { TenantRole } from '../../identity/entities/tenant-role.entity';
 import { UserInvitation } from '../../identity/entities/user-invitation.entity';
 import { loginEmailTaken, rethrowLoginEmailClash } from '../../identity/login-email';
+import { isPhoneClash, normalisePhone, phoneTaken, phoneTakenError } from '../../identity/phone';
 import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { ROLE_TEMPLATES } from '../../identity/role-templates';
 import { PasswordService } from '../../identity/services/password.service';
@@ -98,6 +99,7 @@ export class ProvisioningService {
     }
     const email = input.superAdmin.email.trim().toLowerCase();
     if (!email.includes('@')) throw new BadRequestException('That is not an email address.');
+    const phone = normalisePhone(input.superAdmin.phone);
 
     return runTenantSpanning(this.ds, `provision ${tenantId} by ${scope.userId}`, async (m) => {
       const existing = await m.getRepository(Tenant).findOne({ where: { tenantId } });
@@ -115,12 +117,13 @@ export class ProvisioningService {
       // exists would leave exactly the half-provisioned state this transaction is here
       // to prevent.
       if (await loginEmailTaken(m, email)) throw new ConflictException(`${email} already has a login.`);
+      if (phone && await phoneTaken(m, phone)) throw phoneTakenError(phone);
 
       const tenant = await this.createTenant(m, scope, tenantId, input, now);
       await this.mapExternalClients(m, tenantId, input, now);
       const roles = await this.copyRoleTemplates(m, tenantId, scope.userId, now);
       const admin = await this.seedSuperAdmin(
-        m, tenantId, email, input.superAdmin.fullName, input.superAdmin.phone ?? null, scope.userId, now,
+        m, tenantId, email, input.superAdmin.fullName, phone, scope.userId, now,
       );
       const invitation = await this.inviteSuperAdmin(m, tenant, admin, scope.userId, now);
 
@@ -247,7 +250,11 @@ export class ProvisioningService {
           );
         }
         if (input.superAdmin.fullName !== undefined) admin.fullName = input.superAdmin.fullName.trim();
-        if (input.superAdmin.phone !== undefined) admin.phone = input.superAdmin.phone?.trim() || null;
+        if (input.superAdmin.phone !== undefined) {
+          const phone = normalisePhone(input.superAdmin.phone);
+          if (phone && phone !== admin.phone && await phoneTaken(m, phone, admin.id)) throw phoneTakenError(phone);
+          admin.phone = phone;
+        }
         if (input.superAdmin.email !== undefined) {
           const email = input.superAdmin.email.trim().toLowerCase();
           if (email !== admin.email) {
@@ -255,7 +262,10 @@ export class ProvisioningService {
             admin.email = email;
           }
         }
-        await users.save(admin).catch((err) => rethrowLoginEmailClash(err, admin.email));
+        await users.save(admin).catch((err) => {
+          if (isPhoneClash(err) && admin.phone) throw phoneTakenError(admin.phone);
+          return rethrowLoginEmailClash(err, admin.email);
+        });
         superAdmin = { fullName: admin.fullName, email: admin.email, phone: admin.phone, status: admin.status };
       }
 
@@ -371,13 +381,16 @@ export class ProvisioningService {
   ): Promise<AppUser> {
     const repo = m.getRepository(AppUser);
     return repo.save(repo.create({
-      tenantId, email, fullName: fullName.trim(), phone: phone?.trim() || null,
+      tenantId, email, fullName: fullName.trim(), phone,
       roleSlug: 'ceo-manager', status: 'invited', passwordHash: null,
       externalUserId: null, externalSourceSystem: null,
       failedAttempts: 0, lockedUntil: null,
       invitedBy: by, invitedAt: now, activatedAt: null,
       suspendedAt: null, suspendedReason: null,
-    })).catch((err) => rethrowLoginEmailClash(err, email));
+    })).catch((err) => {
+      if (isPhoneClash(err) && phone) throw phoneTakenError(phone);
+      return rethrowLoginEmailClash(err, email);
+    });
   }
 
   private async inviteSuperAdmin(
