@@ -394,6 +394,16 @@ export class CredentialService {
   // -------------------------------------------------------------------- resetting
 
   /**
+   * Whether a client user signs in with this address. Tenant-spanning because sign-in
+   * has no tenant yet; it reveals nothing to the caller, only to `AuthController`.
+   */
+  async hasAccount(email: string): Promise<boolean> {
+    const normalised = email.trim().toLowerCase();
+    return runTenantSpanning(this.ds, 'sign-in account lookup', (m) =>
+      m.getRepository(AppUser).exists({ where: { email: normalised } }));
+  }
+
+  /**
    * Always the same answer.
    *
    * This is the one place where refusing to say whether an address exists costs

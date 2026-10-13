@@ -28,7 +28,7 @@ describeDb('password reset email', () => {
 
   const controller = () => {
     const mail = new MailService({ get: (key: string) => settings[key] } as unknown as ConfigService);
-    return new AuthController(credentials, platformCredentials, mail);
+    return new AuthController(credentials, platformCredentials, passwords, mail);
   };
 
   beforeAll(async () => {
