@@ -12,6 +12,7 @@ interface UsersPageProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
   clients: ClientAccount[];
   clientUsers: ClientUserItem[];
   roles: RoleDefinition[];

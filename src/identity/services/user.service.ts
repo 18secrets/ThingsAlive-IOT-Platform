@@ -7,6 +7,7 @@ import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
 import { UserSession } from '../entities/user-session.entity';
 import { loginEmailTaken, rethrowLoginEmailClash } from '../login-email';
+import { rethrowDeleteRefusal } from '../delete-refusal';
 
 export interface InviteInput {
   email: string;
@@ -177,6 +178,21 @@ export class UserService {
 
   async reinstate(scope: RequestScope, userId: string, now = new Date()): Promise<UserView> {
     return this.setStatus(scope, userId, 'active', null, now);
+  }
+
+  /**
+   * Remove somebody who never signed in (dashboard testing, issue 6), so an abandoned
+   * invitation stops holding their email. Refused once they have set a password, and
+   * for the account's only super admin. Both rules are `delete_unused_app_user`'s,
+   * which finds the person through this session's own tenant.
+   */
+  async remove(scope: RequestScope, userId: string): Promise<void> {
+    const [row] = await withTenantSession(this.ds, scope, (m) =>
+      m.query('SELECT delete_unused_app_user($1::uuid) AS deleted', [userId]))
+      .catch((err) => rethrowDeleteRefusal(
+        err, 'Other records still name this person, so they cannot be deleted. Suspend them instead.',
+      ));
+    if (!row.deleted) throw new NotFoundException('No such person in this account.');
   }
 
   private async setStatus(
