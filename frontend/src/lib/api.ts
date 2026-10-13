@@ -2831,6 +2831,12 @@ export function apiEditWorkOrder(id: string, input: EditWorkOrderInput): Promise
   return authFetch(`/work-orders/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
+/** Active people in this account, by name — the assignee picker and the history read
+ *  names from here (`action.work`; works for a site manager, unlike /identity/users). */
+export function apiListWorkOrderPeople(): Promise<{ id: string; fullName: string }[]> {
+  return authFetch("/work-orders/people");
+}
+
 export function apiAssignWorkOrder(id: string, userId: string | null, note?: string): Promise<WorkOrder> {
   return authFetch(`/work-orders/${encodeURIComponent(id)}/assign`, {
     method: "POST",
