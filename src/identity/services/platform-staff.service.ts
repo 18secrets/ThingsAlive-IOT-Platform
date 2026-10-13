@@ -1,7 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { PlatformRole } from '../../auth/platform-roles';
+import { runTenantSpanning } from '../../scope/tenant-session';
+import { AppUser } from '../entities/app-user.entity';
 import { PlatformUser, PlatformUserStatus } from '../entities/platform-user.entity';
+import { rethrowLoginEmailClash } from '../login-email';
 import { rethrowDeleteRefusal } from '../delete-refusal';
 import { PlatformCredentialService } from './platform-credential.service';
 
@@ -66,11 +69,18 @@ export class PlatformStaffService {
     const existing = await repo.findOne({ where: { email }, select: { id: true } });
     if (existing) throw new ConflictException(`${email} already has a platform credential.`);
 
+    // A client user on the same address would lose their login the moment this one
+    // existed: sign-in tries staff first. Client users sit behind row-level security
+    // and this request has no tenant, so the look has to span every account.
+    const client = await runTenantSpanning(this.ds, `staff invite uniqueness check by ${by}`, (m) =>
+      m.getRepository(AppUser).exists({ where: { email } }));
+    if (client) throw new ConflictException(`${email} already has a login.`);
+
     const user = await repo.save(repo.create({
       email, fullName: input.fullName.trim(), role: input.role,
       status: 'invited', passwordHash: null,
       invitedBy: by, invitedAt: now, activatedAt: null,
-    }));
+    })).catch((err) => rethrowLoginEmailClash(err, email));
     return this.view(user);
   }
 
