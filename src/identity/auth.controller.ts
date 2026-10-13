@@ -1,8 +1,9 @@
-import { Body, Controller, Headers, Ip, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Ip, Optional, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 import { Public } from '../auth/decorators/public.decorator';
-import { CredentialService } from './services/credential.service';
+import { MailService } from '../mail/mail.service';
+import { CredentialService, RESET_HOURS } from './services/credential.service';
 import { PlatformCredentialService } from './services/platform-credential.service';
 
 export class SignInDto {
@@ -36,6 +37,9 @@ export class AuthController {
   constructor(
     private readonly credentials: CredentialService,
     private readonly platformCredentials: PlatformCredentialService,
+    // Last and optional so the controller can be built without it in a test that
+    // never resets a password; Nest always supplies it.
+    @Optional() private readonly mail?: MailService,
   ) {}
 
   @Post('sign-in')
@@ -104,7 +108,14 @@ export class AuthController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent?: string,
   ) {
-    await this.credentials.requestReset(body.email, { ipAddress: ip, userAgent });
+    const ctx = { ipAddress: ip, userAgent };
+    // A client user first, then staff: one screen serves both, and the set-password
+    // screen the link opens accepts either kind of token.
+    const client = await this.credentials.requestReset(body.email, ctx);
+    const token = client.token ?? (await this.platformCredentials.requestReset(body.email, ctx)).token;
+    // Sent without waiting, so the response takes as long for an unknown address as for
+    // a known one. MailService logs a failure and never throws.
+    if (token) void this.mail?.sendPasswordReset(body.email.trim().toLowerCase(), token, RESET_HOURS);
     // Identical whether or not an account was found. The token goes by email; it does
     // not come back down this response, or this route would be a way to take over any
     // account whose address somebody could guess.

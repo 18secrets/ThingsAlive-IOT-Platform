@@ -12,6 +12,8 @@ export const AcceptInvitationScreen: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialToken = searchParams.get('invite') ?? undefined;
+  // A reset link from the forgot-password email opens this same screen.
+  const isReset = searchParams.get('reset') === '1';
 
   const [token, setToken] = useState(initialToken ?? '');
   const [password, setPassword] = useState('');
@@ -37,7 +39,7 @@ export const AcceptInvitationScreen: React.FC = () => {
       await acceptInvitation(trimmedToken, trimmedNew);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not accept the invitation.');
+      setError(err instanceof ApiError ? err.message : isReset ? 'Could not reset the password.' : 'Could not accept the invitation.');
     } finally {
       setBusy(false);
     }
@@ -55,10 +57,14 @@ export const AcceptInvitationScreen: React.FC = () => {
           <div className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center mb-3">
             <KeyRound className="w-4.5 h-4.5" />
           </div>
-          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Accept your invitation</h1>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+            {isReset ? 'Choose a new password' : 'Accept your invitation'}
+          </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5">
-            Paste the invitation token Things Alive gave you, then choose a password. This is the only time
-            you'll need the token — after this you sign in with just your email.
+            {isReset
+              ? 'Your reset link filled in the token below. Choose a new password; the link works once.'
+              : <>Paste the invitation token Things Alive gave you, then choose a password. This is the only time
+                you'll need the token — after this you sign in with just your email.</>}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

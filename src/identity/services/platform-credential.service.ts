@@ -10,7 +10,7 @@ import { PlatformUser } from '../entities/platform-user.entity';
 import { PlatformSession } from '../entities/platform-session.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
 import { PasswordService } from './password.service';
-import { ACCESS_TOKEN_SECONDS, RequestContext, SignInResult } from './credential.service';
+import { ACCESS_TOKEN_SECONDS, RESET_HOURS, RequestContext, SignInResult } from './credential.service';
 
 type Refusal = { kind: 'refused'; message: string };
 type Allowed<T> = { kind: 'allowed'; value: T };
@@ -278,6 +278,38 @@ export class PlatformCredentialService {
       expiresAt, consumedAt: null, createdBy: by,
     }));
     return { email: user.email, token, expiresAt };
+  }
+
+  /**
+   * A reset token for a staff member who forgot their password (dashboard testing,
+   * issue 10). Staff had no way back in at all: change-password needs the current one.
+   *
+   * It is a `platform_invitation` with the reset's short life rather than a new kind of
+   * row: accepting one already sets the password, activates the account and ends every
+   * session, which is exactly a reset. Outstanding tokens are retired first, and a
+   * suspended person gets nothing — same as `CredentialService.requestReset`, and like
+   * it this says nothing to the caller about whether the address exists.
+   */
+  async requestReset(email: string, ctx: RequestContext = {}, now = new Date()): Promise<{ token?: string }> {
+    const normalised = email.trim().toLowerCase();
+    return runTenantSpanning(this.ds, 'platform password reset request', async (m) => {
+      const user = await m.getRepository(PlatformUser).findOne({
+        where: { email: normalised }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!user || user.status === 'suspended') return {};
+
+      const repo = m.getRepository(PlatformInvitation);
+      await repo.update({ platformUserId: user.id, consumedAt: IsNull() }, { consumedAt: now });
+      const token = this.passwords.newToken();
+      await repo.save(repo.create({
+        platformUserId: user.id,
+        tokenHash: this.passwords.fingerprint(token),
+        expiresAt: new Date(now.getTime() + RESET_HOURS * 3_600_000),
+        consumedAt: null, createdBy: null,
+      }));
+      await this.record(m, 'password.reset-requested', { userId: user.id, ctx });
+      return { token };
+    });
   }
 
   /**
