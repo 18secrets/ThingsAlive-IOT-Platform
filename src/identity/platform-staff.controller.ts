@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsIn, IsNotEmpty, IsString } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
@@ -76,5 +76,21 @@ export class PlatformStaffController {
   @ApiOperation({ summary: 'Let them back in' })
   reinstate(@Param('id') id: string) {
     return this.staff.reinstate(id);
+  }
+
+  @Post(':id/resend-invitation')
+  @Requires('platform.admin')
+  @ApiOperation({ summary: 'A new invitation for somebody who lost theirs. The old one stops working' })
+  async resendInvitation(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    const { email, token, expiresAt } = await this.credentials.reissueInvitation(id, scope.userId);
+    return { email, invitationToken: token, invitationExpiresAt: expiresAt };
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Requires('platform.admin')
+  @ApiOperation({ summary: 'Delete somebody who never signed in. Anyone who has is suspended instead' })
+  remove(@Param('id') id: string) {
+    return this.staff.remove(id);
   }
 }
