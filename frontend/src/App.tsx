@@ -71,7 +71,7 @@ import { ClientUsersPage } from './pages/ClientUsersPage';
 import { RolesPage } from './pages/RolesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import {
-  apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount,
+  apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount, apiDeleteAccount,
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
   apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
@@ -91,18 +91,18 @@ import {
   apiListEquipmentKpis, apiListMyCatalogScenarios, apiListActivations, apiActivationTransition,
   apiGetActivationHistory, apiGetEquipmentRecommendations,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
-  apiSuspendPlatformStaff, apiReinstatePlatformStaff,
+  apiSuspendPlatformStaff, apiReinstatePlatformStaff, apiDeletePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
   apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory,
   apiRetireSensor, apiUnretireSensor, apiDeleteSensor,
-  apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
+  apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping, apiDeleteToolMapping,
   apiListSignalAliases, apiUpsertSignalAlias, apiDeleteSignalAlias,
   apiListSignalStates, apiReplaceSignalStates,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
   apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock,
   apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
   apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
-  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiSetUserAccess,
+  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiDeleteUser, apiSetUserAccess,
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput,
@@ -990,6 +990,13 @@ function AppData() {
     }
   };
 
+  // Only a suspended account nobody ever signed in to, holding no data — the
+  // backend refuses anything else and says why.
+  const handleDeleteAccount = async (tenantId: string) => {
+    await apiDeleteAccount(tenantId);
+    await refreshAccounts();
+  };
+
   // Only works while the super admin has never accepted the first one — see
   // ProvisioningService.resendInvitation. This is a fresh token, not the
   // original one; the old one stops working the moment this succeeds.
@@ -1021,6 +1028,11 @@ function AppData() {
     const updated = await apiSuspendUser(userId, reason);
     await refreshTenantUsers();
     return updated;
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    await apiDeleteUser(userId);
+    await refreshTenantUsers();
   };
 
   const handleReinstateUser = async (userId: string) => {
@@ -1108,6 +1120,10 @@ function AppData() {
     const created = await apiCreateToolMapping(input);
     await refreshToolMappings();
     return created;
+  };
+  const handleDeleteToolMapping = async (id: string) => {
+    await apiDeleteToolMapping(id);
+    await refreshToolMappings();
   };
   const handleUpdateToolMapping = async (id: string, input: ToolMappingInput) => {
     const updated = await apiUpdateToolMapping(id, input);
@@ -1461,6 +1477,11 @@ function AppData() {
 
   const handleSuspendStaff = async (id: string, reason: string) => {
     await apiSuspendPlatformStaff(id, reason);
+    await refreshPlatformStaff();
+  };
+
+  const handleDeleteStaff = async (id: string) => {
+    await apiDeletePlatformStaff(id);
     await refreshPlatformStaff();
   };
 
@@ -1846,6 +1867,7 @@ function AppData() {
                   toolMappingsError={toolMappingsError}
                   onCreateToolMapping={handleCreateToolMapping}
                   onUpdateToolMapping={handleUpdateToolMapping}
+                  onDeleteToolMapping={handleDeleteToolMapping}
                   signalAliases={signalAliases}
                   signalAliasesError={signalAliasesError}
                   onUpsertSignalAlias={handleUpsertSignalAlias}
@@ -1929,6 +1951,7 @@ function AppData() {
                   onUpdateAccount={handleUpdateAccount}
                   onResendInvitation={handleResendInvitation}
                   onToggleClientStatus={handleToggleClientStatus}
+                  onDeleteAccount={handleDeleteAccount}
                   entitlements={entitlements}
                   entitlementsError={entitlementsError}
                   onGrantEntitlement={handleGrantEntitlement}
@@ -1939,6 +1962,7 @@ function AppData() {
                   onSetStaffRole={handleSetStaffRole}
                   onSuspendStaff={handleSuspendStaff}
                   onReinstateStaff={handleReinstateStaff}
+                  onDeleteStaff={handleDeleteStaff}
                 />
               }
             />
@@ -1979,6 +2003,7 @@ function AppData() {
                 onSetStaffRole={handleSetStaffRole}
                 onSuspendStaff={handleSuspendStaff}
                 onReinstateStaff={handleReinstateStaff}
+                onDeleteStaff={handleDeleteStaff}
                 clients={clients}
                 clientUsers={clientUsers}
                 roles={roles}
@@ -2000,6 +2025,7 @@ function AppData() {
                 onSetUserRole={handleSetUserRole}
                 onSuspendUser={handleSuspendUser}
                 onReinstateUser={handleReinstateUser}
+                onDeleteUser={handleDeleteUser}
                 plants={realPlants}
                 equipment={realEquipment}
                 onSetUserAccess={handleSetUserAccess}

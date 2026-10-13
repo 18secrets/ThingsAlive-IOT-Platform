@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, ShieldCheck, AlertCircle, Mail, RotateCw } from 'lucide-react';
+import { Search, Plus, ShieldCheck, AlertCircle, Mail, RotateCw, Trash2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import {
   ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole, ResendInvitationResult,
@@ -17,6 +17,7 @@ interface StaffManagementProps {
   onSetRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspend: (id: string, reason: string) => Promise<void>;
   onReinstate: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 const ROLE_LABEL: Record<PlatformStaffRole, string> = {
@@ -32,7 +33,7 @@ const STATUS_STYLE: Record<PlatformStaffMember['status'], string> = {
 };
 
 export const StaffManagement: React.FC<StaffManagementProps> = ({
-  staff, error, onInvite, onSetRole, onSuspend, onReinstate,
+  staff, error, onInvite, onSetRole, onSuspend, onReinstate, onDelete,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,6 +65,18 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
       setReissued(await apiResendPlatformStaffInvitation(member.id));
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'Could not resend the invitation.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (member: PlatformStaffMember) => {
+    if (!window.confirm(`Delete ${member.fullName}? Their email becomes free to invite again.`)) return;
+    setBusyId(member.id);
+    try {
+      await onDelete(member.id);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not delete this person.');
     } finally {
       setBusyId(null);
     }
@@ -186,6 +199,16 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                 >
                   <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
                   <span>Resend invitation</span>
+                </button>
+              )}
+              {!s.activatedAt && (
+                <button
+                  onClick={() => handleDelete(s)}
+                  disabled={busyId === s.id}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                  title="Delete (never signed in)"
+                >
+                  <Trash2 className="w-3 h-3" />
                 </button>
               )}
               {s.suspendedReason && s.status === 'suspended' && (

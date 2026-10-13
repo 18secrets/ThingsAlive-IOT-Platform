@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, RotateCw, MapPin,
+  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, RotateCw, MapPin, Trash2,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import {
@@ -19,6 +19,7 @@ interface ClientUserManagementProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
   plants: Plant[];
   equipment: EquipmentProfile[];
   onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
@@ -31,7 +32,7 @@ const STATUS_STYLE: Record<TenantUser['status'], string> = {
 };
 
 export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
-  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
+  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser,
   plants, equipment, onSetUserAccess,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,6 +173,20 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             title="Resend invitation. The old token stops working."
                           >
                             <RotateCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        {u.status !== 'active' && !superAdmin && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete ${u.fullName}? Only somebody who never signed in can be deleted.`)) {
+                                runAction(u.id, () => onDeleteUser(u.id));
+                              }
+                            }}
+                            disabled={busy}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                            title="Delete (never signed in)"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                         {u.status === 'suspended' ? (
