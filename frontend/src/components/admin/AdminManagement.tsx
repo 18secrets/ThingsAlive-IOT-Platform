@@ -64,6 +64,7 @@ interface AdminManagementProps {
   toolMappingsError?: string;
   onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  onDeleteToolMapping: (id: string) => Promise<void>;
   signalAliases: SignalAlias[];
   signalAliasesError?: string;
   onUpsertSignalAlias: (input: SignalAliasInput) => Promise<SignalAlias>;
@@ -187,6 +188,7 @@ interface AdminManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  onDeleteAccount: (id: string) => Promise<void>;
   entitlements: Entitlement[];
   entitlementsError?: string;
   onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
@@ -199,6 +201,7 @@ interface AdminManagementProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
 }
@@ -235,6 +238,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   toolMappingsError,
   onCreateToolMapping,
   onUpdateToolMapping,
+  onDeleteToolMapping,
   signalAliases,
   signalAliasesError,
   onUpsertSignalAlias,
@@ -323,6 +327,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleClientStatus,
+  onDeleteAccount,
   entitlements,
   entitlementsError,
   onGrantEntitlement,
@@ -333,6 +338,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onSetStaffRole,
   onSuspendStaff,
   onReinstateStaff,
+  onDeleteStaff,
   restrictToClientAdmin,
 }) => {
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -428,6 +434,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             error={toolMappingsError}
             onCreateMapping={onCreateToolMapping}
             onUpdateMapping={onUpdateToolMapping}
+            onDeleteMapping={onDeleteToolMapping}
             availableSensors={realSensors}
           />
         )}
@@ -580,6 +587,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateAccount={onUpdateAccount}
             onResendInvitation={onResendInvitation}
             onToggleStatus={onToggleClientStatus}
+            onDeleteAccount={onDeleteAccount}
             equipmentClasses={equipmentClasses}
             entitlements={entitlements}
             entitlementsError={entitlementsError}
@@ -596,6 +604,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onSetRole={onSetStaffRole}
             onSuspend={onSuspendStaff}
             onReinstate={onReinstateStaff}
+            onDelete={onDeleteStaff}
           />
         )}
       </div>

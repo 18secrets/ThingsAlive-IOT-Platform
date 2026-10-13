@@ -14,6 +14,7 @@ interface UsersHubProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
   clients: ClientAccount[];
   clientUsers: ClientUserItem[];
   roles: RoleDefinition[];
@@ -29,6 +30,7 @@ export const UsersHub: React.FC<UsersHubProps> = ({
   onSetStaffRole,
   onSuspendStaff,
   onReinstateStaff,
+  onDeleteStaff,
   clients,
   clientUsers,
   roles,
@@ -72,6 +74,7 @@ export const UsersHub: React.FC<UsersHubProps> = ({
           onSetRole={onSetStaffRole}
           onSuspend={onSuspendStaff}
           onReinstate={onReinstateStaff}
+          onDelete={onDeleteStaff}
         />
       ) : (
         <AllClientUsersView

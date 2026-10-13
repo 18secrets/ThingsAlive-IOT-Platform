@@ -42,6 +42,7 @@ interface AdminPageProps {
   toolMappingsError?: string;
   onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  onDeleteToolMapping: (id: string) => Promise<void>;
   signalAliases: SignalAlias[];
   signalAliasesError?: string;
   onUpsertSignalAlias: (input: SignalAliasInput) => Promise<SignalAlias>;
@@ -146,6 +147,7 @@ interface AdminPageProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  onDeleteAccount: (id: string) => Promise<void>;
   entitlements: Entitlement[];
   entitlementsError?: string;
   onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
@@ -158,6 +160,7 @@ interface AdminPageProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
 }
 
 export const AdminPage: React.FC<AdminPageProps> = (props) => {
@@ -199,6 +202,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       toolMappingsError={props.toolMappingsError}
       onCreateToolMapping={props.onCreateToolMapping}
       onUpdateToolMapping={props.onUpdateToolMapping}
+      onDeleteToolMapping={props.onDeleteToolMapping}
       signalAliases={props.signalAliases}
       signalAliasesError={props.signalAliasesError}
       onUpsertSignalAlias={props.onUpsertSignalAlias}
@@ -289,6 +293,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateAccount={props.onUpdateAccount}
       onResendInvitation={props.onResendInvitation}
       onToggleClientStatus={props.onToggleClientStatus}
+      onDeleteAccount={props.onDeleteAccount}
       entitlements={props.entitlements}
       entitlementsError={props.entitlementsError}
       onGrantEntitlement={props.onGrantEntitlement}
@@ -299,6 +304,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onSetStaffRole={props.onSetStaffRole}
       onSuspendStaff={props.onSuspendStaff}
       onReinstateStaff={props.onReinstateStaff}
+      onDeleteStaff={props.onDeleteStaff}
       restrictToClientAdmin={restrictToClientAdmin}
     />
   );

@@ -6,6 +6,7 @@ import { DomainEvent } from '../../events/domain-event.entity';
 import { AppUser, UserStatus } from '../../identity/entities/app-user.entity';
 import { TenantRole } from '../../identity/entities/tenant-role.entity';
 import { UserInvitation } from '../../identity/entities/user-invitation.entity';
+import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { ROLE_TEMPLATES } from '../../identity/role-templates';
 import { PasswordService } from '../../identity/services/password.service';
 import { TenantMap } from '../../projection/entities/tenant-map.entity';
@@ -153,6 +154,21 @@ export class ProvisioningService {
   ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
     this.requirePlatform(scope);
     return this.setStatus(scope, tenantId, 'active', null, now);
+  }
+
+  /**
+   * Delete an account that was never used (dashboard testing, issue 6): created,
+   * perhaps mistyped, and never signed in to. It must be suspended first, nobody in
+   * it may have set a password, and it may hold nothing beyond what provisioning
+   * wrote. Those rules are `delete_unused_tenant`'s, which is the only way the
+   * application can delete an account. Anything that has been used stays suspended,
+   * because its machines and history belong to a customer.
+   */
+  async remove(scope: RequestScope, tenantId: string): Promise<void> {
+    this.requirePlatform(scope);
+    const [row] = await this.ds.query('SELECT delete_unused_tenant($1) AS deleted', [tenantId])
+      .catch((err) => rethrowDeleteRefusal(err));
+    if (!row.deleted) throw new NotFoundException(`No account "${tenantId}".`);
   }
 
   async list(scope: RequestScope): Promise<(Tenant & { superAdmin: SuperAdminContact | null })[]> {

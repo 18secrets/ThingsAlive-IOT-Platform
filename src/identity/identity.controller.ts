@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ArrayMaxSize, IsArray, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, ValidateNested,
@@ -179,5 +179,13 @@ export class IdentityController {
   async resendInvitation(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
     const { email, token, expiresAt } = await this.credentials.reissueInvitation(scope, id);
     return { email, invitationToken: token, invitationExpiresAt: expiresAt };
+  }
+
+  @Delete('users/:id')
+  @HttpCode(204)
+  @Requires('user.manage')
+  @ApiOperation({ summary: 'Delete somebody who never signed in. Anyone who has is suspended instead' })
+  removeUser(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.users.remove(scope, id);
   }
 }
