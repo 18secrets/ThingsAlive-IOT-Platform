@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, ShieldCheck, AlertCircle, Mail } from 'lucide-react';
+import { Search, Plus, ShieldCheck, AlertCircle, Mail, RotateCw, Trash2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import {
-  ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
+  ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole, ResendInvitationResult,
+  apiResendPlatformStaffInvitation,
 } from '../../lib/api';
+import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { InviteStaffModal } from './InviteStaffModal';
 
 interface StaffManagementProps {
@@ -15,6 +17,7 @@ interface StaffManagementProps {
   onSetRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspend: (id: string, reason: string) => Promise<void>;
   onReinstate: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 const ROLE_LABEL: Record<PlatformStaffRole, string> = {
@@ -30,11 +33,12 @@ const STATUS_STYLE: Record<PlatformStaffMember['status'], string> = {
 };
 
 export const StaffManagement: React.FC<StaffManagementProps> = ({
-  staff, error, onInvite, onSetRole, onSuspend, onReinstate,
+  staff, error, onInvite, onSetRole, onSuspend, onReinstate, onDelete,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
@@ -48,6 +52,31 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
       await onSetRole(id, role);
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'Could not change this role.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Called directly rather than through a prop: nothing above this screen holds the
+  // token, and it is shown once and then forgotten.
+  const handleResend = async (member: PlatformStaffMember) => {
+    setBusyId(member.id);
+    try {
+      setReissued(await apiResendPlatformStaffInvitation(member.id));
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not resend the invitation.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (member: PlatformStaffMember) => {
+    if (!window.confirm(`Delete ${member.fullName}? Their email becomes free to invite again.`)) return;
+    setBusyId(member.id);
+    try {
+      await onDelete(member.id);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not delete this person.');
     } finally {
       setBusyId(null);
     }
@@ -161,6 +190,27 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
                 {s.status}
               </span>
+              {s.status === 'invited' && (
+                <button
+                  onClick={() => handleResend(s)}
+                  disabled={busyId === s.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
+                  title="Issue a new invitation token. The old one stops working."
+                >
+                  <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
+                  <span>Resend invitation</span>
+                </button>
+              )}
+              {!s.activatedAt && (
+                <button
+                  onClick={() => handleDelete(s)}
+                  disabled={busyId === s.id}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                  title="Delete (never signed in)"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
               {s.suspendedReason && s.status === 'suspended' && (
                 <span className="text-[10px] text-slate-400 truncate max-w-[140px]" title={s.suspendedReason}>
                   {s.suspendedReason}
@@ -177,6 +227,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           </div>
         )}
       </div>
+
+      <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
 
       <InviteStaffModal
         isOpen={isModalOpen}

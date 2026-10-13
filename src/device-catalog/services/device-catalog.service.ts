@@ -5,6 +5,8 @@ import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
 import { slugify } from '../../catalog-import/services/sensor-review';
+import { assignDefined } from '../../common/assign-defined';
+import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { retiredSensorProblem } from './sensor-retirement';
 
 export interface ResolvedMappedSensor {
@@ -21,19 +23,6 @@ type SensorDraft = Partial<Pick<Sensor, 'sensorName' | 'categoryId' | 'descripti
 type ToolMappingDraft = Partial<Pick<ToolMapping, 'toolName' | 'industryType' | 'protocol'>> & {
   mappedSensors?: MappedSensorRef[];
 };
-
-/**
- * `draft` is a class-validator DTO: every optional field TypeScript declares is
- * defined as an own property (value `undefined`) at construction time, even when the
- * request body omitted it — an ordinary Object.assign would copy those `undefined`s
- * onto the entity and null out fields the caller never touched.
- */
-function assignDefined<T extends object>(target: T, draft: Partial<T>): T {
-  for (const [key, value] of Object.entries(draft)) {
-    if (value !== undefined) (target as unknown as Record<string, unknown>)[key] = value;
-  }
-  return target;
-}
 
 /**
  * Master Admin's reference data for wiring a device before it exists (task: complete
@@ -273,6 +262,21 @@ export class DeviceCatalogService {
     assignDefined(row, { ...draft, ...(mappedSensors ? { mappedSensors } : {}) });
     const saved = await this.toolMappings.save(row);
     return (await this.resolveAll([saved]))[0];
+  }
+
+  /**
+   * Remove a tool mapping no device uses (dashboard testing, issue 6). A device still
+   * pointing at it makes the database refuse (`fk_device_inventory_tool_mapping`):
+   * those devices belong to clients and sit behind row-level security, so a count
+   * taken here would read none and allow the delete anyway.
+   */
+  async deleteToolMapping(id: string): Promise<void> {
+    if (!UUID.test(id)) throw new NotFoundException(`No tool mapping "${id}".`);
+    const [row] = await this.toolMappings.query('SELECT delete_unused_tool_mapping($1::uuid) AS deleted', [id])
+      .catch((err: unknown) => rethrowDeleteRefusal(
+        err, 'Devices are still registered with this tool mapping. Move them to another mapping first.',
+      ));
+    if (!row.deleted) throw new NotFoundException(`No tool mapping "${id}".`);
   }
 
   /** Consumed by InventoryService.pool() so a registered device's tool profile shows its name. */

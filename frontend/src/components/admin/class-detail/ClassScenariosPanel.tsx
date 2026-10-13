@@ -94,8 +94,11 @@ export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
                 <button
                   onClick={() => { setEditingScenario(sc); setIsModalOpen(true); }}
                   className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
+                  title={sc.status === 'published'
+                    ? `Saving creates v${sc.version + 1} as a draft. v${sc.version} stays published until the new one is.`
+                    : undefined}
                 >
-                  Edit draft
+                  {sc.status === 'published' ? 'Edit as new version' : 'Edit draft'}
                 </button>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{sc.name}</h4>

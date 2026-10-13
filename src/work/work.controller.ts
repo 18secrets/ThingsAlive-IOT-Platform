@@ -80,6 +80,13 @@ export class WorkOrderController {
     });
   }
 
+  @Get('people')
+  @Requires('action.work')
+  @ApiOperation({ summary: 'Active people in this account, by name — for assigning jobs and reading their history' })
+  people(@CurrentScope() scope: RequestScope) {
+    return this.orders.people(scope);
+  }
+
   @Get(':id/history')
   @Requires('action.work')
   @ApiOperation({ summary: 'What happened to this job, and who did it' })
