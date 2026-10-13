@@ -7,6 +7,7 @@ import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
 import { UserSession } from '../entities/user-session.entity';
 import { loginEmailTaken, rethrowLoginEmailClash } from '../login-email';
+import { isPhoneClash, normalisePhone, phoneTaken, phoneTakenError } from '../phone';
 import { rethrowDeleteRefusal } from '../delete-refusal';
 
 export interface InviteInput {
@@ -70,6 +71,7 @@ export class UserService {
   async invite(scope: RequestScope, input: InviteInput, now = new Date()): Promise<UserView> {
     const email = normaliseEmail(input.email);
     if (!email.includes('@')) throw new BadRequestException('That is not an email address.');
+    const phone = normalisePhone(input.phone);
 
     // Email identifies a person across the platform, so the uniqueness check has to
     // look past this account. It is the one read here that cannot be tenant-scoped,
@@ -77,9 +79,10 @@ export class UserService {
     // is all a stranger's account owes anybody.
     // Staff count too: a client user and a staff member on one address leave sign-in
     // choosing between them, and the client loses.
-    const taken = await runTenantSpanning(this.ds, `invite uniqueness check by ${scope.userId}`, (m) =>
-      loginEmailTaken(m, email));
+    const [taken, phoneInUse] = await runTenantSpanning(this.ds, `invite uniqueness check by ${scope.userId}`, async (m) =>
+      [await loginEmailTaken(m, email), await phoneTaken(m, phone)]);
     if (taken) throw new ConflictException(`${email} already has a login.`);
+    if (phoneInUse && phone) throw phoneTakenError(phone);
 
     return withTenantSession(this.ds, scope, async (m) => {
       const role = await m.getRepository(TenantRole).findOne({
@@ -92,7 +95,7 @@ export class UserService {
         tenantId: scope.tenantId,
         email,
         fullName: input.fullName.trim(),
-        phone: input.phone ?? null,
+        phone,
         roleSlug: role.slug,
         status: 'invited',
         passwordHash: null,
@@ -103,7 +106,10 @@ export class UserService {
         activatedAt: null,
         suspendedAt: null,
         suspendedReason: null,
-      })).catch((err) => rethrowLoginEmailClash(err, email));
+      })).catch((err) => {
+        if (isPhoneClash(err) && phone) throw phoneTakenError(phone);
+        return rethrowLoginEmailClash(err, email);
+      });
 
       await this.writeAccess(m, scope, user.id, input);
       return this.view(m, scope.tenantId, user);
