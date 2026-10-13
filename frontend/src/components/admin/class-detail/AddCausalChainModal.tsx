@@ -25,6 +25,20 @@ const DIRECTION_OPTIONS: { label: string; value: ChainDirection }[] = [
 ];
 
 const emptyDriver = (): ChainDriver => ({ signal: '', coefficient: 0 });
+
+/**
+ * Stages as stored, made safe to edit. Chains written before the API fix were saved
+ * as `[[]]` — every stage an empty array — and the editor crashed reading one (dashboard
+ * testing, issue 11). Anything that is not a stage with a signal is dropped, and the
+ * caller says so rather than pretending the chain was empty all along.
+ */
+const usableNodes = (raw: unknown): { nodes: ChainNode[]; lost: boolean } => {
+  const list = Array.isArray(raw) ? raw : [];
+  const nodes = list
+    .filter((n): n is ChainNode => !!n && typeof n === 'object' && !Array.isArray(n) && typeof (n as ChainNode).signal === 'string')
+    .map((n) => ({ ...n, drivers: Array.isArray(n.drivers) && n.drivers.length ? n.drivers : [emptyDriver()] }));
+  return { nodes, lost: nodes.length < list.length };
+};
 const emptyNode = (signals: string[]): ChainNode => ({
   signal: signals[0] ?? '', intercept: 0, drivers: [emptyDriver()], warnAbove: 0, criticalAbove: 0, direction: 'above',
 });
@@ -41,6 +55,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
   const [nodes, setNodes] = useState<ChainNode[]>([emptyNode(availableSignals)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [stagesLost, setStagesLost] = useState(false);
 
   const isEditing = !!existingChain;
 
@@ -52,7 +67,9 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
     setDescription(existingChain?.description ?? '');
     setOutcome(existingChain?.outcome ?? '');
     setScenarioSlug(existingChain?.scenarioSlug ?? '');
-    setNodes(existingChain?.nodes?.length ? existingChain.nodes : [emptyNode(availableSignals)]);
+    const stored = usableNodes(existingChain?.nodes);
+    setNodes(stored.nodes.length ? stored.nodes : [emptyNode(availableSignals)]);
+    setStagesLost(stored.lost);
     setError(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, existingChain, isEditing]);
@@ -333,6 +350,11 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
             ))}
           </div>
 
+          {stagesLost && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+              This draft's stages were lost when it was saved, by a bug that has since been fixed. Enter them again and save.
+            </div>
+          )}
           {error && (
             <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
               {error}
