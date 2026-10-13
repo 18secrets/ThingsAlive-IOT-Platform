@@ -386,6 +386,11 @@ export function apiReinstatePlatformStaff(id: string): Promise<PlatformStaffMemb
   return authFetch(`/platform/staff/${encodeURIComponent(id)}/reinstate`, { method: "POST" });
 }
 
+/** A new token for an invited staff member who lost theirs. The old token stops working. */
+export function apiResendPlatformStaffInvitation(id: string): Promise<ResendInvitationResult> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/resend-invitation`, { method: "POST" });
+}
+
 // ------------------------------------------------------------------------- plants
 
 /**
@@ -3229,4 +3234,9 @@ export function apiReinstateUser(userId: string): Promise<TenantUser> {
   return authFetch(`/identity/users/${encodeURIComponent(userId)}/reinstate`, {
     method: "POST",
   });
+}
+
+/** A new token for an invited person who lost theirs. The old token stops working. */
+export function apiResendUserInvitation(userId: string): Promise<ResendInvitationResult> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/resend-invitation`, { method: "POST" });
 }

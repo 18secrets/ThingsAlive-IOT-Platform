@@ -172,4 +172,12 @@ export class IdentityController {
   reinstate(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
     return this.users.reinstate(scope, id);
   }
+
+  @Post('users/:id/resend-invitation')
+  @Requires('user.manage')
+  @ApiOperation({ summary: 'A new invitation for somebody who lost theirs. The old one stops working' })
+  async resendInvitation(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    const { email, token, expiresAt } = await this.credentials.reissueInvitation(scope, id);
+    return { email, invitationToken: token, invitationExpiresAt: expiresAt };
+  }
 }
