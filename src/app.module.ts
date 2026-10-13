@@ -34,6 +34,7 @@ import { DeviceHealthModule } from './device-health/device-health.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
+import { MailModule } from './mail/mail.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { DeviceCatalogModule } from './device-catalog/device-catalog.module';
 import { EquipmentTemplateModule } from './equipment-template/equipment-template.module';
@@ -89,6 +90,7 @@ export class AppModule {
               DeviceCatalogModule,
               EquipmentTemplateModule,
               IdentityModule,
+              MailModule,
               TenancyModule,
               EquipmentModule,
               SignalBindingModule,

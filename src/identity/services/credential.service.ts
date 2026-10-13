@@ -50,7 +50,7 @@ export interface RequestContext {
 export const ACCESS_TOKEN_SECONDS = 3600;
 const REFRESH_TOKEN_DAYS = 30;
 const INVITATION_DAYS = 14;
-const RESET_HOURS = 2;
+export const RESET_HOURS = 2;
 
 /** Five, then fifteen minutes. Enough to stop online guessing, not enough to be a weapon. */
 const MAX_FAILURES = 5;
