@@ -33,6 +33,13 @@ describe('password policy', () => {
       .toThrow(/should not contain your own email/);
   });
 
+  it('says which part of the address the password contains', () => {
+    // Dashboard testing, issue 3: the whole address never appeared in the password,
+    // so the refusal read as a bug until it named the part that matched.
+    expect(() => passwords.assertAcceptable('Test@sbi123', 'sbi@gmail.com'))
+      .toThrow('A password should not contain your own email address, including "sbi", the part before the @.');
+  });
+
   it('caps the length, which is not a strength rule', () => {
     // bcrypt ignores everything past 72 bytes, and an unbounded input is a cheap way
     // to make the server do work on request.

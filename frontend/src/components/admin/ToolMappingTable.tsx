@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Edit3, AlertCircle } from 'lucide-react';
+import { Search, Plus, Edit3, AlertCircle, Trash2 } from 'lucide-react';
 import { Input } from 'rsuite';
-import { Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
+import { ApiError, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
 
 interface ToolMappingTableProps {
@@ -9,13 +9,29 @@ interface ToolMappingTableProps {
   error?: string;
   onCreateMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  onDeleteMapping: (id: string) => Promise<void>;
   availableSensors: Sensor[];
 }
 
 export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
-  mappings, error, onCreateMapping, onUpdateMapping, availableSensors,
+  mappings, error, onCreateMapping, onUpdateMapping, onDeleteMapping, availableSensors,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+
+  const handleDelete = async (item: ToolMapping) => {
+    if (!window.confirm(`Delete the tool mapping "${item.toolName}"? Devices still using it will stop the delete.`)) return;
+    setDeletingId(item.id);
+    setDeleteError(undefined);
+    try {
+      await onDeleteMapping(item.id);
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Could not delete this tool mapping.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<ToolMapping | null>(null);
 
@@ -52,10 +68,10 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
         </button>
       </div>
 
-      {error && (
+      {(error || deleteError) && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{error}</span>
+          <span>{error || deleteError}</span>
         </div>
       )}
 
@@ -112,6 +128,14 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
                           title="Edit Mapping Configuration"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          disabled={deletingId === item.id}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                          title="Delete Tool Mapping"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

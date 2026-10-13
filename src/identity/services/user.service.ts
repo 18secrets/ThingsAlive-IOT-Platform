@@ -6,6 +6,8 @@ import { AppUser, UserStatus } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
 import { UserSession } from '../entities/user-session.entity';
+import { loginEmailTaken, rethrowLoginEmailClash } from '../login-email';
+import { rethrowDeleteRefusal } from '../delete-refusal';
 
 export interface InviteInput {
   email: string;
@@ -73,8 +75,10 @@ export class UserService {
     // look past this account. It is the one read here that cannot be tenant-scoped,
     // and it deliberately reports nothing about where the clash is: "already in use"
     // is all a stranger's account owes anybody.
+    // Staff count too: a client user and a staff member on one address leave sign-in
+    // choosing between them, and the client loses.
     const taken = await runTenantSpanning(this.ds, `invite uniqueness check by ${scope.userId}`, (m) =>
-      m.getRepository(AppUser).findOne({ where: { email }, select: { id: true } }));
+      loginEmailTaken(m, email));
     if (taken) throw new ConflictException(`${email} already has a login.`);
 
     return withTenantSession(this.ds, scope, async (m) => {
@@ -99,7 +103,7 @@ export class UserService {
         activatedAt: null,
         suspendedAt: null,
         suspendedReason: null,
-      }));
+      })).catch((err) => rethrowLoginEmailClash(err, email));
 
       await this.writeAccess(m, scope, user.id, input);
       return this.view(m, scope.tenantId, user);
@@ -174,6 +178,21 @@ export class UserService {
 
   async reinstate(scope: RequestScope, userId: string, now = new Date()): Promise<UserView> {
     return this.setStatus(scope, userId, 'active', null, now);
+  }
+
+  /**
+   * Remove somebody who never signed in (dashboard testing, issue 6), so an abandoned
+   * invitation stops holding their email. Refused once they have set a password, and
+   * for the account's only super admin. Both rules are `delete_unused_app_user`'s,
+   * which finds the person through this session's own tenant.
+   */
+  async remove(scope: RequestScope, userId: string): Promise<void> {
+    const [row] = await withTenantSession(this.ds, scope, (m) =>
+      m.query('SELECT delete_unused_app_user($1::uuid) AS deleted', [userId]))
+      .catch((err) => rethrowDeleteRefusal(
+        err, 'Other records still name this person, so they cannot be deleted. Suspend them instead.',
+      ));
+    if (!row.deleted) throw new NotFoundException('No such person in this account.');
   }
 
   private async setStatus(

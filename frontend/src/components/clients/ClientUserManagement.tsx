@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, MapPin,
+  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, RotateCw, MapPin, Trash2,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import {
-  ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, SetUserAccessInput, TenantRole, TenantUser,
+  ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, ResendInvitationResult, SetUserAccessInput,
+  TenantRole, TenantUser, apiResendUserInvitation,
 } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { EditUserAccessModal } from './EditUserAccessModal';
 
 interface ClientUserManagementProps {
@@ -17,6 +19,7 @@ interface ClientUserManagementProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
   plants: Plant[];
   equipment: EquipmentProfile[];
   onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
@@ -29,7 +32,7 @@ const STATUS_STYLE: Record<TenantUser['status'], string> = {
 };
 
 export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
-  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
+  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser,
   plants, equipment, onSetUserAccess,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +40,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
   const [accessUser, setAccessUser] = useState<TenantUser | null>(null);
+  const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
 
   const roleName = useMemo(() => {
     const byId = new Map(roles.map((r) => [r.slug, r.name]));
@@ -77,6 +81,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
 
   return (
     <div id="client-user-management-view" className="space-y-3">
+      <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -158,6 +163,30 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             title={`Edit which ${userScopeShape === 'plant' ? 'sites' : 'machines'} this person can see`}
                           >
                             <MapPin className="w-4 h-4" />
+                          </button>
+                        )}
+                        {u.status === 'invited' && (
+                          <button
+                            onClick={() => runAction(u.id, async () => setReissued(await apiResendUserInvitation(u.id)))}
+                            disabled={busy}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-30 transition-colors cursor-pointer"
+                            title="Resend invitation. The old token stops working."
+                          >
+                            <RotateCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        {u.status !== 'active' && !superAdmin && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete ${u.fullName}? Only somebody who never signed in can be deleted.`)) {
+                                runAction(u.id, () => onDeleteUser(u.id));
+                              }
+                            }}
+                            disabled={busy}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                            title="Delete (never signed in)"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                         {u.status === 'suspended' ? (
