@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers } from 'lucide-react';
+import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2 } from 'lucide-react';
 import { Input } from 'rsuite';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
@@ -19,6 +19,7 @@ interface ClientManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleStatus: (id: string) => void;
+  onDeleteAccount: (id: string) => Promise<void>;
   equipmentClasses: EquipmentClass[];
   entitlements: Entitlement[];
   entitlementsError?: string;
@@ -33,6 +34,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleStatus,
+  onDeleteAccount,
   equipmentClasses,
   entitlements,
   entitlementsError,
@@ -56,6 +58,17 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
       window.alert(err instanceof ApiError ? err.message : 'Could not resend the invitation.');
     } finally {
       setResendingId(null);
+    }
+  };
+
+  const handleDeleteClick = async (client: ClientAccount) => {
+    if (!window.confirm(
+      `Delete ${client.clientName}? Only an account nobody ever signed in to, holding no data, can be deleted.`,
+    )) return;
+    try {
+      await onDeleteAccount(client.id);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not delete this account.');
     }
   };
 
@@ -167,6 +180,16 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   >
                     <Layers className="w-3.5 h-3.5" />
                   </button>
+
+                  {c.status !== 'Active' && (
+                    <button
+                      onClick={() => handleDeleteClick(c)}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                      title="Delete account (only if never used)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   <button
                     onClick={() => onToggleStatus(c.id)}

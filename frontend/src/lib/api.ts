@@ -303,6 +303,11 @@ export function apiSuspendAccount(
   });
 }
 
+/** Only a suspended account nobody ever signed in to, holding no data. */
+export function apiDeleteAccount(tenantId: string): Promise<void> {
+  return authFetch(`/accounts/${encodeURIComponent(tenantId)}`, { method: "DELETE" });
+}
+
 export function apiReinstateAccount(tenantId: string): Promise<Account> {
   return authFetch(`/accounts/${encodeURIComponent(tenantId)}/reinstate`, {
     method: "POST",
@@ -384,6 +389,16 @@ export function apiSuspendPlatformStaff(id: string, reason: string): Promise<Pla
 
 export function apiReinstatePlatformStaff(id: string): Promise<PlatformStaffMember> {
   return authFetch(`/platform/staff/${encodeURIComponent(id)}/reinstate`, { method: "POST" });
+}
+
+/** Only somebody who never signed in. Anyone who has is suspended instead. */
+export function apiDeletePlatformStaff(id: string): Promise<void> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** A new token for an invited staff member who lost theirs. The old token stops working. */
+export function apiResendPlatformStaffInvitation(id: string): Promise<ResendInvitationResult> {
+  return authFetch(`/platform/staff/${encodeURIComponent(id)}/resend-invitation`, { method: "POST" });
 }
 
 // ------------------------------------------------------------------------- plants
@@ -1496,6 +1511,11 @@ export function apiCreateToolMapping(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** Refused (409) while any device is still registered with this mapping. */
+export function apiDeleteToolMapping(id: string): Promise<void> {
+  return authFetch(`/device-catalog/tool-mappings/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function apiUpdateToolMapping(
@@ -3229,4 +3249,14 @@ export function apiReinstateUser(userId: string): Promise<TenantUser> {
   return authFetch(`/identity/users/${encodeURIComponent(userId)}/reinstate`, {
     method: "POST",
   });
+}
+
+/** Only somebody who never signed in, and never the account's only super admin. */
+export function apiDeleteUser(userId: string): Promise<void> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+/** A new token for an invited person who lost theirs. The old token stops working. */
+export function apiResendUserInvitation(userId: string): Promise<ResendInvitationResult> {
+  return authFetch(`/identity/users/${encodeURIComponent(userId)}/resend-invitation`, { method: "POST" });
 }

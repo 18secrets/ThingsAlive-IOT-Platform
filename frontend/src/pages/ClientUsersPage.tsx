@@ -17,6 +17,7 @@ interface ClientUsersPageProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
   plants: Plant[];
   equipment: EquipmentProfile[];
   onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
@@ -24,7 +25,7 @@ interface ClientUsersPageProps {
 
 export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   users, roles, error, manageAccessClientId, onBackToClients,
-  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, plants, equipment, onSetUserAccess,
+  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser, plants, equipment, onSetUserAccess,
 }) => {
   const { authUser } = useAuth();
   if (!authUser) return null;
@@ -50,6 +51,7 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
       onSetUserRole={onSetUserRole}
       onSuspendUser={onSuspendUser}
       onReinstateUser={onReinstateUser}
+      onDeleteUser={onDeleteUser}
       plants={plants}
       equipment={equipment}
       onSetUserAccess={onSetUserAccess}

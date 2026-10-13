@@ -177,6 +177,14 @@ export class DeviceCatalogController {
   updateToolMapping(@Param('id') id: string, @Body() dto: ToolMappingDto) {
     return this.catalog.updateToolMapping(id, dto);
   }
+
+  @Delete('tool-mappings/:id')
+  @HttpCode(204)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Delete a tool mapping no device uses; refused while any device does' })
+  deleteToolMapping(@Param('id') id: string) {
+    return this.catalog.deleteToolMapping(id);
+  }
 }
 
 /**
