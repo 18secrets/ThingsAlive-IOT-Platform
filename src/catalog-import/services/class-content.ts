@@ -15,6 +15,10 @@ import {
 import { Severity } from '../../common/severity';
 import { loadLayout } from '../../catalog/services/class-layout';
 import { LayoutWidget } from '../../catalog/layout/layout-rules';
+import {
+  DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES, OemFigures,
+} from '../../catalog/services/content-validation';
+import { predates, TEMPLATE_VERSION } from '../template-schema';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 
 export interface ThresholdEntry {
@@ -70,6 +74,8 @@ export interface ClassContent {
   description: string | null;
   category: string | null;
   serviceIntervalHours: number | null;
+  /** Template v5 (task QCLASS-OEM). */
+  oem: OemFigures;
   expectedSignals: ExpectedSignal[];
   /** Read from `equipment_class_failure_mode`, never from the deprecated jsonb. */
   failureModes: FailureModeContent[];
@@ -89,8 +95,34 @@ export const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+const noOemFigures = (): OemFigures => ({
+  nominalFuelPerHour: null, nominalFuelUnit: null,
+  idleBreakdownThresholdMinutes: DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES,
+  runningSignal: null, runningIdleBound: null, availabilitySignal: null,
+});
+
+export const oemFiguresOf = (c: EquipmentClassProfile): OemFigures => ({
+  nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit,
+  idleBreakdownThresholdMinutes: c.idleBreakdownThresholdMinutes,
+  runningSignal: c.runningSignal, runningIdleBound: c.runningIdleBound, availabilitySignal: c.availabilitySignal,
+});
+
+/** The OEM figures an `equipment_class` row states. A blank threshold is the stated
+ * default; everything else blank is unset. */
+export function oemFiguresFromRow(payload: Record<string, unknown>): OemFigures {
+  return {
+    nominalFuelPerHour: num(payload.nominal_fuel_per_hour) ?? null,
+    nominalFuelUnit: strOrNull(payload.nominal_fuel_unit),
+    idleBreakdownThresholdMinutes: num(payload.idle_breakdown_threshold_minutes)
+      ?? DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES,
+    runningSignal: strOrNull(payload.running_signal),
+    runningIdleBound: num(payload.running_idle_bound) ?? null,
+    availabilitySignal: strOrNull(payload.availability_signal),
+  };
+}
+
 const emptyContent = (slug: string): ClassContent => ({
-  name: slug, description: null, category: null, serviceIntervalHours: null,
+  name: slug, description: null, category: null, serviceIntervalHours: null, oem: noOemFigures(),
   expectedSignals: [], failureModes: [], recommendations: [], defaultThresholds: {}, sensorRequirements: [],
   formulas: [], layout: [],
 });
@@ -122,6 +154,7 @@ export async function loadCurrentClass(
     content: {
       name: current.name, description: current.description, category: current.category,
       serviceIntervalHours: current.serviceIntervalHours,
+      oem: oemFiguresOf(current),
       expectedSignals: current.expectedSignals, failureModes, recommendations,
       defaultThresholds: (current.defaultThresholds ?? {}) as Record<string, ThresholdEntry>,
       sensorRequirements: reqs.map((r) => ({
@@ -156,7 +189,9 @@ export async function loadCurrentClass(
  * wholesale, but sensorRequirements and defaultThresholds each replace only when a
  * `signal` row actually supplies criticality, or a min/max, respectively.
  */
-export function buildProposedClass(rows: CatalogImportRow[], current: ClassContent): ClassContent {
+export function buildProposedClass(
+  rows: CatalogImportRow[], current: ClassContent, templateVersion: string = TEMPLATE_VERSION,
+): ClassContent {
   const byS = (sheet: string) => rows.filter((r) => r.sheet === sheet);
   const classRow = byS('equipment_class')[0];
   const signalRows = byS('signal');
@@ -189,6 +224,9 @@ export function buildProposedClass(rows: CatalogImportRow[], current: ClassConte
     serviceIntervalHours: classRow
       ? num(classRow.payload.service_interval_hours) ?? null
       : current.serviceIntervalHours,
+    // A workbook older than v5 has no OEM columns to leave blank, so its class row says
+    // nothing about them — inherited, not cleared, the same as a sheet it does not have.
+    oem: classRow && !predates(templateVersion, 'v5') ? oemFiguresFromRow(classRow.payload) : current.oem,
     expectedSignals: signalRows.length
       ? firstPerSignal(signalRows).map((r) => ({
           signal: str(r.payload.signal), unit: strOrNull(r.payload.unit),
@@ -315,6 +353,7 @@ export function canonicalizeClass(content: ClassContent): string {
   return JSON.stringify({
     name: content.name, description: content.description, category: content.category,
     serviceIntervalHours: content.serviceIntervalHours,
+    oem: content.oem,
     expectedSignals: signals, failureModes: modes, recommendations, defaultThresholds: thresholds,
     sensorRequirements: reqs, formulas,
     layout: [...content.layout].sort((a, b) => a.widgetKey.localeCompare(b.widgetKey)),
@@ -370,6 +409,7 @@ export async function computeClassDiffEntry(
   current: EquipmentClassProfile | null,
   currentContent: ClassContent,
   action: ClassDiffEntry['action'],
+  templateVersion: string = TEMPLATE_VERSION,
 ): Promise<ClassDiffEntry> {
   const countsBySheet: Record<string, number> = {};
   for (const r of validRowsForClass) countsBySheet[r.sheet] = (countsBySheet[r.sheet] ?? 0) + 1;
@@ -378,7 +418,7 @@ export async function computeClassDiffEntry(
     allRowsForClass.filter((r) => r.sheet === 'signal').map((r) => str(r.payload.signal)),
   ).size;
 
-  const proposed = buildProposedClass(validRowsForClass, currentContent);
+  const proposed = buildProposedClass(validRowsForClass, currentContent, templateVersion);
   const signalsToApply = proposed.expectedSignals.length;
   const rejectedRows = allRowsForClass.filter((r) => r.status === 'invalid').length;
 
