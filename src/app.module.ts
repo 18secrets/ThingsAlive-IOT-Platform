@@ -28,6 +28,7 @@ import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
+import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
@@ -103,6 +104,7 @@ export class AppModule {
               WorkModule,
               ShiftModule,
               TelemetryPartitionModule,
+              TelemetryArchiveModule,
               UtilizationModule,
               ServiceModule,
               DeviceHealthModule,
