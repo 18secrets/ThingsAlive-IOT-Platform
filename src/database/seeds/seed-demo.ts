@@ -119,15 +119,15 @@ export interface DemoMachine {
 export const DEMO_MACHINES: DemoMachine[] = [
   {
     externalId: 'EX-01', name: 'EX-01 Healthy', state: 'healthy', historyDays: 90, endDaysAgo: 0, unbound: [],
-    expect: 'Everything ready. KPIs inside target; availability high (a two-hour stop every Wednesday afternoon); no alerts. '
-      + 'KNOWN DEFECT (QFIX-BASELINE): the baseline charts swing about ±1.5σ every day on every machine, this one '
-      + 'included — the 30-day baseline mixes running and parked hours. Report it if you see it; it is not expected behaviour.',
+    expect: 'Everything ready during shift hours. KPIs inside target; availability high (a two-hour stop every Wednesday '
+      + 'afternoon); no alerts. The baseline KPIs sit within about ±2σ of 0 while the engine runs. Outside shift hours, and '
+      + 'during the Wednesday stop, they read not_available / not_operating with no value: a parked engine is not judged '
+      + 'against a running one.',
   },
   {
     externalId: 'EX-02', name: 'EX-02 Trending', state: 'trending', historyDays: 90, endDaysAgo: 0, unbound: [],
     expect: 'Ready. Coolant drifts up by about 14 °C over the last 10 days, still under the 105 °C bound; '
-      + 'its coolant-vs-baseline chart rides higher than EX-01\'s during running hours, though the gap is smaller '
-      + 'than it should be until QFIX-BASELINE (known defect); no alert.',
+      + 'while running, coolant-vs-baseline reads about +3σ against EX-01\'s near 0; no alert.',
   },
   {
     externalId: 'EX-03', name: 'EX-03 Breaching', state: 'breaching', historyDays: 90, endDaysAgo: 0, unbound: [],
