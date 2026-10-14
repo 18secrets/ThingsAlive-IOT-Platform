@@ -1,3 +1,4 @@
+import { FleetOnboardingService } from './services/fleet-onboarding.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DeviceCatalogModule } from '../device-catalog/device-catalog.module';
@@ -9,7 +10,7 @@ import { InventoryService } from './services/inventory.service';
 @Module({
   imports: [TypeOrmModule.forFeature([DeviceInventory, DeviceInventoryEvent]), DeviceCatalogModule],
   controllers: [InventoryController],
-  providers: [InventoryService],
+  providers: [InventoryService, FleetOnboardingService],
   exports: [InventoryService],
 })
 export class InventoryModule {}
