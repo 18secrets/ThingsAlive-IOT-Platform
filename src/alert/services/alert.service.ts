@@ -1,3 +1,4 @@
+import { absorbAlerts } from '../../incident/incident-absorb';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -318,6 +319,9 @@ export class AlertService {
           resolvedBy: null, resolvedAt: null, resolutionNote: null,
         })));
       }
+      // Into incidents in this same transaction (phase 2): an alert and the incident
+      // that owns it commit together or not at all.
+      await absorbAlerts(m, context.tenantId, fired);
       return fired;
     });
   }

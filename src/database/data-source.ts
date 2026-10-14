@@ -69,6 +69,8 @@ import { SiteClass, SiteClassLayout } from '../catalog/entities/site-class.entit
 import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-equipment-class-layout.entity';
 import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
 import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
+import { Incident } from '../incident/entities/incident.entity';
+import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -152,6 +154,10 @@ export const ENTITIES = [
   ClientEquipmentClassVisualAnchor,
   SignalState,
   ShieldEvidenceRecord,
+  Incident,
+  IncidentAlert,
+  IncidentEvent,
+  IncidentSlaPolicy,
 ];
 
 export interface DataSourceChoices {
