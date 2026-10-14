@@ -541,6 +541,8 @@ export interface EquipmentClass {
   status: "draft" | "published" | "retired";
   publishedAt: string | null;
   updatedAt: string;
+  /** Exists for the demo tenant only; only the demo seeder may grant it. */
+  seedOnly: boolean;
 }
 
 export interface EquipmentClassInput {
