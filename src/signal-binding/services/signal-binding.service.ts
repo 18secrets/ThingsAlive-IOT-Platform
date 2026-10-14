@@ -476,6 +476,27 @@ export async function bindingSegments(
   }));
 }
 
+/**
+ * The devices a machine's bindings place on it at some point in `[from, to]`, whatever
+ * the signal (task QFIX-DEVICES-2) — for the readers that ask "which loggers are on this
+ * machine" rather than "which device produced this signal". Same authority as
+ * `bindingSegments`: not `device_projection`, which is where 1.0 thinks a device is, and
+ * which let prediction, chains, recommendations, the service forecast and Availability
+ * read a different machine's devices than the page beside them.
+ */
+export async function boundImeis(
+  m: EntityManager, tenantId: string, equipment: EquipmentRef, from: Date, to: Date,
+): Promise<string[]> {
+  const rows = await m.getRepository(SignalBindingVersion).find({
+    where: {
+      tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, isPrimary: true, status: 'active',
+    },
+  });
+  return [...new Set(rows
+    .filter((r) => !!r.imei && r.validFrom <= to && (r.validTo === null || r.validTo > from))
+    .map((r) => r.imei!))];
+}
+
 /** Segments that overlap `[from, to]` — a signal is bound for a window when some
  * binding was in force during it, which is what lets history after a move still be
  * read for the machine that had the device at the time. */

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
+import { boundImeis } from '../../signal-binding/services/signal-binding.service';
 import { BaselineSource, PredictionBaseline } from '../entities/prediction-baseline.entity';
 
 /** Thirty days of history is the default reference for a Tier 1 z-score. */
@@ -53,7 +53,7 @@ export class BaselineService {
     const from = new Date(now.getTime() - windowDays * 86_400_000);
 
     return withTenantSession(this.ds, scope, async (m) => {
-      const imeis = await this.imeisFor(m, scope, target);
+      const imeis = await boundImeis(m, scope.tenantId, target, from, now);
       if (imeis.length === 0) {
         this.logger.debug(`No device on ${target.externalId}; nothing to baseline.`);
         return [];
@@ -69,13 +69,22 @@ export class BaselineService {
                 count(DISTINCT date_trunc('day', "source_timestamp"))::int AS days_with_data,
                 count(*) FILTER (WHERE "source" = 'live')::int            AS live_count,
                 count(*) FILTER (WHERE "source" <> 'live')::int           AS other_count
-           FROM "telemetry_reading"
-          WHERE "tenant_id" = $1
-            AND "imei" = ANY($2::text[])
-            AND "source_timestamp" >= $3
-            AND "source_timestamp" <= $4
+           FROM "telemetry_reading" r
+          WHERE r."tenant_id" = $1
+            AND r."imei" = ANY($2::text[])
+            AND r."source_timestamp" >= $3
+            AND r."source_timestamp" <= $4
+            -- Only while a binding had the device on this machine (task QFIX-DEVICES-2):
+            -- a logger moved here mid-window brings none of its earlier readings.
+            AND EXISTS (
+              SELECT 1 FROM "signal_binding_version" b
+               WHERE b."tenant_id" = r."tenant_id" AND b."imei" = r."imei"
+                 AND b."source_system" = $5 AND b."external_id" = $6
+                 AND b."is_primary" AND b."status" = 'active'
+                 AND r."source_timestamp" >= b."valid_from"
+                 AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to"))
           GROUP BY "signal"`,
-        [scope.tenantId, imeis, from, now],
+        [scope.tenantId, imeis, from, now, target.sourceSystem, target.externalId],
       );
 
       const written: PredictionBaseline[] = [];
@@ -93,19 +102,6 @@ export class BaselineService {
    * away from the sensor map — the map is keyed by IMEI and knows nothing about
    * machines.
    */
-  private async imeisFor(
-    m: EntityManager, scope: RequestScope, target: BaselineTarget,
-  ): Promise<string[]> {
-    const devices = await m.getRepository(DeviceProjection).find({
-      where: {
-        tenantId: scope.tenantId,
-        sourceSystem: target.sourceSystem,
-        equipmentExternalId: target.externalId,
-      },
-    });
-    return [...new Set(devices.map((d) => d.imei))];
-  }
-
   private async upsert(
     m: EntityManager,
     scope: RequestScope,

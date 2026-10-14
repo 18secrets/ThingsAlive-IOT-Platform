@@ -12,6 +12,7 @@ import { DeviceProjection } from '../src/projection/entities/device-projection.e
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 /**
  * The prediction runtime against a real Postgres (tasks P1-12, P1-13).
@@ -93,6 +94,7 @@ describeDb('prediction runtime', () => {
         imei: IMEI, equipmentExternalId: ASSET, name: null, payload: {},
         sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
       });
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: SOURCE, externalId: ASSET, imei: IMEI });
       await m.getRepository(ClientScenario).save(scenario('dg-coolant-overheat', ['coolant_temp']));
       await m.getRepository(EquipmentScenario).save(activate('dg-coolant-overheat'));
       await m.getRepository(TelemetryReading).save(history('coolant_temp'));

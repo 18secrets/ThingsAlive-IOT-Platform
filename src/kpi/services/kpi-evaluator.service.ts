@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { WindowReading } from '../../alert/services/alert-rules';
 import {
-  alertExcludedRanges, ExcludedRange, openWorkOrderExcludedRanges, Reading,
+  alertExcludedRanges, ExcludedRange, OperatingGate, openWorkOrderExcludedRanges, Reading,
 } from '../../catalog/formula/baseline-operators';
 import { ExecContext, lookupExecutor } from '../../catalog/formula/executor-registry';
 import { ArgKind, lookupOperator } from '../../catalog/formula/operator-registry';
@@ -14,8 +15,10 @@ import { Plant } from '../../equipment/entities/plant.entity';
 import { SiteBoundary } from '../../catalog/formula/geofence';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantSession } from '../../scope/tenant-session';
+import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { BindingSegment, bindingSegments, overlapping, SignalBindingService } from '../../signal-binding/services/signal-binding.service';
 import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
+import { AVAILABILITY_SIGNALS, operatingIntervals } from '../../utilization/services/availability';
 import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
 import { BucketAggregate, TelemetrySegment, TelemetryWindowReader } from './telemetry-window-reader';
@@ -56,6 +59,9 @@ interface PlanEvalContext {
    * `signal` column on `work_order`) and already merged into every entry here;
    * alert ranges are signal-specific and only merged into their own signal's. */
   excludedRangesBySignal: Map<string, ExcludedRange[]>;
+  /** When this machine was operating, over the whole read window (task QFIX-BASELINE).
+   * Only built when a target uses a baseline operator. */
+  operating?: OperatingGate;
 }
 
 type EvalResult =
@@ -115,6 +121,12 @@ export class KpiEvaluatorService {
       const envelopes = await this.evaluateBatch(m, scope.tenantId, equipment, profile, formulas, targets, at);
       return new Map(envelopes.map((e) => [e.formulaKey, e]));
     });
+  }
+
+  /** The operating periods a baseline on this machine learns from (task QFIX-BASELINE).
+   * Public so the claim that it agrees with Availability can be checked, not assumed. */
+  async operatingPeriods(scope: RequestScope, equipment: EquipmentRef, from: Date, to: Date): Promise<OperatingGate> {
+    return withTenantSession(this.ds, scope, (m) => this.loadOperatingGate(m, scope.tenantId, equipment, from, to));
   }
 
   private async loadFormulas(
@@ -261,6 +273,9 @@ export class KpiEvaluatorService {
     for (const signal of allRequiredSignals) {
       excludedRangesBySignal.set(signal, [...workOrderRanges, ...(alertRangesBySignal.get(signal) ?? [])]);
     }
+    const operating = baselineSignals.length
+      ? await this.loadOperatingGate(m, tenantId, equipment, readFrom, readTo)
+      : undefined;
 
     // The site boundary (task QGEO1), read in this tenant session like the rest. One
     // row, and only when the machine is placed somewhere.
@@ -280,11 +295,47 @@ export class KpiEvaluatorService {
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
       {
-        signals, parameters, excludedRangesBySignal, siteBoundary,
+        signals, parameters, excludedRangesBySignal, siteBoundary, operating,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
       m, tenantId, toTelemetry(segments),
     )));
+  }
+
+  /**
+   * The machine's operating periods across the read window (task QFIX-BASELINE) —
+   * Availability's own definition, `operatingIntervals`, over the same shift schedule
+   * and engine-state signals. The engine-state readings come through the bindings like
+   * every other signal this evaluator reads (task QFIX-DEVICES), not through
+   * `device_projection`. Shifts are applied across the whole lookback as they stand
+   * today, as Availability applies them to a period.
+   */
+  private async loadOperatingGate(
+    m: EntityManager, tenantId: string, equipment: EquipmentRef, from: Date, to: Date,
+  ): Promise<OperatingGate> {
+    const shifts = await m.getRepository(EquipmentShift).find({
+      where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, status: 'active' },
+    });
+    if (!shifts.length) return { scheduled: false, periods: [] };
+
+    const segments = await bindingSegments(
+      m, tenantId, equipment, [...AVAILABILITY_SIGNALS], { by: 'signalKey', componentId: '' },
+    );
+    const bySignal = await this.reader.readSegments(
+      m, tenantId,
+      overlapping(segments, from, to).map(({ signal, imei, from: f, to: t }) => ({ signal, imei, from: f, to: t })),
+      from, to,
+    );
+    const readings: WindowReading[] = [];
+    for (const [signal, rows] of bySignal) {
+      for (const r of rows) readings.push({ signal, value: r.value, sourceTimestamp: r.at.toISOString() });
+    }
+    // A millisecond past `to`: the KPI window includes its end instant and the interval
+    // arithmetic is half-open, so a reading taken exactly at evaluation time — the one a
+    // z-score judges — would otherwise always fall just outside every operating period.
+    const periods = operatingIntervals(shifts, readings, { from, to: new Date(to.getTime() + 1) })
+      .map((i) => ({ start: new Date(i.start), end: new Date(i.end) }));
+    return { scheduled: true, periods };
   }
 
   /** Condition (a) of task QCE2.1 §5 — the same four-branch `appliesTo`
@@ -348,7 +399,7 @@ export class KpiEvaluatorService {
     ctxBase: {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
-      siteBoundary: SiteBoundary | null;
+      siteBoundary: SiteBoundary | null; operating?: OperatingGate;
     },
     m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<KpiEnvelope> {
@@ -404,6 +455,7 @@ export class KpiEvaluatorService {
     const ctx: PlanEvalContext = {
       window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal, siteBoundary: ctxBase.siteBoundary,
+      operating: ctxBase.operating,
     };
 
     if (resultKind === 'series') {
@@ -479,6 +531,14 @@ export class KpiEvaluatorService {
     // when the window is short enough to produce exactly one bucket.
     return { ok: true, value: points };
   }
+}
+
+/** No schedule is a configuration gap; too little operating data is a block on the
+ * baseline as a whole (QFIX-BASELINE §3); everything else is a value not available now. */
+function readinessFor(reason: Reason): Readiness {
+  if (reason === 'no_shift_schedule') return 'not_configured';
+  if (reason === 'insufficient_coverage') return 'blocked';
+  return 'not_available';
 }
 
 /** 1 when the ordering holds, else 0 (task QCE5). */
@@ -713,10 +773,10 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
         windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
-        siteBoundary: ctx.siteBoundary,
+        siteBoundary: ctx.siteBoundary, operating: ctx.operating,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
-      if (result.ok === false) return { ok: false, readiness: 'not_available', reason: result.reason };
+      if (result.ok === false) return { ok: false, readiness: readinessFor(result.reason), reason: result.reason };
       return { ok: true, value: result.value };
     }
     default:

@@ -1,6 +1,6 @@
 import { WindowReading } from '../../alert/services/alert-rules';
 import { ShiftDefinition, windowsEndingBetween } from '../../shift/services/shift-window';
-import { computeDutyCycle, DUTY_SIGNALS } from './duty-cycle';
+import { DUTY_SIGNALS, engineOnIntervals } from './duty-cycle';
 import { SIGNALS } from '../../common/signals';
 
 /**
@@ -52,7 +52,7 @@ export interface Period {
   to: Date;
 }
 
-interface Interval {
+export interface Interval {
   start: number;
   end: number;
 }
@@ -114,12 +114,36 @@ function complement(scheduled: Interval[], period: Period): Interval[] {
   return out;
 }
 
-function engineOnHours(readings: WindowReading[], intervals: Interval[]): number {
-  let seconds = 0;
-  for (const i of intervals) {
-    seconds += computeDutyCycle(readings, new Date(i.start), new Date(i.end)).engineOnSeconds;
-  }
-  return seconds / 3600;
+/** Engine-on time inside each interval, from the duty cycle's own timeline. */
+function engineOn(readings: WindowReading[], intervals: Interval[]): Interval[] {
+  return intervals.flatMap((i) => engineOnIntervals(readings, new Date(i.start), new Date(i.end)));
+}
+
+const hoursIn = (intervals: Interval[]): number =>
+  intervals.reduce((sum, i) => sum + (i.end - i.start), 0) / HOUR_MS;
+
+function observedIn(readings: WindowReading[], period: Period): WindowReading[] {
+  const wanted = new Set(AVAILABILITY_SIGNALS);
+  const from = period.from.getTime();
+  const to = period.to.getTime();
+  return readings.filter((r) => {
+    if (!wanted.has(r.signal) || !Number.isFinite(r.value)) return false;
+    const at = new Date(r.sourceTimestamp).getTime();
+    return at >= from && at < to;
+  });
+}
+
+/**
+ * When the machine was operating: inside a scheduled shift **and** with the engine on.
+ * Availability's uptime is the length of these intervals, and the baseline keeps only
+ * the readings taken inside them (task QFIX-BASELINE) — one definition of operating
+ * time with two callers, because two definitions would drift the way
+ * `device_projection` and `device_inventory` once did.
+ */
+export function operatingIntervals(
+  shifts: readonly ShiftDefinition[], readings: WindowReading[], period: Period,
+): Interval[] {
+  return engineOn(observedIn(readings, period), scheduledIntervals(shifts, period));
 }
 
 /**
@@ -134,14 +158,7 @@ function engineOnHours(readings: WindowReading[], intervals: Interval[]): number
 export function computeAvailability(
   shifts: readonly ShiftDefinition[], readings: WindowReading[], period: Period,
 ): Availability {
-  const wanted = new Set(AVAILABILITY_SIGNALS);
-  const from = period.from.getTime();
-  const to = period.to.getTime();
-  const observed = readings.filter((r) => {
-    if (!wanted.has(r.signal) || !Number.isFinite(r.value)) return false;
-    const at = new Date(r.sourceTimestamp).getTime();
-    return at >= from && at < to;
-  });
+  const observed = observedIn(readings, period);
 
   const scheduled = scheduledIntervals(shifts, period);
   const scheduledHours = round(scheduled.reduce((sum, i) => sum + (i.end - i.start), 0) / HOUR_MS);
@@ -149,7 +166,7 @@ export function computeAvailability(
   // Measured whether or not there is a schedule: a machine running with no shift
   // defined is exactly the one whose owner most needs to see it.
   const unscheduledRunningHours = observed.length
-    ? round(engineOnHours(observed, complement(scheduled, period)))
+    ? round(hoursIn(engineOn(observed, complement(scheduled, period))))
     : null;
 
   if (scheduledHours === 0) {
@@ -168,7 +185,7 @@ export function computeAvailability(
     };
   }
 
-  const uptimeHours = round(engineOnHours(observed, scheduled));
+  const uptimeHours = round(hoursIn(operatingIntervals(shifts, readings, period)));
   return {
     scheduledHours,
     uptimeHours,
