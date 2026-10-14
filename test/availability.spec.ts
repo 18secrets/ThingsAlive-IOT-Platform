@@ -10,6 +10,7 @@ import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { aggregateAvailability, Availability, computeAvailability } from '../src/utilization/services/availability';
 import { AvailabilityService } from '../src/utilization/services/availability.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
@@ -208,6 +209,7 @@ describeDb('availability: the service against Postgres, as ta_app', () => {
       sourceUpdatedAt: null, syncedAt: new Date(), checksum: 'c', status: 'live',
       imei, equipmentExternalId: externalId, name: null,
     });
+    await bindProjectedDevice(m, { tenantId, sourceSystem: SOURCE, externalId, imei });
     if (opts.shift) {
       await m.getRepository(EquipmentShift).save({
         tenantId, sourceSystem: SOURCE, externalId, name: 'Day',

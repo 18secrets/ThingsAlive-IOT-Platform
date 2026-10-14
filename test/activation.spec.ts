@@ -20,6 +20,7 @@ import { DeviceProjection } from '../src/projection/entities/device-projection.e
 import { SensorMapProjection } from '../src/projection/entities/sensor-map-projection.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 /**
  * Turning a scenario on for one asset (task P1-09).
@@ -138,6 +139,7 @@ describeDb('activation', () => {
         ...base, externalId: 'dev-1', checksum: 'c1', imei: 'imei-1',
         equipmentExternalId: ASSET, name: null,
       });
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: SOURCE, externalId: ASSET, imei: 'imei-1' });
       await m.getRepository(SensorMapProjection).save({
         ...base, externalId: 'imei-1-coolant_temp', checksum: 'c2', imei: 'imei-1',
         signal: 'coolant_temp', sensorName: 'coolant_temp', unit: null,

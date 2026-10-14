@@ -10,6 +10,7 @@ import { TenantMap } from '../../src/projection/entities/tenant-map.entity';
 import { TelemetryReading } from '../../src/telemetry/telemetry-reading.entity';
 import { runTenantSpanning } from '../../src/scope/tenant-session';
 import { CopyOnGrantService } from '../../src/client-catalog/services/copy-on-grant.service';
+import { bindProjectedDevice } from '../bind-projected-devices';
 
 /**
  * A fleet shaped to exercise every answer the recommendation engine can give.
@@ -194,6 +195,7 @@ async function upsertAsset(m: EntityManager, asset: AssetSpec, now: Date): Promi
     ...base, externalId: `dev-${asset.externalId}`, checksum: `demo-dev-${asset.externalId}`,
     imei, equipmentExternalId: asset.externalId, name: `Logger on ${asset.name}`,
   }));
+  await bindProjectedDevice(m, { tenantId: TENANT, sourceSystem: SOURCE, externalId: asset.externalId, imei });
 
   const sensors = m.getRepository(SensorMapProjection);
   for (const signal of asset.signals) {
