@@ -99,6 +99,24 @@ export class KpiEvaluatorService {
     });
   }
 
+  /**
+   * Several of one machine's KPIs in one pass (task QTX1) — what a site page needs from
+   * each machine, without evaluating formulas no widget shows or one session per key.
+   * A key the machine's class does not declare is simply absent from the result.
+   */
+  async evaluateKeys(
+    scope: RequestScope, equipment: EquipmentRef, formulaKeys: string[], at: Date = new Date(),
+  ): Promise<Map<string, KpiEnvelope>> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const { formulas, profile } = await this.loadFormulas(m, scope.tenantId, equipment);
+      const wanted = new Set(formulaKeys);
+      const targets = formulas.filter((f) => wanted.has(f.formulaKey));
+      if (!targets.length) return new Map();
+      const envelopes = await this.evaluateBatch(m, scope.tenantId, equipment, profile, formulas, targets, at);
+      return new Map(envelopes.map((e) => [e.formulaKey, e]));
+    });
+  }
+
   private async loadFormulas(
     m: EntityManager, tenantId: string, equipment: EquipmentRef,
   ): Promise<{ formulas: ClientFormula[]; profile: EquipmentProfile }> {
