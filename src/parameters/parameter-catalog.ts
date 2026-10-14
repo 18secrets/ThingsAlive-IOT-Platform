@@ -49,6 +49,16 @@ export const OPERATIONAL_PARAMETERS: readonly OperationalParameter[] = [
     name: 'stale_after_seconds', unit: 's', kind: 'number', costTyped: false,
     description: 'How long without a reading before a signal is stale. Overrides the class requirement.',
   },
+  // OEE (task QOEE1). Each overrides the library class's OEM figure for this client,
+  // site, class or machine; with none set at any scope, the OEM figure answers.
+  {
+    name: 'nominal_fuel_per_hour', unit: 'L/h', kind: 'number', costTyped: false,
+    description: 'Fuel the machine should burn per productive hour. Compared with fuel_consumption in the same unit.',
+  },
+  {
+    name: 'idle_breakdown_threshold_minutes', unit: 'min', kind: 'number', costTyped: false,
+    description: 'How long idle with fuel available, inside a shift, before it counts as a breakdown. At least 5.',
+  },
   {
     name: 'shield_due_soon_days', unit: 'd', kind: 'number', costTyped: false,
     description: 'How many days before an evidence record falls due it reads "due soon" on ThingsShield.',

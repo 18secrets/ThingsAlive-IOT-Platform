@@ -301,19 +301,22 @@ export class ServiceForecastService {
     tenantId: string,
   ): Promise<Map<string, { value: number; at: Date }>> {
     const rows = await m.query(
-      // Machine to device to reading. This joined `sensor_map_projection.external_id`
-      // as though it were the equipment code; it is the upstream *measurement* id, so
-      // the join matched nothing in real data. The fixture that tested it encoded the
-      // same mistake, which is why it passed. The device projection is the table that
-      // knows which loggers are fitted to which machine.
-      `SELECT DISTINCT ON (d."equipment_external_id")
-              d."equipment_external_id" AS external_id, r."value", r."source_timestamp"
+      // Machine to device to reading, through the bindings (task QFIX-DEVICES-2): an
+      // hour-meter reading belongs to the machine its device was bound to when it was
+      // taken, so a logger moved between machines does not carry one machine's hours
+      // onto the other. `sensor_map_projection.external_id` is the upstream
+      // *measurement* id, never the machine's, and `device_projection` is where 1.0
+      // thinks a device is.
+      `SELECT DISTINCT ON (b."external_id")
+              b."external_id" AS external_id, r."value", r."source_timestamp"
          FROM "telemetry_reading" r
-         JOIN "device_projection" d
-           ON d."imei" = r."imei" AND d."tenant_id" = r."tenant_id"
+         JOIN "signal_binding_version" b
+           ON b."imei" = r."imei" AND b."tenant_id" = r."tenant_id"
+          AND b."is_primary" AND b."status" = 'active'
+          AND r."source_timestamp" >= b."valid_from"
+          AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to")
         WHERE r."tenant_id" = $1 AND r."signal" = $2
-          AND d."equipment_external_id" IS NOT NULL
-        ORDER BY d."equipment_external_id", r."source_timestamp" DESC`,
+        ORDER BY b."external_id", r."source_timestamp" DESC`,
       [tenantId, SIGNALS.engineRuntime],
     );
     return new Map(rows.map((r) => [

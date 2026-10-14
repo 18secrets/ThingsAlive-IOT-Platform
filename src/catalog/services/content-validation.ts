@@ -42,3 +42,53 @@ export function validateSignalCountForPublish(signals: unknown[]): string | null
 export function validateScenarioRequiredSignals(requiredSignals: string[]): string | null {
   return requiredSignals.length ? null : 'a scenario must require at least one signal.';
 }
+
+/** The OEM figures OEE reads from a class (task QCLASS-OEM). */
+export interface OemFigures {
+  nominalFuelPerHour: number | null;
+  nominalFuelUnit: string | null;
+  idleBreakdownThresholdMinutes: number;
+  runningSignal: string | null;
+  runningIdleBound: number | null;
+  availabilitySignal: string | null;
+}
+
+/** The task's stated default — not an OEM figure, a definition of "too long idle". */
+export const DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES = 30;
+export const MIN_IDLE_BREAKDOWN_THRESHOLD_MINUTES = 5;
+
+/**
+ * The same refusals `1759800000000-ClassOemFigures.ts` enforces, said in sentences, so
+ * the import can name a row and publish can name the class instead of a constraint.
+ * Unset is always fine: a class without OEM figures is a class QOEE1 reports as
+ * `parameter_not_set`, not an invalid one.
+ */
+export function oemFigureProblems(f: OemFigures, declaredSignals: string[]): string[] {
+  const problems: string[] = [];
+  const declared = new Set(declaredSignals);
+  if (f.nominalFuelPerHour !== null && !(f.nominalFuelPerHour > 0)) {
+    problems.push(`nominal_fuel_per_hour must be above 0, not ${f.nominalFuelPerHour}.`);
+  }
+  if (f.nominalFuelPerHour !== null && !f.nominalFuelUnit?.trim()) {
+    problems.push('nominal_fuel_per_hour has no unit; a nominal without one cannot be compared to anything.');
+  }
+  if (f.nominalFuelPerHour === null && f.nominalFuelUnit?.trim()) {
+    problems.push(`nominal_fuel_unit "${f.nominalFuelUnit}" is set with no nominal_fuel_per_hour.`);
+  }
+  if (!Number.isInteger(f.idleBreakdownThresholdMinutes)
+    || f.idleBreakdownThresholdMinutes < MIN_IDLE_BREAKDOWN_THRESHOLD_MINUTES) {
+    problems.push(
+      `idle_breakdown_threshold_minutes must be a whole number of at least ${MIN_IDLE_BREAKDOWN_THRESHOLD_MINUTES}, `
+        + `not ${f.idleBreakdownThresholdMinutes}.`,
+    );
+  }
+  if ((f.runningSignal === null) !== (f.runningIdleBound === null)) {
+    problems.push('running_signal and running_idle_bound are set together or not at all.');
+  }
+  for (const [column, signal] of [['running_signal', f.runningSignal], ['availability_signal', f.availabilitySignal]]) {
+    if (signal !== null && !declared.has(signal)) {
+      problems.push(`${column} "${signal}" is not a signal this class declares.`);
+    }
+  }
+  return problems;
+}

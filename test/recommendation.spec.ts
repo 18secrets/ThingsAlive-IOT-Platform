@@ -14,6 +14,7 @@ import { runTenantSpanning } from '../src/scope/tenant-session';
 import { ClientEquipmentClass } from '../src/client-catalog/entities/client-equipment-class.entity';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 /**
  * Which scenarios an asset can run, and why not (task P1-10).
@@ -120,6 +121,7 @@ describeDb('recommendations', () => {
         payload: {}, sourceUpdatedAt: null, syncedAt: NOW, checksum: `c-${opts.externalId}`,
         status: 'live', imei, equipmentExternalId: opts.externalId, name: null,
       });
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: SOURCE, externalId: opts.externalId, imei });
       for (const signal of opts.signals ?? ['fuel_level']) {
         await m.getRepository(SensorMapProjection).save({
           sourceSystem: SOURCE, externalId: `${imei}-${signal}`, tenantId: 'acme',

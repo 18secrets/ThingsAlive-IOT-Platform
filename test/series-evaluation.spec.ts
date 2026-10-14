@@ -14,6 +14,7 @@ import { SignalBindingService } from '../src/signal-binding/services/signal-bind
 import { SignalBindingVersion } from '../src/signal-binding/entities/signal-binding-version.entity';
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
+import { EquipmentShift } from '../src/shift/entities/equipment-shift.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 const HOUR = 3_600_000;
@@ -43,7 +44,7 @@ describeDb('QCE2.1: series evaluation', () => {
 
   beforeEach(async () => {
     for (const t of ['telemetry_reading', 'signal_binding_version', 'alert_event', 'alert_rule',
-      'device_projection', 'equipment_profile', 'client_formula', 'client_equipment_class', 'plant']) {
+      'device_projection', 'equipment_shift', 'equipment_profile', 'client_formula', 'client_equipment_class', 'plant']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     const plant = await owner.getRepository(Plant).save(owner.getRepository(Plant).create({
@@ -104,6 +105,29 @@ describeDb('QCE2.1: series evaluation', () => {
     })),
   );
 
+  // The baseline learns only from operating periods (task QFIX-BASELINE): a shift
+  // covering every reading here, with the engine on at each. This file tests the
+  // baseline's own arithmetic, so the gate is satisfied, not exercised.
+  const seedOperating = async (hoursAgo: number[]) => {
+    await owner.getRepository(EquipmentShift).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId, name: 'Day',
+      startMinute: 6 * 60, endMinute: 18 * 60, days: [0, 1, 2, 3, 4, 5, 6], timeZone: 'UTC', status: 'active',
+      scoredThrough: null, arrivalsThrough: null, createdBy: 'u-master', updatedBy: 'u-master',
+    });
+    await owner.getRepository(SignalBindingVersion).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId,
+      signalKey: 'engine_running_status', measurementRole: 'engine_running_status', componentId: '',
+      origin: 'physical', imei: IMEI, channel: 'ch2', sensorInstanceId: null,
+      canonicalUnit: 'state', sourceUnit: null, validFrom: new Date('2026-01-01'), validTo: null,
+      expectedPeriodSeconds: null, isPrimary: true, status: 'active',
+      discoveredFrom: null, discoveredBy: 'manual', approvedBy: 'u-master', approvedAt: NOW,
+    });
+    await owner.getRepository(TelemetryReading).save(hoursAgo.map((h) => ({
+      tenantId: 'acme', imei: IMEI, signal: 'engine_running_status', value: 1, unit: 'state',
+      sourceTimestamp: new Date(NOW.getTime() - h * HOUR), receivedAt: NOW, source: 'live' as const,
+    })));
+  };
+
   describe('§1: series output shape', () => {
     it('a bare-signal series plan returns bucketed points, ascending by t, with null for empty buckets', async () => {
       await saveFormula('coolant_series', 'coolant_temp_c');
@@ -152,6 +176,7 @@ describeDb('QCE2.1: series evaluation', () => {
       await saveFormula('coolant_z', 'zscore(coolant_temp_c, 20d)');
       const history = Array.from({ length: 20 }, (_, i) => ({ hoursAgo: (20 - i) * 24, value: 50 }));
       await seedReadings([...history, { hoursAgo: 0.1, value: 80 }]);
+      await seedOperating([...history.map((p) => p.hoursAgo), 0.1]);
 
       const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'coolant_z', NOW);
       expect(envelope.readiness).toBe('ready');
@@ -177,10 +202,11 @@ describeDb('QCE2.1: series evaluation', () => {
     // points (19 history + the current one) are flat at 50 exactly.
     const avgFormula = () => saveFormula('coolant_avg', 'baseline_avg(coolant_temp_c, 20d)');
     const SPIKE_INDEX = 9; // 11 days ago
-    const historyWithSpike = () => {
+    const historyWithSpike = async () => {
       const history = Array.from(
         { length: 20 }, (_, i) => ({ hoursAgo: (20 - i) * 24, value: i === SPIKE_INDEX ? 500 : 50 }),
       );
+      await seedOperating([...history.map((p) => p.hoursAgo), 0.1]);
       return seedReadings([...history, { hoursAgo: 0.1, value: 50 }]);
     };
     const UNEXCLUDED_AVG = 1500 / 21;
@@ -243,6 +269,7 @@ describeDb('QCE2.1: series evaluation', () => {
       // Spike in the last two days; an open alert since 3 days ago excludes it.
       const history = Array.from({ length: 20 }, (_, i) => ({ hoursAgo: (20 - i) * 24, value: i === 18 ? 500 : 50 }));
       await seedReadings([...history, { hoursAgo: 0.1, value: 50 }]);
+      await seedOperating([...history.map((p) => p.hoursAgo), 0.1]);
       const rule = await saveRule({ appliesTo: 'account' });
       await saveEvent(rule.id, 3 * 24, null); // still open — no resolvedAt
       expect(await avgValue()).toBe(EXCLUDED_AVG);

@@ -70,9 +70,19 @@ export class ActivationService {
     options: { reason?: string; parameterOverrides?: Record<string, unknown> } = {},
     now = new Date(),
   ): Promise<ActivationView> {
+    // Copied out field by field, never spread. The controller hands over its whole
+    // request body as the target, and a validated DTO carries `reason` and
+    // `parameterOverrides` as own keys even when the request omitted them (ES2022 class
+    // fields). Spread into a `where`, those keys name columns EquipmentScenario does not
+    // have, and every transition failed with a 500 before reaching the state machine.
+    const key = {
+      sourceSystem: target.sourceSystem,
+      externalId: target.externalId,
+      clientScenarioSlug: target.clientScenarioSlug,
+    };
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(EquipmentScenario);
-      const existing = await repo.findOne({ where: { tenantId: scope.tenantId, ...target } });
+      const existing = await repo.findOne({ where: { tenantId: scope.tenantId, ...key } });
       const from: ActivationState | null = existing?.state ?? null;
 
       const { to } = transition(action, from, options.reason);
@@ -90,13 +100,13 @@ export class ActivationService {
       }
 
       const blockers = action === 'activate' || action === 'resume'
-        ? await this.gate(scope, target, now)
+        ? await this.gate(scope, key, now)
         : [];
 
       const row = repo.create({
         ...(existing ?? {}),
         tenantId: scope.tenantId,
-        ...target,
+        ...key,
         state: to,
         parameterOverrides: options.parameterOverrides
           ?? existing?.parameterOverrides
@@ -117,7 +127,7 @@ export class ActivationService {
       const history = m.getRepository(ScenarioActivationEvent);
       await history.save(history.create({
         tenantId: scope.tenantId,
-        ...target,
+        ...key,
         action,
         fromState: from,
         toState: to,

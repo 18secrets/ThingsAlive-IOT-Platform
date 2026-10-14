@@ -10,6 +10,7 @@ import { ServiceForecastService } from '../src/service/services/service-forecast
 import { computeDutyCycle } from '../src/utilization/services/duty-cycle';
 import { UtilizationService } from '../src/utilization/services/utilization.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 /**
  * Service forecasting, end to end (task P4-07).
@@ -100,6 +101,7 @@ describeDb('service forecast', () => {
          VALUES ('acme',$1,$2,'c',$2,$3,'{}'::jsonb,$4,$4,'live')
          ON CONFLICT DO NOTHING`,
         [CLIENT_SOURCE_SYSTEM, imei, externalId, NOW]);
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId, imei });
       await m.query(
         `INSERT INTO "telemetry_reading"
            ("tenant_id","imei","signal","value","unit","source_timestamp","received_at","source")
