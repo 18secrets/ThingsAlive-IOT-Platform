@@ -5,8 +5,9 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import {
-  ApiError, EquipmentAvailability, EquipmentProfile, UtilizationShiftRow,
-  apiGetEquipmentAvailability, apiGetEquipmentUtilization, apiListEquipment,
+  ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor, OeeParameterSource,
+  OeeWindow, UtilizationShiftRow, apiGetBreakdowns, apiGetEquipmentAvailability, apiGetEquipmentOee,
+  apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
 
 const DAYS = 7;
@@ -14,6 +15,151 @@ const REASON_TEXT: Record<string, string> = {
   no_shift_schedule: 'No shift schedule configured for this machine',
   no_readings: 'No readings in this period',
 };
+
+const OEE_REASON_TEXT: Record<string, string> = {
+  no_shift_schedule: 'No shift schedule for this machine',
+  no_readings: 'No readings in this window',
+  parameter_not_set: 'A required parameter is not set',
+  insufficient_coverage: 'Not enough readings to judge',
+  unbound: 'The signal it needs is not bound',
+  unit_mismatch: 'Fuel units do not match the nominal figure',
+  stale: 'Readings are stale',
+  undefined_result: 'No available time to measure against',
+  not_available: 'Not available',
+};
+
+const SOURCE_TEXT: Record<OeeParameterSource, string> = {
+  equipment: 'this machine', class: 'its class', site: 'its site', client: 'the account', oem: 'the OEM figure',
+};
+
+const WINDOW_LABEL: Record<OeeWindow, string> = { day: 'Today', week: 'This week', month: 'This month' };
+
+const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
+
+const FactorTile: React.FC<{ label: string; factor: OeeFactor; children?: React.ReactNode }> = ({ label, factor, children }) => (
+  <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-1">
+    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+    {factor.readiness === 'ready' ? (
+      <p className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{pct(factor.value)}</p>
+    ) : (
+      <p className="text-xs text-slate-400">{OEE_REASON_TEXT[factor.reason ?? ''] ?? factor.reason ?? 'Not available'}</p>
+    )}
+    {children}
+  </div>
+);
+
+/** OEE for one machine (QOEE1): the three factors it multiplies, each standing or
+ *  falling on its own, and the breakdowns that took Performance down. */
+function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
+  const [oee, setOee] = useState<EquipmentOee | null>(null);
+  const [breakdowns, setBreakdowns] = useState<BreakdownEvent[]>([]);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    setError(undefined);
+    apiGetEquipmentOee(sourceSystem, externalId, oeeWindow)
+      .then((result) => {
+        if (!live) return;
+        setOee(result);
+        // Same window the OEE was computed over, so the list explains the number above it.
+        return apiGetBreakdowns(sourceSystem, externalId, result.from, result.to)
+          .then((rows) => { if (live) setBreakdowns(rows); });
+      })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load OEE.'); });
+    return () => { live = false; };
+  }, [sourceSystem, externalId, oeeWindow]);
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Overall Equipment Effectiveness</h3>
+          <p className="text-xs text-slate-400">Availability × Performance × Quality · UTC {oeeWindow}</p>
+        </div>
+        <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+          {(['day', 'week', 'month'] as OeeWindow[]).map((w) => (
+            <button
+              key={w}
+              onClick={() => setOeeWindow(w)}
+              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${oeeWindow === w ? 'bg-sky-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              {WINDOW_LABEL[w]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+
+      {oee && (
+        <>
+          <div className="flex items-center gap-4">
+            <RingGauge value={oee.oee.value != null ? oee.oee.value * 100 : null} size={72} colorClass="text-emerald-500 dark:text-emerald-400" />
+            <div>
+              <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{oee.oee.readiness === 'ready' ? pct(oee.oee.value) : '—'}</p>
+              <p className="text-xs text-slate-400">
+                {oee.oee.readiness === 'ready'
+                  ? `${new Date(oee.from).toLocaleString()} – ${new Date(oee.to).toLocaleString()}`
+                  : OEE_REASON_TEXT[oee.oee.reason ?? ''] ?? 'OEE not available'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <FactorTile label="Availability" factor={oee.availability}>
+              <p className="text-[11px] text-slate-400">
+                {oee.availability.availableMinutes != null ? `${Math.round(oee.availability.availableMinutes)} of ` : ''}{Math.round(oee.availability.scheduledMinutes)} scheduled min
+              </p>
+            </FactorTile>
+            <FactorTile label="Performance" factor={oee.performance}>
+              <p className="text-[11px] text-slate-400">
+                {oee.performance.breakdownCount} breakdown{oee.performance.breakdownCount === 1 ? '' : 's'} · {Math.round(oee.performance.breakdownMinutes)} min
+                {oee.performance.openBreakdown ? ' · one ongoing' : ''}
+              </p>
+              {oee.performance.thresholdMinutes != null && (
+                <p className="text-[11px] text-slate-400">
+                  Idle over {oee.performance.thresholdMinutes} min counts{oee.performance.parameterSource ? `, set by ${SOURCE_TEXT[oee.performance.parameterSource]}` : ''}
+                </p>
+              )}
+              {oee.performance.warning && <p className="text-[11px] text-amber-600 dark:text-amber-400">{oee.performance.warning}</p>}
+            </FactorTile>
+            <FactorTile label="Quality" factor={oee.quality}>
+              {oee.quality.nominalFuel != null && oee.quality.actualFuel != null && (
+                <p className="text-[11px] text-slate-400">
+                  {oee.quality.actualFuel.toFixed(1)} {oee.quality.unit} burned vs {oee.quality.nominalFuel.toFixed(1)} nominal
+                </p>
+              )}
+              {oee.quality.wasteLitres != null && oee.quality.wasteLitres > 0 && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">{oee.quality.wasteLitres.toFixed(1)} L over nominal</p>
+              )}
+              {oee.quality.parameterSource && (
+                <p className="text-[11px] text-slate-400">Nominal set by {SOURCE_TEXT[oee.quality.parameterSource]}</p>
+              )}
+            </FactorTile>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Breakdowns in this window</p>
+            {breakdowns.length === 0 ? (
+              <p className="text-xs text-slate-400">None recorded.</p>
+            ) : (
+              breakdowns.map((b) => (
+                <div key={b.id} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {new Date(b.startedAt).toLocaleString()} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString() : 'ongoing'}
+                  </span>
+                  <Chip tone={b.endedAt ? 'amber' : 'rose'}>{b.durationMinutes != null ? `${b.durationMinutes} min` : 'ongoing'}</Chip>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function periodLastNDays(days: number): { from: string; to: string } {
   const to = new Date();
@@ -98,6 +244,8 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {sourceSystem && externalId && <OeeSection sourceSystem={sourceSystem} externalId={externalId} />}
 
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-2">Shift history</h3>

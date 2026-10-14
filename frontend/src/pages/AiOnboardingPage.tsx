@@ -1,20 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { OnboardingSessionItem } from '../types';
 import { usePageHeader } from '../lib/PageHeaderContext';
-import { OnboardingList } from '../components/onboarding/OnboardingList';
-import { EquipmentDetailsView } from '../components/onboarding/EquipmentDetailsView';
+import { OnboardingProgress } from '../components/onboarding/OnboardingProgress';
 import { AIOnboarding } from '../components/onboarding/AIOnboarding';
 
-interface AiOnboardingPageProps {
-  sessions: OnboardingSessionItem[];
-  onToggleActive: (id: string) => void;
-  onRefreshSession: (id: string) => void;
-}
+type View = 'list' | 'chat';
 
-type View = 'list' | 'chat' | 'equipment-detail';
-
-export const AiOnboardingPage: React.FC<AiOnboardingPageProps> = ({ sessions, onToggleActive, onRefreshSession }) => {
+/**
+ * The list is real onboarding progress per site (GET /onboarding/status), a site being
+ * the "session" (QONBOARD-STATUS §2). The chat is still a front-end assistant: nothing in
+ * the backend answers it, and the task that built the progress endpoint ruled one out.
+ */
+export const AiOnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // AdminPage's "AI-assisted setup" link and Devices' "Setup with AI" both
@@ -24,23 +21,11 @@ export const AiOnboardingPage: React.FC<AiOnboardingPageProps> = ({ sessions, on
   usePageHeader(
     view === 'chat'
       ? { title: 'ChatBot Assistant', subtitle: 'AI Setup Assistant', breadcrumb: 'AI Onboarding', aiIndicator: true, onBack: () => setView('list') }
-      : view === 'equipment-detail'
-        ? { title: 'Equipment Details', breadcrumb: 'AI Onboarding', onBack: () => setView('list') }
-        : { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' },
+      : { title: 'AI Onboarding', subtitle: 'Onboarding progress by site' },
   );
 
-  if (view === 'equipment-detail') return <EquipmentDetailsView />;
   if (view === 'chat') {
-    return <AIOnboarding onSkipToManualSetup={() => navigate('/admin/devices/new')} />;
+    return <AIOnboarding onSkipToManualSetup={() => navigate('/admin/equipment')} />;
   }
-  return (
-    <OnboardingList
-      sessions={sessions}
-      onAddNew={() => setView('chat')}
-      onViewSession={() => setView('equipment-detail')}
-      onEditSession={() => setView('chat')}
-      onToggleActive={onToggleActive}
-      onRefreshSession={onRefreshSession}
-    />
-  );
+  return <OnboardingProgress onAddNew={() => setView('chat')} />;
 };

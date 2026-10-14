@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { Search, AlertCircle, Unplug, Info } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, AlertCircle, Unplug, Info, Activity } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { ApiError, EquipmentProfile, MyDevice } from '../../lib/api';
+import { ApiError, DeviceHealthWindow, DeviceLinkState, EquipmentProfile, MyDevice, apiGetDeviceHealth } from '../../lib/api';
+import { Chip } from '../common/Chip';
+import { Modal } from '../common/Modal';
 
 const STATE_OPTIONS: { label: string; value: MyDevice['state'] }[] = [
   { label: 'In stock', value: 'in-stock' },
@@ -29,6 +31,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
   const [selectedState, setSelectedState] = useState<'All' | MyDevice['state']>('All');
   const [busyImei, setBusyImei] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
+  const [healthOf, setHealthOf] = useState<MyDevice | null>(null);
 
   const equipmentName = useMemo(() => {
     const byExternalId = new Map(equipment.map((e) => [e.externalId, e.name ?? e.externalId]));
@@ -126,16 +129,25 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
                       {equipmentName(d.equipmentExternalId) || <span className="text-slate-400 italic">Not fitted</span>}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {d.state === 'assigned' && d.equipmentExternalId && (
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
-                          onClick={() => handleUnclaim(d)}
-                          disabled={busyImei === d.imei}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
-                          title="Take off this machine"
+                          onClick={() => setHealthOf(d)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                          title="Connection health, window by window"
                         >
-                          <Unplug className="w-3.5 h-3.5" />
+                          <Activity className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                        {d.state === 'assigned' && d.equipmentExternalId && (
+                          <button
+                            onClick={() => handleUnclaim(d)}
+                            disabled={busyImei === d.imei}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
+                            title="Take off this machine"
+                          >
+                            <Unplug className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -154,6 +166,69 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
           Total Rows: <span className="font-semibold text-slate-800 dark:text-slate-200">{filtered.length}</span>
         </div>
       </div>
+
+      <Modal
+        isOpen={!!healthOf}
+        onClose={() => setHealthOf(null)}
+        title="Connection health"
+        subtitle={healthOf ? `${healthOf.imei}${healthOf.equipmentExternalId ? ` · ${equipmentName(healthOf.equipmentExternalId)}` : ''}` : undefined}
+        maxWidth="max-w-2xl"
+      >
+        {healthOf && <DeviceHealth key={healthOf.imei} imei={healthOf.imei} />}
+      </Modal>
     </div>
+  );
+};
+
+const HEALTH_TONE: Record<DeviceLinkState, 'emerald' | 'amber' | 'rose' | 'slate'> = {
+  healthy: 'emerald', 'weak-signal': 'amber', buffering: 'amber', intermittent: 'amber', partial: 'amber',
+  dark: 'rose', unknown: 'slate',
+};
+
+const minutes = (seconds: number | null) => (seconds == null ? null : `${Math.round(seconds / 60)} min`);
+
+/** The newest windows first (the backend returns up to 50), each with what made it
+ *  that state — the per-logger version of the fleet's online/offline filter. */
+const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
+  const [windows, setWindows] = useState<DeviceHealthWindow[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetDeviceHealth(imei)
+      .then((w) => { if (live) setWindows(w); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load connection health.'); });
+    return () => { live = false; };
+  }, [imei]);
+
+  if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!windows) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (windows.length === 0) {
+    return <p className="text-sm text-slate-400">No health windows recorded yet. They appear once the logger has reported and been assessed.</p>;
+  }
+
+  return (
+    <ol className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+      {windows.map((w) => (
+        <li key={w.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-600 dark:text-slate-300">
+              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowEnd).toLocaleTimeString()}
+            </span>
+            <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{w.state}</Chip>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400">{w.detail}</p>
+          <p className="text-[11px] text-slate-400">
+            {w.samples} sample{w.samples === 1 ? '' : 's'}
+            {w.signalBand ? ` · signal ${w.signalBand}` : ''}
+            {minutes(w.longestGapSeconds) ? ` · longest gap ${minutes(w.longestGapSeconds)}` : ''}
+            {minutes(w.medianLagSeconds) ? ` · median lag ${minutes(w.medianLagSeconds)}` : ''}
+          </p>
+          {w.missingSignals.length > 0 && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">Missing: {w.missingSignals.join(', ')}</p>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 };

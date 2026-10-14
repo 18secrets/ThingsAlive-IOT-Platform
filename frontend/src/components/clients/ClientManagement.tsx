@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2 } from 'lucide-react';
+import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud } from 'lucide-react';
 import { Input } from 'rsuite';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
 import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
+import { FleetOnboardingModal } from './FleetOnboardingModal';
 
 interface ClientManagementProps {
   clients: ClientAccount[];
@@ -43,6 +44,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [onboardingClient, setOnboardingClient] = useState<ClientAccount | null>(null);
   const [editingClient, setEditingClient] = useState<ClientAccount | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
@@ -181,6 +183,14 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     <Layers className="w-3.5 h-3.5" />
                   </button>
 
+                  <button
+                    onClick={() => setOnboardingClient(c)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title="Onboard 1.0 fleet: bring this client's existing machines and loggers into 2.0"
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5" />
+                  </button>
+
                   {c.status !== 'Active' && (
                     <button
                       onClick={() => handleDeleteClick(c)}
@@ -270,6 +280,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         onUpdate={onUpdateAccount}
         existingClient={editingClient}
       />
+
+      <FleetOnboardingModal client={onboardingClient} onClose={() => setOnboardingClient(null)} />
 
       <ClientEntitlementsModal
         isOpen={!!entitlementsClient}

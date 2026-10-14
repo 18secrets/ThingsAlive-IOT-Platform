@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Activity, Layers, Info } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import {
-  ApiError, Sensor, ToolMapping, ToolMappingInput,
+  ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput,
 } from '../../lib/api';
 
 interface MapSensorsModalProps {
@@ -12,13 +12,15 @@ interface MapSensorsModalProps {
   onUpdate: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
   existingMapping?: ToolMapping | null;
   availableSensors: Sensor[];
+  /** Every industry type; the picker offers the active ones plus whatever this mapping already has. */
+  industryTypes: IndustryType[];
 }
 
 export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
-  isOpen, onClose, onCreate, onUpdate, existingMapping, availableSensors,
+  isOpen, onClose, onCreate, onUpdate, existingMapping, availableSensors, industryTypes,
 }) => {
   const [toolName, setToolName] = useState('');
-  const [industryType, setIndustryType] = useState('');
+  const [industryTypeId, setIndustryTypeId] = useState<string | null>(null);
   const [activeSensorMap, setActiveSensorMap] = useState<Record<string, boolean>>({});
   const [activeParamsMap, setActiveParamsMap] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setToolName(existingMapping?.toolName ?? '');
-    setIndustryType(existingMapping?.industryType ?? '');
+    setIndustryTypeId(existingMapping?.industryTypeId ?? null);
     setError(undefined);
 
     const sMap: Record<string, boolean> = {};
@@ -45,6 +47,10 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
   }, [isOpen, existingMapping]);
 
   if (!isOpen) return null;
+
+  const industryOptions = industryTypes
+    .filter((t) => t.status === 'active' || t.id === existingMapping?.industryTypeId)
+    .map((t) => ({ label: t.status === 'active' ? `${t.name} (${t.code})` : `${t.name} (${t.code}) — inactive`, value: t.id }));
 
   const toggleSensor = (sensor: Sensor) => {
     setActiveSensorMap((prev) => {
@@ -81,9 +87,13 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
     setBusy(true);
     setError(undefined);
     try {
+      // Sent only when it changed. The backend requires a set id to name an *active*
+      // type, so re-sending an unchanged one that has since been made inactive would
+      // refuse an edit that never touched the industry.
+      const originalIndustry = existingMapping?.industryTypeId ?? null;
       const input: ToolMappingInput = {
         toolName: finalName,
-        industryType: industryType.trim() || undefined,
+        ...(industryTypeId !== originalIndustry ? { industryTypeId } : {}),
         mappedSensors,
       };
       if (isEditing) {
@@ -158,12 +168,20 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Industrial Domain
               </label>
-              <Input
+              <SelectPicker
                 size="sm"
-                value={industryType}
-                onChange={(value) => setIndustryType(value)}
-                placeholder="e.g. Heavy Construction & Mining"
+                block
+                data={industryOptions}
+                value={industryTypeId}
+                onChange={(value) => setIndustryTypeId(value ?? null)}
+                placeholder={industryOptions.length ? 'Select an industry type' : 'No active industry types yet'}
+                searchable={industryOptions.length > 8}
               />
+              {!industryTypeId && existingMapping?.industryTypeLegacy && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                  Previously typed as "{existingMapping.industryTypeLegacy}" — pick the matching type.
+                </p>
+              )}
             </div>
           </div>
 

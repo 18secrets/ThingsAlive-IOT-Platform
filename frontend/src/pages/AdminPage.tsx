@@ -1,19 +1,18 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem,
+  AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem,
   ClientAccount,
 } from '../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -22,7 +21,9 @@ interface AdminPageProps {
   sensors: SensorItem[];
   toolMappings: ToolMappingItem[];
   categories: CategoryItem[];
-  industryTypes: IndustryTypeItem[];
+  industryTypes: IndustryType[];
+  industryTypesError?: string;
+  unmatchedIndustries: UnmatchedIndustry[];
   plants: PlantItem[];
   sensorCategories: SensorCategory[];
   realSensors: Sensor[];
@@ -70,25 +71,10 @@ interface AdminPageProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
-  equipmentTemplates: EquipmentTemplate[];
-  equipmentTemplatesError?: string;
-  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenEquipmentTemplate: (templateId: string) => void;
-  templateSensorCounts: Record<string, number>;
-  templateAlertCounts: Record<string, number>;
-  templateKpiCounts: Record<string, number>;
-  myEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplatesError?: string;
-  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenMyEquipmentTemplate: (templateId: string) => void;
-  myTemplateSensorCounts: Record<string, number>;
-  myTemplateAlertCounts: Record<string, number>;
-  myTemplateKpiCounts: Record<string, number>;
-  onAddIndustryType: (industryType: IndustryTypeItem) => void;
-  onUpdateIndustryType: (industryType: IndustryTypeItem) => void;
-  onDeleteIndustryType: (id: string) => void;
+  onCreateIndustryType: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
+  onUpdateIndustryType: (id: string, input: IndustryTypeInput) => Promise<void>;
+  onDeleteIndustryType: (id: string) => Promise<void>;
+  onRematchIndustries: () => Promise<{ matched: number; unmatched: number }>;
   realPlants: Plant[];
   plantsError?: string;
   onCreatePlant: (input: PlantInput) => Promise<Plant>;
@@ -183,6 +169,8 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       toolMappings={props.toolMappings}
       categories={props.categories}
       industryTypes={props.industryTypes}
+      industryTypesError={props.industryTypesError}
+      unmatchedIndustries={props.unmatchedIndustries}
       plants={visiblePlants}
       sensorCategories={props.sensorCategories}
       realSensors={props.realSensors}
@@ -230,25 +218,10 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateNamedFormula={props.onCreateNamedFormula}
       onUpdateNamedFormula={props.onUpdateNamedFormula}
       onPublishNamedFormula={props.onPublishNamedFormula}
-      equipmentTemplates={props.equipmentTemplates}
-      equipmentTemplatesError={props.equipmentTemplatesError}
-      onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
-      onUpdateEquipmentTemplate={props.onUpdateEquipmentTemplate}
-      onOpenEquipmentTemplate={props.onOpenEquipmentTemplate}
-      templateSensorCounts={props.templateSensorCounts}
-      templateAlertCounts={props.templateAlertCounts}
-      templateKpiCounts={props.templateKpiCounts}
-      myEquipmentTemplates={props.myEquipmentTemplates}
-      myEquipmentTemplatesError={props.myEquipmentTemplatesError}
-      onCreateMyEquipmentTemplate={props.onCreateMyEquipmentTemplate}
-      onUpdateMyEquipmentTemplate={props.onUpdateMyEquipmentTemplate}
-      onOpenMyEquipmentTemplate={props.onOpenMyEquipmentTemplate}
-      myTemplateSensorCounts={props.myTemplateSensorCounts}
-      myTemplateAlertCounts={props.myTemplateAlertCounts}
-      myTemplateKpiCounts={props.myTemplateKpiCounts}
-      onAddIndustryType={props.onAddIndustryType}
+      onCreateIndustryType={props.onCreateIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}
+      onRematchIndustries={props.onRematchIndustries}
       realPlants={props.realPlants}
       plantsError={props.plantsError}
       onCreatePlant={props.onCreatePlant}

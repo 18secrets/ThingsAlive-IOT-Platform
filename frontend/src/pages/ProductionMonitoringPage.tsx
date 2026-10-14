@@ -6,8 +6,8 @@ import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentConnection, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
-  ApiError, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant,
-  apiGetDeviceHealthFleet, apiGetFleetAvailability, apiListEquipment, apiListPlants,
+  ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
+  apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
 } from '../lib/api';
 
 const PAGE_SIZE = 12;
@@ -31,12 +31,23 @@ export const ProductionMonitoringPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
+  // OEE comes per site (GET /plants/:id/oee), which carries every machine's own OEE too —
+  // one call per site instead of one per machine. A machine on no site has none here.
+  const [siteOee, setSiteOee] = useState<Record<string, SiteOee>>({});
 
   useEffect(() => {
     let live = true;
     const { from, to } = periodLastNDays(DAYS);
     apiListEquipment().then((e) => { if (live) setEquipment(e); }).catch(() => {});
-    apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
+    apiListPlants().then((p) => {
+      if (!live) return;
+      setPlants(p);
+      for (const plant of p) {
+        apiGetSiteOee(plant.id, 'week')
+          .then((o) => { if (live) setSiteOee((prev) => ({ ...prev, [plant.id]: o })); })
+          .catch(() => {});
+      }
+    }).catch(() => {});
     apiGetDeviceHealthFleet({ days: DAYS }).then((rows) => { if (live) setLinkHealth(rows); }).catch(() => {});
     apiGetFleetAvailability(from, to)
       .then((a) => { if (live) { setAvailability(a); setError(undefined); } })
@@ -55,6 +66,15 @@ export const ProductionMonitoringPage: React.FC = () => {
     if (!row) return null;
     return row.state === 'dark' ? 'offline' : 'online';
   };
+
+  const machineOee = useMemo(() => {
+    const byKey = new Map<string, EquipmentOee>();
+    for (const site of Object.values(siteOee)) {
+      for (const m of site.machines) byKey.set(`${m.sourceSystem}|${m.externalId}`, m);
+    }
+    return byKey;
+  }, [siteOee]);
+  const selectedSiteOee = scope.plantId !== 'all' ? siteOee[scope.plantId] : undefined;
 
   const equipmentClasses = useMemo(
     () => [...new Set(equipment.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))].sort(),
@@ -93,7 +113,7 @@ export const ProductionMonitoringPage: React.FC = () => {
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Last {DAYS} days</span>
-          <span title="Availability is uptime against scheduled shift hours — not OEE, which also needs a performance and quality figure this platform does not compute.">
+          <span title="Availability is uptime against scheduled shift hours. OEE multiplies it by Performance (time lost to breakdowns) and Quality (fuel burned against nominal), per calendar week.">
             <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
@@ -121,11 +141,17 @@ export const ProductionMonitoringPage: React.FC = () => {
         <p className="text-sm text-slate-500">Loading…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>
             <KpiTile label="Machines measured" value={String(availability?.machinesMeasured ?? 0)} />
             <KpiTile label="Fleet availability" value={availability?.availability != null ? `${availability.availability.toFixed(0)}%` : '—'} />
             <KpiTile label="Uptime" value={availability?.uptimeHours != null ? `${availability.uptimeHours.toFixed(0)}h` : '—'} />
             <KpiTile label="Downtime" value={availability?.downtimeHours != null ? `${availability.downtimeHours.toFixed(0)}h` : '—'} tone="warn" />
+            {selectedSiteOee && (
+              <KpiTile
+                label={`Site OEE · this week (${selectedSiteOee.machinesIncluded} machine${selectedSiteOee.machinesIncluded === 1 ? '' : 's'})`}
+                value={selectedSiteOee.oee != null ? `${(selectedSiteOee.oee * 100).toFixed(0)}%` : '—'}
+              />
+            )}
           </div>
           {(availability?.excluded.noShiftSchedule || availability?.excluded.noReadings) ? (
             <p className="text-xs text-slate-400">
@@ -150,6 +176,7 @@ export const ProductionMonitoringPage: React.FC = () => {
                     key={`${m.sourceSystem}/${m.externalId}`}
                     machine={m}
                     name={name(m.sourceSystem, m.externalId)}
+                    oee={machineOee.get(`${m.sourceSystem}|${m.externalId}`)}
                     onOpen={() => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
                   />
                 ))}
@@ -192,7 +219,9 @@ const REASON_TEXT: Record<string, string> = {
   no_readings: 'No readings in this period',
 };
 
-const ProductionCard: React.FC<{ machine: FleetAvailability['machines'][number]; name: string; onOpen: () => void }> = ({ machine, name, onOpen }) => {
+const ProductionCard: React.FC<{
+  machine: FleetAvailability['machines'][number]; name: string; oee?: EquipmentOee; onOpen: () => void;
+}> = ({ machine, name, oee, onOpen }) => {
   const style = READINESS_STYLE[machine.readiness];
   const gaugeValue = machine.readiness === 'ready' ? machine.availability : null;
   return (
@@ -202,6 +231,15 @@ const ProductionCard: React.FC<{ machine: FleetAvailability['machines'][number];
         <div className="min-w-0 flex-1">
           <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{machine.sourceSystem}/{machine.externalId}</p>
+          {oee && (
+            <p className="text-xs mt-1">
+              {oee.oee.readiness === 'ready' && oee.oee.value != null ? (
+                <Chip tone="emerald" title="OEE this calendar week">OEE {(oee.oee.value * 100).toFixed(0)}% · this week</Chip>
+              ) : (
+                <span className="text-slate-400" title={oee.oee.reason ?? oee.oee.readiness}>OEE not available</span>
+              )}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">

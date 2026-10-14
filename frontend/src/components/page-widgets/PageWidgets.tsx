@@ -3,6 +3,7 @@ import { AlertTriangle, Bell, CheckCircle2, Wrench } from 'lucide-react';
 import {
   PageWidget, PageKpiWidgetData, PageSignalChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
   PageServiceDueData, PageFailureModeRow, PageRecommendationRow, PageMachineRow, PageSchematicData,
+  PageParameterRow, ParameterScope,
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { RingGauge } from '../common/RingGauge';
@@ -22,6 +23,8 @@ const REASON_LABEL: Record<string, string> = {
   not_forecast: 'Not in the service forecast', no_visual: 'No equipment image configured',
   upload_pending: 'Image upload pending', assets_unavailable: 'Image storage not configured',
   not_on_this_page: 'Not available on this page',
+  forecast_not_declared: 'No forecast declared for this signal',
+  no_forecast_model: 'Forecasting is not available yet',
 };
 
 export const reasonText = (reason?: string | null) => (reason ? REASON_LABEL[reason] ?? reason : 'Not available');
@@ -41,11 +44,19 @@ const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode }>
   </div>
 );
 
-function KpiWidget({ widget }: { widget: PageWidget }) {
+/** Shown under a ready KPI widget when the page offers a drill-down (Equipment Page). */
+const ExploreLink: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <button onClick={onClick} className="text-[11px] font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+    Details
+  </button>
+);
+
+function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (formulaKey: string) => void }) {
   if (widget.readiness !== 'ready' || !widget.data) {
     return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const data = widget.data as PageKpiWidgetData;
+  const explore = onExplore ? <ExploreLink onClick={() => onExplore(data.formulaKey)} /> : null;
   if (data.resultKind === 'series') {
     const points = (data.value as { t: string; v: number | null }[] ?? []).map((p) => p.v).filter((v): v is number => v != null);
     const latest = points[points.length - 1];
@@ -60,6 +71,7 @@ function KpiWidget({ widget }: { widget: PageWidget }) {
           </div>
           {points.length >= 2 && <Sparkline values={points} colorClass="text-sky-600 dark:text-sky-400" />}
         </div>
+        {explore}
       </WidgetShell>
     );
   }
@@ -79,6 +91,7 @@ function KpiWidget({ widget }: { widget: PageWidget }) {
           )}
         </div>
       </div>
+      {explore}
     </WidgetShell>
   );
 }
@@ -283,9 +296,61 @@ function SchematicWidget({ widget }: { widget: PageWidget }) {
   );
 }
 
-export function Widget({ widget }: { widget: PageWidget }) {
+const PARAMETER_SCOPE_LABEL: Record<ParameterScope, string> = {
+  equipment: 'Machine', equipment_class: 'Class', site: 'Site', client: 'Account',
+};
+
+/** "nominal_fuel_per_hour" -> "Nominal fuel per hour". The catalog has no display labels. */
+const humanise = (name: string) => {
+  const words = name.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+const formatParameterValue = (value: unknown) => {
+  if (typeof value === 'number') return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  if (typeof value === 'string' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+};
+
+function ParameterListWidget({ widget }: { widget: PageWidget }) {
+  if (widget.readiness !== 'ready' || !widget.data) {
+    return <WidgetShell title={widget.title ?? 'Parameters'}><Unfilled reason={widget.reason} /></WidgetShell>;
+  }
+  const rows = widget.data as PageParameterRow[];
+  // Cost units are stored as "currency/L"; the account's own currency is itself one of
+  // these parameters, so the unit can say "INR/L" whenever it is set.
+  const currency = rows.find((r) => r.name === 'currency' && typeof r.value === 'string')?.value as string | undefined;
+  const unitText = (unit: string | null) => (unit && currency ? unit.replace(/currency/g, currency) : unit);
+  return (
+    <WidgetShell title={widget.title ?? 'Parameters'}>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-600 dark:text-slate-300 truncate" title={r.name}>{humanise(r.name)}</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {r.source && r.value != null ? (
+                <>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
+                    {formatParameterValue(r.value)}
+                    {r.name !== 'currency' && unitText(r.unit) && <span className="font-sans font-normal text-slate-400"> {unitText(r.unit)}</span>}
+                  </span>
+                  <Chip tone="slate">{PARAMETER_SCOPE_LABEL[r.source.scope] ?? r.source.scope}</Chip>
+                </>
+              ) : (
+                <span className="text-slate-400 dark:text-slate-500">Not set</span>
+              )}
+            </div>
+          </div>
+        ))}
+        {rows.length === 0 && <p className="text-xs text-slate-400">No parameters in this account's catalog.</p>}
+      </div>
+    </WidgetShell>
+  );
+}
+
+export function Widget({ widget, onExploreKpi }: { widget: PageWidget; onExploreKpi?: (formulaKey: string) => void }) {
   switch (widget.widgetType) {
-    case 'kpi_number': case 'kpi_gauge': case 'kpi_chart': return <KpiWidget widget={widget} />;
+    case 'kpi_number': case 'kpi_gauge': case 'kpi_chart': return <KpiWidget widget={widget} onExplore={onExploreKpi} />;
     case 'signal_chart': return <SignalChartWidget widget={widget} />;
     case 'readiness_list': return <ReadinessListWidget widget={widget} />;
     case 'alert_list': return <AlertListWidget widget={widget} />;
@@ -295,6 +360,9 @@ export function Widget({ widget }: { widget: PageWidget }) {
     case 'recommendations': return <RecommendationsWidget widget={widget} />;
     case 'machine_list': return <MachineListWidget widget={widget} />;
     case 'schematic': return <SchematicWidget widget={widget} />;
+    case 'parameter_list': return <ParameterListWidget widget={widget} />;
+    // Never filled until a forecast model exists (QML1); the backend says which absence it is.
+    case 'forecast_chart': return <WidgetShell title={widget.title ?? 'Forecast'}><Unfilled reason={widget.reason} /></WidgetShell>;
     default: return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
 }

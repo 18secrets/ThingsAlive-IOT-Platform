@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowUp, RefreshCw, Settings } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { AnchorEditor } from '../components/visual/AnchorEditor';
 import {
-  ApiError, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
-  MyEquipmentClass, ScenarioProvenance,
-  apiAdoptLatestScenarioTemplate, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
+  ApiError, ClassUpgradePreview, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
+  MyEquipmentClass, ScenarioProvenance, UpgradeAction, UpgradeChange,
+  TenantVisual, apiGetMyClassVisual, apiSetMyClassAnchors,
+  apiAdoptLatestScenarioTemplate, apiApplyClassUpgrade, apiPreviewClassUpgrade, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
   apiGetMyCatalogClassLayout, apiGetMyCatalogEquipmentClass, apiGetMyCatalogScenario, apiListMyCatalogScenarios,
   apiReorderMyCatalogLayout, apiSetMyCatalogWidgetHidden,
 } from '../lib/api';
@@ -236,12 +238,25 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
     }
   }
 
+  // After an upgrade the class's own fields may have followed the library too, so the
+  // form is reloaded along with the layout rather than left showing the old values.
+  async function reloadAfterUpgrade() {
+    const c = await apiGetMyCatalogEquipmentClass(slug);
+    setCls(c);
+    setName(c.name);
+    setDescription(c.description ?? '');
+    setCategory(c.category ?? '');
+    await refreshLayout();
+  }
+
   if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
   if (!cls) return null;
 
   return (
     <div className="space-y-5">
+      <ClassUpgradeSection slug={slug} onUpgraded={reloadAfterUpgrade} />
+
       <form onSubmit={saveDetails} className="space-y-4">
         <label className="block space-y-1">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Name</span>
@@ -295,6 +310,158 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
           {widgets.length === 0 && <p className="text-xs text-slate-400">No widgets on this class's page.</p>}
         </div>
       </div>
+
+      <MyClassMarkers slug={slug} />
+    </div>
+  );
+};
+
+/** The account's copy of the class schematic: the image is the library's, the markers
+ *  can be moved or added here, and a moved one stays put through later upgrades. */
+const MyClassMarkers: React.FC<{ slug: string }> = ({ slug }) => {
+  const [visual, setVisual] = useState<TenantVisual | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetMyClassVisual(slug)
+      .then((v) => { if (live) setVisual(v); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the schematic.'); });
+    return () => { live = false; };
+  }, [slug]);
+
+  return (
+    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Schematic markers</h4>
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!visual ? (
+        !error && <p className="text-xs text-slate-400">Loading…</p>
+      ) : visual.state === 'assets_unavailable' ? (
+        <p className="text-xs text-slate-400">Image storage is not configured on this server, so the schematic can't be shown.</p>
+      ) : visual.state !== 'ready' || !visual.imageUrl ? (
+        <p className="text-xs text-slate-400">This class has no schematic image yet; Things Alive adds it to the library class.</p>
+      ) : (
+        <AnchorEditor
+          imageUrl={visual.imageUrl}
+          anchors={visual.anchors}
+          unplacedSignals={visual.unplacedSignals}
+          onSave={async (anchors) => { setVisual(await apiSetMyClassAnchors(slug, anchors)); }}
+          note="Markers you move or add become your account's own and are never moved by a library upgrade."
+        />
+      )}
+    </div>
+  );
+};
+
+const UPGRADE_ACTION_LABEL: Record<UpgradeAction, string> = {
+  replace: 'updated from the library',
+  keep: 'kept (yours)',
+  add: 'new',
+  orphan: 'no longer in the library (yours stays)',
+};
+
+/** "3 updated from the library, 1 kept (yours)" — empty when nothing of that kind moves. */
+function summarise(changes: UpgradeChange[]): string {
+  const counts = new Map<UpgradeAction, number>();
+  for (const c of changes) {
+    // An inherited row the library didn't touch is "replaced" with itself; not news.
+    if (c.action === 'replace' && c.upstream === 'unchanged') continue;
+    counts.set(c.action, (counts.get(c.action) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([action, n]) => `${n} ${UPGRADE_ACTION_LABEL[action]}`).join(', ');
+}
+
+/** The library's newer version of this class, what taking it would change, and the
+ *  button that applies exactly the version shown (QUPGRADE1). */
+const ClassUpgradeSection: React.FC<{ slug: string; onUpgraded: () => Promise<void> }> = ({ slug, onUpgraded }) => {
+  const [preview, setPreview] = useState<ClassUpgradePreview | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [applying, setApplying] = useState(false);
+  const [notice, setNotice] = useState<string | undefined>(undefined);
+
+  const load = () => apiPreviewClassUpgrade(slug)
+    .then((p) => { setPreview(p); setError(undefined); })
+    .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not check for a newer library version.'));
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug]);
+
+  async function apply() {
+    if (!preview) return;
+    if (!window.confirm(`Upgrade this class to library v${preview.toVersion}? Content you changed or added is kept.`)) return;
+    setApplying(true);
+    setNotice(undefined);
+    try {
+      const result = await apiApplyClassUpgrade(slug, preview.toVersion);
+      setNotice(result.upgraded ? `Upgraded to v${result.toVersion}.` : `Already on v${result.toVersion}; nothing changed.`);
+      await onUpgraded();
+      await load();
+    } catch (err) {
+      // Most likely a newer version published after this preview: show the fresh one.
+      setError(err instanceof ApiError ? err.message : 'Could not upgrade this class.');
+      await load();
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  if (error) return <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!preview) return <p className="text-xs text-slate-400">Checking the library version…</p>;
+
+  if (preview.upToDate) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        <span>Up to date with library v{preview.toVersion}.</span>
+        {notice && <span className="text-slate-400">{notice}</span>}
+      </div>
+    );
+  }
+
+  const lines: [string, string][] = [
+    // The preview says whether the fields follow the library, not whether v-next changed
+    // them, so this states the rule rather than claiming a change.
+    ['Class details', preview.classFields.action === 'keep' ? 'kept (yours)' : 'follow the library'],
+    ['Formulas', summarise(preview.formulas)],
+    ['Failure modes', summarise(preview.failureModes)],
+    ['Recommendations', summarise(preview.recommendations)],
+    ['Page widgets', [
+      preview.layout.added.length ? `${preview.layout.added.length} added` : '',
+      preview.layout.removed.length ? `${preview.layout.removed.length} removed` : '',
+      preview.layout.keptCustom.length ? `${preview.layout.keptCustom.length} of your arrangements kept` : '',
+    ].filter(Boolean).join(', ')],
+    ['Schematic anchors', [
+      preview.anchors.added.length ? `${preview.anchors.added.length} added` : '',
+      preview.anchors.removed.length ? `${preview.anchors.removed.length} removed` : '',
+      preview.anchors.needsRecheck.length ? `${preview.anchors.needsRecheck.length} of yours to recheck (image changed)` : '',
+    ].filter(Boolean).join(', ')],
+  ];
+
+  return (
+    <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-sky-800 dark:text-sky-300">
+          Library v{preview.toVersion} is available <span className="font-normal">(you have v{preview.fromVersion})</span>
+        </p>
+        <button
+          onClick={apply}
+          disabled={applying}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          <ArrowUpCircle className="w-3.5 h-3.5" /> {applying ? 'Upgrading…' : `Upgrade to v${preview.toVersion}`}
+        </button>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+        {lines.filter(([, text]) => text).map(([label, text]) => (
+          <React.Fragment key={label}>
+            <dt className="text-slate-500 dark:text-slate-400">{label}</dt>
+            <dd className="text-slate-700 dark:text-slate-200">{text}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      {lines.slice(1).every(([, text]) => !text) && (
+        <p className="text-[11px] text-slate-500">No formula, failure-mode, recommendation or page-widget changes in this version.</p>
+      )}
+      {notice && <p className="text-[11px] text-slate-500">{notice}</p>}
     </div>
   );
 };

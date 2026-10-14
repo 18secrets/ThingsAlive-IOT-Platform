@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, AlertCircle, Trash2 } from 'lucide-react';
 import { Input } from 'rsuite';
-import { ApiError, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
+import { ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
 
 interface ToolMappingTableProps {
@@ -11,10 +11,11 @@ interface ToolMappingTableProps {
   onUpdateMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
   onDeleteMapping: (id: string) => Promise<void>;
   availableSensors: Sensor[];
+  industryTypes: IndustryType[];
 }
 
 export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
-  mappings, error, onCreateMapping, onUpdateMapping, onDeleteMapping, availableSensors,
+  mappings, error, onCreateMapping, onUpdateMapping, onDeleteMapping, availableSensors, industryTypes,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -97,7 +98,11 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
                       <div className="font-semibold text-sm text-slate-900 dark:text-white">{item.toolName}</div>
                     </td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                      {item.industryType || '—'}
+                      {item.industryType ?? (item.industryTypeLegacy ? (
+                        <span className="text-amber-600 dark:text-amber-400" title="Typed before industry types existed; no type matches it yet">
+                          {item.industryTypeLegacy} <span className="text-[10px]">(unmatched)</span>
+                        </span>
+                      ) : '—')}
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex flex-wrap gap-1.5 max-w-sm">
@@ -161,6 +166,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
         onUpdate={onUpdateMapping}
         existingMapping={editingMapping}
         availableSensors={availableSensors}
+        industryTypes={industryTypes}
       />
     </div>
   );
