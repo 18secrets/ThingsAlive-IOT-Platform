@@ -17,7 +17,9 @@ import { SignalAlias } from '../entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
 import { validateParams } from '../../alert/services/alert-rules';
-import { validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals } from './content-validation';
+import {
+  oemFigureProblems, validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals,
+} from './content-validation';
 import {
   ClassContentError, copyClassContent, danglingRecommendations, fromFailureModeJsonb, insertClassContent,
   loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
@@ -174,6 +176,9 @@ export class CatalogAuthoringService {
       // The visual (task QREC0c): an anchor on an undeclared signal, or an upload never
       // confirmed. No visual at all publishes normally.
       ...await visualPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
+      // OEM figures (task QCLASS-OEM). The constraints already refuse a bad row at write;
+      // this is the net that names the field for any path that reached a draft anyway.
+      ...oemFigureProblems(draft, draft.expectedSignals.map((s) => s.signal)),
     ];
     if (contentProblems.length) {
       throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${contentProblems.join(' ')}`);

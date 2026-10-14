@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { UtilizationShift } from './entities/utilization-shift.entity';
+import { BreakdownEvent } from './entities/breakdown-event.entity';
+import { OeeController } from './oee.controller';
 import { AvailabilityService } from './services/availability.service';
+import { OeeService } from './services/oee.service';
 import { UtilizationService } from './services/utilization.service';
 import { UtilizationController } from './utilization.controller';
 
@@ -14,9 +17,9 @@ import { UtilizationController } from './utilization.controller';
  * put the shift runner one edge away from a cycle for the sake of two fields.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([UtilizationShift, EquipmentProfile])],
-  controllers: [UtilizationController],
-  providers: [UtilizationService, AvailabilityService],
+  imports: [TypeOrmModule.forFeature([UtilizationShift, EquipmentProfile, BreakdownEvent])],
+  controllers: [UtilizationController, OeeController],
+  providers: [UtilizationService, AvailabilityService, OeeService],
   exports: [UtilizationService],
 })
 export class UtilizationModule {}
