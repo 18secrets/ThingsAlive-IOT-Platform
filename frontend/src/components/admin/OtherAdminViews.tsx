@@ -10,28 +10,41 @@ import {
   Hexagon,
 } from 'lucide-react';
 import { Input } from 'rsuite';
-import { IndustryTypeItem } from '../../types';
-import { ApiError, GeoJsonPolygon, Plant, PlantInput } from '../../lib/api';
+import {
+  ApiError, GeoJsonPolygon, IndustryType, IndustryTypeInput, Plant, PlantInput, UnmatchedIndustry,
+} from '../../lib/api';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
 import { AddPlantModal } from './AddPlantModal';
 import { EditPlantBoundaryModal } from './EditPlantBoundaryModal';
 
 interface IndustryTypeViewProps {
-  items: IndustryTypeItem[];
-  onAddIndustryType?: (industryType: IndustryTypeItem) => void;
-  onUpdateIndustryType?: (industryType: IndustryTypeItem) => void;
-  onDeleteIndustryType?: (id: string) => void;
+  items: IndustryType[];
+  error?: string;
+  /** Free text from before industry types existed that no active type matches yet. */
+  unmatched: UnmatchedIndustry[];
+  onCreateIndustryType?: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
+  onUpdateIndustryType?: (id: string, input: IndustryTypeInput) => Promise<void>;
+  onDeleteIndustryType?: (id: string) => Promise<void>;
+  onRematchIndustries?: () => Promise<{ matched: number; unmatched: number }>;
 }
 
 export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   items,
-  onAddIndustryType,
+  error,
+  unmatched,
+  onCreateIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
+  onRematchIndustries,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<IndustryTypeItem | null>(null);
+  const [editingItem, setEditingItem] = useState<IndustryType | null>(null);
+  // Bumped on every open so the modal remounts and reads the item it was opened for.
+  const [modalKey, setModalKey] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rematching, setRematching] = useState(false);
+  const [notice, setNotice] = useState<string | undefined>(undefined);
 
   const filteredItems = useMemo(() => {
     return items.filter((i) =>
@@ -40,8 +53,49 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
     );
   }, [items, searchTerm]);
 
+  const openModal = (item: IndustryType | null) => {
+    setEditingItem(item);
+    setModalKey((k) => k + 1);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (item: IndustryType) => {
+    if (!window.confirm(`Delete the industry type "${item.name}"? Tool mappings still using it will stop the delete.`)) return;
+    setBusyId(item.id);
+    try {
+      await onDeleteIndustryType?.(item.id);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not delete this industry type.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRematch = async () => {
+    if (!onRematchIndustries) return;
+    setRematching(true);
+    setNotice(undefined);
+    try {
+      const { matched, unmatched: left } = await onRematchIndustries();
+      setNotice(`${matched} tool mapping${matched === 1 ? '' : 's'} matched${left ? `; ${left} still need${left === 1 ? 's' : ''} a type` : ''}.`);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not re-match tool mappings.');
+    } finally {
+      setRematching(false);
+    }
+  };
+
+  const unmatchedMappings = unmatched.reduce((sum, u) => sum + u.mappings, 0);
+
   return (
     <div id="industry-type-management-view" className="space-y-3">
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Search & Add Action Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -56,13 +110,10 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
           />
         </div>
 
-        {onAddIndustryType && (
+        {onCreateIndustryType && (
           <button
             id="add-industry-type-btn"
-            onClick={() => {
-              setEditingItem(null);
-              setIsModalOpen(true);
-            }}
+            onClick={() => openModal(null)}
             className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -70,6 +121,42 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* Tool mappings saved before industry types existed carry free text. It is kept,
+          not discarded, and re-matched to a real type once one with that name exists. */}
+      {(unmatchedMappings > 0 || notice) && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-4 space-y-2">
+          {unmatchedMappings > 0 && (
+            <>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  {unmatchedMappings} tool mapping{unmatchedMappings === 1 ? '' : 's'} still carr{unmatchedMappings === 1 ? 'ies' : 'y'} an industry typed before industry types existed
+                </p>
+                {onRematchIndustries && (
+                  <button
+                    onClick={handleRematch}
+                    disabled={rematching}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950 disabled:opacity-50 cursor-pointer"
+                  >
+                    {rematching ? 'Re-matching…' : 'Re-match'}
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                Add an active industry type whose name or code is exactly one of these, then Re-match:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {unmatched.map((u) => (
+                  <span key={u.text} className="text-[11px] font-medium px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
+                    {u.text} <span className="text-amber-500">×{u.mappings}</span>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          {notice && <p className="text-[11px] text-amber-800 dark:text-amber-300">{notice}</p>}
+        </div>
+      )}
 
       {/* Industry Type Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -85,24 +172,27 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                 </span>
 
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      setEditingItem(item);
-                      setIsModalOpen(true);
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Edit Industry Type"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  {onUpdateIndustryType && (
+                    <button
+                      onClick={() => openModal(item)}
+                      disabled={busyId === item.id}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Edit Industry Type"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => onDeleteIndustryType?.(item.id)}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer"
-                    title="Delete Industry Type"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {onDeleteIndustryType && (
+                    <button
+                      onClick={() => handleDelete(item)}
+                      disabled={busyId === item.id}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Delete Industry Type"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -110,13 +200,13 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                 {item.name}
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Created: {item.createdAt}
+                Created: {new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
               </p>
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
-              <span className={`font-semibold text-xs ${item.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                {item.status === 'Active' ? '• Active' : '• Disabled'}
+              <span className={`font-semibold text-xs ${item.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                {item.status === 'active' ? '• Active' : '• Inactive'}
               </span>
             </div>
           </div>
@@ -131,17 +221,15 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
       </div>
 
       <AddIndustryTypeModal
+        key={modalKey}
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setEditingItem(null);
         }}
-        onSave={(saved) => {
-          if (editingItem) {
-            onUpdateIndustryType?.(saved);
-          } else {
-            onAddIndustryType?.(saved);
-          }
+        onSave={async (input) => {
+          if (editingItem) await onUpdateIndustryType?.(editingItem.id, input);
+          else await onCreateIndustryType?.(input);
         }}
         existingIndustryType={editingItem}
       />

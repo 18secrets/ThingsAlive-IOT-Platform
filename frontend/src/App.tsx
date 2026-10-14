@@ -12,7 +12,6 @@ import {
   EquipmentItem,
   DeviceItem,
   PlantItem,
-  IndustryTypeItem,
   ClientAccount,
   ClientUserItem,
   RoleDefinition,
@@ -26,7 +25,6 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_EQUIPMENT,
   INITIAL_DEVICES,
-  INITIAL_INDUSTRY_TYPES,
   INITIAL_PLANTS,
   INITIAL_ONBOARDING_SESSIONS,
   INITIAL_CLIENT_USERS,
@@ -96,6 +94,8 @@ import {
   apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory,
   apiRetireSensor, apiUnretireSensor, apiDeleteSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping, apiDeleteToolMapping,
+  apiListIndustryTypes, apiCreateIndustryType, apiUpdateIndustryType, apiDeleteIndustryType,
+  apiListUnmatchedIndustries, apiRematchIndustries, IndustryType, IndustryTypeInput, UnmatchedIndustry,
   apiListSignalAliases, apiUpsertSignalAlias, apiDeleteSignalAlias,
   apiListSignalStates, apiReplaceSignalStates,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
@@ -342,9 +342,13 @@ function AppData() {
   const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
   const [devices, setDevices] = useState<DeviceItem[]>(INITIAL_DEVICES);
-  const [industryTypes, setIndustryTypes] = useState<IndustryTypeItem[]>(INITIAL_INDUSTRY_TYPES);
+  const [industryTypes, setIndustryTypes] = useState<IndustryType[]>([]);
+  const [industryTypesError, setIndustryTypesError] = useState<string | undefined>(undefined);
+  const [unmatchedIndustries, setUnmatchedIndustries] = useState<UnmatchedIndustry[]>([]);
   const [plants, setPlants] = useState<PlantItem[]>(INITIAL_PLANTS);
-  const [onboardingSessions, setOnboardingSessions] = useState(INITIAL_ONBOARDING_SESSIONS);
+  // Mock: only the master-admin dashboard's tiles read this now. AI Onboarding shows
+  // real progress from /onboarding/status.
+  const [onboardingSessions] = useState(INITIAL_ONBOARDING_SESSIONS);
 
   const refreshAccounts = async () => {
     try {
@@ -755,6 +759,19 @@ function AppData() {
     }
   };
 
+  // The unmatched list rides along: it changes whenever a type is created, renamed or
+  // re-matched, and the tab shows both together.
+  const refreshIndustryTypes = async () => {
+    try {
+      const [types, unmatched] = await Promise.all([apiListIndustryTypes(), apiListUnmatchedIndustries()]);
+      setIndustryTypes(types);
+      setUnmatchedIndustries(unmatched);
+      setIndustryTypesError(undefined);
+    } catch (err) {
+      setIndustryTypesError(err instanceof ApiError ? err.message : 'Could not load industry types.');
+    }
+  };
+
   const refreshSignalAliases = async () => {
     try {
       setSignalAliases(await apiListSignalAliases());
@@ -838,6 +855,13 @@ function AppData() {
         if (live) { setDevicePool(pool); setDevicePoolError(undefined); }
       } catch (err) {
         if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+      }
+
+      try {
+        const [types, unmatched] = await Promise.all([apiListIndustryTypes(), apiListUnmatchedIndustries()]);
+        if (live) { setIndustryTypes(types); setUnmatchedIndustries(unmatched); setIndustryTypesError(undefined); }
+      } catch (err) {
+        if (live) setIndustryTypesError(err instanceof ApiError ? err.message : 'Could not load industry types.');
       }
 
       try {
@@ -1665,16 +1689,27 @@ function AppData() {
     await refreshPlants();
     return updated;
   };
-  const handleAddIndustryType = (newType: IndustryTypeItem) => setIndustryTypes([newType, ...industryTypes]);
-  const handleUpdateIndustryType = (updatedType: IndustryTypeItem) =>
-    setIndustryTypes(industryTypes.map((i) => (i.id === updatedType.id ? updatedType : i)));
-  const handleDeleteIndustryType = (id: string) => setIndustryTypes(industryTypes.filter((i) => i.id !== id));
+  // Tool mappings are refreshed too: they show the type's name, so a rename or a
+  // re-match changes what that table reads.
+  const handleCreateIndustryType = async (input: IndustryTypeInput & { name: string; code: string }) => {
+    await apiCreateIndustryType(input);
+    await refreshIndustryTypes();
+  };
+  const handleUpdateIndustryType = async (id: string, input: IndustryTypeInput) => {
+    await apiUpdateIndustryType(id, input);
+    await Promise.all([refreshIndustryTypes(), refreshToolMappings()]);
+  };
+  const handleDeleteIndustryType = async (id: string) => {
+    await apiDeleteIndustryType(id);
+    await refreshIndustryTypes();
+  };
+  const handleRematchIndustries = async () => {
+    const result = await apiRematchIndustries();
+    await Promise.all([refreshIndustryTypes(), refreshToolMappings()]);
+    return result;
+  };
   const handleAddDevice = (newDevice: DeviceItem) => setDevices([newDevice, ...devices]);
   const handleDeleteDevice = (id: number) => setDevices(devices.filter((d) => d.id !== id));
-  const handleToggleOnboardingActive = (id: string) =>
-    setOnboardingSessions(onboardingSessions.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
-  const handleRefreshOnboardingSession = (id: string) =>
-    setOnboardingSessions(onboardingSessions.map((s) => (s.id === id ? { ...s, updatedAt: 'Just now' } : s)));
 
   const templateSensorCounts = Object.fromEntries(
     equipmentTemplates.map((t) => [t.id, (templateSensorLinks[t.id] ?? []).length]),
@@ -1848,6 +1883,8 @@ function AppData() {
                   toolMappings={toolMappings}
                   categories={categories}
                   industryTypes={industryTypes}
+                  industryTypesError={industryTypesError}
+                  unmatchedIndustries={unmatchedIndustries}
                   plants={plants}
                   sensorCategories={sensorCategories}
                   realSensors={realSensors}
@@ -1910,9 +1947,10 @@ function AppData() {
                   myTemplateSensorCounts={myTemplateSensorCounts}
                   myTemplateAlertCounts={myTemplateAlertCounts}
                   myTemplateKpiCounts={myTemplateKpiCounts}
-                  onAddIndustryType={handleAddIndustryType}
+                  onCreateIndustryType={handleCreateIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}
+                  onRematchIndustries={handleRematchIndustries}
                   realPlants={realPlants}
                   plantsError={plantsError}
                   onCreatePlant={handleCreatePlant}
@@ -1970,19 +2008,13 @@ function AppData() {
 
           <Route
             path="ai-onboarding"
-            element={
-              <AiOnboardingPage
-                sessions={onboardingSessions}
-                onToggleActive={handleToggleOnboardingActive}
-                onRefreshSession={handleRefreshOnboardingSession}
-              />
-            }
+            element={<AiOnboardingPage />}
           />
 
           <Route path="things-care" element={<ThingsCarePage />} />
           <Route path="things-care/:sourceSystem/:externalId" element={<ThingsCareDetailPage />} />
           <Route path="things-shield" element={<ThingsShieldPage />} />
-          <Route path="things-shield/:thingId" element={<ThingsShieldDetailPage />} />
+          <Route path="things-shield/:sourceSystem/:externalId" element={<ThingsShieldDetailPage />} />
           <Route path="incident-management" element={<IncidentManagementPage />} />
           <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
           <Route path="production-monitoring/:sourceSystem/:externalId" element={<ProductionMonitoringDetailPage />} />

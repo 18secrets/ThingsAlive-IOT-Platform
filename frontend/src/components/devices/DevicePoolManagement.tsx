@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Search, Plus, UserPlus, AlertCircle, Undo2, Archive, RotateCcw } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Plus, UserPlus, AlertCircle, Undo2, Archive, RotateCcw, History } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { PooledDevice, RegisterDeviceInput, ToolMapping } from '../../lib/api';
+import {
+  ApiError, DeviceInventoryEvent, InventoryAction, PooledDevice, RegisterDeviceInput, ToolMapping, apiGetDeviceHistory,
+} from '../../lib/api';
 import { ClientAccount } from '../../types';
+import { Modal } from '../common/Modal';
 import { AssignDeviceModal } from './AssignDeviceModal';
 import { RegisterDevicesModal } from './RegisterDevicesModal';
 
@@ -38,6 +41,7 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
   const [assigning, setAssigning] = useState<PooledDevice | null>(null);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [busyImei, setBusyImei] = useState<string | null>(null);
+  const [historyImei, setHistoryImei] = useState<string | null>(null);
 
   const withBusy = async (imei: string, action: () => Promise<void>) => {
     setBusyImei(imei);
@@ -137,6 +141,13 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setHistoryImei(d.imei)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer inline-flex items-center gap-1"
+                          title="History: every account and machine it has been on"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
                         {d.state === 'in-stock' && (
                           <>
                             <button
@@ -220,6 +231,52 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
         toolMappings={toolMappings}
         onRegister={onRegister}
       />
+
+      <Modal isOpen={!!historyImei} onClose={() => setHistoryImei(null)} title="Device history" subtitle={historyImei ?? undefined} maxWidth="max-w-xl">
+        {historyImei && <DeviceHistory key={historyImei} imei={historyImei} clientName={clientName} />}
+      </Modal>
     </div>
+  );
+};
+
+const ACTION_LABEL: Record<InventoryAction, string> = {
+  register: 'Registered', assign: 'Assigned to client', release: 'Taken back into stock', retire: 'Retired',
+  'return-to-stock': 'Returned to stock', claim: 'Fitted to a machine', unclaim: 'Taken off its machine',
+};
+
+/** Oldest first, as the backend returns it — a device's life reads top to bottom. */
+const DeviceHistory: React.FC<{ imei: string; clientName: (tenantId: string | null) => string | null }> = ({ imei, clientName }) => {
+  const [events, setEvents] = useState<DeviceInventoryEvent[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetDeviceHistory(imei)
+      .then((e) => { if (live) setEvents(e); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the history.'); });
+    return () => { live = false; };
+  }, [imei]);
+
+  if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!events) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (events.length === 0) return <p className="text-sm text-slate-400">No history recorded.</p>;
+
+  return (
+    <ol className="space-y-2">
+      {events.map((ev) => (
+        <li key={ev.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-0.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{ACTION_LABEL[ev.action] ?? ev.action}</span>
+            <span className="text-slate-400">{new Date(ev.at).toLocaleString()}</span>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400">
+            {ev.fromState ? `${ev.fromState} → ` : ''}{ev.toState}
+            {ev.tenantId && ` · ${clientName(ev.tenantId) || ev.tenantId}`}
+            {ev.equipmentExternalId && ` · machine ${ev.equipmentExternalId}`}
+          </p>
+          {ev.reason && <p className="text-slate-600 dark:text-slate-300">“{ev.reason}”</p>}
+        </li>
+      ))}
+    </ol>
   );
 };

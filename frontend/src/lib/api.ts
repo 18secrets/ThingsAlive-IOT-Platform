@@ -1488,7 +1488,11 @@ export interface ResolvedMappedSensor {
 export interface ToolMapping {
   id: string;
   toolName: string;
+  /** The industry type's name, resolved from `industryTypeId`; null when none is set. */
   industryType: string | null;
+  industryTypeId: string | null;
+  /** Free text typed before industry types existed, frozen; shown until re-matched. */
+  industryTypeLegacy: string | null;
   protocol: string | null;
   mappedSensors: ResolvedMappedSensor[];
   createdAt: string;
@@ -1497,9 +1501,71 @@ export interface ToolMapping {
 
 export interface ToolMappingInput {
   toolName?: string;
+  /** An active industry type's id; null clears it. Preferred over `industryType` text. */
+  industryTypeId?: string | null;
   industryType?: string;
   protocol?: string;
   mappedSensors?: { sensorId: string; parameters: string[] }[];
+}
+
+// ------------------------------------------------------------------ industry types
+
+/**
+ * What industry a tool mapping is for (`/device-catalog/industry-types`,
+ * `device-catalog.write`). Global reference data owned by Things Alive. Inactive hides
+ * a type from the tool-mapping picker; mappings already pointing at it keep it.
+ */
+export type IndustryTypeStatus = "active" | "inactive";
+
+export interface IndustryType {
+  id: string;
+  name: string;
+  /** 2–10 uppercase letters or digits, unique. */
+  code: string;
+  status: IndustryTypeStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IndustryTypeInput {
+  name?: string;
+  code?: string;
+  status?: IndustryTypeStatus;
+}
+
+/** Pre-industry-type text no active type matches yet, with how many mappings carry it. */
+export interface UnmatchedIndustry {
+  text: string;
+  mappings: number;
+}
+
+export function apiListIndustryTypes(status?: IndustryTypeStatus): Promise<IndustryType[]> {
+  return authFetch(`/device-catalog/industry-types${status ? `?status=${status}` : ""}`);
+}
+
+export function apiCreateIndustryType(input: IndustryTypeInput & { name: string; code: string }): Promise<IndustryType> {
+  return authFetch("/device-catalog/industry-types", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiUpdateIndustryType(id: string, input: IndustryTypeInput): Promise<IndustryType> {
+  return authFetch(`/device-catalog/industry-types/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Refused (409, naming the count) while any tool mapping uses the type. */
+export function apiDeleteIndustryType(id: string): Promise<void> {
+  return authFetch(`/device-catalog/industry-types/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function apiListUnmatchedIndustries(): Promise<UnmatchedIndustry[]> {
+  return authFetch("/device-catalog/tool-mappings/unmatched-industries");
+}
+
+/** Matches unmatched mappings to the active types that now exist; never moves a set one. */
+export function apiRematchIndustries(): Promise<{ matched: number; unmatched: number }> {
+  return authFetch("/device-catalog/tool-mappings/unmatched-industries/rematch", { method: "POST" });
 }
 
 export function apiListToolMappings(): Promise<ToolMapping[]> {
@@ -1604,6 +1670,29 @@ export function apiListDevicePool(
   if (filters.unassignedOnly) params.set("unassignedOnly", "true");
   const query = params.toString();
   return authFetch(`/inventory/pool${query ? `?${query}` : ""}`);
+}
+
+export type InventoryAction = "register" | "assign" | "release" | "retire" | "return-to-stock" | "claim" | "unclaim";
+
+/** One move in a device's life, across every account it has been in. */
+export interface DeviceInventoryEvent {
+  id: string;
+  imei: string;
+  action: InventoryAction;
+  fromState: PooledDevice["state"] | null;
+  toState: PooledDevice["state"];
+  /** The account it went to or came from; null while in stock. */
+  tenantId: string | null;
+  equipmentExternalId: string | null;
+  reason: string | null;
+  actorUserId: string;
+  actorRoles: string[];
+  at: string;
+}
+
+/** Oldest first. Things Alive staff only (`device.manage`). */
+export function apiGetDeviceHistory(imei: string): Promise<DeviceInventoryEvent[]> {
+  return authFetch(`/inventory/history/${encodeURIComponent(imei)}`);
 }
 
 export function apiRegisterDevices(
@@ -1938,7 +2027,7 @@ export function apiListEquipmentKpis(sourceSystem: string, externalId: string): 
 export type PageWidgetType =
   | "kpi_number" | "kpi_gauge" | "kpi_chart" | "signal_chart" | "readiness_list"
   | "alert_list" | "work_order_list" | "service_due" | "failure_modes"
-  | "recommendations" | "machine_list" | "schematic";
+  | "recommendations" | "machine_list" | "schematic" | "parameter_list" | "forecast_chart";
 
 export type PageReadiness = KpiReadiness;
 
@@ -2000,9 +2089,22 @@ export interface PageSchematicData {
   unplacedSignals: { signal: string; readiness: PageReadiness; reason: string | null }[];
 }
 
+/**
+ * One operational parameter as it applies to this machine or site (`parameter_list`):
+ * every parameter in the account's catalog, set or not. `source` names the scope whose
+ * row supplied the value; null means nothing sets it at any scope.
+ */
+export interface PageParameterRow {
+  name: string;
+  value: unknown;
+  unit: string | null;
+  source: { scope: ParameterScope; scopeRef: string | null; effectiveFrom: string } | null;
+}
+
 export type PageWidgetData =
   | PageKpiWidgetData | PageSignalChartData | PageReadinessRow[] | PageAlertRow[] | PageWorkOrderRow[]
-  | PageServiceDueData | PageFailureModeRow[] | PageRecommendationRow[] | PageMachineRow[] | PageSchematicData;
+  | PageServiceDueData | PageFailureModeRow[] | PageRecommendationRow[] | PageMachineRow[] | PageSchematicData
+  | PageParameterRow[];
 
 export interface PageWidget {
   widgetKey: string;
@@ -2151,6 +2253,90 @@ export function apiGetEquipmentAvailability(
   );
 }
 
+// ---------------------------------------------------------------------------- oee
+
+/**
+ * OEE = Availability × Performance × Quality over a UTC day, ISO week or month
+ * (`utilization.read`). Each factor carries its own readiness: a factor that can't be
+ * computed says why rather than reading as zero.
+ */
+export type OeeWindow = "day" | "week" | "month";
+
+/** Which level supplied a parameter OEE used; `oem` is the class library's figure. */
+export type OeeParameterSource = "equipment" | "class" | "site" | "client" | "oem";
+
+export interface OeeFactor {
+  /** 0..1, null unless readiness is 'ready'. */
+  value: number | null;
+  readiness: KpiReadiness;
+  reason?: string;
+}
+
+export interface EquipmentOee {
+  window: OeeWindow;
+  from: string;
+  to: string;
+  daysCovered: number;
+  availability: OeeFactor & { scheduledMinutes: number; availableMinutes: number | null };
+  performance: OeeFactor & {
+    breakdownMinutes: number; breakdownCount: number; openBreakdown: boolean;
+    thresholdMinutes: number | null; parameterSource: OeeParameterSource | null; warning?: string;
+  };
+  quality: OeeFactor & {
+    nominalFuel: number | null; actualFuel: number | null; unit: string | null;
+    wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
+  };
+  oee: OeeFactor;
+}
+
+export interface SiteOee {
+  window: OeeWindow;
+  from: string;
+  to: string;
+  daysCovered: number;
+  availability: number | null;
+  performance: number | null;
+  quality: number | null;
+  oee: number | null;
+  machinesIncluded: number;
+  /** Machines left out because their own OEE isn't ready, counted by reason. */
+  machinesExcluded: Record<string, number>;
+  machines: (EquipmentOee & { sourceSystem: string; externalId: string })[];
+}
+
+/** Idle with fuel inside a shift, past the threshold. `endedAt` null = still going. */
+export interface BreakdownEvent {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMinutes: number | null;
+  shiftId: string | null;
+  thresholdMinutes: number;
+}
+
+export function apiGetEquipmentOee(
+  sourceSystem: string, externalId: string, window: OeeWindow = "day",
+): Promise<EquipmentOee> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/oee?window=${window}`,
+  );
+}
+
+export function apiGetSiteOee(plantId: string, window: OeeWindow = "day"): Promise<SiteOee> {
+  return authFetch(`/plants/${encodeURIComponent(plantId)}/oee?window=${window}`);
+}
+
+export function apiGetBreakdowns(
+  sourceSystem: string, externalId: string, from: string, to: string,
+): Promise<BreakdownEvent[]> {
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/breakdowns`
+      + `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  );
+}
+
 // -------------------------------------------------------------------- device health
 
 /**
@@ -2175,6 +2361,35 @@ export interface FleetLinkRow {
   longestGapSeconds: number | null;
   medianLagSeconds: number | null;
   missingSignals: string[];
+}
+
+/** One assessment window for one logger (`/device-health/:imei`), newest first, up to 50. */
+export interface DeviceHealthWindow {
+  id: string;
+  imei: string;
+  sourceSystem: string;
+  externalId: string;
+  localDate: string;
+  windowStart: string;
+  windowEnd: string;
+  state: DeviceLinkState;
+  detail: string;
+  signalScale: string | null;
+  signalMedian: number | null;
+  signalWorst: number | null;
+  signalBand: string | null;
+  signalWorstBand: string | null;
+  longestGapSeconds: number | null;
+  medianLagSeconds: number | null;
+  maxLagSeconds: number | null;
+  reportedSignals: string[];
+  missingSignals: string[];
+  samples: number;
+}
+
+/** Narrowed server-side to machines the caller may see. */
+export function apiGetDeviceHealth(imei: string): Promise<DeviceHealthWindow[]> {
+  return authFetch(`/device-health/${encodeURIComponent(imei)}`);
 }
 
 export function apiGetDeviceHealthFleet(
@@ -2568,6 +2783,58 @@ export function apiReorderMyCatalogLayout(slug: string, widgetKeys: string[]) {
   return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/layout/order`, {
     method: "PUT",
     body: JSON.stringify({ widgetKeys }),
+  });
+}
+
+// ------------------------------------------------------------------- class upgrade
+
+/**
+ * Moving the account's copy of a class to the library's latest published version
+ * (`/my-catalog/equipment-classes/:slug/upgrade`). Read the preview, then apply exactly
+ * the version it showed. Inherited content follows the library; anything the account
+ * changed or added is kept.
+ */
+export type UpgradeOrigin = "inherited" | "customised" | "tenant_added";
+export type UpgradeUpstream = "unchanged" | "changed" | "removed" | "added";
+/** replace = follows the library · keep = the account's own version stays ·
+ *  orphan = the library dropped it, the account's row stays · add = new from the library. */
+export type UpgradeAction = "replace" | "keep" | "orphan" | "add";
+
+export interface UpgradeChange {
+  key: string;
+  /** null for a row the new version adds and the account never had. */
+  origin: UpgradeOrigin | null;
+  upstream: UpgradeUpstream;
+  action: UpgradeAction;
+}
+
+export interface ClassUpgradePreview {
+  slug: string;
+  fromVersion: number;
+  toVersion: number;
+  upToDate: boolean;
+  classFields: { origin: "inherited" | "customised"; action: "replace" | "keep" };
+  formulas: UpgradeChange[];
+  failureModes: UpgradeChange[];
+  recommendations: UpgradeChange[];
+  layout: { added: string[]; removed: string[]; keptCustom: string[] };
+  anchors: { added: string[]; removed: string[]; keptCustom: string[]; needsRecheck: string[] };
+}
+
+export interface ClassUpgradeResult extends ClassUpgradePreview {
+  /** false when it was already at that version — a repeat is a no-op that says so. */
+  upgraded: boolean;
+}
+
+export function apiPreviewClassUpgrade(slug: string): Promise<ClassUpgradePreview> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/upgrade`);
+}
+
+/** Refused if a newer version has published since the preview: re-read and confirm again. */
+export function apiApplyClassUpgrade(slug: string, toVersion: number): Promise<ClassUpgradeResult> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/upgrade`, {
+    method: "POST",
+    body: JSON.stringify({ toVersion }),
   });
 }
 
@@ -3267,4 +3534,256 @@ export function apiDeleteUser(userId: string): Promise<void> {
 /** A new token for an invited person who lost theirs. The old token stops working. */
 export function apiResendUserInvitation(userId: string): Promise<ResendInvitationResult> {
   return authFetch(`/identity/users/${encodeURIComponent(userId)}/resend-invitation`, { method: "POST" });
+}
+
+// ----------------------------------------------------------------- onboarding status
+
+/**
+ * How far along each machine is, derived — never stored — from the tables that own each
+ * fact (`/onboarding/status`, `equipment.write`). A site is the "session" the AI
+ * Onboarding list shows (QONBOARD-STATUS §2).
+ */
+export type OnboardingStepName = "equipment" | "device" | "mapping" | "validation" | "activation" | "alerts" | "access";
+export type OnboardingStepState = "done" | "pending" | "blocked";
+
+export const ONBOARDING_STEPS: OnboardingStepName[] = [
+  "equipment", "device", "mapping", "validation", "activation", "alerts", "access",
+];
+
+export interface OnboardingStep {
+  step: OnboardingStepName;
+  state: OnboardingStepState;
+  /** A code, null exactly when `done`. */
+  reason: string | null;
+  /** The earlier step this one waits on; set only when `blocked` by one. */
+  blockedBy: OnboardingStepName | null;
+  /** What the state was read from — counts and keys. */
+  evidence: Record<string, unknown>;
+}
+
+export interface MachineOnboarding {
+  machine: { sourceSystem: string; externalId: string; name: string | null; classSlug: string | null; plantId: string | null };
+  overall: "done" | "in_progress";
+  steps: OnboardingStep[];
+}
+
+export interface SiteOnboarding {
+  /** Null groups the machines that have no site. */
+  site: { id: string; code: string; name: string } | null;
+  status: "completed" | "in_progress" | "no_equipment";
+  machines: { total: number; done: number; inProgress: number };
+  steps: Record<OnboardingStepName, Record<OnboardingStepState, number>>;
+}
+
+export interface OnboardingSummary {
+  asOf: string;
+  sites: SiteOnboarding[];
+}
+
+export function apiGetOnboardingSummary(): Promise<OnboardingSummary> {
+  return authFetch("/onboarding/status");
+}
+
+export function apiGetMachineOnboarding(sourceSystem: string, externalId: string): Promise<MachineOnboarding> {
+  return authFetch(
+    `/onboarding/status/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`,
+  );
+}
+
+// ---------------------------------------------------------------------- thingsshield
+
+/**
+ * ThingsShield evidence (`/shield`, `shield.read` / `shield.write`): what was checked on
+ * a machine, what was found, and when the next check is due. Status is computed at read
+ * time from the latest standing record per category and never stored. A record is never
+ * edited: a correction is a new record that supersedes it, once.
+ */
+export type ShieldCategory = "compliance" | "safety" | "security";
+export const SHIELD_CATEGORIES: ShieldCategory[] = ["compliance", "safety", "security"];
+export type ShieldResult = "passed" | "failed" | "attention";
+export type ShieldStatus = "action_required" | "overdue" | "due_soon" | "current" | "not_recorded";
+
+export interface ShieldEvidence {
+  id: string;
+  category: ShieldCategory;
+  title: string;
+  result: ShieldResult;
+  performedAt: string;
+  dueAt: string | null;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  reference: string | null;
+  findings: string | null;
+  recordedBy: string;
+  recordedAt: string;
+  supersedesId: string | null;
+  /** The record that corrected this one; null while it stands. */
+  supersededById: string | null;
+}
+
+export interface ShieldMachine {
+  machine: { sourceSystem: string; externalId: string; name: string | null; classSlug: string | null; plantId: string | null };
+  /** How far ahead "due soon" looks, and whether a parameter or the default set it. */
+  dueSoonWindow: { days: number; source: "parameter" | "default"; parameter: { scope: string; scopeRef: string | null } | null };
+  categories: Record<ShieldCategory, { status: ShieldStatus; record: ShieldEvidence | null }>;
+}
+
+export interface ShieldSummary {
+  asOf: string;
+  /** Over every (machine, category) cell — a machine with nothing recorded counts three times. */
+  counts: Record<ShieldStatus, number>;
+  machines: ShieldMachine[];
+}
+
+export interface ShieldEvidenceInput {
+  title: string;
+  result: ShieldResult;
+  /** When the check happened. Not in the future. */
+  performedAt: string;
+  dueAt?: string | null;
+  /** At least one of ownerUserId and ownerName. */
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  reference?: string | null;
+  findings?: string | null;
+}
+
+export function apiGetShieldSummary(): Promise<ShieldSummary> {
+  return authFetch("/shield/summary");
+}
+
+/** Every record on the machine, newest check first, corrected ones included and marked. */
+export function apiListShieldRecords(sourceSystem: string, externalId: string): Promise<ShieldEvidence[]> {
+  return authFetch(`/shield/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/records`);
+}
+
+export function apiRecordShieldEvidence(
+  sourceSystem: string, externalId: string, input: ShieldEvidenceInput & { category: ShieldCategory },
+): Promise<ShieldEvidence> {
+  return authFetch(`/shield/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/records`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Correct a record: the original stays. A record is corrected once — a different second
+ *  correction is a 409; retrying the same one returns it. */
+export function apiReviseShieldEvidence(id: string, input: ShieldEvidenceInput): Promise<ShieldEvidence> {
+  return authFetch(`/shield/records/${encodeURIComponent(id)}/revisions`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// ------------------------------------------------------------------------ incidents
+
+/**
+ * Incident Management (`/incidents`). An incident is one machine's live problem, opened
+ * by the first alert the evaluator fires on it and gathering the rest: owned, acknowledged,
+ * resolved with a note, with SLA clocks from the account's per-severity policy (none set,
+ * no clock). Escalation runs server-side.
+ */
+export type IncidentSeverity = "none" | "low" | "medium" | "high" | "critical";
+export const INCIDENT_SEVERITIES: IncidentSeverity[] = ["critical", "high", "medium", "low", "none"];
+export type IncidentStatus = "open" | "acknowledged" | "resolved";
+export type SlaState = "no_policy" | "on_track" | "met" | "breached";
+export type IncidentEventKind =
+  | "opened" | "alert_linked" | "severity_raised" | "acknowledged" | "assigned" | "work_raised" | "escalated" | "resolved";
+
+export interface IncidentRecord {
+  id: string;
+  machine: { sourceSystem: string; externalId: string };
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  ownerUserId: string | null;
+  openedAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+  escalationLevel: number;
+  sla: {
+    acknowledge: { dueAt: string | null; state: SlaState };
+    resolve: { dueAt: string | null; state: SlaState };
+  };
+}
+
+export interface IncidentDetail extends IncidentRecord {
+  alerts: { id: string; severity: string; state: string; firedAt: string; summary: string }[];
+  workOrders: { id: string; title: string; status: string; priority: string; assignedToUserId: string | null; alertId: string | null }[];
+  timeline: { kind: IncidentEventKind; actor: string; at: string; detail: Record<string, unknown> }[];
+}
+
+/** One row per machine with an open alert (the phase-1 view); `incident` is its live record. */
+export interface IncidentMachineView {
+  machine: { sourceSystem: string; externalId: string; name: string | null; classSlug: string | null; plantId: string | null };
+  worstSeverity: IncidentSeverity;
+  latestRaisedAt: string;
+  /** Same rows the machine page's alert_list shows. */
+  openAlerts: PageAlertRow[];
+  /** null when the caller may not read work orders — not "none". */
+  openWorkOrders: { id: string; status: string; title: string; priority: string }[] | null;
+  incident: IncidentRecord | null;
+}
+
+export interface IncidentSlaPolicy {
+  severity: IncidentSeverity;
+  ackWithinMinutes: number;
+  resolveWithinMinutes: number;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export function apiListIncidentView(): Promise<{ status: "open"; incidents: IncidentMachineView[] }> {
+  return authFetch("/incidents");
+}
+
+export function apiListIncidentRecords(
+  filters: { status?: IncidentStatus | "live"; externalId?: string } = {},
+): Promise<IncidentRecord[]> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.externalId) params.set("externalId", filters.externalId);
+  const qs = params.toString();
+  return authFetch(`/incidents/records${qs ? `?${qs}` : ""}`);
+}
+
+export function apiGetIncident(id: string): Promise<IncidentDetail> {
+  return authFetch(`/incidents/records/${encodeURIComponent(id)}`);
+}
+
+/** Acknowledges its open alerts too. */
+export function apiAcknowledgeIncident(id: string): Promise<IncidentRecord> {
+  return authFetch(`/incidents/records/${encodeURIComponent(id)}/acknowledge`, { method: "POST" });
+}
+
+export function apiAssignIncident(id: string, userId: string | null): Promise<IncidentRecord> {
+  return authFetch(`/incidents/records/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ userId }) });
+}
+
+/** Needs a note; resolves its alerts; refused while work raised on them is unfinished. */
+export function apiResolveIncident(id: string, note: string): Promise<IncidentRecord> {
+  return authFetch(`/incidents/records/${encodeURIComponent(id)}/resolve`, { method: "POST", body: JSON.stringify({ note }) });
+}
+
+/** Raised against the incident's worst unresolved alert. */
+export function apiRaiseIncidentWorkOrder(
+  id: string,
+  input: { title: string; description?: string | null; priority?: WorkOrderPriority; assignedToUserId?: string | null; dueAt?: string | null },
+): Promise<WorkOrder> {
+  return authFetch(`/incidents/records/${encodeURIComponent(id)}/work-orders`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiListIncidentSlaPolicies(): Promise<IncidentSlaPolicy[]> {
+  return authFetch("/incidents/sla-policies");
+}
+
+/** Applies to incidents opened from now on. `parameters.write`. */
+export function apiSetIncidentSlaPolicy(
+  severity: IncidentSeverity, input: { ackWithinMinutes: number; resolveWithinMinutes: number },
+): Promise<IncidentSlaPolicy> {
+  return authFetch(`/incidents/sla-policies/${encodeURIComponent(severity)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function apiDeleteIncidentSlaPolicy(severity: IncidentSeverity): Promise<void> {
+  return authFetch(`/incidents/sla-policies/${encodeURIComponent(severity)}`, { method: "DELETE" });
 }

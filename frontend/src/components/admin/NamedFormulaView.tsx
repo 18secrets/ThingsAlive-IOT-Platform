@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare, History } from 'lucide-react';
 import { Input } from 'rsuite';
-import { NamedFormula, NamedFormulaInput } from '../../lib/api';
+import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
+import { Modal } from '../common/Modal';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
 
 interface NamedFormulaViewProps {
@@ -38,6 +39,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFormula, setEditingFormula] = useState<NamedFormula | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  const [historyOf, setHistoryOf] = useState<NamedFormula | null>(null);
 
   const representatives = useMemo(() => representativePerSlug(formulas), [formulas]);
 
@@ -86,13 +88,22 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                 <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
                   #{f.slug} · v{f.version}
                 </span>
-                <button
-                  onClick={() => { setEditingFormula(f); setIsModalOpen(true); }}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                  title={f.status === 'published' ? 'View (published, read-only)' : 'Edit (working draft)'}
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setHistoryOf(f)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title="Version history"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => { setEditingFormula(f); setIsModalOpen(true); }}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title={f.status === 'published' ? 'View (published, read-only)' : 'Edit (working draft)'}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{f.name}</h4>
               {f.category && <p className="text-[11px] text-slate-400 mt-0.5">{f.category}</p>}
@@ -139,6 +150,65 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
         onUpdate={onUpdateFormula}
         existingFormula={editingFormula}
       />
+
+      <Modal
+        isOpen={!!historyOf}
+        onClose={() => setHistoryOf(null)}
+        title="Version history"
+        subtitle={historyOf ? `${historyOf.name} · #${historyOf.slug}` : undefined}
+        maxWidth="max-w-2xl"
+      >
+        {historyOf && <FormulaVersions key={historyOf.slug} slug={historyOf.slug} />}
+      </Modal>
     </div>
+  );
+};
+
+/** Every version of one formula, newest first. Published versions are immutable, so
+ *  this is where an older expression a class may still be bound to can be read. */
+const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
+  const [versions, setVersions] = useState<NamedFormula[] | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetNamedFormulaVersions(slug)
+      .then((v) => { if (live) setVersions(v); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the version history.'); });
+    return () => { live = false; };
+  }, [slug]);
+
+  if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!versions) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  return (
+    <ol className="space-y-2.5">
+      {versions.map((v) => (
+        <li key={v.id} className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">v{v.version}</span>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
+                {v.status}
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              {v.publishedAt ? `Published ${new Date(v.publishedAt).toLocaleString()}` : `Last edited ${new Date(v.updatedAt).toLocaleString()}`}
+            </span>
+          </div>
+          {v.name !== versions[0].name && <p className="text-xs text-slate-600 dark:text-slate-300">{v.name}</p>}
+          <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+            <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0 mt-0.5" />
+            <span className="break-all">{v.expression}</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {v.inputs.length ? v.inputs.map((i) => `${i.role} (${i.dimension})`).join(', ') : 'No input roles'}
+            {' · '}
+            {v.resultDimension ?? (v.resultUnit ? `unit: ${v.resultUnit}` : 'dimension inferred')}
+          </p>
+        </li>
+      ))}
+      {versions.length === 0 && <p className="text-sm text-slate-400">No versions recorded.</p>}
+    </ol>
   );
 };

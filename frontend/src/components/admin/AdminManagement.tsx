@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   FunctionSquare
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, ClientAccount } from '../../types';
+import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
@@ -20,7 +20,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -41,7 +41,10 @@ interface AdminManagementProps {
   sensors: SensorItem[];
   toolMappings: ToolMappingItem[];
   categories: CategoryItem[];
-  industryTypes: IndustryTypeItem[];
+  /** Real industry types (GET /device-catalog/industry-types) — Master Admin only. */
+  industryTypes: IndustryType[];
+  industryTypesError?: string;
+  unmatchedIndustries: UnmatchedIndustry[];
   plants: PlantItem[];
   /** The real reference sensors/categories/tool mappings — Master Admin only.
    *  Separate from the mock `sensors`/`toolMappings` above, which still feed
@@ -117,9 +120,10 @@ interface AdminManagementProps {
   myTemplateSensorCounts: Record<string, number>;
   myTemplateAlertCounts: Record<string, number>;
   myTemplateKpiCounts: Record<string, number>;
-  onAddIndustryType?: (industryType: IndustryTypeItem) => void;
-  onUpdateIndustryType?: (industryType: IndustryTypeItem) => void;
-  onDeleteIndustryType?: (id: string) => void;
+  onCreateIndustryType?: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
+  onUpdateIndustryType?: (id: string, input: IndustryTypeInput) => Promise<void>;
+  onDeleteIndustryType?: (id: string) => Promise<void>;
+  onRematchIndustries?: () => Promise<{ matched: number; unmatched: number }>;
   /** The signed-in client's own sites, real (GET /equipment/plants) — client role only. */
   realPlants: Plant[];
   plantsError?: string;
@@ -219,6 +223,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   toolMappings,
   categories,
   industryTypes,
+  industryTypesError,
+  unmatchedIndustries,
   plants,
   sensorCategories,
   realSensors,
@@ -282,9 +288,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   myTemplateSensorCounts,
   myTemplateAlertCounts,
   myTemplateKpiCounts,
-  onAddIndustryType,
+  onCreateIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
+  onRematchIndustries,
   realPlants,
   plantsError,
   onCreatePlant,
@@ -436,6 +443,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateMapping={onUpdateToolMapping}
             onDeleteMapping={onDeleteToolMapping}
             availableSensors={realSensors}
+            industryTypes={industryTypes}
           />
         )}
 
@@ -495,9 +503,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         {!restrictToClientAdmin && activeSubTab === 'industry' && (
           <IndustryTypeView
             items={industryTypes}
-            onAddIndustryType={onAddIndustryType}
+            error={industryTypesError}
+            unmatched={unmatchedIndustries}
+            onCreateIndustryType={onCreateIndustryType}
             onUpdateIndustryType={onUpdateIndustryType}
             onDeleteIndustryType={onDeleteIndustryType}
+            onRematchIndustries={onRematchIndustries}
           />
         )}
 
