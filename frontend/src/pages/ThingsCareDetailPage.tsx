@@ -12,6 +12,7 @@ import {
   apiGetLatestPredictions, apiGetPredictionBaselines, apiGetPredictionHistory, apiListEquipment, apiListWorkOrders,
   apiRefreshPredictionBaselines, apiScorePredictionsNow,
 } from '../lib/api';
+import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 
 const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   none: 'emerald', low: 'emerald', medium: 'amber', high: 'rose', critical: 'rose',
@@ -223,6 +224,9 @@ export const ThingsCareDetailPage: React.FC = () => {
       </div>
 
       {sourceSystem && externalId && <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />}
+      {sourceSystem && externalId && (
+        <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+      )}
 
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">Active scenarios</h3>

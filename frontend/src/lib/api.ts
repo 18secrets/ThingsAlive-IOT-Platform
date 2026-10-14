@@ -1925,61 +1925,6 @@ export function apiProposeOrActivateBinding(
   );
 }
 
-// --------------------------------------------------------------------- equipment templates
-
-/**
- * Common onboarding fields for a named/categorised kind of equipment
- * (/equipment-templates, `equipment-template.write` — master admin only).
- * Deliberately separate from EquipmentClass — that is the prediction catalog and
- * stays untouched by this; a template here is onboarding convenience only, not yet
- * wired into the client's own Add Equipment form.
- */
-export interface EquipmentTemplate {
-  id: string;
-  name: string;
-  category: string | null;
-  manufacturer: string | null;
-  engineType: string | null;
-  fuelTankCapacityLiters: number | null;
-  serviceIntervalHours: number | null;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface EquipmentTemplateInput {
-  name?: string;
-  category?: string;
-  manufacturer?: string;
-  engineType?: string;
-  fuelTankCapacityLiters?: number;
-  serviceIntervalHours?: number;
-  description?: string;
-}
-
-export function apiListEquipmentTemplates(): Promise<EquipmentTemplate[]> {
-  return authFetch("/equipment-templates");
-}
-
-export function apiCreateEquipmentTemplate(
-  input: EquipmentTemplateInput,
-): Promise<EquipmentTemplate> {
-  return authFetch("/equipment-templates", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function apiUpdateEquipmentTemplate(
-  id: string,
-  input: EquipmentTemplateInput,
-): Promise<EquipmentTemplate> {
-  return authFetch(`/equipment-templates/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
-}
-
 // ------------------------------------------------------------------------------ kpis
 
 /**
@@ -2012,6 +1957,16 @@ export interface KpiEnvelope {
 export function apiListEquipmentKpis(sourceSystem: string, externalId: string): Promise<KpiEnvelope[]> {
   return authFetch(
     `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/kpis`,
+  );
+}
+
+/** One KPI over its declared window, or an explicit from/to (both or neither). */
+export function apiGetEquipmentKpi(
+  sourceSystem: string, externalId: string, formulaKey: string, window?: { from: string; to: string },
+): Promise<KpiEnvelope> {
+  const qs = window ? `?from=${encodeURIComponent(window.from)}&to=${encodeURIComponent(window.to)}` : "";
+  return authFetch(
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/kpis/${encodeURIComponent(formulaKey)}${qs}`,
   );
 }
 
@@ -3786,4 +3741,240 @@ export function apiSetIncidentSlaPolicy(
 
 export function apiDeleteIncidentSlaPolicy(severity: IncidentSeverity): Promise<void> {
   return authFetch(`/incidents/sla-policies/${encodeURIComponent(severity)}`, { method: "DELETE" });
+}
+
+// ---------------------------------------------------------------- fleet onboarding
+
+/**
+ * Bringing a 1.0 customer's existing fleet into 2.0's register from the mirror
+ * (`/inventory/fleet-onboarding/:tenantId`, Things Alive staff, `device.manage`). Read the
+ * plan, then apply: apply recomputes inside its own transaction, only ever adds, and is
+ * idempotent. Conflicts are listed, never resolved. It does not bind signals.
+ */
+export type FleetConflictReason =
+  | "held_by_another_account" | "retired" | "claimed_to_another_machine" | "machine_not_in_projection";
+
+export interface FleetOnboardingPlan {
+  tenantId: string;
+  /** 1.0 machines with no register row; created `origin: 'mirrored'`, unclassified. */
+  createMachines: { sourceSystem: string; externalId: string; name: string | null }[];
+  /** 1.0 loggers 2.0 has never seen: registered, assigned to the account and fitted. */
+  registerDevices: { imei: string; sourceSystem: string; equipmentExternalId: string }[];
+  /** Loggers already in the account but on no machine: fitted to the one 1.0 says. */
+  claimDevices: { imei: string; sourceSystem: string; equipmentExternalId: string }[];
+  alreadyOnboarded: number;
+  conflicts: { imei: string; equipmentExternalId: string; reason: FleetConflictReason; detail: string }[];
+}
+
+export function apiGetFleetOnboardingPlan(tenantId: string): Promise<FleetOnboardingPlan> {
+  return authFetch(`/inventory/fleet-onboarding/${encodeURIComponent(tenantId)}`);
+}
+
+export function apiApplyFleetOnboarding(tenantId: string): Promise<FleetOnboardingPlan & { applied: true }> {
+  return authFetch(`/inventory/fleet-onboarding/${encodeURIComponent(tenantId)}/apply`, { method: "POST" });
+}
+
+// ------------------------------------------------------------- chain diagnosis / what-if
+
+/**
+ * What a machine's causal chains say about it now (`/intelligence/diagnose/...`,
+ * `prediction.read`), and where a chain ends up if its inputs go where you say
+ * (`/intelligence/chains/:slug/project`). A stage is scored against what its own
+ * drivers predict, so the first stage off its curve — the origin — is the thing to look at.
+ */
+export type StageVerdict = "normal" | "origin" | "additional" | "unevaluated";
+
+export interface ChainStageResult {
+  signal: string;
+  label?: string;
+  verdict: StageVerdict;
+  reason?: "no-target" | "driver-missing" | "out-of-range";
+  missingDrivers?: string[];
+  at?: number;
+  actual?: number;
+  expected?: number;
+  /** actual - expected, signed. */
+  residual?: number;
+  /** Residual over warnAbove in the fault direction; 1 is exactly at the threshold. */
+  exceedance?: number;
+  severity?: "none" | "warning" | "critical";
+  drivers?: Record<string, number>;
+}
+
+export interface ChainDiagnosisResult {
+  slug: string;
+  evaluated: boolean;
+  reason?: "no-nodes" | "cycle" | "nothing-evaluable";
+  confidence: string;
+  stages: ChainStageResult[];
+  origin?: ChainStageResult;
+  additional: ChainStageResult[];
+  /** Downstream stages whose rise the origin fully explains. */
+  explainedBy?: { signal: string; because: string }[];
+}
+
+export interface MachineDiagnosis {
+  sourceSystem: string;
+  externalId: string;
+  equipmentClassSlug: string | null;
+  chains: ChainDiagnosisResult[];
+  skipped: { slug: string; reason: string }[];
+}
+
+export interface ProjectedStage {
+  signal: string;
+  label?: string;
+  expected: number;
+  /** Seconds from now before this stage has finished responding. */
+  leadSeconds: number;
+  depth: number;
+  /** null when the stage has no rating to breach — "not configured", not "within limits". */
+  breach: "none" | "warning" | "critical" | null;
+  confidence: string;
+}
+
+export interface ChainProjection {
+  slug: string;
+  projected: boolean;
+  reason?: "no-nodes" | "cycle" | "no-inputs";
+  stages: ProjectedStage[];
+  firstBreach?: ProjectedStage;
+}
+
+export function apiDiagnoseMachine(sourceSystem: string, externalId: string): Promise<MachineDiagnosis> {
+  return authFetch(`/intelligence/diagnose/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}`);
+}
+
+export function apiProjectChain(slug: string, inputs: { signal: string; value: number }[]): Promise<ChainProjection> {
+  return authFetch(`/intelligence/chains/${encodeURIComponent(slug)}/project`, {
+    method: "POST",
+    body: JSON.stringify({ inputs }),
+  });
+}
+
+// -------------------------------------------------------------------- class visuals
+
+/**
+ * A class's schematic image and the signal anchors placed on it (QREC0c). Master Admin
+ * authors it on a draft class version (`/platform/catalog/equipment-classes/:slug/:version`,
+ * `catalog.write`): the image goes straight to object storage through a short-lived
+ * presigned PUT, then is confirmed with the dimensions the console measured. Each account
+ * can move or add anchors on its own copy (`/my-catalog/...`) but not change the image.
+ */
+export type VisualState = "ready" | "no_visual" | "upload_pending" | "assets_unavailable";
+export const VISUAL_CONTENT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+export const MAX_VISUAL_BYTES = 50 * 1024 * 1024;
+
+export interface VisualAnchor {
+  signal: string;
+  /** Percent of the image's width and height, 0..100. */
+  hotspotX: number;
+  hotspotY: number;
+  label: string | null;
+}
+
+export interface ClassVisual {
+  classSlug: string;
+  classVersion: number;
+  state: VisualState;
+  tier: "schematic" | null;
+  imageUrl: string | null;
+  contentType: string | null;
+  width: number | null;
+  height: number | null;
+  anchors: VisualAnchor[];
+  unplacedSignals: string[];
+}
+
+export interface TenantVisual {
+  classSlug: string;
+  state: VisualState;
+  imageUrl: string | null;
+  width: number | null;
+  height: number | null;
+  /** placementCustom: the account moved or added it; a new class version never moves it. */
+  anchors: (VisualAnchor & { placementCustom: boolean })[];
+  unplacedSignals: string[];
+}
+
+const classVisualPath = (slug: string, version: number) =>
+  `/platform/catalog/equipment-classes/${encodeURIComponent(slug)}/${version}`;
+
+export function apiGetClassVisual(slug: string, version: number): Promise<ClassVisual> {
+  return authFetch(`${classVisualPath(slug, version)}/visual`);
+}
+
+export function apiRequestClassVisualUpload(
+  slug: string, version: number, contentType: string,
+): Promise<{ uploadUrl: string; key: string; method: "PUT"; headers: Record<string, string>; expiresInSeconds: number }> {
+  return authFetch(`${classVisualPath(slug, version)}/visual/upload-url`, {
+    method: "POST",
+    body: JSON.stringify({ contentType }),
+  });
+}
+
+/** Records the uploaded image; the API never sees the bytes, so the console sends the size it measured. */
+export function apiConfirmClassVisual(slug: string, version: number, width: number, height: number): Promise<ClassVisual> {
+  return authFetch(`${classVisualPath(slug, version)}/visual/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ width, height }),
+  });
+}
+
+/** Draft versions only. The stored object is kept. */
+export function apiDeleteClassVisual(slug: string, version: number): Promise<void> {
+  return authFetch(`${classVisualPath(slug, version)}/visual`, { method: "DELETE" });
+}
+
+/** Replaces the whole set, validated as a set. */
+export function apiSetClassAnchors(slug: string, version: number, anchors: VisualAnchor[]): Promise<ClassVisual> {
+  return authFetch(`${classVisualPath(slug, version)}/anchors`, { method: "PUT", body: JSON.stringify({ anchors }) });
+}
+
+export function apiGetMyClassVisual(slug: string): Promise<TenantVisual> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/visual`);
+}
+
+/** Moved or added anchors become the account's own. */
+export function apiSetMyClassAnchors(slug: string, anchors: VisualAnchor[]): Promise<TenantVisual> {
+  return authFetch(`/my-catalog/equipment-classes/${encodeURIComponent(slug)}/anchors`, {
+    method: "PUT",
+    body: JSON.stringify({ anchors }),
+  });
+}
+
+// ---------------------------------------------------------------- telemetry archive
+
+/**
+ * Telemetry past 90 days, exported to Parquet per account and month, verified by reading
+ * the object back, then dropped (QARCH1). Things Alive staff only (`platform.admin`).
+ * Read-only here: running a pass stays an operations action, not a console button.
+ */
+export interface TelemetryArchiveRow {
+  id: string;
+  tenantId: string;
+  /** First day of the month archived. */
+  month: string;
+  part: number;
+  objectKey: string;
+  /** bigint columns arrive as strings. */
+  rowCount: string;
+  checksum: string;
+  byteSize: string;
+  exportedAt: string;
+  verifiedAt: string | null;
+  verifyError: string | null;
+}
+
+/** Raw rows of `telemetry_partition_drop`, so snake_case. */
+export interface TelemetryPartitionDrop {
+  partition_name: string;
+  month: string;
+  rows_dropped: string;
+  proved_by: unknown;
+  dropped_at: string;
+}
+
+export function apiListTelemetryArchives(): Promise<{ archives: TelemetryArchiveRow[]; drops: TelemetryPartitionDrop[] }> {
+  return authFetch("/platform/telemetry-archives");
 }

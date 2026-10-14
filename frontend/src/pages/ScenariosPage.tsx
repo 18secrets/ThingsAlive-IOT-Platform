@@ -4,9 +4,11 @@ import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { AnchorEditor } from '../components/visual/AnchorEditor';
 import {
   ApiError, ClassUpgradePreview, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
   MyEquipmentClass, ScenarioProvenance, UpgradeAction, UpgradeChange,
+  TenantVisual, apiGetMyClassVisual, apiSetMyClassAnchors,
   apiAdoptLatestScenarioTemplate, apiApplyClassUpgrade, apiPreviewClassUpgrade, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
   apiGetMyCatalogClassLayout, apiGetMyCatalogEquipmentClass, apiGetMyCatalogScenario, apiListMyCatalogScenarios,
   apiReorderMyCatalogLayout, apiSetMyCatalogWidgetHidden,
@@ -308,6 +310,45 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
           {widgets.length === 0 && <p className="text-xs text-slate-400">No widgets on this class's page.</p>}
         </div>
       </div>
+
+      <MyClassMarkers slug={slug} />
+    </div>
+  );
+};
+
+/** The account's copy of the class schematic: the image is the library's, the markers
+ *  can be moved or added here, and a moved one stays put through later upgrades. */
+const MyClassMarkers: React.FC<{ slug: string }> = ({ slug }) => {
+  const [visual, setVisual] = useState<TenantVisual | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetMyClassVisual(slug)
+      .then((v) => { if (live) setVisual(v); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the schematic.'); });
+    return () => { live = false; };
+  }, [slug]);
+
+  return (
+    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Schematic markers</h4>
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!visual ? (
+        !error && <p className="text-xs text-slate-400">Loading…</p>
+      ) : visual.state === 'assets_unavailable' ? (
+        <p className="text-xs text-slate-400">Image storage is not configured on this server, so the schematic can't be shown.</p>
+      ) : visual.state !== 'ready' || !visual.imageUrl ? (
+        <p className="text-xs text-slate-400">This class has no schematic image yet; Things Alive adds it to the library class.</p>
+      ) : (
+        <AnchorEditor
+          imageUrl={visual.imageUrl}
+          anchors={visual.anchors}
+          unplacedSignals={visual.unplacedSignals}
+          onSave={async (anchors) => { setVisual(await apiSetMyClassAnchors(slug, anchors)); }}
+          note="Markers you move or add become your account's own and are never moved by a library upgrade."
+        />
+      )}
     </div>
   );
 };

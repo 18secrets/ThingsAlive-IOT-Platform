@@ -1,45 +1,28 @@
 import React from 'react';
-import { ClientAccount, DeviceItem, EquipmentItem, OnboardingSessionItem, TemplateAlertRule } from '../types';
-import { EquipmentTemplate, Sensor } from '../lib/api';
+import { ClientAccount } from '../types';
 import { useAuth } from '../lib/AuthProvider';
 import { MasterAdminDashboard } from '../components/dashboard/MasterAdminDashboard';
 import { EnterpriseCommandCenter } from '../components/dashboard/EnterpriseCommandCenter';
+import { DashboardSwitch } from '../components/dashboard/DashboardSwitch';
 
 interface DashboardPageProps {
   clients: ClientAccount[];
-  devices: DeviceItem[];
-  equipmentList: EquipmentItem[];
-  onboardingSessions: OnboardingSessionItem[];
-  masterEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplates: EquipmentTemplate[];
-  templateSensorLinks: Record<string, string[]>;
-  myTemplateSensorLinks: Record<string, string[]>;
-  alertRules: TemplateAlertRule[];
-  myAlertRules: TemplateAlertRule[];
-  realSensors: Sensor[];
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({
-  clients, devices, equipmentList, onboardingSessions,
-  masterEquipmentTemplates, myEquipmentTemplates, templateSensorLinks, myTemplateSensorLinks,
-  alertRules, myAlertRules, realSensors,
-}) => {
+export const DashboardPage: React.FC<DashboardPageProps> = ({ clients }) => {
   const { authUser } = useAuth();
   if (!authUser) return null;
 
   if (authUser.role === 'master-admin') {
-    return (
-      <MasterAdminDashboard
-        clients={clients}
-        devices={devices}
-        equipmentList={equipmentList}
-        onboardingSessions={onboardingSessions}
-      />
-    );
+    return <MasterAdminDashboard clients={clients} />;
   }
 
-  // UI-only mock fleet view (see src/data/fleetMockData.ts) — not yet backed
-  // by the real equipment-template props this page still receives for the
-  // master-admin branch above.
-  return <EnterpriseCommandCenter />;
+  // UI-only mock fleet view (see src/data/fleetMockData.ts). Shown beside the live
+  // dashboard (/dashboard-live) until one of the two is chosen.
+  return (
+    <div className="space-y-3">
+      <DashboardSwitch current="classic" />
+      <EnterpriseCommandCenter />
+    </div>
+  );
 };

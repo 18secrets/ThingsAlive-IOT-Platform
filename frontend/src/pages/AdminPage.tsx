@@ -7,7 +7,6 @@ import {
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
@@ -72,22 +71,6 @@ interface AdminPageProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
-  equipmentTemplates: EquipmentTemplate[];
-  equipmentTemplatesError?: string;
-  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenEquipmentTemplate: (templateId: string) => void;
-  templateSensorCounts: Record<string, number>;
-  templateAlertCounts: Record<string, number>;
-  templateKpiCounts: Record<string, number>;
-  myEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplatesError?: string;
-  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenMyEquipmentTemplate: (templateId: string) => void;
-  myTemplateSensorCounts: Record<string, number>;
-  myTemplateAlertCounts: Record<string, number>;
-  myTemplateKpiCounts: Record<string, number>;
   onCreateIndustryType: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
   onUpdateIndustryType: (id: string, input: IndustryTypeInput) => Promise<void>;
   onDeleteIndustryType: (id: string) => Promise<void>;
@@ -235,22 +218,6 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateNamedFormula={props.onCreateNamedFormula}
       onUpdateNamedFormula={props.onUpdateNamedFormula}
       onPublishNamedFormula={props.onPublishNamedFormula}
-      equipmentTemplates={props.equipmentTemplates}
-      equipmentTemplatesError={props.equipmentTemplatesError}
-      onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
-      onUpdateEquipmentTemplate={props.onUpdateEquipmentTemplate}
-      onOpenEquipmentTemplate={props.onOpenEquipmentTemplate}
-      templateSensorCounts={props.templateSensorCounts}
-      templateAlertCounts={props.templateAlertCounts}
-      templateKpiCounts={props.templateKpiCounts}
-      myEquipmentTemplates={props.myEquipmentTemplates}
-      myEquipmentTemplatesError={props.myEquipmentTemplatesError}
-      onCreateMyEquipmentTemplate={props.onCreateMyEquipmentTemplate}
-      onUpdateMyEquipmentTemplate={props.onUpdateMyEquipmentTemplate}
-      onOpenMyEquipmentTemplate={props.onOpenMyEquipmentTemplate}
-      myTemplateSensorCounts={props.myTemplateSensorCounts}
-      myTemplateAlertCounts={props.myTemplateAlertCounts}
-      myTemplateKpiCounts={props.myTemplateKpiCounts}
       onCreateIndustryType={props.onCreateIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}

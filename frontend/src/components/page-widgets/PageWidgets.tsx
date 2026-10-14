@@ -44,11 +44,19 @@ const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode }>
   </div>
 );
 
-function KpiWidget({ widget }: { widget: PageWidget }) {
+/** Shown under a ready KPI widget when the page offers a drill-down (Equipment Page). */
+const ExploreLink: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <button onClick={onClick} className="text-[11px] font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+    Details
+  </button>
+);
+
+function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (formulaKey: string) => void }) {
   if (widget.readiness !== 'ready' || !widget.data) {
     return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const data = widget.data as PageKpiWidgetData;
+  const explore = onExplore ? <ExploreLink onClick={() => onExplore(data.formulaKey)} /> : null;
   if (data.resultKind === 'series') {
     const points = (data.value as { t: string; v: number | null }[] ?? []).map((p) => p.v).filter((v): v is number => v != null);
     const latest = points[points.length - 1];
@@ -63,6 +71,7 @@ function KpiWidget({ widget }: { widget: PageWidget }) {
           </div>
           {points.length >= 2 && <Sparkline values={points} colorClass="text-sky-600 dark:text-sky-400" />}
         </div>
+        {explore}
       </WidgetShell>
     );
   }
@@ -82,6 +91,7 @@ function KpiWidget({ widget }: { widget: PageWidget }) {
           )}
         </div>
       </div>
+      {explore}
     </WidgetShell>
   );
 }
@@ -338,9 +348,9 @@ function ParameterListWidget({ widget }: { widget: PageWidget }) {
   );
 }
 
-export function Widget({ widget }: { widget: PageWidget }) {
+export function Widget({ widget, onExploreKpi }: { widget: PageWidget; onExploreKpi?: (formulaKey: string) => void }) {
   switch (widget.widgetType) {
-    case 'kpi_number': case 'kpi_gauge': case 'kpi_chart': return <KpiWidget widget={widget} />;
+    case 'kpi_number': case 'kpi_gauge': case 'kpi_chart': return <KpiWidget widget={widget} onExplore={onExploreKpi} />;
     case 'signal_chart': return <SignalChartWidget widget={widget} />;
     case 'readiness_list': return <ReadinessListWidget widget={widget} />;
     case 'alert_list': return <AlertListWidget widget={widget} />;

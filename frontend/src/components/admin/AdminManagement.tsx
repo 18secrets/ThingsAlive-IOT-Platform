@@ -14,7 +14,6 @@ import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, Clie
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
@@ -28,8 +27,8 @@ import { SignalAliasTable } from './SignalAliasTable';
 import { SignalStateTable } from './SignalStateTable';
 import { CategoryView } from './CategoryView';
 import { NamedFormulaView } from './NamedFormulaView';
-import { EquipmentTemplateView } from './EquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
+import { TelemetryArchiveView } from './TelemetryArchiveView';
 import { ClientDeviceManagement } from '../devices/ClientDeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
@@ -100,26 +99,6 @@ interface AdminManagementProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
-  /** Common onboarding fields, Master Admin only — deliberately separate from
-   *  the prediction catalog above; see EquipmentTemplate's own comment. */
-  equipmentTemplates: EquipmentTemplate[];
-  equipmentTemplatesError?: string;
-  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenEquipmentTemplate: (templateId: string) => void;
-  templateSensorCounts: Record<string, number>;
-  templateAlertCounts: Record<string, number>;
-  templateKpiCounts: Record<string, number>;
-  /** This client's own templates — client role only, invisible to Master Admin
-   *  and every other client. See ClientEquipmentTemplateView's own comment. */
-  myEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplatesError?: string;
-  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenMyEquipmentTemplate: (templateId: string) => void;
-  myTemplateSensorCounts: Record<string, number>;
-  myTemplateAlertCounts: Record<string, number>;
-  myTemplateKpiCounts: Record<string, number>;
   onCreateIndustryType?: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
   onUpdateIndustryType?: (id: string, input: IndustryTypeInput) => Promise<void>;
   onDeleteIndustryType?: (id: string) => Promise<void>;
@@ -272,22 +251,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreateNamedFormula,
   onUpdateNamedFormula,
   onPublishNamedFormula,
-  equipmentTemplates,
-  equipmentTemplatesError,
-  onCreateEquipmentTemplate,
-  onUpdateEquipmentTemplate,
-  onOpenEquipmentTemplate,
-  templateSensorCounts,
-  templateAlertCounts,
-  templateKpiCounts,
-  myEquipmentTemplates,
-  myEquipmentTemplatesError,
-  onCreateMyEquipmentTemplate,
-  onUpdateMyEquipmentTemplate,
-  onOpenMyEquipmentTemplate,
-  myTemplateSensorCounts,
-  myTemplateAlertCounts,
-  myTemplateKpiCounts,
   onCreateIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
@@ -361,13 +324,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'signal-state', label: 'Signal States', icon: Disc },
     { id: 'devices', label: 'Devices', icon: Cpu },
     { id: 'equipment', label: 'Equipment', icon: Wrench },
-    { id: 'equipment-template', label: 'Equipment Templates', icon: LayoutGrid },
+    { id: 'telemetry-archive', label: 'Telemetry Archive', icon: Disc },
   ];
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —
   // the same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement) and no Equipment Templates (client-only "my templates"
-  // entry point). Clients/Staff/Devices/Equipment moved out of this bar
+  // ClientManagement). Clients/Staff/Devices/Equipment moved out of this bar
   // entirely (2026-10-10) — they're promoted to their own sidebar entries
   // (see Shell.tsx's ADMIN_PROMOTED_SUBTABS) because the bar had grown too
   // crowded; PROMOTED_SUBTABS below is what's left of that filter. A client's
@@ -376,7 +338,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant', 'equipment-template', ...PROMOTED_SUBTABS].includes(tab.id)
+      !['plant', ...PROMOTED_SUBTABS].includes(tab.id)
     ));
 
   // A promoted tab (Master Admin only) is reached directly from the sidebar
@@ -456,6 +418,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
+        {!restrictToClientAdmin && activeSubTab === 'telemetry-archive' && (
+          <TelemetryArchiveView clientName={(id) => clients.find((c) => c.id === id)?.clientName ?? id} />
+        )}
+
         {!restrictToClientAdmin && activeSubTab === 'signal-state' && (
           <SignalStateTable
             states={signalStates}
@@ -484,19 +450,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreateFormula={onCreateNamedFormula}
             onUpdateFormula={onUpdateNamedFormula}
             onPublishFormula={onPublishNamedFormula}
-          />
-        )}
-
-        {!restrictToClientAdmin && activeSubTab === 'equipment-template' && (
-          <EquipmentTemplateView
-            templates={equipmentTemplates}
-            error={equipmentTemplatesError}
-            onCreateTemplate={onCreateEquipmentTemplate}
-            onUpdateTemplate={onUpdateEquipmentTemplate}
-            onOpenTemplate={onOpenEquipmentTemplate}
-            sensorCounts={templateSensorCounts}
-            alertCounts={templateAlertCounts}
-            kpiCounts={templateKpiCounts}
           />
         )}
 

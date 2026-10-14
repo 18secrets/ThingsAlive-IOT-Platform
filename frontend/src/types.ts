@@ -124,10 +124,10 @@ export type AdminSubTab =
   | 'signal-state'
   | 'devices'
   | 'equipment'
-  | 'equipment-template'
   | 'named-formula'
   | 'clients'
-  | 'staff';
+  | 'staff'
+  | 'telemetry-archive';
 
 export interface SensorParameterSpec {
   parameter: string;
@@ -264,56 +264,4 @@ export interface OnboardingSessionItem {
   active: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-// --- Equipment Template detail: sensors, alert rules, KPI formulas ---
-// UI-only mock, no backend yet. Everything below is keyed by equipmentTemplateId
-// rather than by any "Equipment Class" of its own — per the master admin flow,
-// the template itself is what a sensor/alert/KPI set is attached to; if a
-// template has nothing configured yet, it's added there directly.
-
-export type AlertSeverity = 'info' | 'warning' | 'critical';
-export type AlertCondition = '>' | '>=' | '<' | '<=' | '==' | '!=';
-
-export interface TemplateAlertRule {
-  id: string;
-  equipmentTemplateId: string;
-  name: string;
-  parameter: string;
-  condition: AlertCondition;
-  threshold: number;
-  severity: AlertSeverity;
-  message: string;
-  active: boolean;
-  createdAt: string;
-}
-
-export interface TemplateKpiFormula {
-  id: string;
-  equipmentTemplateId: string;
-  name: string;
-  formula: string;
-  unit?: string;
-  description?: string;
-  createdAt: string;
-}
-
-// T0 = rule-based (a fixed threshold, evaluated deterministically); T1 = an
-// unsupervised model scoring live telemetry against its own learned baseline.
-// Matches the tiering already shown on the client's Live Predictions dashboard.
-export type PredictionTier = 'T0' | 'T1';
-export type PredictionMethod = 'rule-based' | 'unsupervised';
-
-export interface TemplatePredictiveRule {
-  id: string;
-  equipmentTemplateId: string;
-  name: string;
-  parameter: string;
-  tier: PredictionTier;
-  method: PredictionMethod;
-  windowDays: number;
-  /** Shown to the client under the value, e.g. "vs 7-day rolling baseline". */
-  caption: string;
-  active: boolean;
-  createdAt: string;
 }

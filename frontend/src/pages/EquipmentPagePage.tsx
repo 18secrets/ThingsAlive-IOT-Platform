@@ -11,6 +11,7 @@ import {
 import { Chip } from '../components/common/Chip';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
+import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 
 const DAY_LABEL: Record<Weekday, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
 const DAY_OPTIONS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
@@ -394,6 +395,8 @@ export const EquipmentPagePage: React.FC = () => {
   const [page, setPage] = useState<MachinePage | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  // undefined = closed; null = open on the first KPI; a key = open on that KPI.
+  const [exploring, setExploring] = useState<string | null | undefined>(undefined);
 
   usePageHeader({
     title: page?.equipment.name ?? externalId ?? 'Equipment',
@@ -433,11 +436,18 @@ export const EquipmentPagePage: React.FC = () => {
           <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Equipment page</span>
         </div>
         <h2 className="text-lg font-bold">{page.equipment.name ?? page.equipment.externalId}</h2>
-        <p className="text-xs text-sky-100">
-          {page.equipment.sourceSystem}/{page.equipment.externalId}
-          {page.equipment.classSlug ? ` · ${page.equipment.classSlug}` : ' · Not classified'}
-          {page.layout.fallback ? ' · fallback layout' : ''}
-        </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-sky-100">
+            {page.equipment.sourceSystem}/{page.equipment.externalId}
+            {page.equipment.classSlug ? ` · ${page.equipment.classSlug}` : ' · Not classified'}
+            {page.layout.fallback ? ' · fallback layout' : ''}
+          </p>
+          {page.equipment.classSlug && (
+            <button onClick={() => setExploring(null)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-sky-700 hover:bg-sky-50 cursor-pointer">
+              Explore KPIs
+            </button>
+          )}
+        </div>
       </div>
 
       {page.widgets.length === 0 && (
@@ -445,7 +455,7 @@ export const EquipmentPagePage: React.FC = () => {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {gauges.map((w) => <Widget key={w.widgetKey} widget={w} />)}
+        {gauges.map((w) => <Widget key={w.widgetKey} widget={w} onExploreKpi={(key) => setExploring(key)} />)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {lists.map((w) => <Widget key={w.widgetKey} widget={w} />)}
@@ -453,6 +463,17 @@ export const EquipmentPagePage: React.FC = () => {
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+
+      <Modal isOpen={exploring !== undefined} onClose={() => setExploring(undefined)} title="KPI explorer" subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-2xl">
+        {exploring !== undefined && (
+          <KpiExplorer
+            key={exploring ?? 'first'}
+            sourceSystem={page.equipment.sourceSystem}
+            externalId={page.equipment.externalId}
+            initialFormulaKey={exploring ?? undefined}
+          />
+        )}
+      </Modal>
     </div>
   );
 };

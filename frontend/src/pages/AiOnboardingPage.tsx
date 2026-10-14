@@ -25,7 +25,7 @@ export const AiOnboardingPage: React.FC = () => {
   );
 
   if (view === 'chat') {
-    return <AIOnboarding onSkipToManualSetup={() => navigate('/admin/devices/new')} />;
+    return <AIOnboarding onSkipToManualSetup={() => navigate('/admin/equipment')} />;
   }
   return <OnboardingProgress onAddNew={() => setView('chat')} />;
 };

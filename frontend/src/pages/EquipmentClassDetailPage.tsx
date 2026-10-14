@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Activity, Bell, GitBranch } from 'lucide-react';
+import { ArrowLeft, Activity, Bell, GitBranch, Image as ImageIcon } from 'lucide-react';
 import {
   AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput, EquipmentClass, Scenario, ScenarioInput,
 } from '../lib/api';
@@ -8,8 +8,9 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { ClassScenariosPanel } from '../components/admin/class-detail/ClassScenariosPanel';
 import { ClassAlertTemplatesPanel } from '../components/admin/class-detail/ClassAlertTemplatesPanel';
 import { ClassCausalChainsPanel } from '../components/admin/class-detail/ClassCausalChainsPanel';
+import { ClassVisualPanel } from '../components/admin/class-detail/ClassVisualPanel';
 
-type DetailTab = 'predictions' | 'alerts' | 'chains';
+type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual';
 
 interface EquipmentClassDetailPageProps {
   classes: EquipmentClass[];
@@ -72,10 +73,11 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
   const causalChainsForClass = causalChains.filter((c) => c.equipmentClassSlug === cls.slug);
   const availableSignals = cls.expectedSignals.map((s) => s.signal);
 
-  const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count: number }[] = [
+  const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
     { id: 'predictions', label: 'Predictive Maintenance', icon: Activity, count: scenariosForClass.length },
     { id: 'alerts', label: 'Alert Rules', icon: Bell, count: alertTemplatesForClass.length },
     { id: 'chains', label: 'Causal Chains', icon: GitBranch, count: causalChainsForClass.length },
+    { id: 'visual', label: 'Visual', icon: ImageIcon },
   ];
 
   return (
@@ -111,7 +113,9 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
             >
               <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
               <span>{t.label}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{t.count}</span>
+              {t.count !== undefined && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{t.count}</span>
+              )}
             </button>
           );
         })}
@@ -149,6 +153,9 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
           onCreate={onCreateCausalChain}
           onPublish={onPublishCausalChain}
         />
+      )}
+      {tab === 'visual' && (
+        <ClassVisualPanel key={`${cls.slug}-${cls.version}`} slug={cls.slug} version={cls.version} isDraft={cls.status === 'draft'} />
       )}
     </div>
   );
