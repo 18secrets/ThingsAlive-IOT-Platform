@@ -12,6 +12,7 @@ import { SignalBindingVersion } from '../src/signal-binding/entities/signal-bind
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { WorkOrder } from '../src/work/entities/work-order.entity';
 import { runTenantSpanning } from '../src/scope/tenant-session';
+import { EquipmentShift } from '../src/shift/entities/equipment-shift.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 const HOUR = 3_600_000;
@@ -44,7 +45,7 @@ describeDb('KPI runtime evaluator', () => {
 
   beforeEach(async () => {
     for (const t of ['telemetry_reading', 'signal_binding_version', 'work_order', 'device_projection',
-      'equipment_profile', 'client_formula', 'client_equipment_class']) {
+      'equipment_shift', 'equipment_profile', 'client_formula', 'client_equipment_class']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
   });
@@ -112,6 +113,29 @@ describeDb('KPI runtime evaluator', () => {
       })));
     },
   );
+
+  // The baseline learns only from operating periods (task QFIX-BASELINE): a shift
+  // covering every reading here, with the engine on at each. This file tests the
+  // baseline's own arithmetic, so the gate is satisfied, not exercised.
+  const seedOperating = async (hoursAgo: number[]) => runTenantSpanning(owner, 'test fixture', async (m) => {
+    await m.getRepository(EquipmentShift).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId, name: 'Day',
+      startMinute: 6 * 60, endMinute: 18 * 60, days: [0, 1, 2, 3, 4, 5, 6], timeZone: 'UTC', status: 'active',
+      scoredThrough: null, arrivalsThrough: null, createdBy: 'u-master', updatedBy: 'u-master',
+    });
+    await m.getRepository(SignalBindingVersion).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId,
+      signalKey: 'engine_running_status', measurementRole: 'engine_running_status', componentId: '',
+      origin: 'physical', imei: IMEI, channel: 'ch2', sensorInstanceId: null,
+      canonicalUnit: 'state', sourceUnit: null, validFrom: new Date('2026-01-01'), validTo: null,
+      expectedPeriodSeconds: null, isPrimary: true, status: 'active',
+      discoveredFrom: null, discoveredBy: 'manual', approvedBy: 'u-master', approvedAt: NOW,
+    });
+    await m.getRepository(TelemetryReading).save(hoursAgo.map((h) => ({
+      tenantId: 'acme', imei: IMEI, signal: 'engine_running_status', value: 1, unit: 'state',
+      sourceTimestamp: new Date(NOW.getTime() - h * HOUR), receivedAt: NOW, source: 'live' as const,
+    })));
+  });
 
   it('1. ready: bound, fresh readings in window — a real number with its coverage', async () => {
     await seedClass(); await seedDevice(); await seedBinding();
@@ -211,6 +235,7 @@ describeDb('KPI runtime evaluator', () => {
     });
     const history = Array.from({ length: 20 }, (_, i) => ({ hoursAgo: (20 - i) * 24, value: 50 }));
     await seedReadings([...history, { hoursAgo: 0.1, value: 999 }]);
+    await seedOperating([...history.map((p) => p.hoursAgo), 0.1]);
 
     const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'coolant_z', NOW);
     // The entire 20-day history sits inside the open work order's window, so
