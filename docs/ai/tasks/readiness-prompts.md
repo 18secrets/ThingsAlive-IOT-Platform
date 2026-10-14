@@ -274,3 +274,30 @@ simply disagreed with itself. The test that catches that class of defect reads *
 page and asserts they agree** (`test/device-authority.spec.ts` test 3), not one that tests either producer
 alone. Run against `main` before the fix it also caught a third widget, `signal_chart`, drawing readings for
 a signal the readiness list beside it called unbound.
+
+---
+
+# QOEE1 — Performance, Quality and OEE
+
+Prompt: `docs/ai/prompts/QOEE1-prompt.md`. Built on QCLASS-OEM (the library's place for the OEM
+figures, MR !105) and QFIX-BASELINE's shared operating intervals (MR !104).
+
+OEE is three divisions chained so that each one's denominator is the one above it's numerator — and
+the reason it is usually wrong is that somebody averaged the ratios instead of summing the totals.
+
+Decided while building, for review:
+
+1. **Actual fuel is the `fuel_consumption` rate**, integrated over productive time (each sample speaks
+   until the next, bounded by the duty cycle's carry; a gap is unknown, not fuel). It must arrive in the
+   nominal's own unit or Quality is `not_configured / unit_mismatch`. No conversion.
+2. **Detection runs on read**, from two days before the window to now, and writes with
+   `ON CONFLICT DO NOTHING`. Rows already written are kept: a raised threshold leaves history alone. A
+   lowered one can add older events that were under the old threshold — said here, not hidden.
+3. **Every OEE read goes through the bindings.** Availability's engine-state read (the extracted
+   `readEngineState`) took its devices from `device_projection` when QOEE1 merged; QFIX-DEVICES-2 moved it,
+   and OEE's own Availability read with it, onto the bindings the breakdown and fuel signals already use.
+4. **`parameter_not_set` already existed** as a KPI reason (QPARAM1), so nothing was added to the
+   vocabulary. New here: `unit_mismatch`, `undefined_result` on a zero-fuel Quality, and
+   `breakdown_exceeds_available` as a Performance warning (floored at 0, reported).
+5. **Cost:** a month for one machine is ~0.4 s; a twenty-machine site ~8 s, almost all of it re-running
+   detection. Incremental detection (from the last closed event) is the follow-up before any page polls it.

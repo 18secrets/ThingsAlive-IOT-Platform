@@ -27,11 +27,13 @@ import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { classifyFreshness } from '../signal-binding/services/signal-freshness';
+import { EquipmentClassSensorRequirement } from '../catalog/entities/equipment-class-sensor-requirement.entity';
+import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import {
   AlertRow, FailureModeRow, FailureModeStatus, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
-  READINESS_SEVERITY, ReadinessRow, signalReadiness, SiteKpiData, unfilled,
+  ParameterRow, READINESS_SEVERITY, ReadinessRow, signalReadiness, SiteKpiData, unfilled,
 } from './page-widgets';
 
 const KPI_TYPES: ReadonlySet<WidgetType> = new Set(['kpi_number', 'kpi_gauge', 'kpi_chart']);
@@ -86,6 +88,7 @@ export class PageService {
     private readonly workOrders: WorkOrderService,
     private readonly service: ServiceForecastService,
     private readonly clientCatalog: ClientCatalogService,
+    private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
   ) {}
 
@@ -114,7 +117,8 @@ export class PageService {
     ])];
 
     // One call per producer, each only if some widget needs it.
-    const [envelopes, formulas, chartData, coverage, openAlerts, openWork, forecast, modes, recommendations] =
+    const [envelopes, formulas, chartData, coverage, openAlerts, openWork, forecast, modes, recommendations,
+      parameterRows, forecastDeclared] =
       await Promise.all([
         has('kpi_number', 'kpi_gauge', 'kpi_chart') ? this.kpis.evaluateAll(scope, ref, at) : Promise.resolve(null),
         has('kpi_number', 'kpi_gauge', 'kpi_chart') && classSlug ? this.clientFormulas(scope, classSlug) : Promise.resolve([]),
@@ -125,6 +129,8 @@ export class PageService {
         has('service_due') ? this.service.fleetForecast(scope, at) : Promise.resolve(null),
         has('failure_modes') && classSlug ? this.clientRows(scope, ClientEquipmentClassFailureMode, classSlug) : Promise.resolve([]),
         has('recommendations') && classSlug ? this.clientRows(scope, ClientEquipmentClassRecommendation, classSlug) : Promise.resolve([]),
+        has('parameter_list') ? this.parameters.effective(scope, { scope: 'equipment', scopeRef: profile.id }, at) : Promise.resolve(null),
+        has('forecast_chart') ? this.forecastDeclarations(profile) : Promise.resolve(new Set<string>()),
       ]);
 
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
@@ -181,6 +187,15 @@ export class PageService {
 
         case 'schematic':
           return this.schematicWidget(h, schematic, coverage, chartData, at);
+
+        case 'parameter_list':
+          return filled(h, toParameterRows(parameterRows!));
+
+        case 'forecast_chart':
+          // A forecast nobody declared is a configuration gap; a declared one has no
+          // producer until QML1, and the widget says that rather than drawing nothing.
+          if (!w.boundTo || !forecastDeclared.has(w.boundTo)) return unfilled(h, 'not_configured', 'forecast_not_declared');
+          return unfilled(h, 'not_available', 'no_forecast_model');
 
         case 'machine_list':
         default:
@@ -444,13 +459,14 @@ export class PageService {
     const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
     const has = (...types: WidgetType[]) => layout.some((w) => types.includes(w.widgetType as WidgetType));
 
-    const [alerts, work, worst, siteKpis] = await Promise.all([
+    const [alerts, work, worst, siteKpis, siteParameters] = await Promise.all([
       has('alert_list', 'machine_list') && refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
       has('work_order_list') && refs.length ? this.openWorkOrders(scope, refs) : Promise.resolve([]),
       // Each machine's worst signal readiness — its coverage, not its KPIs. A site page
       // that evaluates every KPI of every machine is the shape that makes it unusable.
-      has('machine_list') ? Promise.all(machines.map((e) => this.machineReadiness(scope, e, at))) : Promise.resolve([]),
+      has('machine_list') ? this.machineReadiness(scope, machines, at) : Promise.resolve([]),
       this.siteKpiEnvelopes(scope, machines, layout, at),
+      has('parameter_list') ? this.parameters.effective(scope, { scope: 'site', scopeRef: plant.id }, at) : Promise.resolve(null),
     ]);
 
     const widgets = layout.map((w): PageWidget => {
@@ -469,6 +485,8 @@ export class PageService {
           return filled(h, work);
         case 'kpi_number': case 'kpi_gauge': case 'kpi_chart':
           return siteKpiWidget(h, w, siteKpis.get(w.boundTo ?? '') ?? []);
+        case 'parameter_list':
+          return filled(h, toParameterRows(siteParameters!));
         default:
           return unfilled(h, 'not_available', 'not_on_this_page');
       }
@@ -481,34 +499,53 @@ export class PageService {
     };
   }
 
-  private async machineReadiness(scope: RequestScope, e: EquipmentProfile, at: Date): Promise<PageReadiness> {
-    if (!e.equipmentClassSlug) return 'not_configured';
-    const coverage = await this.bindings.coverage(scope, { sourceSystem: e.sourceSystem, externalId: e.externalId }, at);
-    const rows = readinessRows(coverage, at);
-    if (!rows.length) return 'not_configured';
-    return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+  /** The signals this machine's class version declares a forecast for (QREC0a). */
+  private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
+    if (!profile.equipmentClassSlug || !profile.classVersion) return new Set();
+    const rows = await this.ds.getRepository(EquipmentClassSensorRequirement).find({
+      where: { classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion, forecastEnabled: true },
+    });
+    return new Set(rows.map((r) => r.measurementRole));
   }
 
-  /** For each bound site KPI, each machine's own envelope for that key — `evaluateOne`
-   * per (machine, key), so a site page never evaluates KPIs no widget shows. A
-   * machine whose class does not declare the key is `not_declared`, normal in a
-   * mixed fleet, not an error. */
+  /** Each machine's worst signal readiness, from one batched coverage read for the
+   * whole site (task QTX1) rather than one per machine — the cost that made the site
+   * page linear in machines. */
+  private async machineReadiness(scope: RequestScope, machines: EquipmentProfile[], at: Date): Promise<PageReadiness[]> {
+    const classified = machines.filter((e) => e.equipmentClassSlug);
+    const coverage = await this.bindings.coverageMany(
+      scope, classified.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId })), at,
+    );
+    return machines.map((e) => {
+      const result = coverage.get(`${e.sourceSystem}/${e.externalId}`);
+      if (!e.equipmentClassSlug || !result) return 'not_configured';
+      const rows = readinessRows(result, at);
+      if (!rows.length) return 'not_configured';
+      return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+    });
+  }
+
+  /** For each bound site KPI, each machine's own envelope for that key — one
+   * `evaluateKeys` per machine for every bound key (task QTX1), so a site page never
+   * evaluates KPIs no widget shows, nor opens a session per key. A machine whose class
+   * does not declare the key is `not_declared`, normal in a mixed fleet, not an error. */
   private async siteKpiEnvelopes(
     scope: RequestScope, machines: EquipmentProfile[], layout: SiteLayoutWidget[], at: Date,
   ): Promise<Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>> {
     const keys = [...new Set(layout.filter((w) => KPI_TYPES.has(w.widgetType as WidgetType) && w.boundTo).map((w) => w.boundTo!))];
     const result = new Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>();
+    if (!keys.length) return result;
+    const perMachine = await Promise.all(machines.map(async (machine) => {
+      if (!machine.equipmentClassSlug) return new Map<string, KpiEnvelope>();
+      try {
+        return await this.kpis.evaluateKeys(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, keys, at);
+      } catch (err) {
+        if (err instanceof NotFoundException) return new Map<string, KpiEnvelope>();
+        throw err;
+      }
+    }));
     for (const key of keys) {
-      result.set(key, await Promise.all(machines.map(async (machine) => {
-        if (!machine.equipmentClassSlug) return { machine, env: null };
-        try {
-          const env = await this.kpis.evaluateOne(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, key, at);
-          return { machine, env };
-        } catch (err) {
-          if (err instanceof NotFoundException) return { machine, env: null };
-          throw err;
-        }
-      })));
+      result.set(key, machines.map((machine, i) => ({ machine, env: perMachine[i].get(key) ?? null })));
     }
     return result;
   }
@@ -580,4 +617,8 @@ function siteKpiWidget(
     excluded: { notDeclared, notReady },
   };
   return filled(h, data);
+}
+
+function toParameterRows(rows: Awaited<ReturnType<ParameterService['effective']>>): ParameterRow[] {
+  return rows.map((r) => ({ name: r.name, value: r.value, unit: r.unit, source: r.source }));
 }

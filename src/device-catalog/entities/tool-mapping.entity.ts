@@ -30,9 +30,14 @@ export class ToolMapping {
   @Column({ name: 'tool_name', type: 'text' })
   toolName: string;
 
-  /** A free-text label, same as the mock UI — not a real relation to any tenant industry list. */
-  @Column({ name: 'industry_type', type: 'text', nullable: true })
-  industryType: string | null;
+  /** The industry this profile is for (task QINDUSTRY). */
+  @Column({ name: 'industry_type_id', type: 'uuid', nullable: true })
+  industryTypeId: string | null;
+
+  /** What was typed before QINDUSTRY, kept and never written again (a trigger refuses
+   * it): the text Master Admin re-matches once the real types exist. */
+  @Column({ name: 'industry_type_legacy', type: 'text', nullable: true, update: false, insert: false })
+  industryTypeLegacy: string | null;
 
   @Column({ type: 'text', nullable: true })
   protocol: string | null;

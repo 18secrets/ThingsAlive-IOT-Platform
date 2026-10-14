@@ -27,6 +27,7 @@ import { UtilizationService } from '../src/utilization/services/utilization.serv
 import { DeviceHealthService } from '../src/device-health/services/device-health.service';
 import { ChainService } from '../src/intelligence/services/chain.service';
 import { createAppDataSource, createTestDataSource, describeDb, TEST_DB } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 const IST = 'Asia/Kolkata';
 const IMEI = '860123456789012';
@@ -150,6 +151,7 @@ describeDb('the shift runner', () => {
         imei: IMEI, equipmentExternalId: ASSET, name: null, payload: {},
         sourceUpdatedAt: NOW, syncedAt: NOW, status: 'live' as const,
       });
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: ASSET, imei: IMEI });
       await m.getRepository(SensorMapProjection).save({
         tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: MEASUREMENT_ID,
         checksum: 'c', imei: IMEI, signal: 'coolant_temp', sensorName: 'Coolant',

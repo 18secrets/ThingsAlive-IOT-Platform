@@ -12,9 +12,11 @@ import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-fo
 import { isWidgetType, WIDGET_SIZES, WIDGET_SPECS, WIDGET_TYPES } from '../../catalog/layout/widget-types';
 import {
   AGGREGATION_WINDOW_VALUES, CHART_TYPE_VALUES, COMPARISON_BASIS_VALUES, CRITICALITY_VALUES, ENABLES_VALUES,
-  FORMULA_KIND_VALUES, SEVERITY_VALUES, TARGET_DIRECTION_VALUES, URGENCY_VALUES,
+  FORMULA_KIND_VALUES, predates, SEVERITY_VALUES, TARGET_DIRECTION_VALUES, URGENCY_VALUES,
 } from '../template-schema';
 import { analyzeSensorCapability } from './sensor-review';
+import { oemFigureProblems } from '../../catalog/services/content-validation';
+import { oemFiguresFromRow, oemFiguresOf } from './class-content';
 
 /**
  * Which column on a sheet carries its unit, wherever the sheet has one at all. Not
@@ -352,6 +354,40 @@ export class CatalogImportValidatorService {
         if (r.sheet === 'signal' && live(r)) {
           const problem = requirementSettingsProblem(r);
           if (problem) invalidate(r, `signal row ${r.rowNumber}: ${problem}`);
+        }
+      }
+
+      // ------------------------------------------------------------ OEM figures
+      // Task QCLASS-OEM. The figures the version this batch writes will carry — the
+      // class row's own on a v5 workbook, otherwise inherited from the current version
+      // — judged against the signals that version will declare: the batch's signal rows
+      // if it has any (they replace the class's wholesale at apply), otherwise the
+      // current ones. The database refuses the same things; this names the row. An
+      // inherited figure left naming a signal the batch drops is the signal rows' doing,
+      // so they carry the message.
+      const batch = await m.getRepository(CatalogImportBatch).findOneByOrFail({ id: batchId });
+      const statesFigures = !predates(batch.templateVersion, 'v5');
+      for (const slug of referencedSlugs) {
+        const classRow = candidates.find((r) => r.sheet === 'equipment_class' && live(r) && r.payload.slug === slug);
+        const existing = latestExisting(slug);
+        const own = classRow && statesFigures;
+        const figures = own ? oemFiguresFromRow(classRow.payload) : existing ? oemFiguresOf(existing) : null;
+        if (!figures) continue;
+        const declared = expectedSignalsInBatch.get(slug)
+          ?? new Set(existing?.expectedSignals?.map((sig) => sig.signal) ?? []);
+        const problems = oemFigureProblems(figures, [...declared]);
+        if (!problems.length) continue;
+        if (own) {
+          invalidate(classRow, `equipment_class row ${classRow.rowNumber}: "${slug}": ${problems.join(' ')}`);
+          continue;
+        }
+        for (const r of candidates) {
+          if (r.sheet !== 'signal' || !live(r) || r.payload.class_slug !== slug) continue;
+          invalidate(
+            r,
+            `signal row ${r.rowNumber}: "${slug}" keeps its OEM figures from v${existing!.version}, and this batch's `
+              + `signals would leave them invalid: ${problems.join(' ')}`,
+          );
         }
       }
 
