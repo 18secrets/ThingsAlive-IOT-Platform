@@ -9,6 +9,7 @@ import { KpiEvaluatorService } from '../src/kpi/services/kpi-evaluator.service';
 import { DeviceProjection } from '../src/projection/entities/device-projection.entity';
 import { SignalBindingVersion } from '../src/signal-binding/entities/signal-binding-version.entity';
 import { SignalBindingService } from '../src/signal-binding/services/signal-binding.service';
+import { EquipmentShift } from '../src/shift/entities/equipment-shift.entity';
 import { TelemetryReading } from '../src/telemetry/telemetry-reading.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
@@ -116,7 +117,7 @@ describeDb('QCE5: evaluating comparisons', () => {
 
   beforeEach(async () => {
     for (const t of ['telemetry_reading', 'signal_binding_version', 'device_projection',
-      'equipment_profile', 'client_formula', 'client_equipment_class']) {
+      'equipment_shift', 'equipment_profile', 'client_formula', 'client_equipment_class']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     await owner.getRepository(ClientEquipmentClass).save({
@@ -166,6 +167,29 @@ describeDb('QCE5: evaluating comparisons', () => {
     })),
   );
 
+  // The baseline learns only from operating periods (task QFIX-BASELINE): a shift
+  // covering every reading here, with the engine on at each. This file tests the
+  // baseline's own arithmetic, so the gate is satisfied, not exercised.
+  const seedOperating = async (hoursAgo: number[]) => {
+    await owner.getRepository(EquipmentShift).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId, name: 'Day',
+      startMinute: 6 * 60, endMinute: 18 * 60, days: [0, 1, 2, 3, 4, 5, 6], timeZone: 'UTC', status: 'active',
+      scoredThrough: null, arrivalsThrough: null, createdBy: 'u-master', updatedBy: 'u-master',
+    });
+    await owner.getRepository(SignalBindingVersion).save({
+      tenantId: 'acme', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId,
+      signalKey: 'engine_running_status', measurementRole: 'engine_running_status', componentId: '',
+      origin: 'physical', imei: IMEI, channel: 'ch2', sensorInstanceId: null,
+      canonicalUnit: 'state', sourceUnit: null, validFrom: new Date('2026-01-01'), validTo: null,
+      expectedPeriodSeconds: null, isPrimary: true, status: 'active',
+      discoveredFrom: null, discoveredBy: 'manual', approvedBy: 'u-master', approvedAt: NOW,
+    });
+    await owner.getRepository(TelemetryReading).save(hoursAgo.map((h) => ({
+      tenantId: 'acme', imei: IMEI, signal: 'engine_running_status', value: 1, unit: 'state',
+      sourceTimestamp: new Date(NOW.getTime() - h * HOUR), receivedAt: NOW, source: 'live' as const,
+    })));
+  };
+
   it('a scalar comparison is 1 or 0', async () => {
     await saveFormula('above', 'avg(coolant_temp_c) > 85');
     await saveFormula('at_least', 'avg(coolant_temp_c) >= 85');
@@ -199,6 +223,7 @@ describeDb('QCE5: evaluating comparisons', () => {
     // A steady history, then a spike: far above +2 sigma, nowhere near -2.
     const history = Array.from({ length: 20 }, (_, i) => ({ hoursAgo: (20 - i) * 24, value: i % 2 ? 48 : 52 }));
     await seedReadings([...history, { hoursAgo: 0.1, value: 200 }]);
+    await seedOperating([...history.map((p) => p.hoursAgo), 0.1]);
     const envelope = await evaluator.evaluateOne(scope, EQUIPMENT, 'risk', NOW);
     expect(envelope.readiness).toBe('ready');
     expect(envelope.value).toEqual([{ t: NOW.toISOString(), v: 1 }]);

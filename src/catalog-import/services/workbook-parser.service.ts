@@ -4,7 +4,9 @@ import { Workbook, Worksheet } from 'exceljs';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow, CatalogImportRowStatus } from '../entities/catalog-import-row.entity';
-import { ACCEPTED_TEMPLATE_VERSIONS, CONTENT_SHEETS, META_SHEET, SheetSchema, TEMPLATE_VERSION } from '../template-schema';
+import {
+  ACCEPTED_TEMPLATE_VERSIONS, CONTENT_SHEETS, META_SHEET, predates, SheetSchema, TEMPLATE_VERSION,
+} from '../template-schema';
 
 /** A whole-workbook refusal: the file never resolves to a batch or any staged row. */
 export class CatalogImportRefusal extends Error {}
@@ -104,9 +106,10 @@ export class WorkbookParserService {
       const sheet = workbook.getWorksheet(schema.sheet);
       if (!sheet) continue; // a sheet with nothing to say for it is not an error
 
-      // A v3 workbook with a v4 sheet or column is claiming a shape it does not
+      // An older workbook with a newer sheet or column is claiming a shape it does not
       // have — refused whole, the same as any other header that is not the template's.
-      if (schema.since && templateVersion !== schema.since) {
+      // Ordered, not equal: a v5 workbook carries the v4 sheets as a matter of course.
+      if (schema.since && predates(templateVersion, schema.since)) {
         throw new CatalogImportRefusal(
           `Sheet "${schema.sheet}" is a ${schema.since} sheet, but this workbook declares template_version `
             + `"${templateVersion}".`,
@@ -181,7 +184,7 @@ export class WorkbookParserService {
       if (!col) {
         throw new CatalogImportRefusal(`Unknown column "${name}" in sheet "${schema.sheet}".`);
       }
-      if (col.since && col.since !== templateVersion) {
+      if (col.since && predates(templateVersion, col.since)) {
         throw new CatalogImportRefusal(
           `Column "${name}" in sheet "${schema.sheet}" is a ${col.since} column, but this workbook declares `
             + `template_version "${templateVersion}".`,
