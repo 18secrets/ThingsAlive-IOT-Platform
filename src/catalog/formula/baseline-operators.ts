@@ -29,14 +29,57 @@ export interface ExcludedRange {
   end: Date;
 }
 
+/**
+ * Which readings a baseline may learn from (task QFIX-BASELINE): only those taken while
+ * the machine was operating — inside a scheduled shift with the engine on, the gate
+ * Availability applies (`operatingIntervals`). A running engine and a parked one are two
+ * populations; averaging them puts the mean between the clusters and makes σ the
+ * distance between them, so a healthy machine read ±1.5σ every day.
+ *
+ * Optional only so the reference semantics above stay testable on their own. The KPI
+ * evaluator always passes one; there is no path through it to an ungated baseline.
+ */
+export interface OperatingGate {
+  /** False when the machine has no shift schedule — there is nothing to gate on. */
+  scheduled: boolean;
+  periods: ExcludedRange[];
+}
+
+/**
+ * The least operating data a baseline is computed from (QFIX-BASELINE §3). Below
+ * either, the answer is `insufficient_coverage`, never a baseline from four hours
+ * and never the unfiltered window.
+ *
+ * - **Days** carries the four-hours case whatever the logger's cadence: a σ from one
+ *   afternoon describes that afternoon. Seven is about two-thirds of the ten working
+ *   days a five-day schedule fits into the 14-day minimum, so a young machine that
+ *   missed a few shifts still qualifies and one that ran on two days does not. The
+ *   seeded demo has 22 operating days in its 30-day window.
+ * - **Readings** is the floor under a sparse logger. σ's own sampling error is about
+ *   1/√(2n): 18% at 15, which moves a z of 2 to anywhere from 1.7 to 2.4. The demo
+ *   has 1,239 operating readings in 30 days, so the measurements never bind it; what
+ *   bounds it from above is the one-reading-a-day fixtures in the evaluator specs,
+ *   which keep 18 after a dirty-window exclusion.
+ */
+export const BASELINE_COVERAGE = { minOperatingReadings: 15, minOperatingDays: 7 } as const;
+
+export type BaselineReason =
+  | 'baseline_not_established' | 'insufficient_coverage' | 'not_operating' | 'no_shift_schedule';
+
 export type BaselineValue =
   | { established: true; value: number }
-  | { established: false; reason: 'baseline_not_established' };
+  | { established: false; reason: BaselineReason };
 
 const NOT_ESTABLISHED: BaselineValue = { established: false, reason: 'baseline_not_established' };
+const INSUFFICIENT_COVERAGE: BaselineValue = { established: false, reason: 'insufficient_coverage' };
+const NOT_OPERATING: BaselineValue = { established: false, reason: 'not_operating' };
+const NO_SHIFT_SCHEDULE: BaselineValue = { established: false, reason: 'no_shift_schedule' };
 
 const isExcluded = (at: Date, excluded: ExcludedRange[]): boolean =>
   excluded.some((r) => at >= r.start && at < r.end);
+
+const distinctDays = (rows: Reading[]): number =>
+  new Set(rows.map((r) => r.at.toISOString().slice(0, 10))).size;
 
 /** Readings strictly before `asOf`, inside the trailing `hours` window, with any
  * dirty period removed. Strictly before: the current period is excluded from its own
@@ -58,16 +101,43 @@ function reachesMinimum(rows: Reading[], asOf: Date): boolean {
   return asOf.getTime() - earliest >= MIN_BASELINE_DAYS * 86_400_000;
 }
 
+/**
+ * The rows a baseline is computed over, or why there are none worth using. The order
+ * is the order of remedies: no schedule is a configuration gap, short history is time,
+ * thin operating data is the machine not having worked enough yet. Elapsed history is
+ * judged on every reading — `baseline_not_established` keeps its meaning — and only
+ * then is the window narrowed to operating periods.
+ *
+ * `minimum` is false for a leg that is short by design (`delta_ratio`'s `w1`); such a
+ * leg still needs one operating reading, or there is nothing to average.
+ */
+function baselineRows(
+  readings: Reading[], asOf: Date, hours: number, excluded: ExcludedRange[],
+  operating: OperatingGate | undefined, minimum: boolean,
+): Reading[] | BaselineValue {
+  if (operating && !operating.scheduled) return NO_SHIFT_SCHEDULE;
+  const rows = windowed(readings, asOf, hours, excluded);
+  if (!rows.length) return NOT_ESTABLISHED;
+  if (minimum && !reachesMinimum(rows, asOf)) return NOT_ESTABLISHED;
+  if (!operating) return rows;
+
+  const kept = rows.filter((r) => isExcluded(r.at, operating.periods));
+  if (!kept.length) return INSUFFICIENT_COVERAGE;
+  if (minimum && (kept.length < BASELINE_COVERAGE.minOperatingReadings
+    || distinctDays(kept) < BASELINE_COVERAGE.minOperatingDays)) return INSUFFICIENT_COVERAGE;
+  return kept;
+}
+
 function trailingMean(
   readings: Reading[],
   asOf: Date,
   hours: number,
   excluded: ExcludedRange[],
   requireMinHistory: boolean,
+  operating?: OperatingGate,
 ): BaselineValue {
-  const rows = windowed(readings, asOf, hours, excluded);
-  if (!rows.length) return NOT_ESTABLISHED;
-  if (requireMinHistory && !reachesMinimum(rows, asOf)) return NOT_ESTABLISHED;
+  const rows = baselineRows(readings, asOf, hours, excluded, operating, requireMinHistory);
+  if (!Array.isArray(rows)) return rows;
   return { established: true, value: rows.reduce((sum, r) => sum + r.value, 0) / rows.length };
 }
 
@@ -76,8 +146,9 @@ export function baselineAvg(
   asOf: Date,
   windowHours: number,
   excluded: ExcludedRange[] = [],
+  operating?: OperatingGate,
 ): BaselineValue {
-  return trailingMean(readings, asOf, windowHours, excluded, true);
+  return trailingMean(readings, asOf, windowHours, excluded, true, operating);
 }
 
 export function baselineSd(
@@ -85,10 +156,10 @@ export function baselineSd(
   asOf: Date,
   windowHours: number,
   excluded: ExcludedRange[] = [],
+  operating?: OperatingGate,
 ): BaselineValue {
-  const rows = windowed(readings, asOf, windowHours, excluded);
-  if (!rows.length) return NOT_ESTABLISHED;
-  if (!reachesMinimum(rows, asOf)) return NOT_ESTABLISHED;
+  const rows = baselineRows(readings, asOf, windowHours, excluded, operating, true);
+  if (!Array.isArray(rows)) return rows;
   const mean = rows.reduce((sum, r) => sum + r.value, 0) / rows.length;
   const variance = rows.reduce((sum, r) => sum + (r.value - mean) ** 2, 0) / rows.length;
   return { established: true, value: Math.sqrt(variance) };
@@ -97,17 +168,30 @@ export function baselineSd(
 /** `(current − baseline_avg) / baseline_sd`. A zero-variance baseline (a long flat
  * history) followed by one extreme current reading divides by zero on purpose —
  * `Infinity` is large, which is exactly what a z-score threshold needs it to be; it
- * is not special-cased away. */
+ * is not special-cased away.
+ *
+ * Gated, the reading being judged must itself be an operating one (QFIX-BASELINE).
+ * A parked engine's coolant against a running engine's baseline reads about −21σ —
+ * a worse version of the defect the gate removes — so it is `not_operating`, with no
+ * number, rather than an excursion nobody should act on. `currentAt` is when it was
+ * taken. */
 export function zscore(
   current: number,
   readings: Reading[],
   asOf: Date,
   windowHours: number,
   excluded: ExcludedRange[] = [],
+  operating?: OperatingGate,
+  currentAt?: Date,
 ): BaselineValue {
-  const avg = baselineAvg(readings, asOf, windowHours, excluded);
-  const sd = baselineSd(readings, asOf, windowHours, excluded);
-  if (!avg.established || !sd.established) return NOT_ESTABLISHED;
+  const avg = baselineAvg(readings, asOf, windowHours, excluded, operating);
+  if (!avg.established) return avg;
+  const sd = baselineSd(readings, asOf, windowHours, excluded, operating);
+  if (!sd.established) return sd;
+  if (operating) {
+    if (!currentAt) throw new Error('zscore: a gated z-score needs the time of the reading it judges.');
+    if (!isExcluded(currentAt, operating.periods)) return NOT_OPERATING;
+  }
   return { established: true, value: (current - avg.value) / sd.value };
 }
 
@@ -129,10 +213,13 @@ export function deltaRatio(
   w1Hours: number,
   w2Hours: number,
   excluded: ExcludedRange[] = [],
+  operating?: OperatingGate,
 ): BaselineValue {
-  const recent = trailingMean(readings, asOf, w1Hours, excluded, false);
-  const baseline = trailingMean(readings, asOf, w2Hours, excluded, true);
-  if (!recent.established || !baseline.established) return NOT_ESTABLISHED;
+  // `w2` first: when both legs fail, the machine's history is the more useful answer.
+  const baseline = trailingMean(readings, asOf, w2Hours, excluded, true, operating);
+  if (!baseline.established) return baseline;
+  const recent = trailingMean(readings, asOf, w1Hours, excluded, false, operating);
+  if (!recent.established) return recent;
   return { established: true, value: recent.value / baseline.value };
 }
 

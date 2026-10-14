@@ -123,7 +123,7 @@ describeDb('seed:demo', () => {
     // zero and this `undefined_result`.
     const z = recentMean(envelopes.get('coolant_vs_baseline')!);
     expect(Number.isFinite(z)).toBe(true);
-    // Whether z sits where a healthy machine's should is the pending test below.
+    // Whether z sits where a healthy machine's should is the next test.
     expect((await bindings.coverage(demo, ref('EX-01'), NOW)).missing).toEqual([]);
     const avail = await availability.forEquipment(demo, ref('EX-01'), { from: new Date(NOW.getTime() - 7 * 86_400_000), to: NOW });
     expect(avail.readiness).toBe('ready');
@@ -132,12 +132,10 @@ describeDb('seed:demo', () => {
     expect(await openAlertsOn('EX-01')).toEqual([]);
   });
 
-  // PENDING against QFIX-BASELINE (docs/ai/prompts/QFIX-BASELINE-prompt.md). The assertion
-  // is right and the code is wrong: the 30-day baseline mixes running and parked hours —
-  // two populations — so σ is inflated by the gap between them and a healthy engine
-  // mid-shift reads about +1.6σ (measured: 1.58). Not loosened to go green; un-skipped
-  // by QFIX-BASELINE, whose test 9 requires it.
-  it.skip('EX-01 healthy: no daily baseline excursion [pending QFIX-BASELINE: the baseline mixes running and parked hours, so a healthy engine reads ±1.5σ daily]', async () => {
+  // Was pending against QFIX-BASELINE, with the bound unchanged: the 30-day baseline
+  // mixed running and parked hours, so a healthy engine mid-shift read +1.58σ. Over
+  // operating periods only it reads 0.23 at this instant.
+  it('EX-01 healthy: no daily baseline excursion', async () => {
     const z = recentMean((await kpis('EX-01')).get('coolant_vs_baseline')!);
     expect(Math.abs(z)).toBeLessThan(1.5);
   });
