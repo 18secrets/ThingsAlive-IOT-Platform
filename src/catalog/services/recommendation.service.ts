@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
+import { boundImeis } from '../../signal-binding/services/signal-binding.service';
 import { SensorMapProjection } from '../../projection/entities/sensor-map-projection.entity';
 import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
 import { withTenantSession } from '../../scope/tenant-session';
@@ -204,12 +204,9 @@ export class RecommendationService {
 
       // Devices first, then the signals those devices report. The sensor map is
       // keyed by IMEI and says nothing about which asset a device is fitted to —
-      // that link lives on the device projection, and going through it is what makes
-      // "this asset's signals" mean the signals of the devices actually on it.
-      const devices = await m.getRepository(DeviceProjection).find({
-        where: { tenantId: scope.tenantId, sourceSystem, equipmentExternalId: externalId },
-      });
-      const imeis = [...new Set(devices.map((d) => d.imei))];
+      // that link is the binding (task QFIX-DEVICES-2), and going through it is what
+      // makes "this asset's signals" mean the signals of the devices on it now.
+      const imeis = await boundImeis(m, scope.tenantId, { sourceSystem, externalId }, now, now);
 
       const sensorRows = imeis.length
         ? await m.getRepository(SensorMapProjection).find({

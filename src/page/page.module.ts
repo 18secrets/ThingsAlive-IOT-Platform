@@ -1,3 +1,4 @@
+import { ParameterModule } from '../parameters/parameter.module';
 import { Module } from '@nestjs/common';
 import { AlertModule } from '../alert/alert.module';
 import { ClientCatalogModule } from '../client-catalog/client-catalog.module';
@@ -10,7 +11,7 @@ import { PageService } from './page.service';
 
 /** Imports producers and adds none (task QPAGE1 §0). */
 @Module({
-  imports: [KpiModule, SignalBindingModule, AlertModule, WorkModule, ServiceModule, ClientCatalogModule],
+  imports: [KpiModule, SignalBindingModule, AlertModule, WorkModule, ServiceModule, ClientCatalogModule, ParameterModule],
   controllers: [PageController],
   providers: [PageService],
 })

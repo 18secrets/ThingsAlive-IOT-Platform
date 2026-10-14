@@ -33,8 +33,21 @@ import { WIDGET_SIZES, WIDGET_TYPES } from '../catalog/layout/widget-types';
 // the defaults, and the diff names the v4 capabilities it is not using. A workbook
 // stamped v3 that carries a v4 column or sheet is refused instead — it is claiming
 // a shape it does not have.
-export const TEMPLATE_VERSION = 'v4';
-export const ACCEPTED_TEMPLATE_VERSIONS = ['v3', 'v4'];
+//
+// v4 -> v5 (task QCLASS-OEM): six optional columns on `equipment_class` carrying the
+// OEM figures OEE needs — nominal fuel per productive hour and its unit, the idle
+// breakdown threshold, the running signal with its idle bound, and the availability
+// signal. Added the way v4 was: nothing earlier changes meaning, so v3 and v4
+// workbooks still load, and an older stamp carrying a newer column is refused.
+export const TEMPLATE_VERSION = 'v5';
+export const ACCEPTED_TEMPLATE_VERSIONS = ['v3', 'v4', 'v5'];
+
+export type TemplateVersion = 'v3' | 'v4' | 'v5';
+
+/** Whether a workbook stamped `version` predates something introduced in `since`. */
+export function predates(version: string, since: TemplateVersion): boolean {
+  return Number(version.replace(/^v/, '')) < Number(since.replace(/^v/, ''));
+}
 
 export interface SheetColumn {
   name: string;
@@ -45,7 +58,7 @@ export interface SheetColumn {
   /** TRUE/FALSE in the cell, parsed to a boolean: signal.required, signal.forecast_enabled. */
   boolean?: boolean;
   /** The template version that introduced the column. Absent means v3 or earlier. */
-  since?: 'v4';
+  since?: TemplateVersion;
 }
 
 export interface SheetSchema {
@@ -55,7 +68,7 @@ export interface SheetSchema {
   /** One filled row, so the template is never handed over as a blank shell. */
   example: Record<string, string | number>;
   /** The template version that introduced the sheet. Absent means v3 or earlier. */
-  since?: 'v4';
+  since?: TemplateVersion;
 }
 
 export const META_SHEET: SheetSchema = {
@@ -85,6 +98,14 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'description', requiredCell: false },
       { name: 'category', requiredCell: false },
       { name: 'service_interval_hours', requiredCell: false },
+      // OEM figures (v5). The example leaves them blank on purpose: a template that
+      // ships a nominal teaches people to copy it, and a nominal is the OEM's number.
+      { name: 'nominal_fuel_per_hour', requiredCell: false, since: 'v5' },
+      { name: 'nominal_fuel_unit', requiredCell: false, since: 'v5' },
+      { name: 'idle_breakdown_threshold_minutes', requiredCell: false, since: 'v5' },
+      { name: 'running_signal', requiredCell: false, since: 'v5' },
+      { name: 'running_idle_bound', requiredCell: false, since: 'v5' },
+      { name: 'availability_signal', requiredCell: false, since: 'v5' },
     ],
     example: {
       slug: 'diesel-generator', name: 'Diesel Generator', description: 'Backup power genset',
@@ -329,16 +350,18 @@ export const COMPARISON_BASIS_VALUES = ['none', 'previous_period', 'target'];
 export const AGGREGATION_WINDOW_VALUES = ['shift', 'today', '24h', '7d', '30d', 'mtd', 'ytd'];
 export const CHART_TYPE_VALUES = ['none', 'line', 'bar', 'area', 'gauge', 'number'];
 
-/** What a v3 workbook does not use, for the diff to name — derived from `since`, so it
- * cannot drift from the columns themselves. */
-export function v4OnlyCapabilities(): string[] {
+/** What a workbook stamped `version` does not use, for the diff to name — derived from
+ * `since`, so it cannot drift from the columns themselves. */
+export function capabilitiesAfter(version: string): string[] {
   const names: string[] = [];
   for (const schema of CONTENT_SHEETS) {
-    if (schema.since === 'v4') {
+    if (schema.since && predates(version, schema.since)) {
       names.push(`${schema.sheet} sheet`);
       continue;
     }
-    for (const col of schema.columns) if (col.since === 'v4') names.push(`${schema.sheet}.${col.name}`);
+    for (const col of schema.columns) {
+      if (col.since && predates(version, col.since)) names.push(`${schema.sheet}.${col.name}`);
+    }
   }
   return names;
 }

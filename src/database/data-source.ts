@@ -69,6 +69,8 @@ import { SiteClass, SiteClassLayout } from '../catalog/entities/site-class.entit
 import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-equipment-class-layout.entity';
 import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
 import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
+import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
+import { IndustryType } from '../device-catalog/entities/industry-type.entity';
 import { Incident } from '../incident/entities/incident.entity';
 import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
@@ -154,6 +156,8 @@ export const ENTITIES = [
   ClientEquipmentClassVisualAnchor,
   SignalState,
   ShieldEvidenceRecord,
+  BreakdownEvent,
+  IndustryType,
   Incident,
   IncidentAlert,
   IncidentEvent,
