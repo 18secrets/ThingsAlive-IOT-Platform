@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { TransitionDto } from '../src/activation/activation.controller';
 import { EquipmentScenario } from '../src/activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../src/activation/entities/scenario-activation-event.entity';
 import { ActivationHistoryService } from '../src/activation/services/activation-history.service';
@@ -184,6 +185,21 @@ describeDb('activation', () => {
     expect(await owner.getRepository(EquipmentScenario).count()).toBe(0);
     expect(await owner.getRepository(ScenarioActivationEvent).count()).toBe(0);
     expect(await owner.getRepository(DomainEvent).count()).toBe(0);
+  });
+
+  it('takes the request body the controller passes, extra fields and all', async () => {
+    // The controller hands its whole validated DTO over as the target. The cases above
+    // pass a hand-built three-field object, which is why every route returned a 500 for
+    // weeks without one of them failing: `reason` was spread into the lookup and named a
+    // column that does not exist. This is the body as it really arrives.
+    const body = Object.assign(new TransitionDto(), { ...target, reason: 'from the bindings modal' });
+
+    const proposed = await activation.apply(acme, 'propose', body, body, NOW);
+    expect(proposed.state).toBe('proposed');
+
+    const active = await activation.apply(acme, 'activate', body, body, NOW);
+    expect(active.state).toBe('active');
+    expect(await owner.getRepository(EquipmentScenario).count()).toBe(1);
   });
 
   it('keeps one row per asset and scenario across a full lifecycle', async () => {

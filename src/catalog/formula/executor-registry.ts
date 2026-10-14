@@ -1,6 +1,7 @@
 import { insideBoundary, pairPositions, SiteBoundary } from './geofence';
 import {
-  alertExcludedRanges, baselineAvg, baselineSd, BaselineValue, deltaRatio, ExcludedRange, Reading, zscore,
+  alertExcludedRanges, baselineAvg, BaselineReason, baselineSd, BaselineValue, deltaRatio, ExcludedRange,
+  OperatingGate, Reading, zscore,
 } from './baseline-operators';
 
 /** Everything an aggregate executor needs: the series restricted to the
@@ -13,13 +14,16 @@ export interface ExecContext {
    * baseline operators need lookback the display window itself does not cover. */
   history: Reading[];
   excludedRanges: ExcludedRange[];
+  /** The machine's operating periods (task QFIX-BASELINE) — what a baseline may learn
+   * from. The evaluator always sets it; see `OperatingGate` for why it is optional. */
+  operating?: OperatingGate;
   /** The machine's site boundary (task QGEO1), for operators that need one. */
   siteBoundary?: SiteBoundary | null;
 }
 
 export type ExecValue =
   | { ok: true; value: number }
-  | { ok: false; reason: 'no_readings' | 'undefined_result' | 'baseline_not_established' };
+  | { ok: false; reason: 'no_readings' | 'undefined_result' | BaselineReason };
 
 export interface ExecutorEntry {
   /** `args[i]` is a resolved series (window-bounded readings) for a `'series'`
@@ -129,23 +133,23 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
   // scoping decision, not a silent narrowing.
   baseline_avg: {
     run: ([series], _s, [hours], ctx) =>
-      toExec(baselineAvg(series, ctx.windowTo, hours, ctx.excludedRanges)),
+      toExec(baselineAvg(series, ctx.windowTo, hours, ctx.excludedRanges, ctx.operating)),
   },
   baseline_sd: {
     run: ([series], _s, [hours], ctx) =>
-      toExec(baselineSd(series, ctx.windowTo, hours, ctx.excludedRanges)),
+      toExec(baselineSd(series, ctx.windowTo, hours, ctx.excludedRanges, ctx.operating)),
   },
   zscore: {
     run: ([series], _s, [hours], ctx) => {
       const rows = windowed(series, ctx.windowFrom, ctx.windowTo);
-      const current = rows.length ? rows[rows.length - 1].value : null;
+      const current = rows.length ? rows[rows.length - 1] : null;
       if (current === null) return NO_READINGS;
-      return toExec(zscore(current, series, ctx.windowTo, hours, ctx.excludedRanges));
+      return toExec(zscore(current.value, series, ctx.windowTo, hours, ctx.excludedRanges, ctx.operating, current.at));
     },
   },
   delta_ratio: {
     run: ([series], _s, [w1, w2], ctx) =>
-      toExec(deltaRatio(series, ctx.windowTo, w1, w2, ctx.excludedRanges)),
+      toExec(deltaRatio(series, ctx.windowTo, w1, w2, ctx.excludedRanges, ctx.operating)),
   },
 
   // ------------------------------------------------------------------------ QCE5

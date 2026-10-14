@@ -99,14 +99,7 @@ export class AvailabilityService {
         .filter((d) => d.externalId === p.externalId && mine(d) && !!d.imei
           && d.validFrom <= period.to && (d.validTo === null || d.validTo > period.from))
         .map((d) => d.imei!))];
-
-      const bySignal = await this.telemetry.read(
-        m, tenantId, imeis, [...AVAILABILITY_SIGNALS], period.from, period.to,
-      );
-      const readings: WindowReading[] = [];
-      for (const [signal, rows] of bySignal) {
-        for (const r of rows) readings.push({ signal, value: r.value, sourceTimestamp: r.at.toISOString() });
-      }
+      const readings = await readEngineState(this.telemetry, m, tenantId, imeis, period);
 
       out.push({
         sourceSystem: p.sourceSystem,
@@ -116,4 +109,21 @@ export class AvailabilityService {
     }
     return out;
   }
+}
+
+/**
+ * The engine-state readings Availability measures from, for a machine's devices over a
+ * period. Exported so OEE (task QOEE1) reads exactly the minutes Availability does: its
+ * Performance divides Availability's numerator, and two reads of "was it on" would let
+ * the chain's denominators disagree.
+ */
+export async function readEngineState(
+  reader: TelemetryWindowReader, m: EntityManager, tenantId: string, imeis: string[], period: Period,
+): Promise<WindowReading[]> {
+  const bySignal = await reader.read(m, tenantId, imeis, [...AVAILABILITY_SIGNALS], period.from, period.to);
+  const readings: WindowReading[] = [];
+  for (const [signal, rows] of bySignal) {
+    for (const r of rows) readings.push({ signal, value: r.value, sourceTimestamp: r.at.toISOString() });
+  }
+  return readings;
 }
