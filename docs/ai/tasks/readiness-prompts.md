@@ -293,9 +293,9 @@ Decided while building, for review:
 2. **Detection runs on read**, from two days before the window to now, and writes with
    `ON CONFLICT DO NOTHING`. Rows already written are kept: a raised threshold leaves history alone. A
    lowered one can add older events that were under the old threshold — said here, not hidden.
-3. **Availability's device read is unchanged** (`device_projection`, via the extracted
-   `readEngineState`); the breakdown and fuel signals read through bindings. They agree wherever both are
-   set up; QFIX-DEVICES-2 moves Availability to bindings.
+3. **Every OEE read goes through the bindings.** Availability's engine-state read (the extracted
+   `readEngineState`) took its devices from `device_projection` when QOEE1 merged; QFIX-DEVICES-2 moved it,
+   and OEE's own Availability read with it, onto the bindings the breakdown and fuel signals already use.
 4. **`parameter_not_set` already existed** as a KPI reason (QPARAM1), so nothing was added to the
    vocabulary. New here: `unit_mismatch`, `undefined_result` on a zero-fuel Quality, and
    `breakdown_exceeds_available` as a Performance warning (floored at 0, reported).

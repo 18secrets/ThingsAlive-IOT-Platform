@@ -258,17 +258,21 @@ export class ChainService {
     const since = new Date(now.getTime() - DIAGNOSIS_WINDOW_HOURS * 3600_000);
     return withTenantSession(this.ds, scope, async (m) => {
       const rows = await m.query(
-        // Machine to device to reading. `sensor_map_projection.external_id` is the
-        // upstream *measurement* id, not the machine's — joining on it as though it
-        // were the equipment code matches nothing in real data and everything in a
-        // fixture that made the same mistake. The device projection is what knows
-        // which loggers are fitted to which machine.
+        // Machine to device to reading, through the bindings (task QFIX-DEVICES-2): a
+        // reading counts for this machine only while a binding had its device here, so
+        // a logger moved off it last week stops speaking for it from the move.
+        // `sensor_map_projection.external_id` is the upstream *measurement* id, never
+        // the machine's, and `device_projection` is where 1.0 thinks a device is.
         `SELECT r."signal", r."value", r."source_timestamp"
            FROM "telemetry_reading" r
-           JOIN "device_projection" d
-             ON d."imei" = r."imei" AND d."tenant_id" = r."tenant_id"
-          WHERE r."tenant_id" = $1 AND d."source_system" = $2
-            AND d."equipment_external_id" = $3
+          WHERE r."tenant_id" = $1
+            AND EXISTS (
+              SELECT 1 FROM "signal_binding_version" b
+               WHERE b."tenant_id" = r."tenant_id" AND b."imei" = r."imei"
+                 AND b."source_system" = $2 AND b."external_id" = $3
+                 AND b."is_primary" AND b."status" = 'active'
+                 AND r."source_timestamp" >= b."valid_from"
+                 AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to"))
             AND r."source_timestamp" >= $4
           ORDER BY r."source_timestamp" DESC
           LIMIT ${SAMPLE_CAP}`,

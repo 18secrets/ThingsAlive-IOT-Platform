@@ -6,11 +6,10 @@ import { SIGNALS } from '../../common/signals';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
 import { withTenantSession } from '../../scope/tenant-session';
 import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { SignalBindingVersion } from '../../signal-binding/entities/signal-binding-version.entity';
-import { bindingSegments, overlapping } from '../../signal-binding/services/signal-binding.service';
+import { bindingSegments, boundImeis, overlapping } from '../../signal-binding/services/signal-binding.service';
 import { BreakdownEvent } from '../entities/breakdown-event.entity';
 import { computeAvailability, Interval, operatingIntervals, scheduledIntervals } from './availability';
 import { readEngineState } from './availability.service';
@@ -220,7 +219,7 @@ export class OeeService {
     }
 
     // ------------------------------------------------------------- availability
-    const imeis = await this.projectionImeis(m, tenantId, profile);
+    const imeis = await this.availabilityImeis(m, tenantId, profile, period);
     const engine = await readEngineState(this.reader, m, tenantId, imeis, period);
     const avail = computeAvailability(shifts, engine, period);
     const scheduledMinutes = avail.scheduledHours * 60;
@@ -355,12 +354,10 @@ export class OeeService {
     });
   }
 
-  /** Availability's own device lookup, unchanged (QFIX-DEVICES-2 moves both together). */
-  private async projectionImeis(m: EntityManager, tenantId: string, profile: EquipmentProfile): Promise<string[]> {
-    const devices = await m.getRepository(DeviceProjection).find({
-      where: { tenantId, equipmentExternalId: profile.externalId, sourceSystem: profile.sourceSystem },
-    });
-    return [...new Set(devices.map((d) => d.imei))];
+  /** Availability's own device lookup — the bindings since QFIX-DEVICES-2, which moved
+   * Availability and this together so the chain's denominators cannot disagree. */
+  private availabilityImeis(m: EntityManager, tenantId: string, profile: EquipmentProfile, period: { from: Date; to: Date }): Promise<string[]> {
+    return boundImeis(m, tenantId, profile, period.from, period.to);
   }
 
   private async boundSignals(

@@ -4,7 +4,7 @@ import { WindowReading } from '../../alert/services/alert-rules';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
+import { SignalBindingVersion } from '../../signal-binding/entities/signal-binding-version.entity';
 import { withTenantSession } from '../../scope/tenant-session';
 import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import {
@@ -83,8 +83,11 @@ export class AvailabilityService {
       m.getRepository(EquipmentShift).find({
         where: { tenantId, externalId: In(externalIds), status: 'active' },
       }),
-      m.getRepository(DeviceProjection).find({
-        where: { tenantId, equipmentExternalId: In(externalIds) },
+      // The bindings, not `device_projection` (task QFIX-DEVICES-2): the devices each
+      // machine actually had during the period, which is what the page beside this
+      // number already reads.
+      m.getRepository(SignalBindingVersion).find({
+        where: { tenantId, externalId: In(externalIds), isPrimary: true, status: 'active' },
       }),
     ]);
 
@@ -93,8 +96,9 @@ export class AvailabilityService {
       const mine = (row: { sourceSystem: string }) => row.sourceSystem === p.sourceSystem;
       const machineShifts = shifts.filter((s) => s.externalId === p.externalId && mine(s));
       const imeis = [...new Set(devices
-        .filter((d) => d.equipmentExternalId === p.externalId && mine(d))
-        .map((d) => d.imei))];
+        .filter((d) => d.externalId === p.externalId && mine(d) && !!d.imei
+          && d.validFrom <= period.to && (d.validTo === null || d.validTo > period.from))
+        .map((d) => d.imei!))];
       const readings = await readEngineState(this.telemetry, m, tenantId, imeis, period);
 
       out.push({
