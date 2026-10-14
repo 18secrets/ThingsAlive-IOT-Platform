@@ -464,7 +464,7 @@ export class PageService {
       has('work_order_list') && refs.length ? this.openWorkOrders(scope, refs) : Promise.resolve([]),
       // Each machine's worst signal readiness — its coverage, not its KPIs. A site page
       // that evaluates every KPI of every machine is the shape that makes it unusable.
-      has('machine_list') ? Promise.all(machines.map((e) => this.machineReadiness(scope, e, at))) : Promise.resolve([]),
+      has('machine_list') ? this.machineReadiness(scope, machines, at) : Promise.resolve([]),
       this.siteKpiEnvelopes(scope, machines, layout, at),
       has('parameter_list') ? this.parameters.effective(scope, { scope: 'site', scopeRef: plant.id }, at) : Promise.resolve(null),
     ]);
@@ -508,34 +508,44 @@ export class PageService {
     return new Set(rows.map((r) => r.measurementRole));
   }
 
-  private async machineReadiness(scope: RequestScope, e: EquipmentProfile, at: Date): Promise<PageReadiness> {
-    if (!e.equipmentClassSlug) return 'not_configured';
-    const coverage = await this.bindings.coverage(scope, { sourceSystem: e.sourceSystem, externalId: e.externalId }, at);
-    const rows = readinessRows(coverage, at);
-    if (!rows.length) return 'not_configured';
-    return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+  /** Each machine's worst signal readiness, from one batched coverage read for the
+   * whole site (task QTX1) rather than one per machine — the cost that made the site
+   * page linear in machines. */
+  private async machineReadiness(scope: RequestScope, machines: EquipmentProfile[], at: Date): Promise<PageReadiness[]> {
+    const classified = machines.filter((e) => e.equipmentClassSlug);
+    const coverage = await this.bindings.coverageMany(
+      scope, classified.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId })), at,
+    );
+    return machines.map((e) => {
+      const result = coverage.get(`${e.sourceSystem}/${e.externalId}`);
+      if (!e.equipmentClassSlug || !result) return 'not_configured';
+      const rows = readinessRows(result, at);
+      if (!rows.length) return 'not_configured';
+      return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+    });
   }
 
-  /** For each bound site KPI, each machine's own envelope for that key — `evaluateOne`
-   * per (machine, key), so a site page never evaluates KPIs no widget shows. A
-   * machine whose class does not declare the key is `not_declared`, normal in a
-   * mixed fleet, not an error. */
+  /** For each bound site KPI, each machine's own envelope for that key — one
+   * `evaluateKeys` per machine for every bound key (task QTX1), so a site page never
+   * evaluates KPIs no widget shows, nor opens a session per key. A machine whose class
+   * does not declare the key is `not_declared`, normal in a mixed fleet, not an error. */
   private async siteKpiEnvelopes(
     scope: RequestScope, machines: EquipmentProfile[], layout: SiteLayoutWidget[], at: Date,
   ): Promise<Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>> {
     const keys = [...new Set(layout.filter((w) => KPI_TYPES.has(w.widgetType as WidgetType) && w.boundTo).map((w) => w.boundTo!))];
     const result = new Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>();
+    if (!keys.length) return result;
+    const perMachine = await Promise.all(machines.map(async (machine) => {
+      if (!machine.equipmentClassSlug) return new Map<string, KpiEnvelope>();
+      try {
+        return await this.kpis.evaluateKeys(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, keys, at);
+      } catch (err) {
+        if (err instanceof NotFoundException) return new Map<string, KpiEnvelope>();
+        throw err;
+      }
+    }));
     for (const key of keys) {
-      result.set(key, await Promise.all(machines.map(async (machine) => {
-        if (!machine.equipmentClassSlug) return { machine, env: null };
-        try {
-          const env = await this.kpis.evaluateOne(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, key, at);
-          return { machine, env };
-        } catch (err) {
-          if (err instanceof NotFoundException) return { machine, env: null };
-          throw err;
-        }
-      })));
+      result.set(key, machines.map((machine, i) => ({ machine, env: perMachine[i].get(key) ?? null })));
     }
     return result;
   }

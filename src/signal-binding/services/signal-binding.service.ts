@@ -13,7 +13,9 @@ import {
   SignalBindingDiscoveredBy, SignalBindingOrigin, SignalBindingVersion,
 } from '../entities/signal-binding-version.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
-import { tenantStaleAfterSeconds } from '../../parameters/services/parameter-resolution';
+import {
+  chainForEquipment, ParameterRow, resolveFromRows, tenantStaleAfterSeconds,
+} from '../../parameters/services/parameter-resolution';
 import { resolveStaleAfterSeconds } from './signal-freshness';
 
 /**
@@ -141,108 +143,94 @@ export class SignalBindingService {
   async coverage(scope: RequestScope, equipment: EquipmentRef, at: Date = new Date()): Promise<CoverageResult> {
     return withTenantSession(this.ds, scope, async (m) => {
       const profile = await this.findEquipment(m, scope.tenantId, equipment);
+      if (!profile.equipmentClassSlug || !profile.classVersion) return computeCoverage(equipment, at, [], [], new Map(), null);
 
-      const covered: CoveredRequirement[] = [];
-      const missing: MissingRequirement[] = [];
-      const blockedByLayer = new Map<string, Set<string>>();
+      const requirements = await m.getRepository(EquipmentClassSensorRequirement).find({
+        where: {
+          classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion,
+          criticality: 'required',
+        },
+      });
 
-      if (profile.equipmentClassSlug && profile.classVersion) {
-        const requirements = await m.getRepository(EquipmentClassSensorRequirement).find({
-          where: {
-            classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion,
-            criticality: 'required',
-          },
-        });
+      // Freshness by the binding's device, over the binding's window (task
+      // QFIX-DEVICES) — not `device_inventory`'s IMEIs. The KPI evaluator reads the
+      // same segments, so a signal cannot be ready on one widget and silent on the
+      // one beside it. Discovery still starts from the inventory: that is a
+      // different question (what could be bound), not this one (what is).
+      const segments = await bindingSegments(
+        m, scope.tenantId, equipment, [...new Set(requirements.map((r) => r.measurementRole))], { by: 'measurementRole' },
+      );
+      const latestBySignal = await this.telemetryReader.latestPerSignalInSegments(
+        m, scope.tenantId, segments.map(({ signal, imei, from, to }) => ({ signal, imei, from, to })), at,
+      );
+      // The client's own threshold for this machine wins over the class's (task
+      // QPARAM1 §4b) — the same order the KPI evaluator uses, so a signal cannot be
+      // stale on one screen and fresh on another.
+      const tenantStaleAfter = await tenantStaleAfterSeconds(m, scope.tenantId, profile, at);
 
-        // Freshness by the binding's device, over the binding's window (task
-        // QFIX-DEVICES) — not `device_inventory`'s IMEIs. The KPI evaluator reads the
-        // same segments, so a signal cannot be ready on one widget and silent on the
-        // one beside it. Discovery still starts from the inventory: that is a
-        // different question (what could be bound), not this one (what is).
-        const segments = await bindingSegments(
-          m, scope.tenantId, equipment, [...new Set(requirements.map((r) => r.measurementRole))], { by: 'measurementRole' },
-        );
-        const latestBySignal = await this.telemetryReader.latestPerSignalInSegments(
-          m, scope.tenantId, segments.map(({ signal, imei, from, to }) => ({ signal, imei, from, to })), at,
-        );
-        // The client's own threshold for this machine wins over the class's (task
-        // QPARAM1 §4b) — the same order the KPI evaluator uses, so a signal cannot be
-        // stale on one screen and fresh on another.
-        const tenantStaleAfter = await tenantStaleAfterSeconds(m, scope.tenantId, profile, at);
+      // One read for every requirement (task QPERF-COVERAGE §2), grouped below by the
+      // same (role, component) the per-requirement query used to filter on.
+      const allRows = requirements.length ? await m.getRepository(SignalBindingVersion).find({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+          measurementRole: In([...new Set(requirements.map((r) => r.measurementRole))]),
+        },
+      }) : [];
 
-        // One read for every requirement (task QPERF-COVERAGE §2), grouped below by the
-        // same (role, component) the per-requirement query used to filter on.
-        const allRows = requirements.length ? await m.getRepository(SignalBindingVersion).find({
-          where: {
-            tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
-            measurementRole: In([...new Set(requirements.map((r) => r.measurementRole))]),
-          },
-        }) : [];
+      return computeCoverage(equipment, at, requirements, allRows, latestBySignal, tenantStaleAfter);
+    });
+  }
 
-        for (const req of requirements) {
-          const rows = allRows.filter((r) => r.measurementRole === req.measurementRole && r.componentId === req.componentScope);
+  /**
+   * `coverage` for every machine on a site page at once (task QTX1): the same answer,
+   * per machine, from one read of each input instead of one per machine — profiles,
+   * requirements, bindings and the stale-after parameter. The latest reading is still
+   * one query per machine: the shared reader keys its answer by signal alone, and two
+   * machines share signal names. The computation is `computeCoverage`, the function
+   * `coverage` itself uses, so the two cannot disagree. Machines not in the account
+   * are left out rather than refused: the page already chose which machines to ask about.
+   */
+  async coverageMany(
+    scope: RequestScope, equipment: EquipmentRef[], at: Date = new Date(),
+  ): Promise<Map<string, CoverageResult>> {
+    const out = new Map<string, CoverageResult>();
+    if (!equipment.length) return out;
+    const key = (e: EquipmentRef) => `${e.sourceSystem}/${e.externalId}`;
+    return withTenantSession(this.ds, scope, async (m) => {
+      const wanted = new Set(equipment.map(key));
+      const externalIds = [...new Set(equipment.map((e) => e.externalId))];
+      const profiles = (await m.getRepository(EquipmentProfile).find({
+        where: { tenantId: scope.tenantId, externalId: In(externalIds) },
+      })).filter((p) => wanted.has(key(p)));
 
-          const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
-          const activeCount = activeNow.length;
+      const slugs = [...new Set(profiles.map((p) => p.equipmentClassSlug).filter((s): s is string => !!s))];
+      const [requirements, bindings, parameterRows] = await Promise.all([
+        slugs.length ? m.getRepository(EquipmentClassSensorRequirement).find({
+          where: { classSlug: In(slugs), criticality: 'required' },
+        }) : Promise.resolve([]),
+        m.getRepository(SignalBindingVersion).find({ where: { tenantId: scope.tenantId, externalId: In(externalIds) } }),
+        latestParameterRows(m, scope.tenantId, 'stale_after_seconds', at),
+      ]);
 
-          const staleAfterSeconds = resolveStaleAfterSeconds(req, tenantStaleAfter);
-          const lastReadingAt = latestBySignal.get(req.measurementRole) ?? null;
-          const secondsSinceLastReading = lastReadingAt ? (at.getTime() - lastReadingAt.getTime()) / 1000 : null;
-          const freshness: SignalFreshness = {
-            staleAfterSeconds,
-            lastReadingAt: lastReadingAt ? lastReadingAt.toISOString() : null,
-            secondsSinceLastReading,
-          };
-
-          if (activeCount >= req.minCount) {
-            // Annotated with freshness (task Q08S s3), not reclassified by it.
-            // `covered` stays a binding-count question, exactly as Q08S s2 built
-            // it — existing callers already rely on "enough bindings exist" being
-            // the whole of what `covered` means (see
-            // `test/signal-binding-coverage.spec.ts`'s own "reports a whole-
-            // machine requirement as covered", which asserts this against a
-            // binding with no telemetry seeded at all). Whether a currently-bound
-            // signal that has gone quiet should also move to `missing` here is a
-            // real open question — deliberately not decided unilaterally by
-            // editing those tests to seed telemetry they were never written to
-            // need. QCE2's `KpiEvaluatorService` is where staleness already gates
-            // whether a KPI reads `ready`.
-            covered.push({
-              measurementRole: req.measurementRole, componentScope: req.componentScope,
-              minCount: req.minCount, activeCount, ...freshness,
-            });
-            continue;
-          }
-
-          // `activeCount === 0` covers two situations this slice cannot tell apart
-          // through the contract's enum, and both are `unbound`: no row was ever
-          // created, or an active primary row exists but no window it declares
-          // covers `at` (a closed validity window). A closed window means nothing
-          // is bound at this instant, which is `unbound`'s literal meaning, not a
-          // data-freshness complaint.
-          //
-          // `activeCount > 0` but still under `min_count` is real partial coverage
-          // — at least one confirmed binding is in force, more mapping is what
-          // closes the gap — so that case alone is `mapping_required`.
-          const reason: MissingReason = activeCount === 0 ? 'unbound' : 'mapping_required';
-
-          missing.push({
-            measurementRole: req.measurementRole, componentScope: req.componentScope,
-            minCount: req.minCount, activeCount, reason, ...freshness,
-          });
-          for (const layer of req.enables) {
-            const set = blockedByLayer.get(layer) ?? new Set<string>();
-            set.add(req.measurementRole);
-            blockedByLayer.set(layer, set);
-          }
+      for (const profile of profiles) {
+        const ref = { sourceSystem: profile.sourceSystem, externalId: profile.externalId };
+        const reqs = requirements.filter((r) =>
+          r.classSlug === profile.equipmentClassSlug && r.classVersion === profile.classVersion);
+        if (!profile.equipmentClassSlug || !profile.classVersion) {
+          out.set(key(ref), computeCoverage(ref, at, [], [], new Map(), null));
+          continue;
         }
+        const roles = new Set(reqs.map((r) => r.measurementRole));
+        const rows = bindings.filter((b) => key(b) === key(ref) && roles.has(b.measurementRole));
+        const segments = rows.filter((r) => r.isPrimary && r.status === 'active' && !!r.imei)
+          .map((r) => ({ signal: r.measurementRole, imei: r.imei!, from: r.validFrom, to: r.validTo }));
+        const latestBySignal = await this.telemetryReader.latestPerSignalInSegments(m, scope.tenantId, segments, at);
+        const stale = resolveFromRows(parameterRows, chainForEquipment(profile), ['stale_after_seconds']).get('stale_after_seconds');
+        out.set(key(ref), computeCoverage(
+          ref, at, reqs, rows, latestBySignal, typeof stale?.value === 'number' ? stale.value : null,
+        ));
       }
-
-      const blockedLayers: BlockedLayer[] = [...blockedByLayer.entries()]
-        .map(([layer, roles]) => ({ layer, missingInputs: [...roles].sort() }))
-        .sort((a, b) => a.layer.localeCompare(b.layer));
-
-      return { equipment, at: at.toISOString(), covered, missing, blockedLayers };
+      return out;
     });
   }
 
@@ -519,4 +507,95 @@ export const overlapping = (segments: BindingSegment[], from: Date, to: Date) =>
  * the generated `validity` column's own semantics exactly. */
 function windowContains(binding: SignalBindingVersion, at: Date): boolean {
   return binding.validFrom <= at && (binding.validTo === null || binding.validTo > at);
+}
+
+/**
+ * Coverage for one machine from inputs already read (task QTX1) — the body `coverage`
+ * always had, lifted out unchanged so `coverageMany` computes exactly the same thing.
+ */
+function computeCoverage(
+  equipment: EquipmentRef, at: Date, requirements: EquipmentClassSensorRequirement[],
+  allRows: SignalBindingVersion[], latestBySignal: Map<string, Date>, tenantStaleAfter: number | null,
+): CoverageResult {
+  const covered: CoveredRequirement[] = [];
+  const missing: MissingRequirement[] = [];
+  const blockedByLayer = new Map<string, Set<string>>();
+
+  for (const req of requirements) {
+    const rows = allRows.filter((r) => r.measurementRole === req.measurementRole && r.componentId === req.componentScope);
+
+    const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
+    const activeCount = activeNow.length;
+
+    const staleAfterSeconds = resolveStaleAfterSeconds(req, tenantStaleAfter);
+    const lastReadingAt = latestBySignal.get(req.measurementRole) ?? null;
+    const secondsSinceLastReading = lastReadingAt ? (at.getTime() - lastReadingAt.getTime()) / 1000 : null;
+    const freshness: SignalFreshness = {
+      staleAfterSeconds,
+      lastReadingAt: lastReadingAt ? lastReadingAt.toISOString() : null,
+      secondsSinceLastReading,
+    };
+
+    if (activeCount >= req.minCount) {
+      // Annotated with freshness (task Q08S s3), not reclassified by it.
+      // `covered` stays a binding-count question, exactly as Q08S s2 built
+      // it — existing callers already rely on "enough bindings exist" being
+      // the whole of what `covered` means (see
+      // `test/signal-binding-coverage.spec.ts`'s own "reports a whole-
+      // machine requirement as covered", which asserts this against a
+      // binding with no telemetry seeded at all). Whether a currently-bound
+      // signal that has gone quiet should also move to `missing` here is a
+      // real open question — deliberately not decided unilaterally by
+      // editing those tests to seed telemetry they were never written to
+      // need. QCE2's `KpiEvaluatorService` is where staleness already gates
+      // whether a KPI reads `ready`.
+      covered.push({
+        measurementRole: req.measurementRole, componentScope: req.componentScope,
+        minCount: req.minCount, activeCount, ...freshness,
+      });
+      continue;
+    }
+
+    // `activeCount === 0` covers two situations this slice cannot tell apart
+    // through the contract's enum, and both are `unbound`: no row was ever
+    // created, or an active primary row exists but no window it declares
+    // covers `at` (a closed validity window). A closed window means nothing
+    // is bound at this instant, which is `unbound`'s literal meaning, not a
+    // data-freshness complaint.
+    //
+    // `activeCount > 0` but still under `min_count` is real partial coverage
+    // — at least one confirmed binding is in force, more mapping is what
+    // closes the gap — so that case alone is `mapping_required`.
+    const reason: MissingReason = activeCount === 0 ? 'unbound' : 'mapping_required';
+
+    missing.push({
+      measurementRole: req.measurementRole, componentScope: req.componentScope,
+      minCount: req.minCount, activeCount, reason, ...freshness,
+    });
+    for (const layer of req.enables) {
+      const set = blockedByLayer.get(layer) ?? new Set<string>();
+      set.add(req.measurementRole);
+      blockedByLayer.set(layer, set);
+    }
+  }
+
+  const blockedLayers: BlockedLayer[] = [...blockedByLayer.entries()]
+    .map(([layer, roles]) => ({ layer, missingInputs: [...roles].sort() }))
+    .sort((a, b) => a.layer.localeCompare(b.layer));
+
+  return { equipment, at: at.toISOString(), covered, missing, blockedLayers };
+}
+
+/** The latest row per (scope, scope_ref) for one parameter name, at `at` — what
+ * `resolveFromRows` needs to answer every machine's chain from one read. */
+async function latestParameterRows(m: EntityManager, tenantId: string, name: string, at: Date): Promise<ParameterRow[]> {
+  const raw: (Omit<ParameterRow, 'effectiveFrom'> & { effectiveFrom: Date | string })[] = await m.query(
+    `SELECT DISTINCT ON ("scope", COALESCE("scope_ref", ''))
+            "scope", "scope_ref" AS "scopeRef", "name", "value", "unit", "effective_from" AS "effectiveFrom"
+       FROM "tenant_parameter"
+      WHERE "tenant_id" = $1 AND "name" = $2 AND "effective_from" <= $3
+      ORDER BY "scope", COALESCE("scope_ref", ''), "effective_from" DESC`,
+    [tenantId, name, at],
+  );
+  return raw.map((r) => ({ ...r, effectiveFrom: new Date(r.effectiveFrom) }));
 }

@@ -105,6 +105,24 @@ export class KpiEvaluatorService {
     });
   }
 
+  /**
+   * Several of one machine's KPIs in one pass (task QTX1) — what a site page needs from
+   * each machine, without evaluating formulas no widget shows or one session per key.
+   * A key the machine's class does not declare is simply absent from the result.
+   */
+  async evaluateKeys(
+    scope: RequestScope, equipment: EquipmentRef, formulaKeys: string[], at: Date = new Date(),
+  ): Promise<Map<string, KpiEnvelope>> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const { formulas, profile } = await this.loadFormulas(m, scope.tenantId, equipment);
+      const wanted = new Set(formulaKeys);
+      const targets = formulas.filter((f) => wanted.has(f.formulaKey));
+      if (!targets.length) return new Map();
+      const envelopes = await this.evaluateBatch(m, scope.tenantId, equipment, profile, formulas, targets, at);
+      return new Map(envelopes.map((e) => [e.formulaKey, e]));
+    });
+  }
+
   /** The operating periods a baseline on this machine learns from (task QFIX-BASELINE).
    * Public so the claim that it agrees with Availability can be checked, not assumed. */
   async operatingPeriods(scope: RequestScope, equipment: EquipmentRef, from: Date, to: Date): Promise<OperatingGate> {
