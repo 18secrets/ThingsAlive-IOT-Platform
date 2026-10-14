@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
-import { TEMPLATE_VERSION, v4OnlyCapabilities } from '../template-schema';
+import { capabilitiesAfter, TEMPLATE_VERSION } from '../template-schema';
 import {
   ClassDiffEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass,
 } from './class-content';
@@ -119,7 +119,7 @@ export class CatalogImportDiffService {
       const validForClass = validRows.filter((r) => classSlugOf(r) === slug);
 
       const { current, content: currentContent } = await loadCurrentClass(this.ds.manager, slug);
-      const proposed = buildProposedClass(validForClass, currentContent);
+      const proposed = buildProposedClass(validForClass, currentContent, batch.templateVersion);
 
       // A published version is never mutated (QIMP3), so any real change to an
       // existing class always lands in a new version — "unchanged" means the content
@@ -132,7 +132,7 @@ export class CatalogImportDiffService {
           : 'new_version';
 
       classes.push(await computeClassDiffEntry(
-        this.ds.manager, slug, allForClass, validForClass, current, currentContent, action,
+        this.ds.manager, slug, allForClass, validForClass, current, currentContent, action, batch.templateVersion,
       ));
     }
     classes.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -171,7 +171,7 @@ export class CatalogImportDiffService {
       templateVersionNote: batch.templateVersion === TEMPLATE_VERSION
         ? null
         : `This workbook is template ${batch.templateVersion}; it loads with defaults and does not use these `
-          + `${TEMPLATE_VERSION} capabilities: ${v4OnlyCapabilities().join(', ')}.`,
+          + `later-template capabilities: ${capabilitiesAfter(batch.templateVersion).join(', ')}.`,
     };
   }
 }
