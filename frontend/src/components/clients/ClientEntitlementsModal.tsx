@@ -45,8 +45,10 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
   );
 
   const activeGrants = clientEntitlements.filter((e) => !e.revokedAt);
+  // A seed-only class exists for the demo tenant alone; the backend refuses every grant of
+  // it outside the demo seeder, so offering it here only sets up that refusal.
   const grantableClasses = publishedClasses.filter(
-    (ec) => !activeGrants.some((g) => g.equipmentClassSlug === ec.slug),
+    (ec) => !ec.seedOnly && !activeGrants.some((g) => g.equipmentClassSlug === ec.slug),
   );
   const grantableOptions = useMemo(
     () => grantableClasses.map((ec) => ({ label: ec.name ?? ec.slug, value: ec.slug })),
