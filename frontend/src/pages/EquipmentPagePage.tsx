@@ -6,7 +6,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import {
   ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
   ShiftInput, ShiftRun, Weekday, apiCreateShift, apiGetMachinePage, apiGetServiceHistory, apiGetShiftRuns,
-  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift,
+  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift, apiUpdateShift,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
 import { Modal } from '../components/common/Modal';
@@ -41,6 +41,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
   const [error, setError] = useState<string | undefined>(undefined);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<EquipmentShift | null>(null);
 
   const refresh = () => apiListShifts(sourceSystem, externalId).then(setShifts);
 
@@ -79,6 +80,16 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
     }
   }
 
+  async function update(shift: EquipmentShift, input: ShiftInput) {
+    try {
+      await apiUpdateShift(sourceSystem, externalId, shift.id, input);
+      setEditing(null);
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'Could not save this shift.');
+    }
+  }
+
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
       <div className="flex items-center justify-between">
@@ -103,14 +114,23 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
                   {s.days.slice().sort().map((d) => DAY_LABEL[d]).join(', ')} · {minutesToClock(s.startMinute)}–{minutesToClock(s.endMinute)} ({s.timeZone})
                 </p>
               </div>
-              <button
-                disabled={busyId === s.id}
-                onClick={() => toggle(s)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                title={s.status === 'active' ? 'Retire' : 'Reinstate'}
-              >
-                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => setEditing(s)}
+                  className="px-2 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                >
+                  Edit
+                </button>
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => toggle(s)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                  title={s.status === 'active' ? 'Retire' : 'Reinstate'}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -131,16 +151,27 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       <Modal isOpen={adding} onClose={() => setAdding(false)} title="Add shift" subtitle="Working Hours" maxWidth="max-w-md">
         <ShiftForm onCancel={() => setAdding(false)} onCreate={create} />
       </Modal>
+
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Edit shift" subtitle={editing?.name} maxWidth="max-w-md">
+        {editing && (
+          <ShiftForm key={editing.id} initial={editing} onCancel={() => setEditing(null)} onCreate={(input) => update(editing, input)} />
+        )}
+      </Modal>
     </div>
   );
 }
 
-const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) => void }> = ({ onCancel, onCreate }) => {
-  const [name, setName] = useState('');
-  const [start, setStart] = useState('06:00');
-  const [end, setEnd] = useState('18:00');
-  const [days, setDays] = useState<Weekday[]>([1, 2, 3, 4, 5]);
-  const [timeZone, setTimeZone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+const ShiftForm: React.FC<{
+  /** Present when editing: the form starts from the shift's own values and saves them all. */
+  initial?: EquipmentShift;
+  onCancel: () => void;
+  onCreate: (input: ShiftInput) => void;
+}> = ({ initial, onCancel, onCreate }) => {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [start, setStart] = useState(initial ? minutesToClock(initial.startMinute) : '06:00');
+  const [end, setEnd] = useState(initial ? minutesToClock(initial.endMinute) : '18:00');
+  const [days, setDays] = useState<Weekday[]>(initial?.days ?? [1, 2, 3, 4, 5]);
+  const [timeZone, setTimeZone] = useState(initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   const valid = useMemo(() => {
     const s = clockToMinutes(start);
@@ -193,7 +224,7 @@ const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) 
           Cancel
         </button>
         <button type="submit" disabled={!valid} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
-          Add shift
+          {initial ? 'Save changes' : 'Add shift'}
         </button>
       </div>
     </form>
