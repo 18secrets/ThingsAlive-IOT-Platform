@@ -70,6 +70,7 @@ import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-eq
 import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
 import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
+import { IndustryType } from '../device-catalog/entities/industry-type.entity';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -154,6 +155,7 @@ export const ENTITIES = [
   SignalState,
   ShieldEvidenceRecord,
   BreakdownEvent,
+  IndustryType,
 ];
 
 export interface DataSourceChoices {
