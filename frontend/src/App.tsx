@@ -62,7 +62,7 @@ import {
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
   apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
-  apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiPublishEquipmentClass, apiRetireEquipmentClass, apiUnretireEquipmentClass,
   apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula,
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
@@ -80,7 +80,7 @@ import {
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
   apiSuspendPlatformStaff, apiReinstatePlatformStaff, apiDeletePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
-  apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory,
+  apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory, apiRenameSensorCategory,
   apiRetireSensor, apiUnretireSensor, apiDeleteSensor,
   apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping, apiDeleteToolMapping,
   apiListIndustryTypes, apiCreateIndustryType, apiUpdateIndustryType, apiDeleteIndustryType,
@@ -88,7 +88,7 @@ import {
   apiListSignalAliases, apiUpsertSignalAlias, apiDeleteSignalAlias,
   apiListSignalStates, apiReplaceSignalStates,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
-  apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock,
+  apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock, apiUpdateDevice,
   apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
   apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiDeleteUser, apiSetUserAccess,
   apiChangePassword,
@@ -952,6 +952,11 @@ function AppData() {
     await refreshSensorCatalog();
     return restored;
   };
+  const handleRenameSensorCategory = async (id: string, name: string) => {
+    const renamed = await apiRenameSensorCategory(id, name);
+    await refreshSensorCatalog();
+    return renamed;
+  };
   const handleDeleteSensorCategory = async (id: string) => {
     await apiDeleteSensorCategory(id);
     await refreshSensorCatalog();
@@ -1042,6 +1047,13 @@ function AppData() {
     await refreshDevicePool();
   };
 
+  // Rethrows, unlike the movements above: the edit modal shows the refusal (a tool
+  // profile change on a device that has left stock) next to the field.
+  const handleUpdateDevice = async (imei: string, input: Parameters<typeof apiUpdateDevice>[1]) => {
+    await apiUpdateDevice(imei, input);
+    await refreshDevicePool();
+  };
+
   const handleReturnDeviceToStock = async (imei: string) => {
     try {
       reportBadOutcome(await apiReturnDevicesToStock([imei]));
@@ -1083,6 +1095,15 @@ function AppData() {
     }
   };
 
+  const handleUnretireEquipmentClass = async (slug: string) => {
+    try {
+      await apiUnretireEquipmentClass(slug);
+      await refreshEquipmentClasses();
+    } catch (err) {
+      setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not un-retire.');
+    }
+  };
+
   const handleCreateNamedFormula = async (slug: string, input: NamedFormulaInput) => {
     const created = await apiCreateNamedFormula(slug, input);
     await refreshNamedFormulas();
@@ -1095,13 +1116,12 @@ function AppData() {
     return updated;
   };
 
+  // Rethrows: the reason a formula cannot publish (a dimension mismatch, an
+  // undeclared role) is shown on that formula's own card, not in a banner the
+  // person may have scrolled past.
   const handlePublishNamedFormula = async (slug: string, version: number) => {
-    try {
-      await apiPublishNamedFormula(slug, version);
-      await refreshNamedFormulas();
-    } catch (err) {
-      setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not publish.');
-    }
+    await apiPublishNamedFormula(slug, version);
+    await refreshNamedFormulas();
   };
 
   // The commercial boundary (entitlement.service.ts) — a tenant cannot grant
@@ -1496,6 +1516,7 @@ function AppData() {
                   onCreateSensorCategory={handleCreateSensorCategory}
                   onRetireSensorCategory={handleRetireSensorCategory}
                   onUnretireSensorCategory={handleUnretireSensorCategory}
+                  onRenameSensorCategory={handleRenameSensorCategory}
                   onDeleteSensorCategory={handleDeleteSensorCategory}
                   realToolMappings={realToolMappings}
                   toolMappingsError={toolMappingsError}
@@ -1515,6 +1536,7 @@ function AppData() {
                   onAssignDevice={handleAssignDevice}
                   onReleaseDevice={handleReleaseDevice}
                   onRetireDevice={handleRetireDevice}
+                  onUpdateDevice={handleUpdateDevice}
                   onReturnDeviceToStock={handleReturnDeviceToStock}
                   equipmentClasses={equipmentClasses}
                   equipmentClassesError={equipmentClassesError}
@@ -1522,6 +1544,7 @@ function AppData() {
                   onUpdateEquipmentClass={handleUpdateEquipmentClass}
                   onPublishEquipmentClass={handlePublishEquipmentClass}
                   onRetireEquipmentClass={handleRetireEquipmentClass}
+                  onUnretireEquipmentClass={handleUnretireEquipmentClass}
                   onOpenEquipmentClass={handleOpenEquipmentClass}
                   onOpenCatalogImport={handleOpenCatalogImport}
                   namedFormulas={namedFormulas}

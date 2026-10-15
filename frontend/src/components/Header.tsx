@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   Sun,
@@ -30,6 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDarkMode,
   onLogout,
 }) => {
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [currentLang, setCurrentLang] = useState('EN');
@@ -163,9 +165,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* User Profile / Exit matching screenshot */}
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
+          {/* No profile page exists; Settings is where a signed-in person changes their
+              own password, which is what the avatar is expected to lead to. */}
+          <button
+            id="profile-btn"
+            onClick={() => navigate('/settings')}
+            className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:border-sky-400 transition-colors cursor-pointer"
+            title="Profile and settings"
+          >
             <User className="w-3.5 h-3.5" />
-          </div>
+          </button>
           <button
             id="logout-btn"
             onClick={onLogout}

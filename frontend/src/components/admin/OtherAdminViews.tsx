@@ -9,7 +9,7 @@ import {
   LayoutDashboard,
   Hexagon,
 } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import {
   ApiError, GeoJsonPolygon, IndustryType, IndustryTypeInput, Plant, PlantInput, UnmatchedIndustry,
 } from '../../lib/api';
@@ -38,6 +38,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   onRematchIndustries,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | IndustryType['status']>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IndustryType | null>(null);
   // Bumped on every open so the modal remounts and reads the item it was opened for.
@@ -47,11 +48,11 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   const [notice, setNotice] = useState<string | undefined>(undefined);
 
   const filteredItems = useMemo(() => {
-    return items.filter((i) =>
+    return items.filter((i) => (
       i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.code.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [items, searchTerm]);
+    ) && (statusFilter === 'all' || i.status === statusFilter));
+  }, [items, searchTerm, statusFilter]);
 
   const openModal = (item: IndustryType | null) => {
     setEditingItem(item);
@@ -109,6 +110,15 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
             className="w-full pl-9!"
           />
         </div>
+        <SelectPicker
+          data={[{ label: 'All statuses', value: 'all' }, { label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-40"
+        />
 
         {onCreateIndustryType && (
           <button

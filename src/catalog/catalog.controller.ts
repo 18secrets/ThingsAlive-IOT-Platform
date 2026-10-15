@@ -239,6 +239,14 @@ export class CatalogController {
     return this.authoring.retireClass(scope, slug);
   }
 
+  // catalog.publish, like publish: offering a class again makes it grantable to tenants.
+  @Post('equipment-classes/:slug/unretire')
+  @Requires('catalog.publish')
+  @ApiOperation({ summary: 'Offer a retired class again: its newest retired version is published' })
+  unretireClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.unretireClass(scope, slug);
+  }
+
   @Post('scenarios')
   @Requires('catalog.write')
   createScenario(

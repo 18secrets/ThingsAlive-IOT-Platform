@@ -21,13 +21,14 @@ interface SensorTableProps {
   onCreateCategory: (name: string) => Promise<SensorCategory>;
   onRetireCategory: (id: string) => Promise<SensorCategory>;
   onUnretireCategory: (id: string) => Promise<SensorCategory>;
+  onRenameCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteCategory: (id: string) => Promise<void>;
 }
 
 export const SensorTable: React.FC<SensorTableProps> = ({
   sensors, error, categories, showRetired, onToggleShowRetired,
   onCreateSensor, onUpdateSensor, onRetireSensor, onUnretireSensor, onDeleteSensor,
-  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory,
+  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory, onRenameCategory,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -263,6 +264,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         onRetire={onRetireCategory}
         onUnretire={onUnretireCategory}
         onDelete={onDeleteCategory}
+        onRename={onRenameCategory}
       />
     </div>
   );

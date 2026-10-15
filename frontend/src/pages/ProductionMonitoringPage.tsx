@@ -4,7 +4,8 @@ import { AlertCircle, ChevronLeft, ChevronRight, Clock3, Info } from 'lucide-rea
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
-import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentConnection, EquipmentFilters } from '../components/common/EquipmentFilters';
+import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
@@ -61,7 +62,7 @@ export const ProductionMonitoringPage: React.FC = () => {
   const name = (sourceSystem: string, externalId: string) => profileOf(sourceSystem, externalId)?.name ?? externalId;
   /** `dark` is offline; any other recorded link state is reporting, so online.
    *  A machine with no device-health row at all matches neither filter value. */
-  const connectionOf = (externalId: string): EquipmentConnection | null => {
+  const connectionOf = (externalId: string): 'online' | 'offline' | null => {
     const row = linkHealth.find((r) => r.externalId === externalId);
     if (!row) return null;
     return row.state === 'dark' ? 'offline' : 'online';
@@ -177,6 +178,7 @@ export const ProductionMonitoringPage: React.FC = () => {
                     machine={m}
                     name={name(m.sourceSystem, m.externalId)}
                     oee={machineOee.get(`${m.sourceSystem}|${m.externalId}`)}
+                    connection={connectionOf(m.externalId)}
                     onOpen={() => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
                   />
                 ))}
@@ -220,8 +222,9 @@ const REASON_TEXT: Record<string, string> = {
 };
 
 const ProductionCard: React.FC<{
-  machine: FleetAvailability['machines'][number]; name: string; oee?: EquipmentOee; onOpen: () => void;
-}> = ({ machine, name, oee, onOpen }) => {
+  machine: FleetAvailability['machines'][number]; name: string; oee?: EquipmentOee;
+  connection: 'online' | 'offline' | null; onOpen: () => void;
+}> = ({ machine, name, oee, connection, onOpen }) => {
   const style = READINESS_STYLE[machine.readiness];
   const gaugeValue = machine.readiness === 'ready' ? machine.availability : null;
   return (
@@ -229,7 +232,10 @@ const ProductionCard: React.FC<{
       <div className="flex items-center gap-3">
         <RingGauge value={gaugeValue} size={60} colorClass={style.gauge} />
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate" title={name}>{name}</h4>
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate" title={name}>{name}</h4>
+            <ConnectionBadge state={connection} />
+          </div>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{machine.sourceSystem}/{machine.externalId}</p>
           {oee && (
             <p className="text-xs mt-1">

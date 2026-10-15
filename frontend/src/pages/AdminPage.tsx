@@ -38,6 +38,7 @@ interface AdminPageProps {
   onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
   onRetireSensorCategory: (id: string) => Promise<SensorCategory>;
   onUnretireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onRenameSensorCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteSensorCategory: (id: string) => Promise<void>;
   realToolMappings: ToolMapping[];
   toolMappingsError?: string;
@@ -57,6 +58,7 @@ interface AdminPageProps {
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
   onRetireDevice: (imei: string) => Promise<void>;
+  onUpdateDevice: (imei: string, input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null }) => Promise<void>;
   onReturnDeviceToStock: (imei: string) => Promise<void>;
   equipmentClasses: EquipmentClass[];
   equipmentClassesError?: string;
@@ -64,6 +66,7 @@ interface AdminPageProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onUnretireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
   onOpenCatalogImport: () => void;
   namedFormulas: NamedFormula[];
@@ -185,6 +188,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateSensorCategory={props.onCreateSensorCategory}
       onRetireSensorCategory={props.onRetireSensorCategory}
       onUnretireSensorCategory={props.onUnretireSensorCategory}
+      onRenameSensorCategory={props.onRenameSensorCategory}
       onDeleteSensorCategory={props.onDeleteSensorCategory}
       realToolMappings={props.realToolMappings}
       toolMappingsError={props.toolMappingsError}
@@ -204,6 +208,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onAssignDevice={props.onAssignDevice}
       onReleaseDevice={props.onReleaseDevice}
       onRetireDevice={props.onRetireDevice}
+      onUpdateDevice={props.onUpdateDevice}
       onReturnDeviceToStock={props.onReturnDeviceToStock}
       equipmentClasses={props.equipmentClasses}
       equipmentClassesError={props.equipmentClassesError}
@@ -211,6 +216,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateEquipmentClass={props.onUpdateEquipmentClass}
       onPublishEquipmentClass={props.onPublishEquipmentClass}
       onRetireEquipmentClass={props.onRetireEquipmentClass}
+      onUnretireEquipmentClass={props.onUnretireEquipmentClass}
       onOpenEquipmentClass={props.onOpenEquipmentClass}
       onOpenCatalogImport={props.onOpenCatalogImport}
       namedFormulas={props.namedFormulas}

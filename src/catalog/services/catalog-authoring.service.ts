@@ -360,6 +360,36 @@ export class CatalogAuthoringService {
     return this.classes.save(published);
   }
 
+  /**
+   * Offers a retired template again: its newest retired version becomes the published
+   * one. `retired` also marks every version a later publish superseded, so this only
+   * acts when nothing of the slug is published — a class with a live version was never
+   * retired as a whole, and reviving an older version beside it would put two
+   * `published` rows where every reader expects one.
+   *
+   * The slug's rows are locked for the check and the write, so a publish of the same
+   * slug cannot land in between and leave both versions published.
+   */
+  async unretireClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
+    return this.classes.manager.transaction(async (m) => {
+      const rows = await m.getRepository(EquipmentClassProfile).createQueryBuilder('c')
+        .where('c.slug = :slug', { slug })
+        .orderBy('c.version', 'DESC')
+        .setLock('pessimistic_write')
+        .getMany();
+      if (!rows.length) throw new NotFoundException(`No template "${slug}".`);
+      const live = rows.find((r) => r.status === 'published');
+      if (live) {
+        throw new BadRequestException(`"${slug}" is not retired: v${live.version} is published.`);
+      }
+      const latestRetired = rows.find((r) => r.status === 'retired');
+      if (!latestRetired) throw new BadRequestException(`"${slug}" has never been published, so there is nothing to un-retire.`);
+      latestRetired.status = 'published';
+      this.logger.warn(`${scope.userId} un-retired template class "${slug}" (v${latestRetired.version} published again).`);
+      return m.getRepository(EquipmentClassProfile).save(latestRetired);
+    });
+  }
+
   async createScenario(scope: RequestScope, slug: string, draft: ScenarioDraft): Promise<ScenarioDefinition> {
     if (await this.scenarios.findOne({ where: { slug } })) {
       throw new BadRequestException(`Template scenario "${slug}" already exists. Edit it to create a new version.`);

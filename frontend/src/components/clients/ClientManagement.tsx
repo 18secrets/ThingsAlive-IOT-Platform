@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
@@ -28,6 +28,22 @@ interface ClientManagementProps {
   onRevokeEntitlement: (id: string) => Promise<Entitlement>;
 }
 
+type StatusFilter = 'all' | 'active' | 'suspended' | 'awaiting';
+const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Suspended', value: 'suspended' },
+  { label: 'Awaiting first login', value: 'awaiting' },
+];
+// The same two facts each card shows: the account's status, and whether its super
+// admin has ever set a password.
+const matchesStatus = (c: ClientAccount, f: StatusFilter) => (
+  f === 'all'
+  || (f === 'active' && c.status === 'Active')
+  || (f === 'suspended' && c.status !== 'Active')
+  || (f === 'awaiting' && !!c.mustChangePassword)
+);
+
 export const ClientManagement: React.FC<ClientManagementProps> = ({
   clients,
   error,
@@ -43,6 +59,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   onRevokeEntitlement,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [onboardingClient, setOnboardingClient] = useState<ClientAccount | null>(null);
   const [editingClient, setEditingClient] = useState<ClientAccount | null>(null);
@@ -85,14 +102,18 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   };
 
   const filteredClients = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return clients.filter((c) =>
+    const term = searchTerm.trim().toLowerCase();
+    // Phone numbers are stored and typed with spaces, dashes or a +country code in
+    // any mix, so they are compared on digits alone.
+    const digits = term.replace(/\D/g, '');
+    return clients.filter((c) => (
       c.clientName.toLowerCase().includes(term) ||
       c.id.toLowerCase().includes(term) ||
       (c.contactPersonName?.toLowerCase().includes(term) ?? false) ||
-      (c.email?.toLowerCase().includes(term) ?? false)
-    );
-  }, [clients, searchTerm]);
+      (c.email?.toLowerCase().includes(term) ?? false) ||
+      (!!digits && (c.phone ?? '').replace(/\D/g, '').includes(digits))
+    ) && matchesStatus(c, statusFilter));
+  }, [clients, searchTerm, statusFilter]);
 
   return (
     <div id="client-management-view" className="space-y-3">
@@ -104,11 +125,20 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Client Name or Account ID..."
+            placeholder="Search name, account ID, email or phone..."
             className="pl-9!"
             size="sm"
           />
         </div>
+        <SelectPicker
+          data={STATUS_OPTIONS}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter((v ?? 'all') as StatusFilter)}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-52"
+        />
 
         <button
           id="add-client-btn"

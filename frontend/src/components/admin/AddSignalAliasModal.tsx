@@ -13,7 +13,7 @@ interface AddSignalAliasModalProps {
 export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
   isOpen, onClose, onSave, existingAlias,
 }) => {
-  const [sourceSystem, setSourceSystem] = useState('*');
+  const [sourceSystem, setSourceSystem] = useState('');
   const [alias, setAlias] = useState('');
   const [canonical, setCanonical] = useState('');
   const [unit, setUnit] = useState('');
@@ -25,7 +25,8 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setSourceSystem(existingAlias?.sourceSystem ?? '*');
+    // `*` is how the API spells "any source system"; the field shows it as blank.
+    setSourceSystem(existingAlias?.sourceSystem === '*' ? '' : existingAlias?.sourceSystem ?? '');
     setAlias(existingAlias?.alias ?? '');
     setCanonical(existingAlias?.canonical ?? '');
     setUnit(existingAlias?.unit ?? '');
@@ -37,10 +38,10 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalSourceSystem = sourceSystem.trim();
+    const finalSourceSystem = sourceSystem.trim() || '*';
     const finalAlias = alias.trim();
     const finalCanonical = canonical.trim();
-    if (!finalSourceSystem || !finalAlias || !finalCanonical) return;
+    if (!finalAlias || !finalCanonical) return;
 
     setBusy(true);
     setError(undefined);
@@ -94,16 +95,15 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Source System <span className="text-rose-500">*</span>
+                Source System <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <Input
                 size="sm"
-                required
                 autoFocus
                 disabled={isEditing}
                 value={sourceSystem}
                 onChange={(value) => setSourceSystem(value)}
-                placeholder="e.g. legacy-iot, or * for any"
+                placeholder="Any source system — or e.g. legacy-iot"
               />
             </div>
             <div>

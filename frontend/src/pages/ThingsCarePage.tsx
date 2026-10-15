@@ -5,6 +5,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
+import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import {
   ApiError, EquipmentProfile, FleetLinkRow, Plant, Prediction, PredictionSeverity,
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
@@ -161,6 +162,7 @@ export const ThingsCarePage: React.FC = () => {
                     name={e.name ?? e.externalId}
                     externalId={e.externalId}
                     prediction={worst}
+                    connection={connectionOf(e.externalId)}
                     onOpen={() => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
                   />
                 ))}
@@ -195,7 +197,9 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'emerald' | 'rose
   );
 };
 
-const ThingsCareCard: React.FC<{ name: string; externalId: string; prediction: Prediction | null; onOpen: () => void }> = ({ name, externalId, prediction, onOpen }) => {
+const ThingsCareCard: React.FC<{
+  name: string; externalId: string; prediction: Prediction | null; connection: 'online' | 'offline' | null; onOpen: () => void;
+}> = ({ name, externalId, prediction, connection, onOpen }) => {
   const style = prediction ? SEVERITY_STYLE[prediction.severity] : NO_PREDICTION_STYLE;
   return (
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
@@ -204,9 +208,12 @@ const ThingsCareCard: React.FC<{ name: string; externalId: string; prediction: P
           <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} />
         </span>
         <div className="min-w-0 flex-1">
-          <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-            {prediction ? prediction.severity : 'no scenario'}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              {prediction ? prediction.severity : 'no scenario'}
+            </span>
+            <ConnectionBadge state={connection} />
+          </div>
           <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{externalId}</p>
         </div>

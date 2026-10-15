@@ -47,7 +47,10 @@ export const AddSignalStateModal: React.FC<AddSignalStateModalProps> = ({
   const removeRow = (i: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
 
   const filled = rows.filter((r) => r.state.trim() !== '' || r.code.trim() !== '');
-  const allValid = !!role.trim() && filled.length > 0 && filled.every(
+  // The same spelling the API refuses otherwise, checked here so Save stays disabled
+  // with the reason on screen instead of failing after the click.
+  const roleValid = /^[a-z][a-z0-9_]*$/.test(role.trim());
+  const allValid = roleValid && filled.length > 0 && filled.every(
     (r) => /^[a-z][a-z0-9_]*$/.test(r.state.trim()) && /^\d+$/.test(r.code.trim()),
   );
 
@@ -112,6 +115,11 @@ export const AddSignalStateModal: React.FC<AddSignalStateModalProps> = ({
               onChange={(value) => setRole(value)}
               placeholder="e.g. utilization_status"
             />
+            {role.trim() && !roleValid && (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                lower_snake_case starting with a letter, e.g. utilization_status
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

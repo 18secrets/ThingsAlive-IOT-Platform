@@ -9,8 +9,9 @@ import {
   UploadCloud,
   Archive,
   Activity,
+  RotateCcw,
 } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
 import { AddCategoryModal } from './AddCategoryModal';
 
@@ -21,6 +22,7 @@ interface CategoryViewProps {
   onUpdateClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishClass: (slug: string) => Promise<void>;
   onRetireClass: (slug: string) => Promise<void>;
+  onUnretireClass: (slug: string) => Promise<void>;
   onOpenClass: (slug: string) => void;
   onOpenBulkImport: () => void;
 }
@@ -50,10 +52,11 @@ function representativePerSlug(rows: EquipmentClass[]): EquipmentClass[] {
 }
 
 export const CategoryView: React.FC<CategoryViewProps> = ({
-  classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass, onOpenClass,
+  classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass, onUnretireClass, onOpenClass,
   onOpenBulkImport,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | EquipmentClass['status']>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<EquipmentClass | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -62,12 +65,14 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return representatives.filter((c) =>
+    // Filters on the status each card shows — the class's representative version
+    // (its draft if one is open, else what is published).
+    return representatives.filter((c) => (
       c.name.toLowerCase().includes(term) ||
       c.slug.toLowerCase().includes(term) ||
       (c.category?.toLowerCase().includes(term) ?? false)
-    );
-  }, [representatives, searchTerm]);
+    ) && (statusFilter === 'all' || c.status === statusFilter));
+  }, [representatives, searchTerm, statusFilter]);
 
   // Publish/retire report their failure through the `error` prop (App.tsx's
   // handlers already catch and set it) — busySlug here is purely for the
@@ -81,6 +86,12 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
   const handleRetire = async (slug: string) => {
     setBusySlug(slug);
     await onRetireClass(slug);
+    setBusySlug(null);
+  };
+
+  const handleUnretire = async (slug: string) => {
+    setBusySlug(slug);
+    await onUnretireClass(slug);
     setBusySlug(null);
   };
 
@@ -101,6 +112,16 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <SelectPicker
+            data={[{ label: 'All statuses', value: 'all' }, { label: 'Draft', value: 'draft' },
+              { label: 'Published', value: 'published' }, { label: 'Retired', value: 'retired' }]}
+            value={statusFilter}
+            onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+            className="w-36"
+          />
           <button
             onClick={onOpenBulkImport}
             className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"
@@ -209,6 +230,17 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                 >
                   <Archive className="w-3.5 h-3.5" />
                   <span>Retire</span>
+                </button>
+              )}
+              {cls.status === 'retired' && (
+                <button
+                  onClick={() => handleUnretire(cls.slug)}
+                  disabled={busySlug === cls.slug}
+                  title="Offer it again: its latest retired version is published"
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Unretire</span>
                 </button>
               )}
             </div>
