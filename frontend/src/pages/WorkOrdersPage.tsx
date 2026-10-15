@@ -4,6 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus,
@@ -275,7 +276,10 @@ export const WorkOrdersPage: React.FC = () => {
                 </Chip>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{equipmentName(o.sourceSystem, o.externalId)}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{equipmentName(o.sourceSystem, o.externalId)}</p>
+                <ConnectionBadge state={connectionOf(o.externalId)} />
+              </div>
               {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}
               {o.resolution && <p className="text-xs text-slate-400 dark:text-slate-500">Resolution: {o.resolution}</p>}
               <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -75,7 +75,7 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
                       <tr key={idx} className="border-t border-sky-100 dark:border-sky-900/40 align-top">
                         <td className="px-1.5 py-1.5 font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">{spec.parameter}</td>
                         <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.unit}</td>
-                        <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.min} – {spec.max}</td>
+                        <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.min == null || spec.max == null ? <span className="text-amber-600 dark:text-amber-400">range not set</span> : `${spec.min} – ${spec.max}`}</td>
                         <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.normalRange}</td>
                         <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400">{spec.notes || '—'}</td>
                       </tr>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, AlertCircle, Trash2 } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import { ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
 
@@ -35,13 +35,19 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
   };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<ToolMapping | null>(null);
+  // 'all', 'none' (no industry type set), or an industry type id.
+  const [industryFilter, setIndustryFilter] = useState('all');
 
   const filteredMappings = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return mappings.filter((item) =>
+    return mappings.filter((item) => (
       item.toolName.toLowerCase().includes(term) ||
-      (item.industryType?.toLowerCase().includes(term) ?? false));
-  }, [mappings, searchTerm]);
+      (item.industryType?.toLowerCase().includes(term) ?? false)
+    ) && (
+      industryFilter === 'all'
+      || (industryFilter === 'none' ? !item.industryTypeId : item.industryTypeId === industryFilter)
+    ));
+  }, [mappings, searchTerm, industryFilter]);
 
   return (
     <div id="tool-mapping-view" className="space-y-4">
@@ -57,6 +63,18 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
               className="w-full pl-9!"
             />
           </div>
+          <SelectPicker
+            data={[
+              { label: 'All industry types', value: 'all' },
+              { label: 'No industry type', value: 'none' },
+              ...industryTypes.map((t) => ({ label: t.status === 'active' ? t.name : `${t.name} (inactive)`, value: t.id })),
+            ]}
+            value={industryFilter}
+            onChange={(v) => setIndustryFilter(v ?? 'all')}
+            cleanable={false}
+            size="sm"
+            className="w-52"
+          />
         </div>
 
         <button

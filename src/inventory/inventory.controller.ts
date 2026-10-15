@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString, IsUUID,
@@ -39,6 +39,21 @@ export class RegisterBatchDto {
   @ArrayMaxSize(500)
   @ValidateNested({ each: true }) @Type(() => RegisterDeviceDto)
   devices: RegisterDeviceDto[];
+}
+
+/** Every field optional; one left out is kept. `toolMappingId: null` clears it. */
+export class UpdateDeviceDto {
+  @IsOptional() @IsString()
+  model?: string | null;
+
+  @IsOptional() @IsUUID()
+  toolMappingId?: string | null;
+
+  @IsOptional() @IsString()
+  batchRef?: string | null;
+
+  @IsOptional() @IsString()
+  notes?: string | null;
 }
 
 export class AssignDto {
@@ -127,6 +142,13 @@ export class InventoryController {
       receivedAt: d.receivedAt ? new Date(d.receivedAt) : null,
       notes: d.notes ?? null,
     })));
+  }
+
+  @Patch('devices/:imei')
+  @Requires('device.manage')
+  @ApiOperation({ summary: 'Correct a device\'s model, tool profile (in stock only), batch or notes' })
+  updateDevice(@CurrentScope() scope: RequestScope, @Param('imei') imei: string, @Body() body: UpdateDeviceDto) {
+    return this.inventory.updateDevice(scope, imei, body);
   }
 
   @Post('assign')

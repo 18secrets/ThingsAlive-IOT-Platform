@@ -79,6 +79,28 @@ export class DeviceCatalogService {
     return this.categories.save(this.categories.create({ name: trimmed }));
   }
 
+  /**
+   * Renaming is safe by construction: a sensor holds its category by id, never by
+   * name. The name stays unique because `uq_sensor_category_name` says so — two
+   * renames racing for one name cannot both land, and the loser is told which name.
+   */
+  async renameCategory(id: string, name: string): Promise<SensorCategory> {
+    const trimmed = name?.trim();
+    if (!trimmed) throw new BadRequestException('A category needs a name.');
+    const category = UUID.test(id) ? await this.categories.findOne({ where: { id } }) : null;
+    if (!category) throw new NotFoundException(`No category "${id}".`);
+    if (category.name === trimmed) return category;
+    category.name = trimmed;
+    try {
+      return await this.categories.save(category);
+    } catch (err) {
+      if (err instanceof QueryFailedError && (err as QueryFailedError & { code?: string }).code === '23505') {
+        throw new ConflictException(`A category named "${trimmed}" already exists.`);
+      }
+      throw err;
+    }
+  }
+
   async retireCategory(id: string, userId: string): Promise<SensorCategory> {
     return this.retire(this.categories, 'sensor_category', 'category', id, userId);
   }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare, History } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
 import { Modal } from '../common/Modal';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
@@ -40,21 +40,30 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   const [editingFormula, setEditingFormula] = useState<NamedFormula | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [historyOf, setHistoryOf] = useState<NamedFormula | null>(null);
+  const [publishError, setPublishError] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState<'all' | NamedFormula['status']>('all');
 
   const representatives = useMemo(() => representativePerSlug(formulas), [formulas]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return representatives.filter((f) =>
+    return representatives.filter((f) => (statusFilter === 'all' || f.status === statusFilter) && (
       f.name.toLowerCase().includes(term) ||
       f.slug.toLowerCase().includes(term) ||
-      (f.category?.toLowerCase().includes(term) ?? false));
-  }, [representatives, searchTerm]);
+      (f.category?.toLowerCase().includes(term) ?? false) ||
+      (f.description?.toLowerCase().includes(term) ?? false)));
+  }, [representatives, searchTerm, statusFilter]);
 
   const handlePublish = async (f: NamedFormula) => {
     setBusySlug(f.slug);
-    await onPublishFormula(f.slug, f.version);
-    setBusySlug(null);
+    setPublishError((prev) => { const next = { ...prev }; delete next[f.slug]; return next; });
+    try {
+      await onPublishFormula(f.slug, f.version);
+    } catch (err) {
+      setPublishError((prev) => ({ ...prev, [f.slug]: err instanceof ApiError ? err.message : 'Could not publish.' }));
+    } finally {
+      setBusySlug(null);
+    }
   };
 
   return (
@@ -62,8 +71,17 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder="Search Name, Slug, or Category..." className="w-full pl-9!" />
+          <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder="Search Name, Slug, Category or Description..." className="w-full pl-9!" />
         </div>
+        <SelectPicker
+          data={[{ label: 'All statuses', value: 'all' }, { label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }]}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-36"
+        />
         <button
           onClick={() => { setEditingFormula(null); setIsModalOpen(true); }}
           className="px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
@@ -132,6 +150,12 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                 </button>
               )}
             </div>
+            {publishError[f.slug] && (
+              <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>Not published: {publishError[f.slug]}</span>
+              </div>
+            )}
           </div>
         ))}
 

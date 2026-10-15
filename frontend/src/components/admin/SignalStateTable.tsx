@@ -21,6 +21,12 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleGroup | null>(null);
+  // Stable between renders: the modal resets its form whenever this changes, so a
+  // fresh array on every render wiped whatever was being typed.
+  const editingStates = useMemo(
+    () => editingRole?.states.map((s) => ({ state: s.state, code: s.code })) ?? [],
+    [editingRole],
+  );
 
   const groups = useMemo<RoleGroup[]>(() => {
     const byRole = new Map<string, SignalStateVocabEntry[]>();
@@ -138,7 +144,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
         onClose={() => { setIsModalOpen(false); setEditingRole(null); }}
         onSave={onReplaceStates}
         existingRole={editingRole?.role ?? null}
-        existingStates={editingRole?.states.map((s) => ({ state: s.state, code: s.code })) ?? []}
+        existingStates={editingStates}
       />
     </div>
   );

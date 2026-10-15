@@ -481,7 +481,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                     ))}
                   </div>
                   <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    Sensor capabilities: {applySummary.sensorCapabilities.created} created, {applySummary.sensorCapabilities.skipped} skipped.
+                    Sensor capabilities: {applySummary.sensorCapabilities.created} created, {applySummary.sensorCapabilities.skipped} skipped{applySummary.sensorCapabilities.parametersAdded ? `, ${applySummary.sensorCapabilities.parametersAdded} sensor parameter(s) added` : ''}.
                   </p>
                 </div>
               )}

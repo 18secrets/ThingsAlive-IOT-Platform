@@ -61,6 +61,7 @@ interface AdminManagementProps {
   onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
   onRetireSensorCategory: (id: string) => Promise<SensorCategory>;
   onUnretireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onRenameSensorCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteSensorCategory: (id: string) => Promise<void>;
   realToolMappings: ToolMapping[];
   toolMappingsError?: string;
@@ -83,6 +84,7 @@ interface AdminManagementProps {
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
   onRetireDevice: (imei: string) => Promise<void>;
+  onUpdateDevice: (imei: string, input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null }) => Promise<void>;
   onReturnDeviceToStock: (imei: string) => Promise<void>;
   /** The real catalog — platform-owned template classes, Master Admin only. */
   equipmentClasses: EquipmentClass[];
@@ -91,6 +93,7 @@ interface AdminManagementProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onUnretireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
   onOpenCatalogImport: () => void;
   /** Physics shared across classes, Master Admin only. */
@@ -218,6 +221,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreateSensorCategory,
   onRetireSensorCategory,
   onUnretireSensorCategory,
+  onRenameSensorCategory,
   onDeleteSensorCategory,
   realToolMappings,
   toolMappingsError,
@@ -234,6 +238,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   devicePool,
   onReleaseDevice,
   onRetireDevice,
+  onUpdateDevice,
   onReturnDeviceToStock,
   devicePoolError,
   onRegisterDevices,
@@ -244,6 +249,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateEquipmentClass,
   onPublishEquipmentClass,
   onRetireEquipmentClass,
+  onUnretireEquipmentClass,
   onOpenEquipmentClass,
   onOpenCatalogImport,
   namedFormulas,
@@ -393,6 +399,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreateCategory={onCreateSensorCategory}
             onRetireCategory={onRetireSensorCategory}
             onUnretireCategory={onUnretireSensorCategory}
+            onRenameCategory={onRenameSensorCategory}
             onDeleteCategory={onDeleteSensorCategory}
           />
         )}
@@ -438,6 +445,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateClass={onUpdateEquipmentClass}
             onPublishClass={onPublishEquipmentClass}
             onRetireClass={onRetireEquipmentClass}
+            onUnretireClass={onUnretireEquipmentClass}
             onOpenClass={onOpenEquipmentClass}
             onOpenBulkImport={onOpenCatalogImport}
           />
@@ -496,6 +504,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onAssign={onAssignDevice}
             onRelease={onReleaseDevice}
             onRetire={onRetireDevice}
+            onUpdate={onUpdateDevice}
             onReturnToStock={onReturnDeviceToStock}
           />
         )}

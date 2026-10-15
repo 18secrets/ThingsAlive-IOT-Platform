@@ -600,6 +600,11 @@ export function apiPublishEquipmentClass(
 }
 
 /** Stops offering it; accounts that already have a copy keep running it. */
+/** Publishes the newest retired version again. Refused while any version is published. */
+export function apiUnretireEquipmentClass(slug: string): Promise<EquipmentClass> {
+  return authFetch(`/catalog/equipment-classes/${encodeURIComponent(slug)}/unretire`, { method: "POST" });
+}
+
 export function apiRetireEquipmentClass(
   slug: string,
 ): Promise<EquipmentClass[]> {
@@ -1294,7 +1299,7 @@ export interface ClassApplyResult {
 
 export interface CatalogImportApplySummary {
   classes: Record<string, ClassApplyResult>;
-  sensorCapabilities: { created: number; skipped: number };
+  sensorCapabilities: { created: number; skipped: number; parametersAdded?: number };
 }
 
 /** Uploaded, parsed and validated in one step. Rejects outright on a malformed workbook. */
@@ -1394,8 +1399,9 @@ export interface SensorCategory {
 export interface SensorParameterSpec {
   parameter: string;
   unit: string;
-  min: number;
-  max: number;
+  /** null on a sensor created from a catalog import until someone sets the range. */
+  min: number | null;
+  max: number | null;
   normalRange: string;
   notes?: string;
 }
@@ -1435,6 +1441,14 @@ export function apiCreateSensorCategory(name: string): Promise<SensorCategory> {
 
 export function apiRetireSensorCategory(id: string): Promise<SensorCategory> {
   return authFetch(`/device-catalog/categories/${encodeURIComponent(id)}/retire`, { method: "POST" });
+}
+
+/** Sensors keep the category: they hold it by id. 409 when another category has the name. */
+export function apiRenameSensorCategory(id: string, name: string): Promise<SensorCategory> {
+  return authFetch(`/device-catalog/categories/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
 }
 
 export function apiUnretireSensorCategory(id: string): Promise<SensorCategory> {
@@ -1728,6 +1742,18 @@ export function apiReleaseDevices(
   return authFetch("/inventory/release", {
     method: "POST",
     body: JSON.stringify({ imeis, reason }),
+  });
+}
+
+/** Model, batch and notes any time; the tool profile only while the device is in stock.
+ *  A field left out is kept; `toolMappingId: null` clears it. */
+export function apiUpdateDevice(
+  imei: string,
+  input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+): Promise<PooledDevice> {
+  return authFetch(`/inventory/devices/${encodeURIComponent(imei)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 

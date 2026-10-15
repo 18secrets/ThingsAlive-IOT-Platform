@@ -36,6 +36,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
   staff, error, onInvite, onSetRole, onSuspend, onReinstate, onDelete,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | PlatformStaffMember['status']>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | PlatformStaffRole>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
@@ -43,8 +45,10 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return staff.filter((s) =>
-      s.fullName.toLowerCase().includes(term) || s.email.toLowerCase().includes(term));
-  }, [staff, searchTerm]);
+      (s.fullName.toLowerCase().includes(term) || s.email.toLowerCase().includes(term))
+      && (statusFilter === 'all' || s.status === statusFilter)
+      && (roleFilter === 'all' || s.role === roleFilter));
+  }, [staff, searchTerm, statusFilter, roleFilter]);
 
   const handleRoleChange = async (id: string, role: PlatformStaffRole) => {
     setBusyId(id);
@@ -118,6 +122,28 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
             placeholder="Search Name or Email..."
             className="pl-9!"
             size="sm"
+          />
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <SelectPicker
+            data={[{ label: 'All statuses', value: 'all' }, { label: 'Invited', value: 'invited' },
+              { label: 'Active', value: 'active' }, { label: 'Suspended', value: 'suspended' }]}
+            value={statusFilter}
+            onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+            className="w-full sm:w-40"
+          />
+          <SelectPicker
+            data={[{ label: 'All roles', value: 'all' },
+              ...(Object.keys(ROLE_LABEL) as PlatformStaffRole[]).map((r) => ({ label: ROLE_LABEL[r], value: r }))]}
+            value={roleFilter}
+            onChange={(v) => setRoleFilter((v ?? 'all') as typeof roleFilter)}
+            searchable={false}
+            cleanable={false}
+            size="sm"
+            className="w-full sm:w-44"
           />
         </div>
 

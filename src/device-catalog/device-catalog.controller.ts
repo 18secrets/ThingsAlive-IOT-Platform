@@ -95,6 +95,13 @@ export class DeviceCatalogController {
     return this.catalog.createCategory(dto.name);
   }
 
+  @Patch('categories/:id')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Rename a sensor category. Sensors keep it — they hold it by id' })
+  renameCategory(@Param('id') id: string, @Body() dto: CreateSensorCategoryDto) {
+    return this.catalog.renameCategory(id, dto.name);
+  }
+
   @Post('categories/:id/retire')
   @HttpCode(200)
   @Requires('device-catalog.write')

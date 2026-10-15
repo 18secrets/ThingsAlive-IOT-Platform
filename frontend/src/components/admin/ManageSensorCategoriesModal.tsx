@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertCircle, Archive, RotateCcw, Trash2 } from 'lucide-react';
+import { X, AlertCircle, Archive, RotateCcw, Trash2, Edit2, Check } from 'lucide-react';
 import { ApiError, SensorCategory } from '../../lib/api';
 import { compareByCategoryOrder } from '../../lib/sensorCategoryOrder';
 
@@ -12,12 +12,14 @@ interface ManageSensorCategoriesModalProps {
   onRetire: (id: string) => Promise<SensorCategory>;
   onUnretire: (id: string) => Promise<SensorCategory>;
   onDelete: (id: string) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<SensorCategory>;
 }
 
 export const ManageSensorCategoriesModal: React.FC<ManageSensorCategoriesModalProps> = ({
-  isOpen, onClose, categories, showRetired, onToggleShowRetired, onRetire, onUnretire, onDelete,
+  isOpen, onClose, categories, showRetired, onToggleShowRetired, onRetire, onUnretire, onDelete, onRename,
 }) => {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
 
   if (!isOpen) return null;
@@ -73,8 +75,31 @@ export const ManageSensorCategoriesModal: React.FC<ManageSensorCategoriesModalPr
                 key={c.id}
                 className="flex items-center justify-between gap-3 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5"
               >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
+                <div className="min-w-0 flex-1">
+                  {renaming?.id === c.id ? (
+                    <form
+                      className="flex items-center gap-1.5"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const name = renaming.name.trim();
+                        if (!name || name === c.name) { setRenaming(null); return; }
+                        withBusy(c.id, async () => { await onRename(c.id, name); setRenaming(null); });
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ id: c.id, name: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }}
+                        className="flex-1 min-w-0 text-sm px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                      />
+                      <button type="submit" disabled={busyId === c.id} title="Save name" className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-emerald-600 cursor-pointer disabled:opacity-50">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
+                  )}
                   {retired && (
                     <div className="text-[11px] text-slate-400">
                       Retired {new Date(c.retiredAt!).toLocaleDateString()}
@@ -82,6 +107,16 @@ export const ManageSensorCategoriesModal: React.FC<ManageSensorCategoriesModalPr
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {renaming?.id !== c.id && (
+                    <button
+                      onClick={() => { setError(undefined); setRenaming({ id: c.id, name: c.name }); }}
+                      disabled={busyId === c.id}
+                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Rename — sensors filed under it keep it"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => withBusy(c.id, () => (retired ? onUnretire(c.id) : onRetire(c.id)))}
                     disabled={busyId === c.id}

@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, IsNull } from 'typeorm';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { DataSource, EntityManager, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -325,6 +325,46 @@ export class InventoryService {
   }
 
   // ----------------------------------------------------------------------- shared
+
+  /**
+   * Corrects what was typed at registration: model, tool profile, batch, notes. None
+   * of it moves custody, so nothing is written to the event history — that log is where
+   * a device has been, and an edit to its label is not a place.
+   *
+   * The tool profile is fixed once the device leaves stock: a client's machine may
+   * already be bound to signals that profile declared, and changing it underneath
+   * them is a different act from correcting a delivery note.
+   */
+  async updateDevice(
+    scope: RequestScope, imei: string,
+    patch: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+  ): Promise<DeviceInventory> {
+    this.requirePlatform(scope, 'edit devices');
+    return runTenantSpanning(this.ds, `inventory edit by ${scope.userId}`, async (m) => {
+      const repo = m.getRepository(DeviceInventory);
+      const device = await repo.findOne({ where: { imei: imei.trim() } });
+      if (!device) throw new NotFoundException(`No device with IMEI "${imei}".`);
+      if (patch.toolMappingId !== undefined && patch.toolMappingId !== device.toolMappingId && device.state !== 'in-stock') {
+        throw new BadRequestException(
+          `Device ${device.imei} is ${device.state}; its tool profile can only change while it is in stock.`,
+        );
+      }
+      const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
+      const model = text(patch.model); const batchRef = text(patch.batchRef); const notes = text(patch.notes);
+      if (model !== undefined) device.model = model;
+      if (batchRef !== undefined) device.batchRef = batchRef;
+      if (notes !== undefined) device.notes = notes;
+      if (patch.toolMappingId !== undefined) device.toolMappingId = patch.toolMappingId;
+      try {
+        return await repo.save(device);
+      } catch (err) {
+        if (err instanceof QueryFailedError && (err as QueryFailedError & { code?: string }).code === '23503') {
+          throw new BadRequestException(`No tool mapping "${patch.toolMappingId}".`);
+        }
+        throw err;
+      }
+    });
+  }
 
   private requirePlatform(scope: RequestScope, what: string): void {
     if (!scope.isPlatformRole) {
