@@ -25,6 +25,8 @@ const REASON_LABEL: Record<string, string> = {
   not_on_this_page: 'Not available on this page',
   forecast_not_declared: 'No forecast declared for this signal',
   no_forecast_model: 'Forecasting is not available yet',
+  window_not_resolved: "The formula's own window can't be resolved yet — pick a range",
+  formula_not_compiled: 'Formula not compiled',
 };
 
 export const reasonText = (reason?: string | null) => (reason ? REASON_LABEL[reason] ?? reason : 'Not available');

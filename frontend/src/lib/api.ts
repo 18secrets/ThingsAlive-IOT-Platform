@@ -1937,7 +1937,8 @@ export type KpiReadiness = "ready" | "blocked" | "not_configured" | "not_availab
 export type KpiReason =
   | "unbound" | "stale" | "no_readings" | "mapping_required"
   | "baseline_not_established" | "insufficient_coverage" | "undefined_result"
-  | "parameter_not_set" | "site_boundary_not_set";
+  | "parameter_not_set" | "site_boundary_not_set" | "no_shift_schedule" | "not_operating"
+  | "window_not_resolved" | "formula_not_compiled";
 
 export interface KpiSeriesPoint { t: string; v: number | null }
 
@@ -1946,7 +1947,8 @@ export interface KpiEnvelope {
   value: number | KpiSeriesPoint[] | null;
   unit: string;
   resultKind: "scalar" | "series";
-  window: { from: string; to: string };
+  /** null when the formula's own window can't be resolved (e.g. a `shift` window). */
+  window: { from: string; to: string } | null;
   readiness: KpiReadiness;
   reason?: KpiReason;
   /** Which client parameters have no value at any scope for this machine — only with `reason: 'parameter_not_set'`. */

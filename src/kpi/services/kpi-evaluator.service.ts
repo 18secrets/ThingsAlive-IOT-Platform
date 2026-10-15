@@ -408,7 +408,7 @@ export class KpiEvaluatorService {
 
     const base: Omit<KpiEnvelope, 'value' | 'readiness' | 'reason' | 'coverage'> = {
       formulaKey: formula.formulaKey, unit, resultKind,
-      window: window ? { from: window.from.toISOString(), to: window.to.toISOString() } : { from: '', to: '' },
+      window: window ? { from: window.from.toISOString(), to: window.to.toISOString() } : null,
     };
 
     // Never 0 (task QPARAM1 §4a): a cost of zero is a number a customer will act on.
@@ -422,11 +422,12 @@ export class KpiEvaluatorService {
       };
     }
     if (!window) {
-      // aggregation_window: 'shift' — no shift-schedule resolution built here.
-      return { ...base, value: null, readiness: 'not_configured', coverage: zeroCoverage() };
+      // aggregation_window: 'shift' — no shift-schedule resolution built here. An
+      // explicit from/to still answers, so the reason says which half is missing.
+      return { ...base, value: null, readiness: 'not_configured', reason: 'window_not_resolved', coverage: zeroCoverage() };
     }
     if (!formula.compiledPlan) {
-      return { ...base, value: null, readiness: 'not_configured', coverage: zeroCoverage() };
+      return { ...base, value: null, readiness: 'not_configured', reason: 'formula_not_compiled', coverage: zeroCoverage() };
     }
 
     // Structural signal problems (unbound / no readings / stale) are checked

@@ -17,10 +17,10 @@ const fmt = (v: number | null) => (v == null ? '—' : v.toLocaleString(undefine
 
 const READINESS_LABEL: Record<string, string> = { not_configured: 'Not configured', not_available: 'Not available', blocked: 'Blocked' };
 
-/** The backend answers an un-windowed request for a formula with no declared window
- *  with empty strings, not dates; that is "no window", not "Invalid Date". */
-const windowText = (w: { from: string; to: string }) =>
-  w.from && w.to ? `${new Date(w.from).toLocaleString()} – ${new Date(w.to).toLocaleString()}` : 'no declared window — pick a range';
+/** An un-windowed request for a formula whose own window can't be resolved comes back
+ *  with no window at all; that is "pick a range", not "Invalid Date". */
+const windowText = (w: { from: string; to: string } | null) =>
+  w?.from && w.to ? `${new Date(w.from).toLocaleString()} – ${new Date(w.to).toLocaleString()}` : 'no window';
 
 /**
  * One KPI for one machine over a chosen window (GET …/kpis/:formulaKey). The page's
