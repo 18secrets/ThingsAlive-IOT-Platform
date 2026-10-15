@@ -86,7 +86,7 @@ export const EquipmentFilters: React.FC<{
       </button>
 
       {equipmentOptions && onSelect && (
-        <div className="flex items-center gap-2 text-sm ml-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-sm w-full sm:w-auto sm:ml-auto min-w-0">
           <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">Selected equipment</span>
           <SelectPicker
             data={[{ label: 'All matching equipment', value: 'all' }, ...equipmentOptions.map((e) => ({ label: e.label, value: `${e.sourceSystem}|${e.externalId}` }))]}
@@ -94,7 +94,8 @@ export const EquipmentFilters: React.FC<{
             onChange={(value) => onSelect(value ?? 'all')}
             searchable
             cleanable={false}
-            className="min-w-[220px]"
+            block
+            className="sm:w-auto! sm:min-w-[220px]"
           />
         </div>
       )}

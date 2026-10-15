@@ -1,0 +1,203 @@
+{
+  "common": {
+    "backToSignIn": "Back to sign in",
+    "email": "Email",
+    "password": "Password",
+    "active": "Active",
+    "client": "Client",
+    "language": "Language"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "thingsCare": "ThingsCare",
+    "thingsShield": "ThingsShield",
+    "incidentManagement": "Incident Management",
+    "productionMonitoring": "Production Monitoring",
+    "aiOnboarding": "AI Onboarding",
+    "alerts": "Alerts",
+    "livePredictions": "Live Predictions",
+    "scenarios": "Scenarios",
+    "workOrders": "Work Orders",
+    "costAdministration": "Cost Administration",
+    "administration": "Administration",
+    "clients": "Clients",
+    "staff": "Staff",
+    "devices": "Devices",
+    "equipment": "Equipment",
+    "clientUsers": "Client Users",
+    "roles": "Roles & Permissions",
+    "users": "Users",
+    "settings": "Settings",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "version": "Version: {{version}}",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "header": {
+    "goBack": "Go Back",
+    "notifications": "Notifications",
+    "telemetryNotifications": "Telemetry Notifications",
+    "newCount": "{{count}} New",
+    "lightMode": "Light Mode",
+    "darkMode": "Dark Mode",
+    "profile": "Profile and settings",
+    "signOut": "Sign Out"
+  },
+  "login": {
+    "title": "Sign in",
+    "identifier": "Username or email",
+    "forgot": "Forgot password?",
+    "submit": "Sign In",
+    "submitting": "Signing in…",
+    "failed": "Sign-in failed.",
+    "haveToken": "Have an invitation token? Set your password"
+  },
+  "forgot": {
+    "title": "Forgot your password?",
+    "intro": "Enter your sign-in email and we'll send you a reset link.",
+    "submit": "Send Reset Link",
+    "submitting": "Sending…",
+    "failed": "Could not send a reset link.",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for <1>{{email}}</1>, a reset link is on its way."
+  },
+  "invite": {
+    "titleReset": "Choose a new password",
+    "titleAccept": "Accept your invitation",
+    "introReset": "Your reset link filled in the token below. Choose a new password; the link works once.",
+    "introAccept": "Paste the invitation token Things Alive gave you, then choose a password. This is the only time you'll need the token — after this you sign in with just your email.",
+    "token": "Invitation Token",
+    "tokenPlaceholder": "Paste the token here",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Aa1! and at least 8 characters",
+    "confirmPassword": "Confirm Password",
+    "confirmPlaceholder": "Re-enter new password",
+    "submit": "Set Password & Sign In",
+    "submitting": "Setting password…",
+    "weak": "Password needs an uppercase letter, a lowercase letter, a number and a special character.",
+    "mismatch": "Passwords do not match.",
+    "failedReset": "Could not reset the password.",
+    "failedAccept": "Could not accept the invitation."
+  },
+  "settings": {
+    "title": "Account Settings",
+    "subtitle": "Manage your profile information and account security.",
+    "masterAdmin": "ThingsAlive Master Admin",
+    "role": "Role",
+    "username": "Username",
+    "clientOrganization": "Client Organization",
+    "accountStatus": "Account Status",
+    "accessLevel": "Access Level",
+    "clientSince": "Client Since",
+    "allPlantsAndClients": "All Plants & Clients",
+    "changePassword": "Change Password",
+    "changePasswordHint": "Update the password used to sign in",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter your current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Upper, lower, number & symbol",
+    "confirmNewPassword": "Confirm New Password",
+    "confirmPlaceholder": "Re-enter new password",
+    "update": "Update Password",
+    "updating": "Updating…",
+    "tooShort": "New password must be at least 8 characters.",
+    "sameAsCurrent": "New password must be different from your current password.",
+    "mismatch": "New password and confirmation do not match.",
+    "updated": "Your password has been updated. Signing you out for a fresh sign-in…"
+  },
+  "passwordField": {
+    "show": "Show password",
+    "hide": "Hide password"
+  },
+  "pages": {
+    "admin": {
+      "title": "Administration",
+      "subtitle": "Master Configuration"
+    },
+    "clients": {
+      "title": "Clients",
+      "subtitle": "Accounts & Entitlements"
+    },
+    "staff": {
+      "title": "Staff",
+      "subtitle": "Things Alive Team"
+    },
+    "devices": {
+      "title": "Devices",
+      "subtitle": "Stock & Assignment"
+    },
+    "equipment": {
+      "title": "Equipment",
+      "subtitle": "Fleet Register"
+    },
+    "thingsCare": {
+      "title": "ThingsCare",
+      "subtitle": "Health & Prognostics"
+    },
+    "thingsShield": {
+      "title": "ThingsShield",
+      "subtitle": "Safety, Compliance & Risk"
+    },
+    "incidentManagement": {
+      "title": "Incident Management",
+      "subtitle": "People, Machine Wellbeing & Security"
+    },
+    "productionMonitoring": {
+      "title": "Production Monitoring",
+      "subtitle": "Output & Performance"
+    },
+    "aiOnboarding": {
+      "title": "AI Onboarding",
+      "subtitle": "Guided Setup Sessions"
+    },
+    "alertAgent": {
+      "title": "Alert Agent",
+      "subtitle": "Automated Dispatch"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "subtitle": "Fleet Attention Feed"
+    },
+    "predictions": {
+      "title": "Live Predictions",
+      "subtitle": "Automated Dispatch"
+    },
+    "scenarios": {
+      "title": "Scenarios",
+      "subtitle": "Monitoring Workflows"
+    },
+    "workOrders": {
+      "title": "Work Orders",
+      "subtitle": "Maintenance Tasks"
+    },
+    "costAdministration": {
+      "title": "Cost Administration",
+      "subtitle": "Fuel & Maintenance Rates"
+    },
+    "users": {
+      "title": "User Management",
+      "subtitle": "Access & Permissions"
+    },
+    "clientUsers": {
+      "title": "Client Users",
+      "subtitle": "People & Access"
+    },
+    "roles": {
+      "title": "Roles & Permissions",
+      "subtitle": "Page Access Control"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "System Parameters"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Fleet Telematics"
+    },
+    "dashboardPlatform": {
+      "title": "Dashboard",
+      "subtitle": "Platform Overview"
+    }
+  }
+}

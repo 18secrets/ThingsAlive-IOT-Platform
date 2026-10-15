@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LanguageSelector } from '../common/LanguageSelector';
 import { AlertCircle, Info, MailCheck } from 'lucide-react';
 import { Input } from 'rsuite';
 import { PasswordField } from '../common/PasswordField';
@@ -9,6 +11,7 @@ import logoFull from '../../../assets/logo-icon.png';
 
 export const LoginScreen: React.FC = () => {
   const { signIn } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +34,7 @@ export const LoginScreen: React.FC = () => {
       // the same tick as the sign-in, not one render later.
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Sign-in failed.');
+      setError(err instanceof ApiError ? err.message : t('login.failed'));
     } finally {
       setBusy(false);
     }
@@ -39,6 +42,10 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <div id="login-screen" className="min-h-screen w-full flex items-center justify-center bg-[#F4F7FB] dark:bg-slate-950 p-4">
+      {/* Chosen before signing in, so the whole first visit is in that language. */}
+      <div className="fixed top-4 right-4">
+        <LanguageSelector />
+      </div>
       <div className="w-full max-w-sm">
 
         {/* Logo */}
@@ -49,12 +56,12 @@ export const LoginScreen: React.FC = () => {
 
         {/* Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-6">
-          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-1 mb-5">Sign in</h1>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-1 mb-5">{t('login.title')}</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Username or email
+                {t('login.identifier')}
               </label>
               <Input
                 required
@@ -66,7 +73,7 @@ export const LoginScreen: React.FC = () => {
             </div>
 
             <PasswordField
-              label="Password"
+              label={t('common.password')}
               value={password}
               onChange={setPassword}
               placeholder="••••••••"
@@ -79,7 +86,7 @@ export const LoginScreen: React.FC = () => {
                 onClick={() => navigate('/forgot-password')}
                 className="text-xs text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 cursor-pointer"
               >
-                Forgot password?
+                {t('login.forgot')}
               </button>
             </div>
 
@@ -95,7 +102,7 @@ export const LoginScreen: React.FC = () => {
               disabled={busy}
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {busy ? 'Signing in…' : 'Sign In'}
+              {busy ? t('login.submitting') : t('login.submit')}
             </button>
           </form>
         </div>
@@ -106,7 +113,7 @@ export const LoginScreen: React.FC = () => {
           className="mt-4 w-full flex items-center justify-center gap-1.5 text-xs text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 cursor-pointer"
         >
           <MailCheck className="w-3.5 h-3.5" />
-          <span>Have an invitation token? Set your password</span>
+          <span>{t('login.haveToken')}</span>
         </button>
 
         {/* Master Admin is now a real, stored platform_user credential (see

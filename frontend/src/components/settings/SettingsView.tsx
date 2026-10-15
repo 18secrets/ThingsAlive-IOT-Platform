@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   UserCircle2,
   ShieldCheck,
@@ -19,6 +20,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, onChangePassword }) => {
+  const { t } = useTranslation();
   const isMasterAdmin = authUser.role === 'master-admin';
 
   // For a client, look up their live account record for status / created date
@@ -43,15 +45,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     const trimmedConfirm = confirmPassword.trim();
 
     if (trimmedNew.length < 8) {
-      setFormError('New password must be at least 8 characters.');
+      setFormError(t('settings.tooShort'));
       return;
     }
     if (trimmedNew === trimmedCurrent) {
-      setFormError('New password must be different from your current password.');
+      setFormError(t('settings.sameAsCurrent'));
       return;
     }
     if (trimmedNew !== trimmedConfirm) {
-      setFormError('New password and confirmation do not match.');
+      setFormError(t('settings.mismatch'));
       return;
     }
 
@@ -64,20 +66,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     }
 
     setFormError(undefined);
-    setSuccessMessage('Your password has been updated. Signing you out for a fresh sign-in…');
+    setSuccessMessage(t('settings.updated'));
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
   };
 
-  const displayName = isMasterAdmin ? 'ThingsAlive Master Admin' : (authUser.clientName || authUser.username);
+  const displayName = isMasterAdmin ? t('settings.masterAdmin') : (authUser.clientName || authUser.username);
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
     <div id="settings-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Account Settings</h2>
-        <p className="text-sm text-sky-100">Manage your profile information and account security.</p>
+        <h2 className="text-xl font-bold">{t('settings.title')}</h2>
+        <p className="text-sm text-sky-100">{t('settings.subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -98,17 +100,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-sky-600" />
-                Role
+                {t('settings.role')}
               </span>
               <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 text-xs">
-                {isMasterAdmin ? 'ThingsAlive Master Admin' : 'Client'}
+                {isMasterAdmin ? t('settings.masterAdmin') : t('common.client')}
               </span>
             </div>
 
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <UserCircle2 className="w-4 h-4 text-sky-600" />
-                Username
+                {t('settings.username')}
               </span>
               <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{authUser.username}</span>
             </div>
@@ -117,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
                 <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                   <Briefcase className="w-4 h-4 text-sky-600" />
-                  Client Organization
+                  {t('settings.clientOrganization')}
                 </span>
                 <span className="font-medium text-slate-700 dark:text-slate-200">{authUser.clientName || '—'}</span>
               </div>
@@ -126,20 +128,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <CheckCircle2 className="w-4 h-4 text-sky-600" />
-                Account Status
+                {t('settings.accountStatus')}
               </span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                • {isMasterAdmin ? 'Active' : (clientRecord?.status || 'Active')}
+                • {isMasterAdmin || !clientRecord?.status || clientRecord.status === 'Active' ? t('common.active') : clientRecord.status}
               </span>
             </div>
 
             <div className="flex items-center justify-between py-1.5">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                 <Calendar className="w-4 h-4 text-sky-600" />
-                {isMasterAdmin ? 'Access Level' : 'Client Since'}
+                {isMasterAdmin ? t('settings.accessLevel') : t('settings.clientSince')}
               </span>
               <span className="font-medium text-slate-700 dark:text-slate-200">
-                {isMasterAdmin ? 'All Plants & Clients' : (clientRecord?.createdAt || '—')}
+                {isMasterAdmin ? t('settings.allPlantsAndClients') : (clientRecord?.createdAt || '—')}
               </span>
             </div>
           </div>
@@ -152,33 +154,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               <KeyRound className="w-4.5 h-4.5" />
             </div>
             <div>
-              <div className="font-semibold text-base text-slate-800 dark:text-slate-100">Change Password</div>
-              <div className="text-sm text-slate-400">Update the password used to sign in</div>
+              <div className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('settings.changePassword')}</div>
+              <div className="text-sm text-slate-400">{t('settings.changePasswordHint')}</div>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
             <PasswordField
-              label="Current Password"
+              label={t('settings.currentPassword')}
               value={currentPassword}
               onChange={setCurrentPassword}
-              placeholder="Enter your current password"
+              placeholder={t('settings.currentPasswordPlaceholder')}
               required
             />
 
             <PasswordField
-              label="New Password"
+              label={t('settings.newPassword')}
               value={newPassword}
               onChange={setNewPassword}
-              placeholder="Upper, lower, number & symbol"
+              placeholder={t('settings.newPasswordPlaceholder')}
               required
             />
 
             <PasswordField
-              label="Confirm New Password"
+              label={t('settings.confirmNewPassword')}
               value={confirmPassword}
               onChange={setConfirmPassword}
-              placeholder="Re-enter new password"
+              placeholder={t('settings.confirmPlaceholder')}
               required
             />
 
@@ -202,7 +204,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <KeyRound className="w-4 h-4" />
-              <span>{isSubmitting ? 'Updating…' : 'Update Password'}</span>
+              <span>{isSubmitting ? t('settings.updating') : t('settings.update')}</span>
             </button>
           </form>
         </div>

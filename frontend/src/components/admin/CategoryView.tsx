@@ -111,7 +111,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <SelectPicker
             data={[{ label: 'All statuses', value: 'all' }, { label: 'Draft', value: 'draft' },
               { label: 'Published', value: 'published' }, { label: 'Retired', value: 'retired' }]}
@@ -120,7 +120,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             searchable={false}
             cleanable={false}
             size="sm"
-            className="w-36"
+            className="w-full xs:w-36"
           />
           <button
             onClick={onOpenBulkImport}
