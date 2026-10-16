@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, MapPin, X } from 'lucide-react';
 import { Input } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, VisualAnchor } from '../../lib/api';
 
 /**
@@ -17,6 +18,7 @@ export const AnchorEditor: React.FC<{
   /** Shown under the image, e.g. what saving does for a client's copy. */
   note?: string;
 }> = ({ imageUrl, anchors: initial, unplacedSignals, onSave, note }) => {
+  const { t } = useTranslation('catalog');
   const [anchors, setAnchors] = useState<VisualAnchor[]>(() => initial.map(({ signal, hotspotX, hotspotY, label }) => ({ signal, hotspotX, hotspotY, label })));
   const [selected, setSelected] = useState<string | null>(unplacedSignals[0] ?? initial[0]?.signal ?? null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export const AnchorEditor: React.FC<{
       await onSave(anchors);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save the markers.');
+      setError(err instanceof ApiError ? err.message : t('anchors.saveFailed'));
     } finally {
       setBusy(false);
     }
@@ -56,7 +58,7 @@ export const AnchorEditor: React.FC<{
   return (
     <div className="space-y-3 text-xs">
       <div className="flex items-start gap-2 flex-wrap">
-        <span className="text-slate-500 dark:text-slate-400 pt-1">Placing:</span>
+        <span className="text-slate-500 dark:text-slate-400 pt-1">{t('anchors.placing')}</span>
         {[...anchors.map((a) => a.signal), ...tray].map((s) => (
           <button
             key={s}
@@ -66,9 +68,9 @@ export const AnchorEditor: React.FC<{
               : placed.has(s)
                 ? 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
                 : 'border-dashed border-amber-300 text-amber-700 dark:text-amber-300'}`}
-            title={placed.has(s) ? 'Placed — click the image to move it' : 'Not placed yet'}
+            title={placed.has(s) ? t('anchors.placedHint') : t('anchors.notPlacedYet')}
           >
-            {s}{custom.has(s) ? ' ·yours' : ''}
+            {s}{custom.has(s) ? ` ·${t('anchors.yours')}` : ''}
           </button>
         ))}
       </div>
@@ -77,7 +79,7 @@ export const AnchorEditor: React.FC<{
         onClick={place}
         className={`relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 ${selected ? 'cursor-crosshair' : ''}`}
       >
-        <img src={imageUrl} alt="Equipment schematic" className="w-full h-auto block select-none pointer-events-none" draggable={false} />
+        <img src={imageUrl} alt={t('visual.schematicAlt')} className="w-full h-auto block select-none pointer-events-none" draggable={false} />
         {anchors.map((a) => (
           <span
             key={a.signal}
@@ -95,19 +97,19 @@ export const AnchorEditor: React.FC<{
 
       {current && (
         <div className="flex items-center gap-2">
-          <span className="text-slate-500">Label for {current.signal}:</span>
+          <span className="text-slate-500">{t('anchors.labelFor', { signal: current.signal })}</span>
           <Input
             size="sm"
             value={current.label ?? ''}
             onChange={(v) => { setAnchors((prev) => prev.map((a) => (a.signal === current.signal ? { ...a, label: v || null } : a))); setSaved(false); }}
-            placeholder="Optional"
+            placeholder={t('anchors.optional')}
             className="max-w-xs"
           />
           <button
             onClick={() => { setAnchors((prev) => prev.filter((a) => a.signal !== current.signal)); setSaved(false); }}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 hover:border-rose-300 cursor-pointer"
           >
-            <X className="w-3 h-3" /> Remove marker
+            <X className="w-3 h-3" /> {t('anchors.removeMarker')}
           </button>
         </div>
       )}
@@ -118,10 +120,10 @@ export const AnchorEditor: React.FC<{
         </div>
       )}
       <div className="flex items-center justify-end gap-3">
-        {saved && <span className="text-emerald-600 dark:text-emerald-400">Saved.</span>}
-        <span className="text-slate-400">{anchors.length} placed · {tray.length} not placed</span>
+        {saved && <span className="text-emerald-600 dark:text-emerald-400">{t('anchors.saved')}</span>}
+        <span className="text-slate-400">{t('anchors.placedCount', { count: anchors.length })} · {t('anchors.notPlacedCount', { count: tray.length })}</span>
         <button onClick={save} disabled={busy} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer">
-          {busy ? 'Saving…' : 'Save markers'}
+          {busy ? t('common.saving') : t('anchors.save')}
         </button>
       </div>
     </div>

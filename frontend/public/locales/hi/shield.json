@@ -1,0 +1,95 @@
+{
+  "page": {
+    "subtitle": "सुरक्षा, अनुपालन और जोखिम",
+    "heading": "ThingsShield: सुरक्षा, अनुपालन और जोखिम",
+    "eyebrow": "लोग · मशीनें · साक्ष्य",
+    "info": "हर मशीन की अनुपालन, सुरक्षा और सिक्योरिटी स्थिति उसके नवीनतम जाँच रिकॉर्ड से ली जाती है। जो जाँच किसी ने दर्ज नहीं की, उसे दर्ज नहीं गिना जाता है।",
+    "loadFailed": "ThingsShield लोड नहीं हो सका।",
+    "countNote": "मशीन और श्रेणी के अनुसार गिना गया: हर मशीन की तीन जाँचें होती हैं।",
+    "machines": "मशीनें",
+    "machineCount_one": "{{count}} मशीन",
+    "machineCount_other": "{{count}} मशीनें",
+    "loading": "लोड हो रहा है…",
+    "noMatch": "इस फ़िल्टर से कोई मशीन मेल नहीं खाती।",
+    "pageOf": "पेज {{page}} / {{count}}",
+    "prev": "पिछला",
+    "next": "अगला",
+    "incidentsLink": "घटनाएँ घटना प्रबंधन में ट्रैक की जाती हैं"
+  },
+  "card": {
+    "needsAttention": "ध्यान देना ज़रूरी — कोई जाँच विफल या अतिदेय है",
+    "allClear": "कोई विफल या अतिदेय जाँच नहीं",
+    "details": "विवरण"
+  },
+  "category": {
+    "compliance": "अनुपालन",
+    "safety": "सुरक्षा",
+    "security": "सिक्योरिटी"
+  },
+  "status": {
+    "action_required": "कार्रवाई ज़रूरी",
+    "overdue": "अतिदेय",
+    "due_soon": "जल्द देय",
+    "current": "अद्यतन",
+    "not_recorded": "दर्ज नहीं"
+  },
+  "result": {
+    "passed": "पास",
+    "attention": "ध्यान दें",
+    "failed": "फ़ेल"
+  },
+  "detail": {
+    "notFoundTitle": "मशीन नहीं मिली",
+    "subtitle": "ThingsShield विवरण",
+    "loadFailed": "यह मशीन लोड नहीं हो सकी।",
+    "notFound": "यह मशीन आपके खाते में नहीं मिली।",
+    "dueSoonWindow_one": "जल्द देय = {{count}} दिन के भीतर ({{source}})",
+    "dueSoonWindow_other": "जल्द देय = {{count}} दिनों के भीतर ({{source}})",
+    "windowDefault": "डिफ़ॉल्ट",
+    "windowParameter": "पैरामीटर द्वारा सेट",
+    "noRecord": {
+      "compliance": "इस मशीन की अभी तक कोई अनुपालन जाँच दर्ज नहीं है।",
+      "safety": "इस मशीन की अभी तक कोई सुरक्षा जाँच दर्ज नहीं है।",
+      "security": "इस मशीन की अभी तक कोई सिक्योरिटी जाँच दर्ज नहीं है।"
+    },
+    "addRecord": {
+      "compliance": "अनुपालन रिकॉर्ड जोड़ें",
+      "safety": "सुरक्षा रिकॉर्ड जोड़ें",
+      "security": "सिक्योरिटी रिकॉर्ड जोड़ें"
+    },
+    "history": "इतिहास",
+    "correctRecord": "रिकॉर्ड सुधारें"
+  },
+  "record": {
+    "corrected": "सुधारा गया",
+    "performedTitle": "जाँच कब की गई",
+    "dueTitle": "अगली जाँच की तारीख",
+    "due": "देय {{date}}",
+    "oneOff": "एक बार",
+    "accountUser": "खाता उपयोगकर्ता",
+    "correct": "सुधारें",
+    "recordedTitle": "प्लेटफ़ॉर्म में दर्ज; सुधार जोड़े जाते हैं, कभी ओवरराइट नहीं होते",
+    "recorded": "दर्ज {{date}}",
+    "aCorrection": "एक सुधार"
+  },
+  "form": {
+    "saveFailed": "यह रिकॉर्ड सहेजा नहीं जा सका।",
+    "correctionNote": "सुधार एक नए रिकॉर्ड के रूप में सहेजा जाता है जो इसकी जगह लेता है। मूल रिकॉर्ड इतिहास में रहता है, और किसी रिकॉर्ड को एक ही बार सुधारा जा सकता है।",
+    "whatChecked": "क्या जाँचा गया",
+    "whatCheckedPlaceholder": "जैसे गार्ड / आइसोलेशन निरीक्षण",
+    "result": "परिणाम",
+    "performedOn": "जाँच की तारीख",
+    "nextDue": "अगली जाँच (वैकल्पिक)",
+    "oneOff": "एक बार",
+    "owner": "ज़िम्मेदार",
+    "ownerKept": "यथावत: इसका मालिक खाता उपयोगकर्ता",
+    "ownerPlaceholder": "जैसे R. Kulkarni (ठेकेदार)",
+    "reference": "आवश्यकता / दस्तावेज़ संदर्भ",
+    "referencePlaceholder": "जैसे CHK-2026-0412",
+    "findings": "निष्कर्ष",
+    "cancel": "रद्द करें",
+    "saving": "सहेजा जा रहा है…",
+    "saveCorrection": "सुधार सहेजें",
+    "saveRecord": "रिकॉर्ड सहेजें"
+  }
+}

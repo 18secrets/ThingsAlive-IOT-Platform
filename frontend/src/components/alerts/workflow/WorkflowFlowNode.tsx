@@ -1,13 +1,15 @@
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 import { describeWorkflowNode, type WorkflowNode } from './workflowGraph';
 
 const handleClass =
   '!w-2.5 !h-2.5 !border-2 !border-white dark:!border-slate-900 !bg-slate-400 dark:!bg-slate-500';
 
 export const WorkflowFlowNode: React.FC<NodeProps<WorkflowNode>> = ({ data, selected }) => {
+  const { t } = useTranslation('alerts');
   const Icon = data.icon;
-  const { title, subtitle } = describeWorkflowNode(data);
+  const { title, subtitle } = describeWorkflowNode(data, t);
 
   return (
     <div

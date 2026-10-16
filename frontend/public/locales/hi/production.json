@@ -1,0 +1,122 @@
+{
+  "page": {
+    "subtitle": "उपलब्धता और उपयोग",
+    "detailSubtitle": "उत्पादन निगरानी विवरण",
+    "machineNotFound": "मशीन नहीं मिली"
+  },
+  "hero": {
+    "lastDays_one": "पिछला {{count}} दिन",
+    "lastDays_other": "पिछले {{count}} दिन",
+    "tooltip": "उपलब्धता निर्धारित शिफ्ट घंटों के मुकाबले चालू समय है। OEE इसे प्रदर्शन (ब्रेकडाउन में गया समय) और गुणवत्ता (मानक के मुकाबले जला ईंधन) से गुणा करता है, हर कैलेंडर सप्ताह के लिए।",
+    "title": "उत्पादन निगरानी और उपलब्धता"
+  },
+  "common": {
+    "loading": "लोड हो रहा है…",
+    "prev": "पिछला",
+    "next": "अगला",
+    "pageOf": "पृष्ठ {{page}} / {{total}}",
+    "details": "विवरण",
+    "createWorkOrder": "कार्य आदेश बनाएँ",
+    "viewEquipmentPage": "उपकरण पेज देखें",
+    "notAvailable": "उपलब्ध नहीं",
+    "oeeNotAvailable": "OEE उपलब्ध नहीं",
+    "uptimeTitle": "चालू घंटे",
+    "downtimeTitle": "बंद घंटे",
+    "hoursUp": "{{hours}} घंटे चालू",
+    "hoursDown": "{{hours}} घंटे बंद"
+  },
+  "kpi": {
+    "machinesMeasured": "मापी गई मशीनें",
+    "fleetAvailability": "फ़्लीट उपलब्धता",
+    "uptime": "चालू समय",
+    "downtime": "बंद समय",
+    "siteOee_one": "साइट OEE · इस सप्ताह ({{count}} मशीन)",
+    "siteOee_other": "साइट OEE · इस सप्ताह ({{count}} मशीनें)"
+  },
+  "list": {
+    "heading": "मशीनें",
+    "count_one": "{{count}} मशीन",
+    "count_other": "{{count}} मशीनें",
+    "empty": "दिखाने के लिए कोई मशीन नहीं।",
+    "excluded": "ऊपर के योग से बाहर: {{noShift}} बिना शिफ्ट शेड्यूल के, {{noReadings}} बिना रीडिंग के।"
+  },
+  "card": {
+    "oeeTitle": "इस कैलेंडर सप्ताह का OEE",
+    "oeeWeek": "OEE {{value}}% · इस सप्ताह"
+  },
+  "reason": {
+    "no_shift_schedule": "कोई शिफ्ट शेड्यूल सेट नहीं",
+    "no_readings": "इस अवधि में कोई रीडिंग नहीं"
+  },
+  "detailReason": {
+    "no_shift_schedule": "इस मशीन के लिए कोई शिफ्ट शेड्यूल सेट नहीं",
+    "no_readings": "इस अवधि में कोई रीडिंग नहीं"
+  },
+  "oeeReason": {
+    "no_shift_schedule": "इस मशीन का कोई शिफ्ट शेड्यूल नहीं",
+    "no_readings": "इस अवधि में कोई रीडिंग नहीं",
+    "parameter_not_set": "एक ज़रूरी पैरामीटर सेट नहीं है",
+    "insufficient_coverage": "आकलन के लिए पर्याप्त रीडिंग नहीं",
+    "unbound": "ज़रूरी सिग्नल जुड़ा नहीं है",
+    "unit_mismatch": "ईंधन की इकाइयाँ मानक आंकड़े से मेल नहीं खातीं",
+    "stale": "रीडिंग पुरानी हैं",
+    "undefined_result": "मापने के लिए कोई उपलब्ध समय नहीं",
+    "not_available": "उपलब्ध नहीं"
+  },
+  "source": {
+    "equipment": "यह मशीन",
+    "class": "इसकी श्रेणी",
+    "site": "इसकी साइट",
+    "client": "खाता",
+    "oem": "OEM आंकड़ा"
+  },
+  "oee": {
+    "title": "समग्र उपकरण प्रभावशीलता",
+    "formula": "उपलब्धता × प्रदर्शन × गुणवत्ता · UTC {{window}}",
+    "windowUnit": {
+      "day": "दिन",
+      "week": "सप्ताह",
+      "month": "महीना"
+    },
+    "window": {
+      "day": "आज",
+      "week": "इस सप्ताह",
+      "month": "इस महीने"
+    },
+    "availability": "उपलब्धता",
+    "performance": "प्रदर्शन",
+    "quality": "गुणवत्ता",
+    "availableOfScheduled": "{{scheduled}} निर्धारित मिनट में से {{available}}",
+    "scheduled": "{{scheduled}} निर्धारित मिनट",
+    "breakdowns_one": "{{count}} ब्रेकडाउन · {{minutes}} मिनट",
+    "breakdowns_other": "{{count}} ब्रेकडाउन · {{minutes}} मिनट",
+    "oneOngoing": "एक जारी",
+    "idleThreshold": "{{minutes}} मिनट से ज़्यादा निष्क्रिय होना गिना जाता है",
+    "idleThresholdSetBy": "{{minutes}} मिनट से ज़्यादा निष्क्रिय होना गिना जाता है, {{source}} द्वारा तय",
+    "burnedVsNominal": "{{actual}} {{unit}} जला, मानक {{nominal}}",
+    "overNominal": "मानक से {{litres}} L ज़्यादा",
+    "nominalSetBy": "मानक {{source}} द्वारा तय",
+    "breakdownsInWindow": "इस अवधि के ब्रेकडाउन",
+    "noneRecorded": "कोई दर्ज नहीं।",
+    "ongoing": "जारी"
+  },
+  "detail": {
+    "availabilityNotAvailable": "उपलब्धता की जानकारी उपलब्ध नहीं"
+  },
+  "shifts": {
+    "title": "शिफ्ट इतिहास",
+    "empty": "इस अवधि में कोई शिफ्ट दर्ज नहीं।",
+    "col": {
+      "date": "तारीख",
+      "shift": "शिफ्ट",
+      "productive": "उत्पादक",
+      "idle": "निष्क्रिय",
+      "utilization": "उपयोग"
+    }
+  },
+  "errors": {
+    "loadAvailability": "उपलब्धता लोड नहीं हो सकी।",
+    "loadOee": "OEE लोड नहीं हो सका।",
+    "loadMachine": "यह मशीन लोड नहीं हो सकी।"
+  }
+}

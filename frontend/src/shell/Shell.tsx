@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { Suspense, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -213,7 +213,11 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
             Agent) since there's nothing there to clear. */}
         <main ref={mainRef} className={`flex-1 overflow-y-auto p-3 bg-[#F4F7FB] dark:bg-slate-950 ${header.aiIndicator ? '' : 'pb-15 md:pb-20'}`}>
           <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1920px] mx-auto space-y-3">
-            <Outlet />
+            {/* A page's own translation file loads the first time it opens; only the
+                page waits for it, not the sidebar and header around it. */}
+            <Suspense fallback={null}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

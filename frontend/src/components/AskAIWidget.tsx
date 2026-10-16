@@ -1,35 +1,38 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2 } from 'lucide-react';
 import { Input } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 
 interface AskAIWidgetProps {
   onOpenHelpModal?: () => void;
 }
 
+// The canned replies below match on the English wording, so a chip carries its
+// English text as `match` and shows the translation.
 const QUICK_PROMPTS = [
-  'Which devices are offline?',
-  'Show Dust Collector status',
-  'Volvo EC210 service status',
+  { key: 'offline', match: 'Which devices are offline?' },
+  { key: 'dust', match: 'Show Dust Collector status' },
+  { key: 'volvo', match: 'Volvo EC210 service status' },
 ];
 
 const HELP_TOPICS = [
-  { icon: LayoutGrid, title: 'Admin Console & Sub-tabs', body: 'Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Plants, and Tool Mappings.' },
-  { icon: Wrench, title: 'Equipment & Categorization', body: 'Configure industrial excavators, mobile cranes, and conveyors with engine specifications, maintenance intervals, and fuel capacities.' },
-  { icon: Cpu, title: 'Device Onboarding & Tool Mapping', body: 'Register hardware modems by IMEI and auto-bind sensor parameter channels via preconfigured Tool Profiles.' },
+  { icon: LayoutGrid, key: 'admin' },
+  { icon: Wrench, key: 'equipment' },
+  { icon: Cpu, key: 'devices' },
 ];
 
+// A message is stored as a key (plus values) so it re-renders in the new language.
+type ChatMessage = { role: 'user' | 'assistant'; text: string; key?: string; values?: Record<string, string> };
+
 export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
+  const { t } = useTranslation('shared');
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [inputQuery, setInputQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string; time: string }>>([
-    {
-      role: 'assistant',
-      text: 'Hello! I am your ThingsAlive Telematics AI Assistant. You can ask me about sensor telemetry thresholds, equipment health, CAN-bus mapping, or device onboarding status.',
-      time: 'Just now',
-    },
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', text: '', key: 'askAI.welcome' },
   ]);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -37,33 +40,33 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = (e?: React.FormEvent, prompt?: string) => {
+  const handleSend = (e?: React.FormEvent, prompt?: string, match?: string) => {
     if (e) e.preventDefault();
     const userText = (prompt ?? inputQuery).trim();
     if (!userText) return;
 
-    setMessages((prev) => [...prev, { role: 'user', text: userText, time: 'Just now' }]);
+    setMessages((prev) => [...prev, { role: 'user', text: userText }]);
     setInputQuery('');
     setIsTyping(true);
 
     setTimeout(() => {
-      let reply = "I've analyzed the fleet telemetry data across all active plants.";
-      const queryLower = userText.toLowerCase();
+      let reply: Pick<ChatMessage, 'key' | 'values'>;
+      const queryLower = (match ?? userText).toLowerCase();
 
       if (queryLower.includes('offline') || queryLower.includes('device') || queryLower.includes('131')) {
-        reply = 'Device #131 (PowerCommand Cloud) on Generator Unit is currently OFFLINE. Last ping was 4 hours ago via Eicher Motors gateway. Diagnostic code: CAN-BUS TIMEOUT (Error 0x4B).';
+        reply = { key: 'askAI.reply.offline' };
       } else if (queryLower.includes('dust') || queryLower.includes('sensor') || queryLower.includes('cement')) {
-        reply = 'Dust_Collector_Monitoring (SN-CBM-001) is active on the Kiln Drive Monitoring Kit. Current differential pressure is nominal at 1.4 kPa with opacity index at 3.2%.';
+        reply = { key: 'askAI.reply.dust' };
       } else if (queryLower.includes('excavator') || queryLower.includes('equipment') || queryLower.includes('volvo')) {
-        reply = 'Volvo EC210 Crawler Excavator (ID #14, License UP32CE9136) at Lucknow Infrastructure Plant is active. Next scheduled hydraulic service is in 38 operational hours.';
+        reply = { key: 'askAI.reply.volvo' };
       } else if (queryLower.includes('fuel') || queryLower.includes('capacity')) {
-        reply = 'Category CAT-HEE-001 has normalized fuel capacity set to 400 Liters with automated telemetry percentage bounds enabled.';
+        reply = { key: 'askAI.reply.fuel' };
       } else {
-        reply = `Telemetry summary for "${userText}": 18 equipment items logged, 20 telematics units provisioned (9 online, 1 offline, 10 pending data cycle). All MODBUS and J1939 protocols are operating within expected latencies.`;
+        reply = { key: 'askAI.reply.summary', values: { query: userText } };
       }
 
       setIsTyping(false);
-      setMessages((prev) => [...prev, { role: 'assistant', text: reply, time: 'Just now' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', text: '', ...reply }]);
     }, 900);
   };
 
@@ -79,7 +82,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
           id="help-circle-btn"
           onClick={() => setShowHelp(true)}
           className="w-11 h-11 rounded-full bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/5 hover:border-sky-300 hover:text-sky-600 dark:hover:border-sky-700 dark:hover:text-sky-400 hover:-translate-y-0.5 transition-all cursor-pointer"
-          title="ThingsAlive Documentation & Help"
+          title={t('askAI.helpTitle')}
         >
           <HelpCircle className="w-5 h-5" />
         </button>
@@ -93,7 +96,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
             <Bot className="w-5 h-5" />
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-sky-600" />
           </span>
-          <span>Ask AI</span>
+          <span>{t('askAI.button')}</span>
         </button>
       </div>
 
@@ -106,10 +109,11 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                 <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
                   <HelpCircle className="w-4 h-4" />
                 </div>
-                <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">ThingsAlive IoT OS Guide</h3>
+                <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('askAI.guideTitle')}</h3>
               </div>
               <button
                 onClick={() => setShowHelp(false)}
+                aria-label={t('close')}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -124,8 +128,8 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                       <Icon className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{topic.title}</div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{topic.body}</p>
+                      <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t(`askAI.topics.${topic.key}.title`)}</div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{t(`askAI.topics.${topic.key}.body`)}</p>
                     </div>
                   </div>
                 );
@@ -136,7 +140,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                 onClick={() => setShowHelp(false)}
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs transition-colors cursor-pointer"
               >
-                Got it
+                {t('askAI.gotIt')}
               </button>
             </div>
           </div>
@@ -160,20 +164,21 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-sky-700" />
               </div>
               <div className="min-w-0">
-                <h4 className="font-semibold text-sm leading-tight truncate">ThingsAlive Assistant</h4>
-                <p className="text-[11px] text-sky-100/90 truncate">Fleet &amp; telemetry intelligence</p>
+                <h4 className="font-semibold text-sm leading-tight truncate">{t('askAI.assistantName')}</h4>
+                <p className="text-[11px] text-sky-100/90 truncate">{t('askAI.assistantTagline')}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => setIsExpanded((prev) => !prev)}
                 className="p-1.5 rounded-lg hover:bg-white/15 transition-colors text-white cursor-pointer"
-                title={isExpanded ? 'Collapse' : 'Expand'}
+                title={isExpanded ? t('askAI.collapse') : t('askAI.expand')}
               >
                 {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
               <button
                 onClick={() => setIsOpen(false)}
+                aria-label={t('close')}
                 className="p-1.5 rounded-lg hover:bg-white/15 transition-colors text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -185,11 +190,11 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
           <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto">
             {QUICK_PROMPTS.map((prompt) => (
               <button
-                key={prompt}
-                onClick={() => handleSend(undefined, prompt)}
+                key={prompt.key}
+                onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt.key}`), prompt.match)}
                 className="shrink-0 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-[11px] font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer whitespace-nowrap"
               >
-                {prompt}
+                {t(`askAI.prompts.${prompt.key}`)}
               </button>
             ))}
           </div>
@@ -211,9 +216,9 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                         : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-md'
                     }`}
                   >
-                    {m.text}
+                    {m.key ? t(m.key, m.values) : m.text}
                   </div>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">{m.time}</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">{t('askAI.justNow')}</span>
                 </div>
               </div>
             ))}
@@ -240,12 +245,13 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
             <Input
               value={inputQuery}
               onChange={(value) => setInputQuery(value)}
-              placeholder="Ask about telematics, sensors, errors..."
+              placeholder={t('askAI.placeholder')}
               size="sm"
               className="flex-1"
             />
             <button
               type="submit"
+              aria-label={t('askAI.send')}
               className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 transition-colors cursor-pointer"
               disabled={!inputQuery.trim()}
             >

@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
 import { AddCategoryModal } from './AddCategoryModal';
 
@@ -55,6 +56,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
   classes, error, onCreateClass, onUpdateClass, onPublishClass, onRetireClass, onUnretireClass, onOpenClass,
   onOpenBulkImport,
 }) => {
+  const { t } = useTranslation('catalog');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | EquipmentClass['status']>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -106,15 +108,15 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             size="sm"
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Class Names, Slugs, or Tags..."
+            placeholder={t('classes.searchPlaceholder')}
             className="w-full pl-9!"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <SelectPicker
-            data={[{ label: 'All statuses', value: 'all' }, { label: 'Draft', value: 'draft' },
-              { label: 'Published', value: 'published' }, { label: 'Retired', value: 'retired' }]}
+            data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' },
+              { label: t('common.statusLabel.published'), value: 'published' }, { label: t('common.statusLabel.retired'), value: 'retired' }]}
             value={statusFilter}
             onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
             searchable={false}
@@ -127,7 +129,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"
           >
             <UploadCloud className="w-4 h-4" />
-            <span>Bulk Import</span>
+            <span>{t('classes.bulkImport')}</span>
           </button>
           <button
             id="add-category-btn"
@@ -138,7 +140,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>New Class</span>
+            <span>{t('classes.newClass')}</span>
           </button>
         </div>
       </div>
@@ -169,7 +171,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                     setIsModalOpen(true);
                   }}
                   className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                  title="Edit (working draft)"
+                  title={t('classes.editDraft')}
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
@@ -192,11 +194,11 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             <div className="flex flex-wrap gap-2">
               <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
                 <Radio className="w-3 h-3 text-sky-600" />
-                <span>{cls.expectedSignals.length} Signals</span>
+                <span>{t('classes.signalCount', { count: cls.expectedSignals.length })}</span>
               </div>
               <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
                 <Wrench className="w-3 h-3 text-sky-600" />
-                <span>{cls.failureModes.length} Failure Modes</span>
+                <span>{t('classes.failureModeCount', { count: cls.failureModes.length })}</span>
               </div>
             </div>
 
@@ -205,12 +207,12 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
               className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
             >
               <Activity className="w-3.5 h-3.5" />
-              <span>Configure Predictive Maintenance</span>
+              <span>{t('classes.configurePdm')}</span>
             </button>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[cls.status]}`}>
-                {cls.status}
+                {t(`common.status.${cls.status}`, { defaultValue: cls.status })}
               </span>
               {cls.status === 'draft' && (
                 <button
@@ -219,7 +221,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>Publish</span>
+                  <span>{t('common.publish')}</span>
                 </button>
               )}
               {cls.status === 'published' && (
@@ -229,18 +231,18 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer disabled:opacity-50"
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  <span>Retire</span>
+                  <span>{t('common.retire')}</span>
                 </button>
               )}
               {cls.status === 'retired' && (
                 <button
                   onClick={() => handleUnretire(cls.slug)}
                   disabled={busySlug === cls.slug}
-                  title="Offer it again: its latest retired version is published"
+                  title={t('classes.unretireHint')}
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Unretire</span>
+                  <span>{t('common.unretire')}</span>
                 </button>
               )}
             </div>
@@ -250,7 +252,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
         {filtered.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No equipment classes found.</span>
+            <span>{t('classes.noneFound')}</span>
           </div>
         )}
       </div>

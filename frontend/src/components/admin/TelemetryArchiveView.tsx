@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, Archive, Info, RotateCw } from 'lucide-react';
 import { ApiError, TelemetryArchiveRow, TelemetryPartitionDrop, apiListTelemetryArchives } from '../../lib/api';
 import { Chip } from '../common/Chip';
@@ -17,6 +18,7 @@ const bytes = (n: string) => {
  * to operations (TELEMETRY_ARCHIVE_ENABLED, ARCHIVE_S3_*), not to a button here.
  */
 export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => string }> = ({ clientName }) => {
+  const { t } = useTranslation('admin');
   const [archives, setArchives] = useState<TelemetryArchiveRow[] | null>(null);
   const [drops, setDrops] = useState<TelemetryPartitionDrop[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -26,7 +28,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
     setLoading(true);
     apiListTelemetryArchives()
       .then((r) => { setArchives(r.archives); setDrops(r.drops); setError(undefined); })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the telemetry archive.'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t('archive.loadFailed')))
       .finally(() => setLoading(false));
   };
 
@@ -38,11 +40,10 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
         <div className="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
           <Info className="w-4 h-4 shrink-0 text-slate-400" />
           <span>
-            Raw readings older than 90 days are exported to Parquet per account and month, verified by reading the object back,
-            then their partition is dropped. This page only shows what has happened; archive passes are run by operations.
+            {t('archive.intro')}
           </span>
         </div>
-        <button onClick={load} disabled={loading} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer shrink-0" title="Refresh">
+        <button onClick={load} disabled={loading} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer shrink-0" title={t('archive.refresh')}>
           <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
@@ -56,26 +57,26 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
           <Archive className="w-4 h-4 text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Exports</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.exports')}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-semibold">
               <tr>
-                <th className="py-2.5 px-4">Month</th>
-                <th className="py-2.5 px-4">Account</th>
-                <th className="py-2.5 px-4">Part</th>
-                <th className="py-2.5 px-4 text-right">Rows</th>
-                <th className="py-2.5 px-4 text-right">Size</th>
-                <th className="py-2.5 px-4">Exported</th>
-                <th className="py-2.5 px-4">Verified</th>
+                <th className="py-2.5 px-4">{t('archive.month')}</th>
+                <th className="py-2.5 px-4">{t('archive.account')}</th>
+                <th className="py-2.5 px-4">{t('archive.part')}</th>
+                <th className="py-2.5 px-4 text-right">{t('archive.rows')}</th>
+                <th className="py-2.5 px-4 text-right">{t('archive.size')}</th>
+                <th className="py-2.5 px-4">{t('archive.exported')}</th>
+                <th className="py-2.5 px-4">{t('archive.verified')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
               {archives === null ? (
-                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{error ? '—' : 'Loading…'}</td></tr>
+                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{error ? '—' : t('archive.loading')}</td></tr>
               ) : archives.length === 0 ? (
-                <tr><td colSpan={7} className="py-6 text-center text-slate-400">No month has been archived yet.</td></tr>
+                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t('archive.noArchives')}</td></tr>
               ) : archives.map((a) => (
                 <tr key={a.id}>
                   <td className="py-2.5 px-4">{monthLabel(a.month)}</td>
@@ -85,9 +86,9 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
                   <td className="py-2.5 px-4 text-right font-mono">{bytes(a.byteSize)}</td>
                   <td className="py-2.5 px-4 text-slate-500">{new Date(a.exportedAt).toLocaleString()}</td>
                   <td className="py-2.5 px-4">
-                    {a.verifiedAt ? <Chip tone="emerald">verified</Chip>
-                      : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">failed</Chip></span>
-                        : <Chip tone="amber">pending</Chip>}
+                    {a.verifiedAt ? <Chip tone="emerald">{t('archive.status.verified')}</Chip>
+                      : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">{t('archive.status.failed')}</Chip></span>
+                        : <Chip tone="amber">{t('archive.status.pending')}</Chip>}
                   </td>
                 </tr>
               ))}
@@ -98,16 +99,16 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Dropped partitions</h3>
-          <p className="text-[11px] text-slate-400">A partition is dropped only after every account's rows for that month have a verified archive.</p>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.droppedPartitions')}</h3>
+          <p className="text-[11px] text-slate-400">{t('archive.droppedHint')}</p>
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
           {drops.length === 0 ? (
-            <p className="py-6 text-center text-slate-400">No partition has been dropped yet.</p>
+            <p className="py-6 text-center text-slate-400">{t('archive.noDrops')}</p>
           ) : drops.map((d) => (
             <div key={d.partition_name} className="flex items-center justify-between gap-3 px-4 py-2.5">
               <span className="font-mono text-slate-700 dark:text-slate-200">{d.partition_name}</span>
-              <span className="text-slate-500">{monthLabel(d.month)} · {Number(d.rows_dropped).toLocaleString()} rows · {new Date(d.dropped_at).toLocaleString()}</span>
+              <span className="text-slate-500">{monthLabel(d.month)} · {t('archive.rowsDropped', { count: Number(d.rows_dropped), formatted: Number(d.rows_dropped).toLocaleString() })} · {new Date(d.dropped_at).toLocaleString()}</span>
             </div>
           ))}
         </div>

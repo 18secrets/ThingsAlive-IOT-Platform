@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, Scenario, ScenarioInput } from '../../../lib/api';
 
 interface AddScenarioModalProps {
@@ -19,16 +20,14 @@ const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const SEVERITIES: Scenario['severity'][] = ['low', 'medium', 'high', 'critical'];
-const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ label: s, value: s }));
-const TIER_OPTIONS = [
-  { label: '1 — Rules on windows', value: 1 },
-  { label: '2 — Weak supervision', value: 2 },
-  { label: '3 — Trained model', value: 3 },
-];
+const TIERS: Scenario['tier'][] = [1, 2, 3];
 
 export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
   isOpen, onClose, equipmentClassSlug, availableSignals, onCreate, onUpdate, existingScenario,
 }) => {
+  const { t } = useTranslation('catalog');
+  const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ label: t(`common.severity.${s}`, { defaultValue: s }), value: s }));
+  const TIER_OPTIONS = TIERS.map((n) => ({ label: t(`scenarioModal.tierOption.${n}`), value: n }));
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [name, setName] = useState('');
@@ -91,7 +90,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the scenario.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('scenarioModal.saveFailed') : t('scenarioModal.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -106,12 +105,12 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {isEditing ? 'Edit Prediction Scenario' : 'New Prediction Scenario'}
+                {isEditing ? t('scenarioModal.editTitle') : t('scenarioModal.newTitle')}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
                 {isEditing
-                  ? 'Editing the working draft — publishing it is a separate step, from the list.'
-                  : 'Created as a draft. Nothing here reaches a tenant until it is published.'}
+                  ? t('common.editDraftSubtitleList')
+                  : t('classModal.newSubtitle')}
               </p>
             </div>
           </div>
@@ -128,26 +127,26 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Scenario Name <span className="text-rose-500">*</span>
+                {t('scenarioModal.name')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 autoFocus
                 value={name}
                 onChange={(value) => handleNameChange(value)}
-                placeholder="e.g. Coolant Overheat"
+                placeholder={t('scenarioModal.namePlaceholder')}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Slug <span className="text-rose-500">*</span>
+                {t('classModal.slug')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 disabled={isEditing}
                 value={slug}
                 onChange={(value) => { setSlug(value); setSlugTouched(true); }}
-                placeholder="e.g. coolant-overheat"
+                placeholder={t('scenarioModal.slugPlaceholder')}
                 className="font-mono"
               />
             </div>
@@ -155,21 +154,21 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Description
+              {t('classModal.description')}
             </label>
             <Input
               as="textarea"
               rows={2}
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="What this scenario detects, and why it matters..."
+              placeholder={t('scenarioModal.descriptionPlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Severity
+                {t('common.severityLabel')}
               </label>
               <SelectPicker
                 data={SEVERITY_OPTIONS}
@@ -182,7 +181,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Scoring Tier
+                {t('scenarioModal.scoringTier')}
               </label>
               <SelectPicker
                 data={TIER_OPTIONS}
@@ -195,7 +194,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Min. History (days)
+                {t('scenarioModal.minHistory')}
               </label>
               <InputNumber
                 min={0}
@@ -207,13 +206,13 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
           </div>
 
           <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-2">
-            <span className="text-xs font-bold text-slate-800 dark:text-white">Required Signals</span>
+            <span className="text-xs font-bold text-slate-800 dark:text-white">{t('scenarioModal.requiredSignals')}</span>
             <p className="text-[10px] text-slate-400 -mt-1">
-              Drawn from this class's expected signals — a scenario cannot run without every one checked here.
+              {t('scenarioModal.requiredSignalsHint')}
             </p>
             {availableSignals.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic">
-                This class has no expected signals declared yet — add some on the class itself first.
+                {t('common.noClassSignals')}
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -247,7 +246,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory
+              <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -255,7 +254,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -263,7 +262,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : (isEditing ? 'Save Draft' : 'Create Draft')}</span>
+                <span>{busy ? t('common.saving') : (isEditing ? t('classModal.saveDraft') : t('classModal.createDraft'))}</span>
               </button>
             </div>
           </div>

@@ -30,7 +30,12 @@ i18n
     // `hi-IN` from the browser resolves to `hi` rather than falling back to English.
     nonExplicitSupportedLngs: true,
     load: 'languageOnly',
-    backend: { loadPath: '/locales/{{lng}}/translation.json' },
+    // One file per area (translation.json is the shared default: shell, sign-in,
+    // Settings, page titles). A page's file loads when the page first asks for it,
+    // so nobody downloads Administration's strings to read their dashboard.
+    backend: { loadPath: '/locales/{{lng}}/{{ns}}.json' },
+    defaultNS: 'translation',
+    ns: ['translation'],
     interpolation: { escapeValue: false },
     detection: { order: ['localStorage', 'navigator'], caches: ['localStorage'] },
     // A key missing from a language shows the English text, never the bare key.

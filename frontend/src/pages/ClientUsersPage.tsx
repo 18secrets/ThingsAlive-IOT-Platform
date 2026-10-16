@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   InviteUserInput, InviteUserResult, TenantRole, TenantUser, Plant, EquipmentProfile, SetUserAccessInput,
 } from '../lib/api';
@@ -28,6 +29,7 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser, plants, equipment, onSetUserAccess,
 }) => {
   const { authUser } = useAuth();
+  const { t } = useTranslation('users');
   if (!authUser) return null;
 
   // user.manage is that account's own super admin only — there is no cross-tenant
@@ -35,9 +37,8 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   // the Clients tab has nothing real to see here yet.
   if (authUser.role === 'master-admin' || manageAccessClientId) {
     return (
-      <NotAvailableNotice title="Not available yet" onBack={onBackToClients}>
-        Managing another account's users is the account's own super admin's call —
-        there is no Master Admin route for it today.
+      <NotAvailableNotice title={t('common.notAvailableYet')} onBack={onBackToClients}>
+        {t('notAvailable.users')}
       </NotAvailableNotice>
     );
   }

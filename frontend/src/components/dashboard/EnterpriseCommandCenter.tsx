@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Activity, AlertTriangle, ArrowUpRight, Bell, Box, CheckCircle2, ChevronLeft, ChevronRight, Clock3, MapPin, Search } from 'lucide-react';
 import { FleetFilters, DEFAULT_FLEET_SCOPE, matchingFleet } from '../fleet/FleetFilters';
 import { FLEET, isBreaching, weeklyPerformanceFor } from '../../data/fleetMockData';
@@ -12,6 +13,7 @@ const PAGE_SIZE = 12;
 
 export const EnterpriseCommandCenter: React.FC = () => {
   const navigate = useNavigate();
+  const { t: tr } = useTranslation('dashboard');
   const [scope, setScope] = useState(DEFAULT_FLEET_SCOPE);
   const [page, setPage] = useState(1);
   const visible = useMemo(() => matchingFleet(FLEET, scope), [scope]);
@@ -26,14 +28,14 @@ export const EnterpriseCommandCenter: React.FC = () => {
   const downtimeHours = perf.reduce((n, x) => n + x.p.breakdownHours, 0);
 
   const kpis: { label: string; value: string; tone?: 'emerald' | 'amber' | 'rose' }[] = [
-    { label: 'Total Things', value: String(visible.length) },
-    { label: 'Online', value: String(online), tone: 'emerald' },
-    { label: 'Offline', value: String(offline) },
-    { label: 'Active alerts', value: String(alerts.length), tone: 'rose' },
-    { label: 'Work orders', value: String(openOrders), tone: 'amber' },
-    { label: 'OEE (week)', value: `${oeeWeek.toFixed(1)}%` },
-    { label: 'Uptime hours', value: String(Math.round(uptimeHours)) },
-    { label: 'Downtime hours', value: String(Math.round(downtimeHours)), tone: 'amber' },
+    { label: tr('classic.kpi.totalThings'), value: String(visible.length) },
+    { label: tr('classic.kpi.online'), value: String(online), tone: 'emerald' },
+    { label: tr('classic.kpi.offline'), value: String(offline) },
+    { label: tr('classic.kpi.activeAlerts'), value: String(alerts.length), tone: 'rose' },
+    { label: tr('classic.kpi.workOrders'), value: String(openOrders), tone: 'amber' },
+    { label: tr('classic.kpi.oeeWeek'), value: `${oeeWeek.toFixed(1)}%` },
+    { label: tr('classic.kpi.uptimeHours'), value: String(Math.round(uptimeHours)) },
+    { label: tr('classic.kpi.downtimeHours'), value: String(Math.round(downtimeHours)), tone: 'amber' },
   ];
 
   const visibleOrders = MOCK_WORK_ORDERS.filter((o) => o.status === 'Open' || o.status === 'In Progress');
@@ -50,8 +52,8 @@ export const EnterpriseCommandCenter: React.FC = () => {
   return (
     <div id="enterprise-command-center" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Enterprise Command Center</h2>
-        <p className="text-sm text-sky-100">Construction sites, Things performance and maintenance priorities.</p>
+        <h2 className="text-xl font-bold">{tr('classic.title')}</h2>
+        <p className="text-sm text-sky-100">{tr('classic.intro')}</p>
       </div>
 
       <FleetFilters scope={scope} onChange={changeScope} />
@@ -64,32 +66,32 @@ export const EnterpriseCommandCenter: React.FC = () => {
         <SiteScene things={visible} onOpen={(id) => navigate(`/dashboard/${id}`)} />
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs h-[360px] flex flex-col">
           <div className="flex items-center justify-between mb-3 shrink-0">
-            <h3 className="font-semibold text-slate-900 dark:text-white text-base">Attention &amp; next actions</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{tr('classic.attention')}</h3>
             <Bell className="w-4 h-4 text-slate-400" />
           </div>
           <div className="space-y-2 overflow-y-auto min-h-0 flex-1">
             {alerts.slice(0, 3).map((t) => (
               <button key={t.id} onClick={() => navigate(`/alerts`)} className="w-full text-left flex items-center justify-between gap-3 border border-slate-100 dark:border-slate-800 rounded-lg p-3 hover:border-rose-200">
                 <div>
-                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 mb-1">Alert</span>
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 mb-1">{tr('classic.alertTag')}</span>
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Coolant temperature: {t.coolantNowC.toFixed(2)} °C · outside configured range</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{tr('classic.coolantLine', { value: t.coolantNowC.toFixed(2) })}</p>
                 </div>
-                <span className="text-xs text-sky-700 dark:text-sky-400 inline-flex items-center gap-1 shrink-0">Review alerts <ArrowUpRight className="w-3.5 h-3.5" /></span>
+                <span className="text-xs text-sky-700 dark:text-sky-400 inline-flex items-center gap-1 shrink-0">{tr('classic.reviewAlerts')} <ArrowUpRight className="w-3.5 h-3.5" /></span>
               </button>
             ))}
             {visibleOrders.slice(0, 2).map((o) => (
               <button key={o.id} onClick={() => navigate('/work-orders')} className="w-full text-left flex items-center justify-between gap-3 border border-slate-100 dark:border-slate-800 rounded-lg p-3 hover:border-amber-200">
                 <div>
-                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 mb-1">Maintenance</span>
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 mb-1">{tr('classic.maintenanceTag')}</span>
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{o.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{o.equipmentName} · Open work order</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{o.equipmentName} · {tr('classic.openWorkOrder')}</p>
                 </div>
               </button>
             ))}
             {!alerts.length && !visibleOrders.length && (
               <div className="text-center py-6 text-slate-400 text-sm flex flex-col items-center gap-2">
-                <CheckCircle2 className="w-6 h-6" /> No recorded actions in this selection.
+                <CheckCircle2 className="w-6 h-6" /> {tr('classic.noActions')}
               </div>
             )}
           </div>
@@ -101,15 +103,15 @@ export const EnterpriseCommandCenter: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white text-base">Things</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Select a Thing to inspect readings and existing maintenance records.</p>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{tr('classic.things')}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{tr('classic.thingsHint')}</p>
           </div>
-          <span className="text-sm text-slate-400 dark:text-slate-500">{visible.length} Things</span>
+          <span className="text-sm text-slate-400 dark:text-slate-500">{tr('classic.thingsCount', { count: visible.length })}</span>
         </div>
 
         {pageItems.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
-            <Search className="w-6 h-6" /> No Things match these filters.
+            <Search className="w-6 h-6" /> {tr('classic.noMatch')}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -122,7 +124,7 @@ export const EnterpriseCommandCenter: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
                     <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${t.offline ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400'}`}>
-                      {t.offline ? 'Offline' : 'Online'}
+                      {t.offline ? tr('common.offline') : tr('common.online')}
                     </span>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{t.name}</h4>
@@ -130,9 +132,9 @@ export const EnterpriseCommandCenter: React.FC = () => {
                   <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{t.location}</p>
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <Chip icon={Activity} title="Illustrative OEE" size="md">{oee.toFixed(0)}%</Chip>
-                      <Chip icon={Clock3} title="Uptime hours" size="md">{p.workingHours}h</Chip>
-                      <Chip icon={AlertTriangle} tone={breach ? 'rose' : 'slate'} title="Downtime hours" size="md">{p.breakdownHours}h</Chip>
+                      <Chip icon={Activity} title={tr('classic.illustrativeOee')} size="md">{oee.toFixed(0)}%</Chip>
+                      <Chip icon={Clock3} title={tr('common.uptimeHours')} size="md">{p.workingHours}h</Chip>
+                      <Chip icon={AlertTriangle} tone={breach ? 'rose' : 'slate'} title={tr('common.downtimeHours')} size="md">{p.breakdownHours}h</Chip>
                     </div>
                     <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all shrink-0">
                       <ArrowUpRight className="w-3.5 h-3.5" />
@@ -145,21 +147,21 @@ export const EnterpriseCommandCenter: React.FC = () => {
         )}
 
         <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-          <span>Page {pageSafe} of {pageCount}</span>
+          <span>{tr('common.pageOf', { page: pageSafe, count: pageCount })}</span>
           <div className="flex items-center gap-2">
             <button
               disabled={pageSafe <= 1}
               onClick={() => setPage((p) => p - 1)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40"
             >
-              <ChevronLeft className="w-4 h-4" /> Prev
+              <ChevronLeft className="w-4 h-4" /> {tr('common.prev')}
             </button>
             <button
               disabled={pageSafe >= pageCount}
               onClick={() => setPage((p) => p + 1)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40"
             >
-              Next <ChevronRight className="w-4 h-4" />
+              {tr('common.next')} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

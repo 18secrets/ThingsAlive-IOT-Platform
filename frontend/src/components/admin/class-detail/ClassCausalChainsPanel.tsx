@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, GitBranch, UploadCloud } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { CausalChain, CausalChainInput } from '../../../lib/api';
 import { AddCausalChainModal } from './AddCausalChainModal';
 
@@ -35,6 +36,7 @@ function representativePerSlug(rows: CausalChain[]): CausalChain[] {
 export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
   equipmentClassSlug, availableSignals, chains, error, onCreate, onPublish,
 }) => {
+  const { t } = useTranslation('catalog');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingChain, setEditingChain] = useState<CausalChain | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -51,16 +53,14 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg">
-          How a fault moves through this kind of machine — load raises oil temperature,
-          which raises coolant, in that order. A published chain is what a "chain
-          origin" alert rule runs against, and what a diagnosis reads.
+          {t('chains.intro')}
         </p>
         <button
           onClick={() => { setEditingChain(null); setIsModalOpen(true); }}
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <GitBranch className="w-4 h-4" />
-          <span>New Causal Chain</span>
+          <span>{t('chains.new')}</span>
         </button>
       </div>
 
@@ -87,7 +87,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
                     onClick={() => { setEditingChain(chain); setIsModalOpen(true); }}
                     className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
                   >
-                    Edit draft
+                    {t('common.editDraft')}
                   </button>
                 )}
               </div>
@@ -109,12 +109,12 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
                   {n.signal}
                 </span>
               ))}
-              {!chain.nodes.some((n) => typeof n?.signal === 'string') && <span className="text-[11px] text-slate-400 italic">No stages yet</span>}
+              {!chain.nodes.some((n) => typeof n?.signal === 'string') && <span className="text-[11px] text-slate-400 italic">{t('chains.noStages')}</span>}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[chain.status]}`}>
-                {chain.status}
+                {t(`common.status.${chain.status}`, { defaultValue: chain.status })}
               </span>
               {chain.status === 'draft' && (
                 <button
@@ -123,7 +123,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>Publish</span>
+                  <span>{t('common.publish')}</span>
                 </button>
               )}
             </div>
@@ -133,7 +133,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
         {representatives.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No causal chains yet for this class.</span>
+            <span>{t('chains.none')}</span>
           </div>
         )}
       </div>

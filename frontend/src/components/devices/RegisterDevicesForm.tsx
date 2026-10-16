@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Trash2, Info, CheckCircle2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, RegisterDeviceInput, ToolMapping } from '../../lib/api';
 
 interface RegisterDevicesFormProps {
@@ -17,6 +18,7 @@ interface DeviceRow {
 const emptyRow = (): DeviceRow => ({ imei: '', model: '' });
 
 export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack, toolMappings, onRegister }) => {
+  const { t } = useTranslation(['devices', 'shared']);
   const [rows, setRows] = useState<DeviceRow[]>([emptyRow()]);
   const [toolMappingId, setToolMappingId] = useState('');
   const [batchRef, setBatchRef] = useState('');
@@ -30,7 +32,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
   const removeRow = (index: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
-  const toolMappingOptions = toolMappings.map((t) => ({ label: t.toolName, value: t.id }));
+  const toolMappingOptions = toolMappings.map((tm) => ({ label: tm.toolName, value: tm.id }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +55,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
       setResult(outcome);
       setRows([emptyRow()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not register these devices.');
+      setError(err instanceof ApiError ? err.message : t('register.failed'));
     } finally {
       setBusy(false);
     }
@@ -67,15 +69,15 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
           className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Device Pool</span>
+          <span>{t('register.backToPool')}</span>
         </button>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xs overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Register Devices</h2>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{t('register.title')}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Add arriving stock by IMEI. Assigning a device to a client is a separate step from the device pool.
+            {t('register.introPage')}
           </p>
         </div>
 
@@ -83,13 +85,13 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Tool Mapping <span className="text-slate-400 font-normal">(optional)</span>
+                {t('register.toolMapping')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
               </label>
               <SelectPicker
                 data={toolMappingOptions}
                 value={toolMappingId || null}
                 onChange={(value) => setToolMappingId(value ?? '')}
-                placeholder="— No tool profile —"
+                placeholder={t('register.noToolProfile')}
                 block
                 searchable={toolMappingOptions.length > 6}
                 cleanable
@@ -97,12 +99,12 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Batch Reference <span className="text-slate-400 font-normal">(optional)</span>
+                {t('register.batchRef')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
               </label>
               <Input
                 value={batchRef}
                 onChange={(value) => setBatchRef(value)}
-                placeholder="e.g. PO-92"
+                placeholder={t('register.batchPlaceholder')}
               />
             </div>
           </div>
@@ -110,7 +112,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                Devices <span className="text-rose-500">*</span>
+                {t('translation:sidebar.devices')} <span className="text-rose-500">*</span>
               </label>
               <button
                 type="button"
@@ -118,7 +120,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
                 className="text-sky-600 dark:text-sky-400 font-medium text-xs flex items-center gap-1 hover:text-sky-700 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add row
+                {t('register.addRow')}
               </button>
             </div>
             <div className="space-y-2">
@@ -127,13 +129,13 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
                   <Input
                     value={row.imei}
                     onChange={(value) => updateRow(index, 'imei', value)}
-                    placeholder="15-digit IMEI"
+                    placeholder={t('register.imeiPlaceholder')}
                     className="col-span-7 font-mono"
                   />
                   <Input
                     value={row.model}
                     onChange={(value) => updateRow(index, 'model', value)}
-                    placeholder="Model (optional)"
+                    placeholder={t('register.modelPlaceholder')}
                     className="col-span-4"
                   />
                   <button
@@ -141,7 +143,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
                     onClick={() => removeRow(index)}
                     disabled={rows.length === 1}
                     className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Remove row"
+                    title={t('register.removeRow')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -152,7 +154,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Notes <span className="text-slate-400 font-normal">(optional)</span>
+              {t('edit.notes')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
             </label>
             <Input
               as="textarea"
@@ -173,8 +175,7 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
             <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               <span>
-                {result.registered} registered
-                {result.alreadyKnown ? `, ${result.alreadyKnown} already known (skipped)` : ''}.
+                {t(result.alreadyKnown ? 'register.resultWithSkipped' : 'register.result', { registered: result.registered, skipped: result.alreadyKnown })}
               </span>
             </div>
           )}
@@ -185,14 +186,14 @@ export const RegisterDevicesForm: React.FC<RegisterDevicesFormProps> = ({ onBack
               onClick={onBack}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Done
+              {t('shared:done')}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>{busy ? 'Registering…' : 'Register'}</span>
+              <span>{busy ? t('register.registering') : t('register.submit')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

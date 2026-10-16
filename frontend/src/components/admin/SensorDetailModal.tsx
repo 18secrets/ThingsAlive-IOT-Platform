@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Activity } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Sensor } from '../../lib/api';
 
 interface SensorDetailModalProps {
@@ -9,6 +10,7 @@ interface SensorDetailModalProps {
 }
 
 export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, categoryName, onClose }) => {
+  const { t } = useTranslation('catalog');
   if (!sensor) return null;
 
   return (
@@ -24,7 +26,7 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
             </div>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                Sensor Telemetry Specs
+                {t('sensorDetail.title')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{sensor.id}</p>
             </div>
@@ -40,11 +42,11 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
         <div className="p-6 space-y-4 text-xs overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sensor Identifier</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.identifier')}</span>
               <div className="font-semibold text-slate-800 dark:text-white font-mono text-sm mt-0.5">{sensor.sensorName}</div>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Sensor Category</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorModal.sensorCategory')}</span>
               <div className="font-semibold text-slate-800 dark:text-white mt-0.5">{categoryName || '—'}</div>
             </div>
           </div>
@@ -52,10 +54,10 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
           <div className="p-3.5 rounded-xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/60">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] uppercase tracking-wider font-bold text-sky-700 dark:text-sky-300">
-                Telemetry Parameters
+                {t('sensorModal.telemetryParameters')}
               </span>
               <span className="text-[10px] bg-sky-200 dark:bg-sky-900 text-sky-800 dark:text-sky-200 px-2 py-0.5 rounded-full font-bold">
-                {sensor.parameterSpecs.length} Channels
+                {t('sensorDetail.channelCount', { count: sensor.parameterSpecs.length })}
               </span>
             </div>
             {sensor.parameterSpecs.length ? (
@@ -63,11 +65,11 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wider text-sky-700/80 dark:text-sky-300/80">
-                      <th className="px-1.5 py-1 font-semibold">Parameter</th>
-                      <th className="px-1.5 py-1 font-semibold">Unit</th>
-                      <th className="px-1.5 py-1 font-semibold">Range</th>
-                      <th className="px-1.5 py-1 font-semibold">Normal</th>
-                      <th className="px-1.5 py-1 font-semibold">Notes</th>
+                      <th className="px-1.5 py-1 font-semibold">{t('sensorDetail.parameter')}</th>
+                      <th className="px-1.5 py-1 font-semibold">{t('sensorModal.unit')}</th>
+                      <th className="px-1.5 py-1 font-semibold">{t('sensorDetail.range')}</th>
+                      <th className="px-1.5 py-1 font-semibold">{t('sensorDetail.normal')}</th>
+                      <th className="px-1.5 py-1 font-semibold">{t('sensorModal.notes')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -75,7 +77,7 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
                       <tr key={idx} className="border-t border-sky-100 dark:border-sky-900/40 align-top">
                         <td className="px-1.5 py-1.5 font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">{spec.parameter}</td>
                         <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.unit}</td>
-                        <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.min == null || spec.max == null ? <span className="text-amber-600 dark:text-amber-400">range not set</span> : `${spec.min} – ${spec.max}`}</td>
+                        <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.min == null || spec.max == null ? <span className="text-amber-600 dark:text-amber-400">{t('sensorDetail.rangeNotSet')}</span> : `${spec.min} – ${spec.max}`}</td>
                         <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">{spec.normalRange}</td>
                         <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400">{spec.notes || '—'}</td>
                       </tr>
@@ -84,20 +86,20 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
                 </table>
               </div>
             ) : (
-              <p className="text-slate-400">No telemetry parameters declared.</p>
+              <p className="text-slate-400">{t('sensorDetail.noParameters')}</p>
             )}
           </div>
 
           <div className="space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Functional Description</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.functionalDescription')}</span>
             <p className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
-              {sensor.description || 'Monitors continuous operational parameters and telemetry signals.'}
+              {sensor.description || t('sensorDetail.defaultDescription')}
             </p>
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700">
-            <span>Created: {new Date(sensor.createdAt).toLocaleDateString()}</span>
-            <span>Updated: {new Date(sensor.updatedAt).toLocaleDateString()}</span>
+            <span>{t('sensorDetail.created', { date: new Date(sensor.createdAt).toLocaleDateString() })}</span>
+            <span>{t('sensorDetail.updated', { date: new Date(sensor.updatedAt).toLocaleDateString() })}</span>
           </div>
         </div>
 
@@ -106,7 +108,7 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 dark:bg-slate-700 text-white text-xs font-semibold rounded-lg hover:bg-slate-700"
           >
-            Close
+            {t('common.close')}
           </button>
         </div>
       </div>
