@@ -26,6 +26,9 @@ import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placeme
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
+import { WorkflowDefinition } from '../workflow/entities/workflow-definition.entity';
+import { WorkflowLayout } from '../workflow/entities/workflow-layout.entity';
+import { WorkflowVersion } from '../workflow/entities/workflow-version.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { ShiftRun } from '../shift/entities/shift-run.entity';
@@ -75,6 +78,8 @@ import { IndustryType } from '../device-catalog/entities/industry-type.entity';
 import { Incident } from '../incident/entities/incident.entity';
 import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
 import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity';
+import { AssistantUsage } from '../assistant/assistant-usage.entity';
+import { AssistantProposal } from '../assistant/assistant-proposal.entity';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -127,6 +132,9 @@ export const ENTITIES = [
   DeviceLinkHealth,
   CausalChainDefinition,
   AlertRule,
+  WorkflowDefinition,
+  WorkflowVersion,
+  WorkflowLayout,
   AlertEvent,
   PlatformUser,
   PlatformSession,
@@ -166,6 +174,8 @@ export const ENTITIES = [
   IncidentEvent,
   IncidentSlaPolicy,
   TelemetryArchive,
+  AssistantUsage,
+  AssistantProposal,
 ];
 
 export interface DataSourceChoices {
