@@ -21,7 +21,8 @@ def process_age_s():
     return uptime - start_ticks / os.sysconf('SC_CLK_TCK')
 
 
-startup = process_age_s()
+# Age at T0: interpreter start-up up to this script's first line.
+startup = process_age_s() - (time.perf_counter() - T0)
 t = time.perf_counter()
 import torch  # noqa: E402
 from tsfm_public import TinyTimeMixerForPrediction  # noqa: E402
@@ -46,7 +47,7 @@ with torch.no_grad():
     thousand_series = time.perf_counter() - t
 
 print(json.dumps({
-    'startup_s': round(startup - (time.perf_counter() - T0), 4),
+    'startup_s': round(startup, 4),
     'py_import_s': round(py_import, 4),
     'model_load_s': round(model_load, 4),
     'one_series_s': round(one_series, 4),
