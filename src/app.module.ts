@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { FleetImportModule } from './fleet-import/fleet-import.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
@@ -95,6 +96,7 @@ export class AppModule {
               MailModule,
               TenancyModule,
               EquipmentModule,
+              FleetImportModule,
               SignalBindingModule,
               KpiModule,
       PageModule,
