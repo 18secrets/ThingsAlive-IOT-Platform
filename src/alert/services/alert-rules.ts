@@ -18,9 +18,28 @@ import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
  *  - `fuel-loss` — fuel left a machine that was switched off and did not move. First
  *    in Things Alive's own build order, and the one case here that needs no model, no
  *    baseline and no history at all: a tank, a key and a GPS fix.
+ *  - `composite` — several of the above at once, or any one of them (task QWF1, D16).
+ *    Written only by the workflow compiler: a hand-written composite would be the one
+ *    rule kind with no graph to read it back from, and the database refuses one.
  */
 export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry'
-  | 'fuel-loss' | 'chain-origin';
+  | 'fuel-loss' | 'chain-origin' | 'composite';
+
+/**
+ * Every trigger kind, as a value. A `Record` over the union, so adding a kind to
+ * `AlertTrigger` without adding it here fails to type-check — and anything that must
+ * cover every kind (the renderer's registry test, in particular) iterates this rather
+ * than a hand-kept list that drifts.
+ */
+const ALERT_TRIGGER_SET: Record<AlertTrigger, true> = {
+  'prediction-severity': true, 'signal-threshold': true, 'no-telemetry': true,
+  'fuel-loss': true, 'chain-origin': true, composite: true,
+};
+export const ALERT_TRIGGERS = Object.keys(ALERT_TRIGGER_SET) as AlertTrigger[];
+
+/** The kinds a composite may combine. Everything but itself: nesting is a tree of
+ * `allOf` / `anyOf`, never a composite leaf inside a composite. */
+export type CompositeLeafTrigger = Exclude<AlertTrigger, 'composite'>;
 
 export interface PredictionSeverityParams {
   /** Fires at this severity or above. */
@@ -134,8 +153,41 @@ export interface ChainOriginParams {
   stageSignal?: string | null;
 }
 
+/**
+ * One condition inside a composite: a leaf trigger and exactly the parameters a rule
+ * of that kind would carry on its own (task QWF1, D43 Q2). Not an expression. D25 and
+ * D34 keep free text out of the alert path, and a structured tree of the leaf
+ * parameter sets is what lets each leaf be evaluated, validated and rendered by the
+ * code that already does that for a rule of its kind.
+ */
+export interface CompositeLeaf {
+  trigger: CompositeLeafTrigger;
+  params: AlertParams;
+}
+
+/** Exactly one of the two, with at least two terms. */
+export interface CompositeGroup {
+  allOf?: CompositeTerm[];
+  anyOf?: CompositeTerm[];
+}
+
+export type CompositeTerm = CompositeLeaf | CompositeGroup;
+
+/**
+ * Each leaf keeps its own sustained window (D43 Q3): an `allOf` of two thresholds
+ * fires when each one's own M-of-N holds in the shift, not when both are true in the
+ * same M of N readings. A combined window would need readings aligned across signals
+ * that arrive on different clocks, and nobody has decided how to align them.
+ */
+export interface CompositeParams {
+  condition: CompositeGroup;
+}
+
 export type AlertParams = PredictionSeverityParams | SignalThresholdParams
-  | NoTelemetryParams | FuelLossParams | ChainOriginParams;
+  | NoTelemetryParams | FuelLossParams | ChainOriginParams | CompositeParams;
+
+export const isCompositeLeaf = (t: CompositeTerm): t is CompositeLeaf =>
+  typeof (t as CompositeLeaf)?.trigger === 'string';
 
 export interface WindowReading {
   signal: string;
@@ -423,13 +475,79 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       };
     }
 
+    case 'composite':
+      return evaluateGroup((input.params as CompositeParams).condition, input);
+
     default:
       return null;
   }
 }
 
+/**
+ * A composite group, evaluated by evaluating its leaves as the rules they would be on
+ * their own. No leaf logic is repeated here: a threshold inside a composite is counted
+ * by the same `signalWindows` and the same M-of-N as a threshold rule, so the two
+ * cannot disagree about what "breached" means.
+ */
+function evaluateGroup(group: CompositeGroup, input: EvaluationInput): Firing | null {
+  const all = !!group.allOf;
+  const terms = group.allOf ?? group.anyOf ?? [];
+  const fired: { term: CompositeTerm; firing: Firing }[] = [];
+  for (const term of terms) {
+    const firing = isCompositeLeaf(term)
+      ? evaluateRule({ ...input, trigger: term.trigger, params: term.params })
+      : evaluateGroup(term, input);
+    if (firing) fired.push({ term, firing });
+    else if (all) return null;
+  }
+  if (!fired.length) return null;
+  return {
+    summary: fired.map((f) => f.firing.summary).join(all ? '; and ' : '; or '),
+    predictionId: fired.find((f) => f.firing.predictionId)?.firing.predictionId ?? null,
+    evidence: {
+      [all ? 'allOf' : 'anyOf']: fired.map((f) => ({
+        trigger: isCompositeLeaf(f.term) ? f.term.trigger : 'group',
+        evidence: f.firing.evidence,
+      })),
+    },
+  };
+}
+
+/**
+ * A composite's structure, then each leaf through `validateParams` itself — so an
+ * M greater than N inside a composite is refused in the same sentence it would be on
+ * a rule of its own, with where it sits prefixed.
+ */
+function validateGroup(group: CompositeGroup, path: string): string | null {
+  if (!group || typeof group !== 'object') return `${path} must be an allOf or an anyOf.`;
+  const hasAll = Array.isArray(group.allOf);
+  const hasAny = Array.isArray(group.anyOf);
+  if (hasAll === hasAny) return `${path} must be exactly one of allOf or anyOf.`;
+  const terms = (group.allOf ?? group.anyOf)!;
+  if (terms.length < 2) return `${path} combines ${terms.length} condition(s); a composite needs at least two.`;
+  for (const [i, term] of terms.entries()) {
+    const at = `${path}.${hasAll ? 'allOf' : 'anyOf'}[${i}]`;
+    if (isCompositeLeaf(term)) {
+      // Checked at runtime because the params arrive as stored JSON, not as the type says.
+      const leafTrigger = term.trigger as AlertTrigger;
+      if (!ALERT_TRIGGERS.includes(leafTrigger) || leafTrigger === 'composite') {
+        return `${at}: "${term.trigger}" is not a trigger a composite can combine.`;
+      }
+      const problem = validateParams(term.trigger, term.params);
+      if (problem) return `${at}: ${problem}`;
+    } else {
+      const problem = validateGroup(term, at);
+      if (problem) return problem;
+    }
+  }
+  return null;
+}
+
 /** Everything a rule of each kind must carry, checked once on write. */
 export function validateParams(trigger: AlertTrigger, params: AlertParams): string | null {
+  if (trigger === 'composite') {
+    return validateGroup((params as CompositeParams)?.condition, 'condition');
+  }
   if (trigger === 'prediction-severity') {
     const p = params as PredictionSeverityParams;
     if (!p?.atLeast || !SEVERITY_ORDER.includes(p.atLeast)) {

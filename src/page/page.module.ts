@@ -15,5 +15,6 @@ import { PageService } from './page.service';
   imports: [KpiModule, SignalBindingModule, AlertModule, WorkModule, ServiceModule, ClientCatalogModule, ParameterModule, ForecastModule],
   controllers: [PageController],
   providers: [PageService],
+  exports: [PageService],
 })
 export class PageModule {}
