@@ -2,7 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
-import { AssistantModel, AssistantTurn, ModelReply, ToolDeclaration } from '../src/assistant/assistant-model';
+import {
+  AssistantModel, AssistantTurn, GeminiModel, geminiConfigFrom, ModelReply, ToolDeclaration,
+} from '../src/assistant/assistant-model';
 import { AssistantTools } from '../src/assistant/assistant-tools';
 import { AssistantService, MAX_ROUNDS } from '../src/assistant/assistant.service';
 import { RequestScope } from '../src/auth/types/request-scope';
@@ -68,7 +70,9 @@ describeDb('assistant chat', () => {
     process.env.AUTH_JWT_ISSUER = ISSUER;
     process.env.AUTH_TENANT_CLAIM = 'client_id';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
-    for (const k of ['ASSISTANT_VERTEX_PROJECT', 'ASSISTANT_VERTEX_LOCATION', 'ASSISTANT_MODEL']) delete process.env[k];
+    for (const k of ['ASSISTANT_VERTEX_PROJECT', 'ASSISTANT_VERTEX_LOCATION', 'ASSISTANT_MODEL', 'ASSISTANT_GEMINI_API_KEY']) {
+      delete process.env[k];
+    }
     app = await createApp({ database: true });
     await app.init();
     ds = app.get(DataSource);
@@ -220,5 +224,61 @@ describeDb('assistant chat', () => {
     expect(await owner.query(`SELECT to_regclass('assistant_usage') AS t`)).toEqual([{ t: null }]);
     await owner.runMigrations({ transaction: 'all' });
     expect(await owner.query(`SELECT to_regclass('assistant_usage')::text AS t`)).toEqual([{ t: 'assistant_usage' }]);
+  });
+});
+
+describe('assistant configuration', () => {
+  const M = { ASSISTANT_MODEL: 'gemini-x' };
+
+  it('is off without a model name, whatever else is set', () => {
+    expect(geminiConfigFrom({ ASSISTANT_GEMINI_API_KEY: 'k', ASSISTANT_VERTEX_PROJECT: 'p', ASSISTANT_VERTEX_LOCATION: 'l' })).toBeNull();
+    expect(geminiConfigFrom(M)).toBeNull();
+  });
+
+  it('takes a Gemini API key, the way IoT Platform 1.0 runs', () => {
+    expect(geminiConfigFrom({ ...M, ASSISTANT_GEMINI_API_KEY: ' k ' })).toEqual({ mode: 'api-key', apiKey: 'k', model: 'gemini-x' });
+  });
+
+  it('prefers Vertex when both are set, and needs both its project and its location', () => {
+    expect(geminiConfigFrom({ ...M, ASSISTANT_GEMINI_API_KEY: 'k', ASSISTANT_VERTEX_PROJECT: 'p', ASSISTANT_VERTEX_LOCATION: 'l' }))
+      .toEqual({ mode: 'vertex', project: 'p', location: 'l', model: 'gemini-x', credentials: null });
+    expect(geminiConfigFrom({ ...M, ASSISTANT_VERTEX_PROJECT: 'p' })).toBeNull();
+  });
+
+  it('refuses unreadable Vertex credentials without echoing them', () => {
+    expect(() => geminiConfigFrom({ ...M, ASSISTANT_VERTEX_PROJECT: 'p', ASSISTANT_VERTEX_LOCATION: 'l', ASSISTANT_VERTEX_CREDENTIALS_JSON: '{secret' }))
+      .toThrow(/^ASSISTANT_VERTEX_CREDENTIALS_JSON is set but is not valid JSON\.$/);
+  });
+});
+
+describe('Gemini adapter', () => {
+  /** The SDK client swapped for one that records what it was sent and replies as Gemini 3 does. */
+  const stubbed = (reply: unknown) => {
+    const model = new GeminiModel({ mode: 'api-key', apiKey: 'unused', model: 'gemini-x' });
+    const sent: { contents: unknown[] }[] = [];
+    (model as unknown as { ai: unknown }).ai = {
+      models: { generateContent: async (req: { contents: unknown[] }) => { sent.push(req); return reply; } },
+    };
+    return { model, sent };
+  };
+
+  it('carries a tool call\'s thought signature back to Gemini, which refuses the next turn without it', async () => {
+    const { model, sent } = stubbed({
+      candidates: [{ content: { parts: [
+        { text: 'thinking', thought: true },
+        { functionCall: { name: 'list_equipment', args: {} }, thoughtSignature: 'sig-1' },
+      ] } }],
+      usageMetadata: { totalTokenCount: 12 },
+    });
+    const first = await model.generate({ system: 's', turns: [{ role: 'user', text: 'q' }], tools: [] });
+    expect(first).toEqual({ text: null, calls: [{ name: 'list_equipment', args: {}, signature: 'sig-1' }], tokens: 12 });
+
+    await model.generate({
+      system: 's', tools: [],
+      turns: [{ role: 'user', text: 'q' }, { role: 'model', calls: first.calls }, { role: 'tool', results: [{ name: 'list_equipment', result: [] }] }],
+    });
+    expect(sent[1].contents[1]).toEqual({
+      role: 'model', parts: [{ functionCall: { name: 'list_equipment', args: {} }, thoughtSignature: 'sig-1' }],
+    });
   });
 });

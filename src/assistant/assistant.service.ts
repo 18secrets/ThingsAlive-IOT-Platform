@@ -83,7 +83,7 @@ export class AssistantService {
     if (!this.model) {
       throw new ServiceUnavailableException({
         code: 'assistant_not_configured',
-        message: 'The assistant is not configured on this server (ASSISTANT_VERTEX_* and ASSISTANT_MODEL).',
+        message: 'The assistant is not configured on this server (ASSISTANT_MODEL, and ASSISTANT_VERTEX_* or ASSISTANT_GEMINI_API_KEY).',
       });
     }
     const last = messages[messages.length - 1];

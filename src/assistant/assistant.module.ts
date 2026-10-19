@@ -5,7 +5,7 @@ import { EquipmentModule } from '../equipment/equipment.module';
 import { IncidentModule } from '../incident/incident.module';
 import { PageModule } from '../page/page.module';
 import { WorkModule } from '../work/work.module';
-import { ASSISTANT_MODEL, VertexGeminiModel, vertexConfigFrom } from './assistant-model';
+import { ASSISTANT_MODEL, GeminiModel, geminiConfigFrom } from './assistant-model';
 import { AssistantTools } from './assistant-tools';
 import { AssistantController } from './assistant.controller';
 import { ASSISTANT_DAILY_LIMIT, AssistantService, DEFAULT_DAILY_TOKEN_LIMIT } from './assistant.service';
@@ -21,12 +21,14 @@ import { ASSISTANT_DAILY_LIMIT, AssistantService, DEFAULT_DAILY_TOKEN_LIMIT } fr
       // Unconfigured is a state, not a boot failure: every other screen works without
       // the assistant, and the chat answers 503 assistant_not_configured until it is set.
       useFactory: () => {
-        const config = vertexConfigFrom(process.env);
+        const config = geminiConfigFrom(process.env);
+        const logger = new Logger('Assistant');
         if (!config) {
-          new Logger('Assistant').warn('ASSISTANT_VERTEX_PROJECT, ASSISTANT_VERTEX_LOCATION or ASSISTANT_MODEL unset; chat is off.');
+          logger.warn('ASSISTANT_MODEL plus either ASSISTANT_VERTEX_PROJECT/LOCATION or ASSISTANT_GEMINI_API_KEY unset; chat is off.');
           return null;
         }
-        return new VertexGeminiModel(config);
+        logger.log(`Assistant on ${config.model} via ${config.mode === 'vertex' ? 'Vertex AI' : 'a Gemini API key'}.`);
+        return new GeminiModel(config);
       },
     },
     {
