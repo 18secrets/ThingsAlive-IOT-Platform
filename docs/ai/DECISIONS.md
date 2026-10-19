@@ -189,6 +189,23 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+## D20 — Who hears about an escalation, and how (QNOTIFY1)
+
+Decided 2026-10-19 by Tapas, taking the recommendations in `prompts/QNOTIFY1-prompt.md` §8.
+
+- **Who.** Level 1 (acknowledgement overdue): the incident's owner; with no owner who
+  can see the machine, everyone who holds `action.assign`. Level 2 (resolution
+  overdue): the owner and everyone with `action.assign`. "Holds" and "can see" are
+  resolved per person through the same `ScopeResolver` the API uses, so suspended and
+  invited users are never told, and a site-scoped user only about machines in their
+  sites.
+- **How.** Email only. SMS or WhatsApp is a separate task with its own provider decision.
+- **Backlog.** An event older than 24 hours is not delivered; it is marked `failed`
+  with the reason, so nobody gets a day-old page.
+- **No opt-outs or quiet hours** in v1: an escalation is something already ignored once.
+- **Retries.** 5 attempts, waiting 1, 2, 4 and 8 minutes between them, then `failed`.
+- **Levels stand alone.** A level-2 email does not resend a level-1 that failed.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
