@@ -132,7 +132,7 @@ ACCEPT = ', '.join([
     'application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json',
     'application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'])
 def get(ref):
-    req = urllib.request.Request(f'http://localhost:{port}/v2/qml1size/{name}/manifests/{ref}', headers={'Accept': ACCEPT})
+    req = urllib.request.Request(f'http://localhost:{port}/v2/qml1size/{name.lower()}/manifests/{ref}', headers={'Accept': ACCEPT})
     return json.load(urllib.request.urlopen(req))
 m = get('measure')
 if 'manifests' in m:  # an index: take the linux/amd64 image, not attestations
