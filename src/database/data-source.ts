@@ -26,6 +26,9 @@ import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placeme
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
+import { WorkflowDefinition } from '../workflow/entities/workflow-definition.entity';
+import { WorkflowLayout } from '../workflow/entities/workflow-layout.entity';
+import { WorkflowVersion } from '../workflow/entities/workflow-version.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { ShiftRun } from '../shift/entities/shift-run.entity';
@@ -127,6 +130,9 @@ export const ENTITIES = [
   DeviceLinkHealth,
   CausalChainDefinition,
   AlertRule,
+  WorkflowDefinition,
+  WorkflowVersion,
+  WorkflowLayout,
   AlertEvent,
   PlatformUser,
   PlatformSession,
