@@ -189,6 +189,34 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+## D18 — Workflow compiler: the nine questions QWF1 asked, answered
+
+2026-10-19, answered by Tapas before QWF1 started.
+
+1. **Vocabulary.** The Visual Workflow addendum (WF01–WF08) is not in the repository or
+   on any machine that has looked. QWF1's node set is the one derived from D16:
+   `ReadSignal`, `Threshold`, `FreshnessGate`, `PredictionSeverity`, `FuelLoss`,
+   `ChainOrigin`, `AllOf` / `AnyOf`, `Notify`. If the addendum surfaces, it is reconciled
+   against this list, not merged beside it.
+2. **The composite is a structured tree of the existing leaf parameter sets**, not a
+   formula plan. It satisfies D25 literally — no expression enters the alert path — and
+   reuses the leaf evaluators and their wording.
+3. **Each leaf keeps its own M-of-N.** A combined window would need readings aligned
+   across signals on different clocks, and nobody has decided how.
+4. **Caps: 50 nodes, depth 8** (`MAX_WORKFLOW_NODES`, `MAX_WORKFLOW_DEPTH`). An alert
+   workflow is a handful of conditions feeding a Notify; raising either is one constant.
+5. **No workflow-template table yet.** Assembly composes from the account's copies of
+   alert templates and its failure modes.
+6. **Everything on `alert.author`**, reads on `prediction.read`. Operator drafting and
+   delegated publish (G03) are a later task that adds a capability and a scope, once.
+7. **A compiled rule can be switched off and on by itself.** That is operational, not
+   semantic; its content still changes only by republishing. The workflow's read shows
+   which of its rules are off.
+8. **Site- and class-scope publish goes ahead with per-machine readiness listed**, and is
+   refused only when no covered machine is ready. Machine scope with any signal unbound
+   is refused, as a rule on a machine that is not there is today.
+9. **Replay for hand-drawn workflows** comes after QGEN1, as information, never a gate.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
