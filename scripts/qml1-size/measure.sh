@@ -12,6 +12,7 @@
 # and registry containers; touches no other container, image or volume except the
 # qml1size/* images it builds.
 #
+# SKIP_STARTUP=1 keeps an earlier run's readiness and Python timings likewise.
 # SKIP_BUILDS=1 keeps an earlier run's B outcome and build timings in out-dir and only
 # rebuilds each image from cache before measuring sizes and start-up.
 #
@@ -133,9 +134,15 @@ docker run -d --name "$REG" -p "127.0.0.1:$REG_PORT:5000" registry:2 >/dev/null
 sleep 3
 printf 'variant\tuncompressed_bytes\tcompressed_bytes\tlayers\n' > "$OUT/sizes.tsv"
 for name in A C D E; do
-  # --platform: on an arm64 host the image store resolves the host's platform otherwise.
-  docker history --platform "$PLATFORM" --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$(img "$name")" > "$OUT/$name.history.tsv"
-  unc="$(docker image inspect --platform "$PLATFORM" --format '{{.Size}}' "$(img "$name")")"
+  # On disk, measured inside the image: with the containerd image store, `image inspect
+  # .Size` is the compressed content size and `docker history` reports 0 B for layers
+  # built here, so neither gives the uncompressed figure. -x stays off /proc and /sys.
+  unc="$(docker run --rm --platform "$PLATFORM" --entrypoint sh "$(img "$name")" -c 'du -sxk / | cut -f1')"
+  unc=$(( unc * 1024 ))
+  docker run --rm --platform "$PLATFORM" --entrypoint sh "$(img "$name")" -c \
+    'for d in /opt/venv /opt/models /app/node_modules /app/dist /usr/lib /usr/local; do [ -e "$d" ] && du -sxk "$d"; done;
+     sp=$(ls -d /opt/venv/lib/python*/site-packages 2>/dev/null); [ -n "$sp" ] && du -sk "$sp"/* | sort -rn | head -10' \
+    > "$OUT/$name.breakdown.tsv" 2>/dev/null || true
   docker tag "$(img "$name")" "localhost:$REG_PORT/$(img "$name"):measure"
   docker push -q "localhost:$REG_PORT/$(img "$name"):measure" > /dev/null
   python3 - "$REG_PORT" "$name" "$unc" >> "$OUT/sizes.tsv" <<'PY'
@@ -156,6 +163,7 @@ print(f"{name}\t{unc}\t{sum(l['size'] for l in layers)}\t{len(layers)}")
 PY
 done
 
+if [ "${SKIP_STARTUP:-0}" != 1 ]; then
 # ---- cold start, node: container start until /api/v1/ready answers 200 -------------
 log "node readiness"
 docker run -d --name "$PG" --network "$NET" -e POSTGRES_PASSWORD=measure -e POSTGRES_DB=ta2 postgres:16-alpine >/dev/null
@@ -195,6 +203,7 @@ for i in $(seq 1 "$RUNS"); do
     >> "$OUT/python.jsonl" 2> "$OUT/python.$i.stderr"
 done
 docker run --rm --platform "$PLATFORM" "$(img D)" /opt/venv/bin/pip freeze > "$OUT/D.pip-freeze.txt"
+fi
 
 # ---- summary --------------------------------------------------------------------
 python3 "$REPO/scripts/qml1-size/summarise.py" "$OUT" | tee "$OUT/summary.md"

@@ -53,7 +53,7 @@ for k, v in env.items():
 print()
 print('## Results\n')
 print(f'Timings are median / max of {env.get("runs")} runs{TAG}. Sizes do not depend on the host.\n')
-print('| variant | builds? | uncompressed | compressed | cold build | warm rebuild | torch layer rebuilt on src change |')
+print('| variant | builds? | on disk (uncompressed) | compressed (registry) | cold build | warm rebuild | torch layer rebuilt on src change |')
 print('|---|---|---|---|---|---|---|')
 print(f'| B (alpine + torch) | {(out / "B.outcome").read_text().splitlines()[0]} | – | – | – | – | – |')
 for v in 'ACDE':
@@ -89,23 +89,15 @@ for a, z in (('D', 'A'), ('C', 'A'), ('E', 'A')):
           f'{med(b(a, "cold")) - med(b(z, "cold")):+.1f} s | {med(b(a, "warm")) - med(b(z, "warm")):+.1f} s | '
           f'{med(rd(a)) - med(rd(z)):+.2f} s |')
 print()
-print('## Largest layers of D\n')
-print('| size | step |')
+print('## Where D\'s size is\n')
+print('On-disk size, measured inside the image (`du -sxk`); the 10 largest Python packages follow the directories.\n')
+print('| size | path |')
 print('|---|---|')
-hist = [line.split('\t', 1) for line in (out / 'D.history.tsv').read_text().splitlines() if '\t' in line]
-
-
-def to_bytes(s):
-    s = s.strip()
-    for unit, mult in (('GB', 1e9), ('MB', 1e6), ('kB', 1e3), ('B', 1)):
-        if s.endswith(unit):
-            return float(s[:-len(unit)]) * mult
-    return 0.0
-
-
-for size, step in sorted(hist, key=lambda x: -to_bytes(x[0]))[:8]:
-    print(f'| {size} | `{" ".join(step.split())[:110]}` |')
-
+for line in (out / 'D.breakdown.tsv').read_text().splitlines():
+    if '\t' in line:
+        kb, path = line.split('\t', 1)
+        print(f'| {int(kb) / 1024:,.0f} MB | `{path}` |')
+print()
 b_out = (out / 'B.outcome').read_text().splitlines()
 if len(b_out) > 1:
     print('\n## Variant B, as it failed\n')
