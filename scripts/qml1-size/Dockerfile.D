@@ -34,7 +34,12 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/venv
 COPY scripts/qml1-size/requirements.txt /opt/requirements.txt
-RUN /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /opt/requirements.txt
+# The lock is the whole closure, so pip installs exactly it (--no-deps) rather than
+# re-resolving: hash mode refuses an extra such as transformers[torch] that it resolves
+# to a version the lock does not hold. `pip check` then fails the build if the lock
+# is ever missing something a package needs.
+RUN /opt/venv/bin/pip install --no-cache-dir --no-deps --require-hashes -r /opt/requirements.txt \
+ && /opt/venv/bin/pip check
 ARG TTM_MODEL=ibm-granite/granite-timeseries-ttm-r2
 ARG TTM_REVISION=d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f
 RUN /opt/venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('${TTM_MODEL}', revision='${TTM_REVISION}', local_dir='/opt/models/ttm-r2', allow_patterns=['config.json', 'generation_config.json', 'model.safetensors'])"
