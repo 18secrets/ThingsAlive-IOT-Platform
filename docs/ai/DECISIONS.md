@@ -189,31 +189,48 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
-## D44 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
+## D46 — How QML1 forecasts: the answers to its seventeen questions
 
-Decided 2026-10-19 by Tapas. A **dated exception to D01**, narrow and named: 2.0 writes
-class visuals (and later the 3-D twin's assets) into IoT Platform 1.0's Utho object
-storage bucket, `bucket-huod37sz` in Noida, under the key prefix `ta2/`
-(`ASSET_S3_KEY_PREFIX`). It does not write anywhere else in that bucket, and it writes
-nothing to 1.0's database.
+Decided 2026-10-19, answered by Tapas. Numbering follows `prompts/QML1-prompt.md`'s
+Questions section; the code that holds each answer is named.
 
-Why an exception rather than a bucket of 2.0's own, which was the first choice: the only
-Utho credential available is 1.0's object-storage key, and Utho refuses it
-`CreateBucket` (403 AccessDenied, tried path-style, with a location constraint and
-virtual-host style). A new bucket needs the Utho console or an account API token.
-
-What it costs, stated so it is not forgotten: that key can read and delete everything in
-the bucket, including 1.0's nightly `db-backups/` of `iotdb`. Any service holding
-`ASSET_S3_*` therefore holds the means to delete 1.0's backups. The prefix keeps 2.0's
-*writes* apart; it does not limit the key.
-
-Lifted when a bucket of 2.0's own exists, ideally with a key scoped to it: set the six
-`ASSET_S3_*` variables to it and copy `ta2/` across. Stored keys carry no prefix, so
-nothing in the database changes.
-
-Found while doing this: 1.0's `.env` names its bucket `bucket-huod37s`, which Utho
-refuses; the bucket the key can see is `bucket-huod37sz`. 1.0's backup script uploads to
-the first. Its backups may not be landing — for 1.0's owners to check.
+1. **Process boundary.** Node owns the database; Python is a pure stdin/stdout function,
+   one child per pass (`src/forecast/forecast-worker.ts`, `python/forecast/infer.py`).
+2. **Image.** glibc for both services. The api image (`Dockerfile`, now
+   `node:22-bookworm-slim`) never carries Python or torch; the scheduler's
+   (`Dockerfile.scheduler`) adds Python 3.11, CPU torch, granite-tsfm and the weights,
+   below the source copy. Railway picks a Dockerfile per service, not a build target, so
+   the split is two files. **Not yet wired:** `test/deployment.spec.ts` asserts both
+   services build from `Dockerfile`, and pointing `railway.scheduler.json` at
+   `Dockerfile.scheduler` is that test's change to make, with Deepak confirming the
+   scheduler service reads `railway.scheduler.json`.
+3. **Cadence.** A platform constant of four hours (`FORECAST_CADENCE_MS`); no column.
+4. **Budget.** 25% of the cadence (`FORECAST_BUDGET_RATIO`).
+5. **Step and rollup.** Hourly steps; `forecast_input_bucket`, extended incrementally.
+6. **Gaps.** Refused below `MIN_COVERAGE_RATIO` (0.5, the KPI evaluator's, reused); only
+   gaps between two real buckets are filled, on a straight line; a gap at either end is
+   refused; the count of filled steps is on the forecast row (`buildContext`).
+7. **Intervals.** Empirical quantiles of the (machine, signal, model)'s clean residuals at
+   the same lead time, pooled where a lead has fewer than 20. No band, no forecast shown:
+   a machine's first 14 days read `baseline_not_established` (`ForecastReader.chart`).
+8. **Residual grain.** Per forecast step, not per raw reading.
+9. **Retention.** 90 days for residuals, daily samples, the rollup and skip records.
+10. **Model retirement** restarts the 14-day clock: the band is keyed by model.
+11. **Band width.** The 2.5th–97.5th percentile of clean residuals, 95% (`BAND_QUANTILES`).
+12. **Operating periods only.** Each residual records whether its hour was operating, by the
+    KPI baseline's own gate; a machine with no shift schedule never learns a band, and says
+    `no_shift_schedule`.
+13. **Stale forecast.** Older than the cadence plus one tick (`forecastStaleAfterMs`).
+14. **Tenant-added signals** are out of scope for QML1; a follow-up.
+15. **CI.** The real-model check is not in CI yet; it is run locally in the amd64 image
+    for the MR (`scripts/forecast/real-model-check.js`). A CI job follows the image wiring.
+16. **Licence.** granite-timeseries-ttm-r2 at d6a79570… is **Apache-2.0** by its model card
+    at that revision (commercial use permitted). The same card says IBM "will not be
+    maintaining this code going forward". Recorded on the `forecast_model` row and in the
+    migration comment.
+17. **Activation.** The migration seeds the pinned row `active`; that seeding is Tapas's
+    recorded approval of 19 Oct 2026. Any later activation is a platform-staff action with
+    an audit row, after QEVAL1 has reported on the candidate.
 
 ## Open, and blocking something
 

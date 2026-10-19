@@ -310,7 +310,8 @@ export class KpiEvaluatorService {
    * `device_projection`. Shifts are applied across the whole lookback as they stand
    * today, as Availability applies them to a period.
    */
-  private async loadOperatingGate(
+  /** Public for the forecast band (QML1 Q12): one operating gate, not a second. */
+  async loadOperatingGate(
     m: EntityManager, tenantId: string, equipment: EquipmentRef, from: Date, to: Date,
   ): Promise<OperatingGate> {
     const shifts = await m.getRepository(EquipmentShift).find({
@@ -344,7 +345,8 @@ export class KpiEvaluatorService {
    * the baseline's input signal — is the SQL filter on `params->>'signal'`
    * below; without it, one noisy account-wide alert would dirty every
    * baseline on every machine. */
-  private async loadAlertExcludedRangesBySignal(
+  /** Public for the forecast band (QML1 §6): one dirty-window rule, not a second. */
+  async loadAlertExcludedRangesBySignal(
     m: EntityManager, tenantId: string, equipment: EquipmentRef, profile: EquipmentProfile,
     signals: string[], at: Date,
   ): Promise<Map<string, ExcludedRange[]>> {

@@ -28,6 +28,8 @@ import { AlertModule } from './alert/alert.module';
 import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
+import { ForecastModule } from './forecast/forecast.module';
+import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
@@ -105,6 +107,8 @@ export class AppModule {
       AssetsModule,
               WorkModule,
               ShiftModule,
+              ForecastModule,
+              ForecastSchedulingModule,
               TelemetryPartitionModule,
               TelemetryArchiveModule,
               UtilizationModule,

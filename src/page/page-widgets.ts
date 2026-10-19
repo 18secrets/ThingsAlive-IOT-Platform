@@ -1,4 +1,5 @@
 ﻿import { WidgetType } from '../catalog/layout/widget-types';
+import type { ForecastChartData } from '../forecast/forecast-reader';
 import { KpiEnvelope, Readiness, SeriesPoint } from '../kpi/types';
 
 /**
@@ -25,7 +26,7 @@ export const WIDGET_PRODUCERS: Readonly<Record<WidgetType, string>> = Object.fre
   parameter_list: 'ParameterService.effective (QPARAM1)',
   // No forecast producer exists until QML1. The declaration is read so the widget can
   // say which of the two it is waiting on, not to stand in for a forecast.
-  forecast_chart: 'none until QML1; equipment_class_sensor_requirement.forecast_enabled says whether one is declared',
+  forecast_chart: 'ForecastReader.chart (QML1); equipment_class_sensor_requirement.forecast_enabled says whether one is declared',
 });
 
 /** One client parameter as it stands for this machine or site. `source` is null when no
@@ -119,7 +120,8 @@ export interface SchematicData {
 
 export type WidgetData =
   | KpiWidgetData | SignalChartData | ReadinessRow[] | AlertRow[] | WorkOrderRow[] | ServiceDueData
-  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData | SchematicData | ParameterRow[];
+  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData | SchematicData | ParameterRow[]
+  | ForecastChartData;
 
 export interface PageWidget {
   widgetKey: string;

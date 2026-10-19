@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/forecast-response.v1.json",
+  "title": "ForecastResponseV1",
+  "description": "The Python forecast worker to Node (QML1). Every requested id appears exactly once, in series or in refused. No NaN or Infinity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "model", "series", "refused", "timing"],
+  "properties": {
+    "contract": { "const": "forecast-response.v1" },
+    "model": {
+      "type": "object", "additionalProperties": false, "required": ["key", "revision", "weightsSha256"],
+      "properties": {
+        "key": { "type": "string" }, "revision": { "type": "string" },
+        "weightsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "values"],
+        "properties": {
+          "id": { "type": "string" },
+          "values": { "type": "array", "items": { "type": "number" }, "description": "Exactly predictionLength finite values." }
+        }
+      }
+    },
+    "refused": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "reason"],
+        "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "timing": {
+      "type": "object", "additionalProperties": false, "required": ["loadSeconds", "inferSeconds"],
+      "properties": { "loadSeconds": { "type": "number", "minimum": 0 }, "inferSeconds": { "type": "number", "minimum": 0 } }
+    }
+  }
+}

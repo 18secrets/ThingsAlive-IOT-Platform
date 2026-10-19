@@ -74,6 +74,7 @@ import { IndustryType } from '../device-catalog/entities/industry-type.entity';
 import { Incident } from '../incident/entities/incident.entity';
 import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
 import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity';
+import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -164,6 +165,7 @@ export const ENTITIES = [
   IncidentEvent,
   IncidentSlaPolicy,
   TelemetryArchive,
+  ...FORECAST_ENTITIES,
 ];
 
 export interface DataSourceChoices {
