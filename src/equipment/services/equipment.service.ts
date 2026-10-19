@@ -35,7 +35,7 @@ export interface ImportResult {
   unplaced: number;
 }
 
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
  * The equipment register, owned by the client (tasks P1-85, P1-86).
