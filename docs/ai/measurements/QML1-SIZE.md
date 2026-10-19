@@ -112,8 +112,19 @@ Not a verdict. The threshold for "release cadence suffers" is not set (prompt Qu
 
 ## Checks
 
-- **Reproduced from a clean clone** of `spike/qml1-size`: see the MR description for the
-  size numbers of that run against the ones above.
+- **Reproduced from a clean clone** of `spike/qml1-size` (at `52f62f8`, one run, sizes and
+  builds only). Sizes match to within 0.01%, not byte for byte:
+
+  | variant | on disk, this report → clone | compressed, this report → clone |
+  |---|---|---|
+  | A | 413,483,008 → 413,466,624 B | 97,408,319 → 97,413,172 B |
+  | C, E | 479,432,704 → 479,432,704 B | 116,523,500 → 116,520,348 B |
+  | D | 2,235,244,544 → 2,235,240,448 B | 605,219,717 → 605,227,827 B |
+
+  The kilobytes of drift look like build-time content in the layers (npm's and pip's
+  timestamps and logs); the same pins produced the same packages. B failed the same way,
+  and the clone's build timings (A 52.3 / 18.0 s, C 62.9 / 22.8 s, D 265.1 / 21.2 s,
+  E 43.9 / 17.4 s, cold / warm) fall inside the spread above.
 - **Variant B was attempted, not presumed.** The error above is from the run.
 - `test:db` on the branch: 81 suites, 922 tests — equal to `origin/main` at `b06d7cf`, as
   expected for a branch that adds only `scripts/qml1-size/`, this report and nothing else.
