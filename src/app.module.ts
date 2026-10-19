@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { AssistantModule } from './assistant/assistant.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
 import { IncidentModule } from './incident/incident.module';
@@ -112,6 +113,7 @@ export class AppModule {
               LegacyModule,
               AlertModule,
               ParameterModule,
+              AssistantModule,
             ]
           : []),
       ],
