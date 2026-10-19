@@ -189,6 +189,32 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+## D44 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
+
+Decided 2026-10-19 by Tapas. A **dated exception to D01**, narrow and named: 2.0 writes
+class visuals (and later the 3-D twin's assets) into IoT Platform 1.0's Utho object
+storage bucket, `bucket-huod37sz` in Noida, under the key prefix `ta2/`
+(`ASSET_S3_KEY_PREFIX`). It does not write anywhere else in that bucket, and it writes
+nothing to 1.0's database.
+
+Why an exception rather than a bucket of 2.0's own, which was the first choice: the only
+Utho credential available is 1.0's object-storage key, and Utho refuses it
+`CreateBucket` (403 AccessDenied, tried path-style, with a location constraint and
+virtual-host style). A new bucket needs the Utho console or an account API token.
+
+What it costs, stated so it is not forgotten: that key can read and delete everything in
+the bucket, including 1.0's nightly `db-backups/` of `iotdb`. Any service holding
+`ASSET_S3_*` therefore holds the means to delete 1.0's backups. The prefix keeps 2.0's
+*writes* apart; it does not limit the key.
+
+Lifted when a bucket of 2.0's own exists, ideally with a key scoped to it: set the six
+`ASSET_S3_*` variables to it and copy `ta2/` across. Stored keys carry no prefix, so
+nothing in the database changes.
+
+Found while doing this: 1.0's `.env` names its bucket `bucket-huod37s`, which Utho
+refuses; the bucket the key can see is `bucket-huod37sz`. 1.0's backup script uploads to
+the first. Its backups may not be landing — for 1.0's owners to check.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
