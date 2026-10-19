@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { AssistantModule } from './assistant/assistant.module';
 import { FleetImportModule } from './fleet-import/fleet-import.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
@@ -26,6 +27,7 @@ import { PageModule } from './page/page.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
+import { WorkflowModule } from './workflow/workflow.module';
 import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
@@ -114,7 +116,9 @@ export class AppModule {
               IntelligenceModule,
               LegacyModule,
               AlertModule,
+              WorkflowModule,
               ParameterModule,
+              AssistantModule,
               RecEngineModule,
             ]
           : []),

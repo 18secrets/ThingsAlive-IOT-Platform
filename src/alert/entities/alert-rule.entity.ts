@@ -114,6 +114,22 @@ export class AlertRule {
   @Column({ name: 'copied_at', type: 'timestamptz', nullable: true })
   copiedAt: Date | null;
 
+  /**
+   * Which workflow, and which version of it, compiled this rule (task QWF1, D16), and
+   * the hash of the graph it came from. All three or none: a rule with none was
+   * written by hand or copied from a template. A rule with all three is the
+   * compiler's, and only the workflow edits it — the database refuses an edit to its
+   * content (`trg_alert_rule_compiled_guard`).
+   */
+  @Column({ name: 'compiled_from_workflow_id', type: 'uuid', nullable: true })
+  compiledFromWorkflowId: string | null;
+
+  @Column({ name: 'compiled_from_version_id', type: 'uuid', nullable: true })
+  compiledFromVersionId: string | null;
+
+  @Column({ name: 'graph_hash', type: 'text', nullable: true })
+  graphHash: string | null;
+
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;
 

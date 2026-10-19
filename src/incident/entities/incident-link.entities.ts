@@ -19,7 +19,7 @@ export class IncidentAlert {
 
 export type IncidentEventKind =
   | 'opened' | 'alert_linked' | 'severity_raised' | 'acknowledged' | 'assigned' | 'work_raised'
-  | 'escalated' | 'resolved';
+  | 'escalated' | 'resolved' | 'notified' | 'notification_skipped';
 
 /** The timeline. Append-only, by trigger as well as by grant. */
 @Entity('incident_event')
