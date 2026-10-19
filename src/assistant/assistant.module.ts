@@ -3,19 +3,26 @@ import { AlertModule } from '../alert/alert.module';
 import { DeviceHealthModule } from '../device-health/device-health.module';
 import { EquipmentModule } from '../equipment/equipment.module';
 import { IncidentModule } from '../incident/incident.module';
+import { InventoryModule } from '../inventory/inventory.module';
+import { OnboardingStatusModule } from '../onboarding/onboarding-status.module';
 import { PageModule } from '../page/page.module';
 import { WorkModule } from '../work/work.module';
 import { ASSISTANT_MODEL, GeminiModel, geminiConfigFrom } from './assistant-model';
+import { AssistantProposalService } from './assistant-proposal.service';
 import { AssistantTools } from './assistant-tools';
 import { AssistantController } from './assistant.controller';
 import { ASSISTANT_DAILY_LIMIT, AssistantService, DEFAULT_DAILY_TOKEN_LIMIT } from './assistant.service';
 
 @Module({
-  imports: [EquipmentModule, AlertModule, DeviceHealthModule, IncidentModule, WorkModule, PageModule],
+  imports: [
+    EquipmentModule, AlertModule, DeviceHealthModule, IncidentModule, WorkModule, PageModule, InventoryModule,
+    OnboardingStatusModule,
+  ],
   controllers: [AssistantController],
   providers: [
     AssistantTools,
     AssistantService,
+    AssistantProposalService,
     {
       provide: ASSISTANT_MODEL,
       // Unconfigured is a state, not a boot failure: every other screen works without
