@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { runTenantSpanning } from '../scope/tenant-session';
 import { DomainEvent } from './domain-event.entity';
 
 /**
@@ -85,9 +86,9 @@ export class OutboxConsumer {
   }
 
   private async one(now: Date): Promise<keyof PassResult | null> {
-    return this.ds.transaction(async (m) => {
-      // Tenant-spanning: the outbox belongs to no account, and its reader has no request.
-      await m.query(`SELECT set_config('ta.bypass', 'on', true)`);
+    // Tenant-spanning: the outbox belongs to no account, and its reader has no request.
+    // Through runTenantSpanning, the one place CI allows the bypass to be set.
+    return runTenantSpanning(this.ds, 'outbox pass', async (m) => {
       const rows: { id: string }[] = await m.query(
         `SELECT "id" FROM "domain_event"
           WHERE "delivery_state" = 'pending' AND "event_type" = ANY($1::text[])
