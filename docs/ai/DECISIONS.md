@@ -189,7 +189,7 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
-## D20 — Who hears about an escalation, and how (QNOTIFY1)
+## D45 — Who hears about an escalation, and how (QNOTIFY1)
 
 Decided 2026-10-19 by Tapas, taking the recommendations in `prompts/QNOTIFY1-prompt.md` §8.
 

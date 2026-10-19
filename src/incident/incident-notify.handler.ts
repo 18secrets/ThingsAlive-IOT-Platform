@@ -29,7 +29,7 @@ interface Recipient {
 }
 
 /**
- * Tells people that an incident escalated (task QNOTIFY1, answers recorded as D20).
+ * Tells people that an incident escalated (task QNOTIFY1, answers recorded as D45).
  *
  * Who, decided once: level 1 (acknowledgement overdue) goes to the incident's owner,
  * or, with no owner who can see the machine, to everyone who can assign work

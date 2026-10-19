@@ -23,7 +23,7 @@ class FakeMail {
 const MIN = 60_000;
 
 /**
- * Escalation emails and the first outbox consumer (task QNOTIFY1, D20). The mail
+ * Escalation emails and the first outbox consumer (task QNOTIFY1, D45). The mail
  * transport is faked; everything that decides who is told — the users, their roles,
  * their sites, the resolver the API uses — is real, and so is the outbox they are read
  * from and the database rules that keep a message from going twice.
