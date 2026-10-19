@@ -31,8 +31,8 @@ def med_max(values, unit='s', nd=1):
 
 builds = rows('builds.tsv')
 sizes = {r['variant']: r for r in rows('sizes.tsv')}
-ready = rows('ready.tsv')
-py = [json.loads(line) for line in (out / 'python.jsonl').read_text().splitlines() if line.strip()]
+ready = rows('ready.tsv') if (out / 'ready.tsv').exists() else []
+py = [json.loads(line) for line in (out / 'python.jsonl').read_text().splitlines() if line.strip()] if (out / 'python.jsonl').exists() else []
 
 
 def b(variant, kind):
