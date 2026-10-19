@@ -80,6 +80,7 @@ import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/ent
 import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity';
 import { AssistantUsage } from '../assistant/assistant-usage.entity';
 import { AssistantProposal } from '../assistant/assistant-proposal.entity';
+import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -176,6 +177,7 @@ export const ENTITIES = [
   TelemetryArchive,
   AssistantUsage,
   AssistantProposal,
+  RecEvidenceBundle,
 ];
 
 export interface DataSourceChoices {

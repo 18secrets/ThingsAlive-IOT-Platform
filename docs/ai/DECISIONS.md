@@ -189,6 +189,32 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+## D42 — QREC1's thirteen questions, answered
+
+Answered by Tapas, 2026-10-19, taking every recommendation in
+`prompts/QREC1-prompt.md` §12. Numbered D42 because D18–D41 are already used in
+`decisions/ai-layer-decisions.md` — including D21, the decision this task implements.
+
+1. **Ship without QML1.** Detect's residual source reports `not_available` /
+   `no_forecast_model` for every forecast-declared signal until a forecast exists.
+2. **A bundle belongs to a machine at an instant**, with a nullable `incident_id`
+   (foreign key to `incident`) set when a live incident exists.
+3. **`prediction.read` may POST.** The write is a derived, immutable record of reads
+   the caller could make anyway.
+4. **Downtime cost stays `pending`.** `operating_cost_per_hour` is not the cost of a
+   machine standing; a `downtime_cost_per_hour` parameter is a follow-up.
+5. **`estimated_hours` is labour only.** No downtime line, no fuel line, until the
+   library can author either.
+6. **Parts are an unpriced list.** Pricing them needs a per-tenant price list.
+7. **Precedent searches all history** the tenant holds for the machine.
+8. **Precedent is this machine only.** Fleet precedent is a separate, labelled section later.
+9. **Module `rec-engine`, routes `rec-evidence`.** The scenario `RecommendationService` keeps its name.
+10. **No per-tenant enable/disable** of recommendations yet.
+11. **On request only.** Opening a page reads; it never evaluates.
+12. **Acceptance into work is its own task**, after QREC2, with its own concurrency test.
+13. **`ajv` and `ajv-formats` are devDependencies**, for validating contract payloads in
+    tests only. Whether either becomes a runtime dependency is QREC2's question.
+
 ## D43 — Workflow compiler: the nine questions QWF1 asked, answered
 
 2026-10-19, answered by Tapas before QWF1 started.
