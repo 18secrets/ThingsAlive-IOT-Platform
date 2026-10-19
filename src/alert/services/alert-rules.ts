@@ -155,7 +155,7 @@ export interface ChainOriginParams {
 
 /**
  * One condition inside a composite: a leaf trigger and exactly the parameters a rule
- * of that kind would carry on its own (task QWF1, D18 Q2). Not an expression. D25 and
+ * of that kind would carry on its own (task QWF1, D43 Q2). Not an expression. D25 and
  * D34 keep free text out of the alert path, and a structured tree of the leaf
  * parameter sets is what lets each leaf be evaluated, validated and rendered by the
  * code that already does that for a rule of its kind.
@@ -174,7 +174,7 @@ export interface CompositeGroup {
 export type CompositeTerm = CompositeLeaf | CompositeGroup;
 
 /**
- * Each leaf keeps its own sustained window (D18 Q3): an `allOf` of two thresholds
+ * Each leaf keeps its own sustained window (D43 Q3): an `allOf` of two thresholds
  * fires when each one's own M-of-N holds in the shift, not when both are true in the
  * same M of N readings. A combined window would need readings aligned across signals
  * that arrive on different clocks, and nobody has decided how to align them.

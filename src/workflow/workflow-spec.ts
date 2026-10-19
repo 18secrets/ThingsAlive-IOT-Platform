@@ -7,10 +7,10 @@ import {
 } from '../alert/services/alert-rules';
 
 /**
- * The workflow vocabulary (task QWF1 §2, D18 Q1).
+ * The workflow vocabulary (task QWF1 §2, D43 Q1).
  *
  * Derived from D16 alone: the Visual Workflow addendum (WF01–WF08) is not in the
- * repository, and D18 records that this list is QWF1's in its absence. Every node is
+ * repository, and D43 records that this list is QWF1's in its absence. Every node is
  * something the alert runtime already evaluates, so a workflow is a front end on
  * `alert_rule`, not a second engine.
  *
@@ -49,7 +49,7 @@ export const NODE_REGISTRY: Record<WorkflowNodeType, NodeKind> = {
 };
 
 /**
- * Graph size caps (D18 Q4), for the reason the formula parser has `MAX_NODES` and
+ * Graph size caps (D43 Q4), for the reason the formula parser has `MAX_NODES` and
  * `MAX_DEPTH`: an unbounded graph is unbounded validation, compilation and rendering
  * work on every save. An alert workflow is a handful of conditions feeding a Notify;
  * fifty nodes is generous, and a rule nested eight deep no longer reads as a sentence.

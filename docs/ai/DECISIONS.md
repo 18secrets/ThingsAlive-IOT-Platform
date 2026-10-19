@@ -189,7 +189,7 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
-## D18 — Workflow compiler: the nine questions QWF1 asked, answered
+## D43 — Workflow compiler: the nine questions QWF1 asked, answered
 
 2026-10-19, answered by Tapas before QWF1 started.
 

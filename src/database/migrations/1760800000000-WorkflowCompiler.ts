@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Workflows, and the compiler between them and `alert_rule` (task QWF1, D16, D18).
+ * Workflows, and the compiler between them and `alert_rule` (task QWF1, D16, D43).
  *
  * D16 settled the expensive part: an alert workflow compiles to `alert_rule`, and the
  * shift runner keeps evaluating rules exactly as it does now. A workflow is the
@@ -17,7 +17,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - one published version per workflow, by a partial unique index;
  *  - a compiled rule's content cannot be edited — edit the graph and republish. A rule
  *    and a graph that can both be edited drift apart, and then neither describes what
- *    runs. Switching one off is still allowed (D18 Q7): that is operational, not
+ *    runs. Switching one off is still allowed (D43 Q7): that is operational, not
  *    semantic, and a noisy alert at 3 a.m. must not need a republish;
  *  - the three provenance columns are all set or all null;
  *  - a composite is compiler-only, because a hand-written one has no graph to read it
@@ -148,7 +148,7 @@ export class WorkflowCompiler1760800000000 implements MigrationInterface {
 
     // The compiler never rewrites a rule either: republishing switches the old version's
     // rules off and inserts new ones, so an alert event always resolves to the rule, and
-    // the content, that raised it. Enabling and disabling stay open (D18 Q7).
+    // the content, that raised it. Enabling and disabling stay open (D43 Q7).
     await q.query(`
       CREATE FUNCTION "alert_rule_compiled_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN

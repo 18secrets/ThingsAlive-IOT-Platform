@@ -115,7 +115,7 @@ export class WorkflowService {
           publishedAt: v.publishedAt, publishedBy: v.publishedBy, spec: v.spec,
           layout: layouts.find((l) => l.workflowVersionId === v.id)?.positions ?? {},
           rendering: compiled ? compiled.rules.map((r) => describeRule(r, namer)) : [],
-          // Which of its rules are off (D18 Q7): one switched off at 3 a.m. stays visible here.
+          // Which of its rules are off (D43 Q7): one switched off at 3 a.m. stays visible here.
           rules: own.map((r) => ({ id: r.id, slug: r.slug, name: r.name, enabled: r.enabled })),
         };
       }),
@@ -382,7 +382,7 @@ export class WorkflowService {
           + 'have looks configured and never fires.';
       }
     } else if (!readiness.some((r) => r.state === 'ready')) {
-      // D18 Q8: a site or class workflow publishes with its per-machine readiness listed,
+      // D43 Q8: a site or class workflow publishes with its per-machine readiness listed,
       // and is refused only when nothing it covers could fire.
       publishRefusal = machines.length
         ? 'No machine this workflow covers is ready: every one is missing or not receiving a signal it reads.'

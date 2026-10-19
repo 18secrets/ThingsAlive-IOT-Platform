@@ -44,7 +44,7 @@ export class AssembleDto {
  * Workflows (task QWF1).
  *
  * `alert.author` for every write and for assembly: a published alert workflow *is*
- * alert rules, and that capability already gates writing them (D18 Q6). Reads reuse
+ * alert rules, and that capability already gates writing them (D43 Q6). Reads reuse
  * `prediction.read`, for the reason the alert controller gives. No new capability:
  * operator drafting and delegated publish are a later task, decided once.
  */

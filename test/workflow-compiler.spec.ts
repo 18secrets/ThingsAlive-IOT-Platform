@@ -55,7 +55,7 @@ const readings = (signal: string, values: number[]): WindowReading[] => values.m
 }));
 
 /**
- * The workflow compiler (task QWF1, D16, D18). A workflow is how a person draws an
+ * The workflow compiler (task QWF1, D16, D43). A workflow is how a person draws an
  * alert; the compiler turns the drawing into the `alert_rule` rows the runtime already
  * evaluates. What is tested is that the compiler adds nothing of its own — the same
  * parameters, the same refusal sentences, the same evaluation — and that the database
@@ -324,7 +324,7 @@ describeDb('workflow compiler: storage, publish and the database\'s refusals', (
     ))).rejects.toThrow(/compiled from a workflow/);
     await expect(alerts.updateRule(acme, rule.id, { name: 'Renamed', params: { signal: COOLANT, max: 1 } }))
       .rejects.toMatchObject({ status: 409 });
-    // D18 Q7: off and on again, by itself.
+    // D43 Q7: off and on again, by itself.
     expect((await alerts.setEnabled(acme, rule.id, false)).enabled).toBe(false);
     expect((await workflows.get(acme, wf.id)).versions[0].rules).toEqual([expect.objectContaining({ id: rule.id, enabled: false })]);
     // A hand-written rule beside it still updates, and cannot be adopted into a workflow.
@@ -404,7 +404,7 @@ describeDb('workflow compiler: storage, publish and the database\'s refusals', (
     expect((await workflows.compile(acme, ok.id, 1, NOW)).readiness[0]).toMatchObject({ state: 'ready' });
   });
 
-  it('D18 Q8. class scope publishes with readiness listed while one machine is ready, and is refused when none is', async () => {
+  it('D43 Q8. class scope publishes with readiness listed while one machine is ready, and is refused when none is', async () => {
     const one = thresholdSpec(105, { appliesTo: 'equipment-class', equipmentClassSlug: 'genset', sourceSystem: null, externalId: null });
     const wf = await create(one);
     const out = await workflows.publish(acme, wf.id, 1, NOW);
