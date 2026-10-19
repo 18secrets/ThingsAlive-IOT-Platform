@@ -55,7 +55,7 @@ print('## Results\n')
 print(f'Timings are median / max of {env.get("runs")} runs{TAG}. Sizes do not depend on the host.\n')
 print('| variant | builds? | uncompressed | compressed | cold build | warm rebuild | torch layer rebuilt on src change |')
 print('|---|---|---|---|---|---|---|')
-print(f'| B (alpine + torch) | {(out / "B.outcome").read_text().strip()} | – | – | – | – | – |')
+print(f'| B (alpine + torch) | {(out / "B.outcome").read_text().splitlines()[0]} | – | – | – | – | – |')
 for v in 'ACDE':
     s = sizes[v]
     rebuilt = sorted({r['torch_layer_rebuilt'] for r in builds if r['variant'] == v and r['kind'] == 'warm'})
@@ -105,3 +105,10 @@ def to_bytes(s):
 
 for size, step in sorted(hist, key=lambda x: -to_bytes(x[0]))[:8]:
     print(f'| {size} | `{" ".join(step.split())[:110]}` |')
+
+b_out = (out / 'B.outcome').read_text().splitlines()
+if len(b_out) > 1:
+    print('\n## Variant B, as it failed\n')
+    print('```')
+    print('\n'.join(b_out[1:]))
+    print('```')

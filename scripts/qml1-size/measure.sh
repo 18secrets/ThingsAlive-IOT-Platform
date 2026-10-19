@@ -27,6 +27,7 @@ REG=qml1size-registry
 REG_PORT="${REG_PORT:-5055}"
 APP_PORT="${APP_PORT:-18080}"
 
+img() { printf 'qml1size/%s' "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"; }  # tags must be lowercase
 now() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT/measure.log" >&2; }
 
@@ -72,7 +73,7 @@ E|scripts/qml1-size/Dockerfile.D|api"
 build() { # name file target extra-args...
   local name="$1" file="$2" target="$3"; shift 3
   docker buildx build --builder desktop-linux --load --platform "$PLATFORM" --progress=plain \
-    -f "$CTX/$file" --target "$target" -t "qml1size/$name" "$@" "$CTX" < /dev/null
+    -f "$CTX/$file" --target "$target" -t "$(img "$name")" "$@" "$CTX" < /dev/null
 }
 
 # ---- B: does torch install on musl? One attempt, recorded, not worked around --------
@@ -80,7 +81,8 @@ log "B: attempting the torch install on node:22-alpine"
 if build B scripts/qml1-size/Dockerfile.B runtime --no-cache > "$OUT/B.build.log" 2>&1; then
   echo "builds" > "$OUT/B.outcome"
 else
-  echo "fails" > "$OUT/B.outcome"
+  # The step that failed and its last error lines, quoted in the report as they are.
+  { echo "fails"; grep -E '^#[0-9]+ \[runtime' "$OUT/B.build.log" | tail -1; grep -iE 'error' "$OUT/B.build.log" | tail -8; } > "$OUT/B.outcome"
 fi
 log "B: $(cat "$OUT/B.outcome")"
 
@@ -119,10 +121,10 @@ docker run -d --name "$REG" -p "127.0.0.1:$REG_PORT:5000" registry:2 >/dev/null
 sleep 3
 printf 'variant\tuncompressed_bytes\tcompressed_bytes\tlayers\n' > "$OUT/sizes.tsv"
 for name in A C D E; do
-  docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "qml1size/$name" > "$OUT/$name.history.tsv"
-  unc="$(docker image inspect --format '{{.Size}}' "qml1size/$name")"
-  docker tag "qml1size/$name" "localhost:$REG_PORT/qml1size/$name:measure"
-  docker push -q "localhost:$REG_PORT/qml1size/$name:measure" > /dev/null
+  docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$(img "$name")" > "$OUT/$name.history.tsv"
+  unc="$(docker image inspect --format '{{.Size}}' "$(img "$name")")"
+  docker tag "$(img "$name")" "localhost:$REG_PORT/$(img "$name"):measure"
+  docker push -q "localhost:$REG_PORT/$(img "$name"):measure" > /dev/null
   python3 - "$REG_PORT" "$name" "$unc" >> "$OUT/sizes.tsv" <<'PY'
 import json, sys, urllib.request
 port, name, unc = sys.argv[1:]
@@ -149,7 +151,7 @@ sleep 2
 DBENV=(-e DB_HOST="$PG" -e DB_USERNAME=postgres -e DB_PASSWORD=measure -e DB_DATABASE=ta2
        -e AUTH_JWT_SECRET=measure-only -e CORS_ORIGINS=http://localhost -e PORT=8080)
 # Migrations once, with the baseline image: they create the ta_app role the app connects as.
-docker run --rm --platform "$PLATFORM" --network "$NET" "${DBENV[@]}" qml1size/A \
+docker run --rm --platform "$PLATFORM" --network "$NET" "${DBENV[@]}" "$(img A)" \
   node node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js > "$OUT/migrations.log" 2>&1
 
 printf 'variant\trun\tready_seconds\n' > "$OUT/ready.tsv"
@@ -158,7 +160,7 @@ for name in A C D E; do
     docker rm -f qml1size-app >/dev/null 2>&1 || true
     t=$(now)
     docker run -d --name qml1size-app --platform "$PLATFORM" --network "$NET" --cpus="$CPUS" --memory="$MEM" \
-      -p "127.0.0.1:$APP_PORT:8080" "${DBENV[@]}" "qml1size/$name" >/dev/null
+      -p "127.0.0.1:$APP_PORT:8080" "${DBENV[@]}" "$(img "$name")" >/dev/null
     ok=no
     for _ in $(seq 1 1200); do
       if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$APP_PORT/api/v1/ready" || true)" = 200 ]; then ok=yes; break; fi
@@ -176,10 +178,10 @@ log "python timings in D"
 : > "$OUT/python.jsonl"
 for i in $(seq 1 "$RUNS"); do
   docker run --rm --platform "$PLATFORM" --cpus="$CPUS" --memory="$MEM" \
-    -v "$REPO/scripts/qml1-size/bench.py:/opt/bench.py:ro" qml1size/D /opt/venv/bin/python /opt/bench.py \
+    -v "$REPO/scripts/qml1-size/bench.py:/opt/bench.py:ro" "$(img D)" /opt/venv/bin/python /opt/bench.py \
     >> "$OUT/python.jsonl" 2> "$OUT/python.$i.stderr"
 done
-docker run --rm --platform "$PLATFORM" qml1size/D /opt/venv/bin/pip freeze > "$OUT/D.pip-freeze.txt"
+docker run --rm --platform "$PLATFORM" "$(img D)" /opt/venv/bin/pip freeze > "$OUT/D.pip-freeze.txt"
 
 # ---- summary --------------------------------------------------------------------
 python3 "$REPO/scripts/qml1-size/summarise.py" "$OUT" | tee "$OUT/summary.md"
