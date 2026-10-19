@@ -26,8 +26,9 @@ import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
+import { forecastDeclarations } from '../forecast/forecast-inputs';
+import { ForecastReader } from '../forecast/forecast-reader';
 import { classifyFreshness } from '../signal-binding/services/signal-freshness';
-import { EquipmentClassSensorRequirement } from '../catalog/entities/equipment-class-sensor-requirement.entity';
 import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
@@ -92,6 +93,7 @@ export class PageService {
     private readonly clientCatalog: ClientCatalogService,
     private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
+    private readonly forecasts: ForecastReader,
   ) {}
 
   // ================================================================ machine page
@@ -201,11 +203,14 @@ export class PageService {
         case 'parameter_list':
           return filled(h, toParameterRows(parameterRows!));
 
-        case 'forecast_chart':
-          // A forecast nobody declared is a configuration gap; a declared one has no
-          // producer until QML1, and the widget says that rather than drawing nothing.
+        case 'forecast_chart': {
+          // A forecast nobody declared is a configuration gap; a declared one is read from
+          // what the forecast pass wrote (QML1), and says why when there is nothing to show.
           if (!w.boundTo || !forecastDeclared.has(w.boundTo)) return unfilled(h, 'not_configured', 'forecast_not_declared');
-          return unfilled(h, 'not_available', 'no_forecast_model');
+          const answer = await withTenantSession(this.ds, scope, (m) =>
+            this.forecasts.chart(m, scope.tenantId, profile, w.boundTo!, at));
+          return answer.readiness === 'ready' ? filled(h, answer.data) : unfilled(h, answer.readiness, answer.reason);
+        }
 
         case 'machine_list':
         default:
@@ -509,12 +514,10 @@ export class PageService {
     };
   }
 
-  /** The signals this machine's class version declares a forecast for (QREC0a). */
+  /** The signals this machine's class version declares a forecast for (QREC0a) — the
+   * forecast pass's own definition (QML1 §3), so the two cannot disagree. */
   private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
-    if (!profile.equipmentClassSlug || !profile.classVersion) return new Set();
-    const rows = await this.ds.getRepository(EquipmentClassSensorRequirement).find({
-      where: { classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion, forecastEnabled: true },
-    });
+    const rows = await forecastDeclarations(this.ds.manager, profile.equipmentClassSlug, profile.classVersion);
     return new Set(rows.map((r) => r.measurementRole));
   }
 

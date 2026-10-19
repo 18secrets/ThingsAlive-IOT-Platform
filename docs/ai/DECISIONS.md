@@ -286,6 +286,49 @@ Decided 2026-10-19 by Tapas, taking the recommendations in `prompts/QNOTIFY1-pro
 - **Retries.** 5 attempts, waiting 1, 2, 4 and 8 minutes between them, then `failed`.
 - **Levels stand alone.** A level-2 email does not resend a level-1 that failed.
 
+## D46 — How QML1 forecasts: the answers to its seventeen questions
+
+Decided 2026-10-19, answered by Tapas. Numbering follows `prompts/QML1-prompt.md`'s
+Questions section; the code that holds each answer is named.
+
+1. **Process boundary.** Node owns the database; Python is a pure stdin/stdout function,
+   one child per pass (`src/forecast/forecast-worker.ts`, `python/forecast/infer.py`).
+2. **Image.** glibc for both services. The api image (`Dockerfile`, now
+   `node:22-bookworm-slim`) never carries Python or torch; the scheduler's
+   (`Dockerfile.scheduler`) adds Python 3.11, CPU torch, granite-tsfm and the weights,
+   below the source copy. Railway picks a Dockerfile per service, not a build target, so
+   the split is two files. **Not yet wired:** `test/deployment.spec.ts` asserts both
+   services build from `Dockerfile`, and pointing `railway.scheduler.json` at
+   `Dockerfile.scheduler` is that test's change to make, with Deepak confirming the
+   scheduler service reads `railway.scheduler.json`.
+3. **Cadence.** A platform constant of four hours (`FORECAST_CADENCE_MS`); no column.
+4. **Budget.** 25% of the cadence (`FORECAST_BUDGET_RATIO`).
+5. **Step and rollup.** Hourly steps; `forecast_input_bucket`, extended incrementally.
+6. **Gaps.** Refused below `MIN_COVERAGE_RATIO` (0.5, the KPI evaluator's, reused); only
+   gaps between two real buckets are filled, on a straight line; a gap at either end is
+   refused; the count of filled steps is on the forecast row (`buildContext`).
+7. **Intervals.** Empirical quantiles of the (machine, signal, model)'s clean residuals at
+   the same lead time, pooled where a lead has fewer than 20. No band, no forecast shown:
+   a machine's first 14 days read `baseline_not_established` (`ForecastReader.chart`).
+8. **Residual grain.** Per forecast step, not per raw reading.
+9. **Retention.** 90 days for residuals, daily samples, the rollup and skip records.
+10. **Model retirement** restarts the 14-day clock: the band is keyed by model.
+11. **Band width.** The 2.5th–97.5th percentile of clean residuals, 95% (`BAND_QUANTILES`).
+12. **Operating periods only.** Each residual records whether its hour was operating, by the
+    KPI baseline's own gate; a machine with no shift schedule never learns a band, and says
+    `no_shift_schedule`.
+13. **Stale forecast.** Older than the cadence plus one tick (`forecastStaleAfterMs`).
+14. **Tenant-added signals** are out of scope for QML1; a follow-up.
+15. **CI.** The real-model check is not in CI yet; it is run locally in the amd64 image
+    for the MR (`scripts/forecast/real-model-check.js`). A CI job follows the image wiring.
+16. **Licence.** granite-timeseries-ttm-r2 at d6a79570… is **Apache-2.0** by its model card
+    at that revision (commercial use permitted). The same card says IBM "will not be
+    maintaining this code going forward". Recorded on the `forecast_model` row and in the
+    migration comment.
+17. **Activation.** The migration seeds the pinned row `active`; that seeding is Tapas's
+    recorded approval of 19 Oct 2026. Any later activation is a platform-staff action with
+    an audit row, after QEVAL1 has reported on the candidate.
+
 
 ## Open, and blocking something
 
