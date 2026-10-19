@@ -10,7 +10,7 @@ const ENV = {
 const KEY = 'class-visuals/genset/v1/abc.png';
 
 /**
- * The asset key prefix (D19). 2.0 shares a bucket with IoT Platform 1.0, whose
+ * The asset key prefix (D44). 2.0 shares a bucket with IoT Platform 1.0, whose
  * database backups live under `db-backups/`, so every object 2.0 writes, reads or
  * checks must be under its own prefix — and the key stored in the database must not
  * carry it, so leaving the shared bucket later is a configuration change.

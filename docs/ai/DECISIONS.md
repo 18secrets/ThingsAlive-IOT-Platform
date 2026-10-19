@@ -189,7 +189,7 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
-## D19 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
+## D44 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
 
 Decided 2026-10-19 by Tapas. A **dated exception to D01**, narrow and named: 2.0 writes
 class visuals (and later the 3-D twin's assets) into IoT Platform 1.0's Utho object

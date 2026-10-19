@@ -46,7 +46,7 @@ export interface AssetStorageConfig {
    * Where under the bucket 2.0's objects live, e.g. `ta2/`. Empty means the bucket root.
    *
    * Exists because 2.0 shares a bucket with IoT Platform 1.0, whose database backups
-   * sit under `db-backups/` (D19). Applied here, at the one place keys meet the bucket,
+   * sit under `db-backups/` (D44). Applied here, at the one place keys meet the bucket,
    * so the keys stored in the database stay prefix-free and a later move to a bucket of
    * 2.0's own is a configuration change, not a data migration.
    */
