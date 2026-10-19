@@ -12,6 +12,9 @@
 # and registry containers; touches no other container, image or volume except the
 # qml1size/* images it builds.
 #
+# SKIP_BUILDS=1 keeps an earlier run's B outcome and build timings in out-dir and only
+# rebuilds each image from cache before measuring sizes and start-up.
+#
 # RUNS (default 5) is the repeat count for every timed step. MEMORY (default 8g, capped
 # at what the Docker VM has) is the container limit D35's 8-core/8 GB box is matched to.
 set -euo pipefail
@@ -76,6 +79,7 @@ build() { # name file target extra-args...
     -f "$CTX/$file" --target "$target" -t "$(img "$name")" "$@" "$CTX" < /dev/null
 }
 
+if [ "${SKIP_BUILDS:-0}" != 1 ]; then
 # ---- B: does torch install on musl? One attempt, recorded, not worked around --------
 log "B: attempting the torch install on node:22-alpine"
 if build B scripts/qml1-size/Dockerfile.B runtime --no-cache > "$OUT/B.build.log" 2>&1; then
@@ -95,8 +99,9 @@ echo "$VARIANTS" | while IFS='|' read -r name file target; do
     printf '%s\tcold\t%s\t%.1f\t-\n' "$name" "$i" "$(python3 -c "print($e-$t)")" >> "$OUT/builds.tsv"
   done
   for i in $(seq 1 "$RUNS"); do
-    # A one-line change under src/, different each run so the cache cannot reuse the last one.
-    printf '\n// QML1-SIZE warm-rebuild probe %s %s\n' "$name" "$i" >> "$CTX/src/main.ts"
+    # A one-line change under src/, unique to this run of the script too: a probe line
+    # repeated from an earlier run is a cache hit, and a 0.7 s "rebuild" (seen once).
+    printf '\n// QML1-SIZE warm-rebuild probe %s %s %s\n' "$name" "$i" "$(now)" >> "$CTX/src/main.ts"
     log "$name: warm rebuild $i/$RUNS"
     t=$(now); build "$name" "$file" "$target" > "$OUT/$name.warm.$i.log" 2>&1; e=$(now)
     # Was the pip install layer rebuilt by a src change? (A layer-order defect if so.)
@@ -110,7 +115,14 @@ echo "$VARIANTS" | while IFS='|' read -r name file target; do
     printf '%s\twarm\t%s\t%.1f\t%s\n' "$name" "$i" "$(python3 -c "print($e-$t)")" "$rebuilt" >> "$OUT/builds.tsv"
   done
   git -C "$REPO" show HEAD:src/main.ts > "$CTX/src/main.ts"
-  # The image measured below is the committed source, not the last probe.
+done
+fi
+
+# The images measured below are the committed source, rebuilt from cache now: Docker
+# Desktop can reclaim an image built an hour earlier (it did, once, mid-run).
+echo "$VARIANTS" | while IFS='|' read -r name file target; do
+  git -C "$REPO" show HEAD:src/main.ts > "$CTX/src/main.ts"
+  log "$name: final image"
   build "$name" "$file" "$target" > "$OUT/$name.final.log" 2>&1
 done
 
@@ -121,8 +133,9 @@ docker run -d --name "$REG" -p "127.0.0.1:$REG_PORT:5000" registry:2 >/dev/null
 sleep 3
 printf 'variant\tuncompressed_bytes\tcompressed_bytes\tlayers\n' > "$OUT/sizes.tsv"
 for name in A C D E; do
-  docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$(img "$name")" > "$OUT/$name.history.tsv"
-  unc="$(docker image inspect --format '{{.Size}}' "$(img "$name")")"
+  # --platform: on an arm64 host the image store resolves the host's platform otherwise.
+  docker history --platform "$PLATFORM" --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$(img "$name")" > "$OUT/$name.history.tsv"
+  unc="$(docker image inspect --platform "$PLATFORM" --format '{{.Size}}' "$(img "$name")")"
   docker tag "$(img "$name")" "localhost:$REG_PORT/$(img "$name"):measure"
   docker push -q "localhost:$REG_PORT/$(img "$name"):measure" > /dev/null
   python3 - "$REG_PORT" "$name" "$unc" >> "$OUT/sizes.tsv" <<'PY'
