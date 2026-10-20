@@ -92,7 +92,7 @@ template and `--ignore-eos` forced all 128 tokens; that measures throughput, not
 
 ## Spend
 
-Not read from Railway's billing; an estimate. Two image builds of about seven minutes each,
+Not read from Railway's billing; an estimate. Two image builds (about seven and four minutes),
 and about three and a half minutes of running at up to 24 CPUs and 4.5 GB. At Railway's
 published per-minute CPU and memory rates that is well under one dollar, against QSPIKE1's
 $1.18. The actual figure is on the project's usage page under `qspike1b`.
