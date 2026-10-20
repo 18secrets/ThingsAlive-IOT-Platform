@@ -61,16 +61,39 @@ QSPIKE1's thread count was not recorded.
 ## What the one attempt should now be
 
 The prompt's §2 changes one variable, the build. There are now two candidate variables, and
-they can still be separated inside one attempt without becoming two:
+they can still be separated inside one attempt without becoming two. `scripts/qspike1b/`
+builds **one image** holding the same llama.cpp commit (`b6000`, `4762ad7`) twice, native
+detection off in both:
 
-1. **First, the prebuilt runtime QSPIKE1 used, with `n_threads` set explicitly** to the
-   cgroup quota or below, and nothing else changed. If it completes, the cause was the
-   thread count, and the build was never the problem.
-2. **Only if that still does not complete**, Route L as written: llama.cpp from source with
-   the instruction-set flags from the table above, native detection off, threads set the
-   same way.
+- `generic`: AVX, AVX2, FMA, F16C and AVX-512 all off, the shape of a lowest-common wheel
+- `isa`: exactly the flags in the Host table
 
-Both run inside the same one-day budget and the same throwaway service. Neither touches the
+and runs Qwen3-4B Q4_K_M (official Qwen GGUF, sha256 `7485fe6f…34fdf5`) in this order, each
+inference under a 30-minute timeout:
+
+| run | build | threads | answers |
+|---|---|---|---|
+| 1–3 | isa | the cgroup quota | does the 4B complete at all, and how fast |
+| 4–6 | generic | the cgroup quota | what the instruction set is worth, threads held fixed |
+| 7 | isa | 3 × quota | what over-subscription costs, build held fixed |
+| 8 | generic | 3 × quota | QSPIKE1's suspected condition (24 threads on 8 CPUs is 3 ×) |
+
+Every line the report needs starts with `QSPIKE1b` in the service's log, including a
+progress line each minute so a timeout shows whether anything was generated. The service
+exits when done and `restartPolicyType: NEVER` keeps it from running again. Worst case,
+every run times out: about 4 hours of 24 vCPUs.
+
+This is not QSPIKE1's harness (still unpushed), so it is not the same runtime build; it
+is the same model size and quantisation.
+
+Deploy, from `scripts/qspike1b/`, after linking that directory to the Development
+environment:
+
+```
+railway add --service qspike1b
+railway up --service qspike1b --environment Development --detach
+railway logs --service qspike1b --environment Development | grep QSPIKE1b
+``` Neither touches the
 `scheduler`: running the spike there would take its CPU from the forecast, escalation-sweep
 and outbox jobs, and would mean changing its image.
 
