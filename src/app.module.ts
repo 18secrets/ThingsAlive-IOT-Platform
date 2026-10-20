@@ -28,6 +28,7 @@ import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
 import { WorkflowModule } from './workflow/workflow.module';
+import { ProposalModule } from './proposal/proposal.module';
 import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
@@ -121,6 +122,7 @@ export class AppModule {
               LegacyModule,
               AlertModule,
               WorkflowModule,
+              ProposalModule,
               ParameterModule,
               AssistantModule,
               RecEngineModule,

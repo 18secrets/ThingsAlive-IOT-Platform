@@ -302,4 +302,39 @@ export class TelemetryWindowReader {
     )].sort();
     return { partitions, planText };
   }
+
+  /**
+   * Every reading the segments account for, with the logger that sent it (task QGEN1):
+   * what historical replay windows, read once for the whole replay rather than once per
+   * shift. The logger matters because a threshold rule groups by it (D34).
+   */
+  private static readonly SEGMENT_ROWS_QUERY = `
+    SELECT r."imei", r."signal", r."value", r."unit", r."source_timestamp" AS at
+      FROM "telemetry_reading" r ${SEGMENTS_JOIN}
+     WHERE r."tenant_id" = $1 AND r."source_timestamp" >= $6 AND r."source_timestamp" <= $7
+     ORDER BY r."source_timestamp" ASC`;
+
+  async readSegmentRows(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[], from: Date, to: Date,
+  ): Promise<{ imei: string; signal: string; value: number; unit: string | null; at: Date }[]> {
+    if (!segments.length) return [];
+    const rows: { imei: string; signal: string; value: string; unit: string | null; at: Date }[] = await m.query(
+      TelemetryWindowReader.SEGMENT_ROWS_QUERY, [tenantId, ...segmentParams(segments), from, to],
+    );
+    return rows.map((r) => ({ imei: r.imei, signal: r.signal, value: Number(r.value), unit: r.unit, at: new Date(r.at) }));
+  }
+
+  /** The partitions `readSegmentRows` touches for these bounds — checked, not assumed. */
+  async explainSegmentRows(
+    m: EntityManager, tenantId: string, segments: TelemetrySegment[], from: Date, to: Date,
+  ): Promise<{ partitions: string[]; planText: string }> {
+    const rows: { 'QUERY PLAN': string }[] = await m.query(
+      `EXPLAIN (FORMAT TEXT) ${TelemetryWindowReader.SEGMENT_ROWS_QUERY}`, [tenantId, ...segmentParams(segments), from, to],
+    );
+    const planText = rows.map((r) => r['QUERY PLAN']).join('\n');
+    const partitions = [...new Set(
+      [...planText.matchAll(/telemetry_reading_(\d{4}_\d{2})/g)].map((m2) => m2[1]),
+    )].sort();
+    return { partitions, planText };
+  }
 }

@@ -81,6 +81,9 @@ import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity'
 import { AssistantUsage } from '../assistant/assistant-usage.entity';
 import { AssistantProposal } from '../assistant/assistant-proposal.entity';
 import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
+import { ArtifactProposal } from '../proposal/entities/artifact-proposal.entity';
+import { ReplayRun } from '../proposal/entities/replay-run.entity';
+import { ProposalRuleEnablement } from '../proposal/entities/proposal-rule-enablement.entity';
 import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
@@ -179,6 +182,9 @@ export const ENTITIES = [
   AssistantUsage,
   AssistantProposal,
   RecEvidenceBundle,
+  ArtifactProposal,
+  ReplayRun,
+  ProposalRuleEnablement,
   ...FORECAST_ENTITIES,
 ];
 
