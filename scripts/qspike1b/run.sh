@@ -25,6 +25,18 @@ Q=$(awk '{ if ($1 == "max") print 0; else printf "%d", $1 / $2 }' /sys/fs/cgroup
 OVER=$((Q * 3))   # QSPIKE1's suspected ratio: 24 default threads on an 8-CPU quota
 say quota_cpus $Q oversubscribed_threads $OVER
 
+# Both binaries must load before any run counts. The first deploy lost every run to a
+# missing shared library (exit 127) and the cause was invisible; this makes it a line.
+for B in isa generic; do
+  if ! /opt/$B/llama-cli --version > /tmp/v.$B 2>&1; then
+    say preflight_failed $B; sed "s/^/QSPIKE1b ldd $B /" <<LDD
+$(ldd /opt/$B/llama-cli 2>&1)
+LDD
+    sed "s/^/QSPIKE1b preflight $B /" /tmp/v.$B; exit 1
+  fi
+  say preflight_ok $B "$(head -1 /tmp/v.$B)"
+done
+
 run() { # build threads label
   B=$1; T=$2; L=$3; OUT=/tmp/$L.out; ERR=/tmp/$L.err
   say run_begin $L build=$B threads=$T $(date -u +%T)
@@ -37,6 +49,7 @@ run() { # build threads label
   kill $P 2>/dev/null
   say run_end $L rc=$RC wall_s=$(( $(date +%s) - S )) output_bytes=$(wc -c < $OUT)
   [ $RC -eq 124 ] && say timeout $L after ${TIMEOUT_S}s
+  [ $RC -ne 0 ] && [ $RC -ne 124 ] && tail -n 20 $ERR | sed "s/^/QSPIKE1b stderr $L /"
   grep -E 'load time|prompt eval time|eval time|total time' $ERR | sed "s/^/QSPIKE1b timing $L /"
   grep -E 'Maximum resident set size' $ERR | sed "s/^\s*/QSPIKE1b rss $L /"
   grep -m1 -E 'system_info' $ERR | sed "s/^/QSPIKE1b $L /"

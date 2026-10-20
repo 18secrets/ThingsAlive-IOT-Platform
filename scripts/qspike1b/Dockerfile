@@ -20,7 +20,7 @@ RUN cmake -S /src -B /build-isa -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF \
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl time coreutils && rm -rf /var/lib/apt/lists/*
+      ca-certificates curl time coreutils libgomp1 && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build-generic/bin/llama-cli /opt/generic/llama-cli
 COPY --from=build /build-isa/bin/llama-cli /opt/isa/llama-cli
 # Qwen3-4B Q4_K_M, the 4B QSPIKE1 fell back to. QSPIKE1's exact file was never pushed, so
