@@ -56,7 +56,7 @@ Absent:
 - **No 3-D position.** Anchors are 2-D percentages only.
 - **No `geometry_version`.** QUPGRADE1 used "a different `asset_key`" as the geometry
   change, because the column did not exist.
-- **No `twin_3d` widget type**, and no producer for one.
+- **No `twin_model` widget type**, and no producer for one.
 - **The schematic does not move `needs_recheck` anchors to the tray** — it draws them where
   they were. D39 states the rule for 3-D anchors; this task applies it there. The schematic
   is question 6.
@@ -82,7 +82,7 @@ tier to the key rather than adding parallel tables:
   model of the version it was written for (`template_version`). An anchor on a model whose
   upload is not confirmed is refused. A tenant anchor marked `needs_recheck` is exempt —
   it is in the tray precisely because it may not fit the geometry any more.
-- `twin_3d` added to the three layout `widget_type` CHECKs.
+- `twin_model` added to the three layout `widget_type` CHECKs.
 
 Parallel tables were the alternative. They would add a class-referencing table the
 inventory must classify and a second copy path doing the same thing — the drift QGRANT0
@@ -141,9 +141,11 @@ net as the schematic's. **Publishing is not gated on having a model** (D39).
   tenant-placed model anchor is marked `needs_recheck`. The preview reports
   `modelAnchors: { added, removed, keptCustom, needsRecheck }` beside `anchors`.
 
-## 4. The page — `twin_3d`
+## 4. The page — `twin_model`
 
-A widget type (`binds: 'none'`, equipment pages). Producer: the class model + the
+A widget type (`binds: 'none'`, equipment pages). Named without a digit:
+`test/page-layout.spec.ts` reads the CHECK with `[a-z_]+`, and `twin_3d` would be invisible
+to it — a drift the test exists to catch, reported as one. Producer: the class model + the
 tenant's model anchors; readiness via coverage; values via the bucketed read the
 schematic already uses — **one read for both**.
 
@@ -215,7 +217,7 @@ New spec `test/twin-model.spec.ts`, added to `test:db`. Storage faked exactly as
 18. Two whole-set PUTs together: both fulfilled, the stored set is exactly one of them.
 
 **Page**
-19. `twin_3d` renders per machine: signed URL, geometry version, markers with readiness,
+19. `twin_model` renders per machine: signed URL, geometry version, markers with readiness,
     tray with `needsRecheck`.
 20. Each unfilled state: `no_model`, `upload_pending`, `assets_unavailable`.
 
