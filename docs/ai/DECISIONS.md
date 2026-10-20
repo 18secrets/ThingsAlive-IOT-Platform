@@ -345,16 +345,18 @@ reads — is kept whole, because nothing moves out of the database.
 
 Why: Railway's standard Postgres image (`ghcr.io/railwayapp-templates/postgres-ssl:18`)
 does not carry pgvector, so getting it means swapping the image of the live database, and a
-tenant's library today is hundreds of entries. Brute force over that is milliseconds
-(measured in `docs/ai/measurements/QEMB1.md`); an index would be bought with the riskiest
-infrastructure change available, for no gain.
+tenant's library today is hundreds of entries. Brute force is linear in the vectors one
+account holds: measured at 71 ms median for 1,000 and 576 ms for 10,000, on a loaded laptop
+(`docs/ai/measurements/QEMB1.md`). At today's size that is tens of milliseconds; an index
+now would be bought with the riskiest infrastructure change available, for no gain yet.
 
 Approved at the same time, by name: **`@huggingface/transformers`** as a runtime dependency,
 pinned to an exact version, for running `bge-small-en-v1.5` as ONNX in the api (D19). The
 model files are baked into the image at build time; nothing is downloaded at runtime.
 
 Revisited on measurement, not on a date. QEMB1's recommendation for the trigger: one tenant
-past ~20k vectors, or search p95 past 250 ms on Development. Moving is one migration that
+past ~3,000 vectors, or search p95 past 250 ms on Development. The measured curve puts the
+first at roughly the second. Moving is one migration that
 adds a `vector` column and an HNSW index; the embedding profile and the stored values do not
 change, so it is not a reindex.
 

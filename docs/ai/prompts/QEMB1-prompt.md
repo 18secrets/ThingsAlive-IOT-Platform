@@ -31,10 +31,10 @@ share no word, and a keyword search finds neither from the other.
 That needs vectors, and the register put them behind pgvector, which Railway's standard
 Postgres image does not carry. Changing the image of the database every service uses is the
 riskiest change available on Development, and nothing about the corpus today needs an
-index: a tenant's library is hundreds of entries, not millions. **So the vectors go in a
-plain `real[]` column and are compared exhaustively** (D47). The measured latency (§9) says
-when that stops being true; until then, pgvector would be an image change bought for no
-gain.
+index yet: a tenant's library is hundreds of entries, not millions. **So the vectors go in a
+plain `real[]` column and are compared exhaustively** (D47). The cost is linear in one
+account's vectors, and the measured latency (§9) says when that stops being acceptable;
+until then, pgvector would be an image change bought for no gain.
 
 ### 0.1 What exists, and what does not, verified on `main` (`6135d46`)
 
@@ -245,7 +245,8 @@ database it already lives in, and the measurement says when it is worth an index
    searches.
 6. **Return the similarity score?** *Recommendation:* no, rank only (G07; contract §4).
 7. **When to move to pgvector?** *Recommendation, not a decision:* when one tenant's vectors
-   pass ~20k, or search p95 passes 250 ms on Development. Then one migration adds a `vector`
+   pass ~3,000, or search p95 passes 250 ms on Development. (Drafted as ~20k; the measurement
+   in §9, 576 ms median at 10k, moved it.) Then one migration adds a `vector`
    column and an HNSW index; the profile and the vectors do not change.
 8. **Capabilities.** *Recommendation:* search on `prediction.read`, the gate the
    recommendation evidence uses; reindex on `prediction.run`, because it writes.

@@ -82,6 +82,7 @@ import { AssistantUsage } from '../assistant/assistant-usage.entity';
 import { AssistantProposal } from '../assistant/assistant-proposal.entity';
 import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
 import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
+import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -180,6 +181,7 @@ export const ENTITIES = [
   AssistantProposal,
   RecEvidenceBundle,
   ...FORECAST_ENTITIES,
+  ...EMBEDDING_ENTITIES,
 ];
 
 export interface DataSourceChoices {
