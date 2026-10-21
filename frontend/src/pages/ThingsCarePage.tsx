@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Bell, Gauge, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
@@ -30,7 +31,8 @@ function worstOf(predictions: Prediction[]): Prediction | null {
 }
 
 export const ThingsCarePage: React.FC = () => {
-  usePageHeader({ title: 'ThingsCare', subtitle: 'Deterministic Scenario Risk' });
+  const { t } = useTranslation('care');
+  usePageHeader({ title: 'ThingsCare', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
@@ -63,7 +65,7 @@ export const ThingsCarePage: React.FC = () => {
         }));
         if (live) setPredictionsByEquipment(new Map(entries));
       })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load equipment.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadEquipment')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, []);
@@ -113,12 +115,12 @@ export const ThingsCarePage: React.FC = () => {
     <div id="things-care-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Deterministic scoring</span>
-          <span title="Risk score is rule-based (Tier 1): 70% worst signal + 30% mean, each vs. baseline. Not a fabricated probability, and there is no remaining-useful-life estimate.">
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('hero.eyebrow')}</span>
+          <span title={t('hero.tooltip')}>
             <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
-        <h2 className="text-xl font-bold">ThingsCare: Scenario Risk</h2>
+        <h2 className="text-xl font-bold">{t('hero.title')}</h2>
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
@@ -134,25 +136,25 @@ export const ThingsCarePage: React.FC = () => {
       />
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-slate-500">{t('common.loading')}</p>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <KpiTile label="Machines in scope" value={String(rows.length)} />
-            <KpiTile label="Mean risk score" value={meanRisk != null ? meanRisk.toFixed(0) : '—'} tone="emerald" />
-            <KpiTile label="High / critical" value={String(highOrCritical)} tone="rose" />
-            <KpiTile label="No active scenario" value={String(rows.length - withPrediction.length)} />
+            <KpiTile label={t('kpi.inScope')} value={String(rows.length)} />
+            <KpiTile label={t('kpi.meanRisk')} value={meanRisk != null ? meanRisk.toFixed(0) : '—'} tone="emerald" />
+            <KpiTile label={t('kpi.highCritical')} value={String(highOrCritical)} tone="rose" />
+            <KpiTile label={t('kpi.noActive')} value={String(rows.length - withPrediction.length)} />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900 dark:text-white text-base">Machines</h3>
-              <span className="text-sm text-slate-400 dark:text-slate-500">{rows.length} machines</span>
+              <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
+              <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
             </div>
 
             {pageItems.length === 0 ? (
               <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                No machines match this filter.
+                {t('list.noMatch')}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -170,13 +172,13 @@ export const ThingsCarePage: React.FC = () => {
             )}
 
             <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-              <span>Page {pageSafe} of {pageCount}</span>
+              <span>{t('common.pageOf', { page: pageSafe, total: pageCount })}</span>
               <div className="flex items-center gap-2">
                 <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  <ChevronLeft className="w-4 h-4" /> Prev
+                  <ChevronLeft className="w-4 h-4" /> {t('common.prev')}
                 </button>
                 <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  Next <ChevronRight className="w-4 h-4" />
+                  {t('common.next')} <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -200,17 +202,18 @@ const KpiTile: React.FC<{ label: string; value: string; tone?: 'emerald' | 'rose
 const ThingsCareCard: React.FC<{
   name: string; externalId: string; prediction: Prediction | null; connection: 'online' | 'offline' | null; onOpen: () => void;
 }> = ({ name, externalId, prediction, connection, onOpen }) => {
+  const { t } = useTranslation('care');
   const style = prediction ? SEVERITY_STYLE[prediction.severity] : NO_PREDICTION_STYLE;
   return (
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">
-        <span title="Risk score: 0–100, rule-based">
+        <span title={t('card.gaugeTitle')}>
           <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-              {prediction ? prediction.severity : 'no scenario'}
+              {prediction ? t(`severity.${prediction.severity}`, { defaultValue: prediction.severity }) : t('card.noScenario')}
             </span>
             <ConnectionBadge state={connection} />
           </div>
@@ -220,16 +223,16 @@ const ThingsCareCard: React.FC<{
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Chip icon={Gauge} tone={prediction && prediction.riskScore >= 60 ? 'rose' : 'slate'} title="Rule-based composite risk score">
-            {prediction ? `${prediction.riskScore} risk` : '—'}
+          <Chip icon={Gauge} tone={prediction && prediction.riskScore >= 60 ? 'rose' : 'slate'} title={t('card.riskTitle')}>
+            {prediction ? t('card.risk', { score: prediction.riskScore }) : '—'}
           </Chip>
-          <Chip title="How much of the picture was available">{prediction ? prediction.confidence : 'n/a'}</Chip>
-          <Chip icon={Bell} tone={prediction && prediction.abnormalCount > 0 ? 'amber' : 'slate'} title="Signals outside baseline">
+          <Chip title={t('card.confidenceTitle')}>{prediction ? t(`confidence.${prediction.confidence}`, { defaultValue: prediction.confidence }) : t('card.na')}</Chip>
+          <Chip icon={Bell} tone={prediction && prediction.abnormalCount > 0 ? 'amber' : 'slate'} title={t('card.abnormalTitle')}>
             {prediction ? prediction.abnormalCount : 0}
           </Chip>
         </div>
         <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
-          Details <ChevronRight className="w-3.5 h-3.5" />
+          {t('common.details')} <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </div>
     </button>

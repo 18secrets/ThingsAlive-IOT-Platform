@@ -1,0 +1,146 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "done": "Done",
+    "saveChanges": "Save Changes",
+    "saving": "Saving…",
+    "eg": "e.g. {{example}}",
+    "notAvailableYet": "Not available yet",
+    "superAdmin": "Super Admin",
+    "awaitingLogin": "Awaiting Login",
+    "reinstate": "Reinstate",
+    "suspend": "Suspend"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "userStatus": {
+    "invited": "Invited",
+    "active": "Active",
+    "suspended": "Suspended"
+  },
+  "col": {
+    "name": "Name",
+    "username": "Username",
+    "client": "Client",
+    "role": "Role",
+    "status": "Status",
+    "actions": "Actions",
+    "email": "Email"
+  },
+  "notAvailable": {
+    "users": "Managing another account's users is the account's own super admin's call — there is no Master Admin route for it today.",
+    "roles": "Managing another account's roles is the account's own super admin's call — there is no Master Admin route for it today."
+  },
+  "hub": {
+    "platformUsers": "Platform Users"
+  },
+  "allClientUsers": {
+    "searchPlaceholder": "Search Name, Username, or Client...",
+    "allClients": "All Clients",
+    "unknownClient": "Unknown client",
+    "unknownRole": "Unknown role",
+    "manageTitle": "Manage users & roles for {{client}}",
+    "thisClient": "this client",
+    "manage": "Manage",
+    "empty": "No client users found."
+  },
+  "clientUsers": {
+    "actionFailed": "That action failed.",
+    "searchPlaceholder": "Search Name or Email...",
+    "lastCeoManager": "This account's only ceo-manager — move someone else into this role first",
+    "editSites": "Edit which sites this person can see",
+    "editMachines": "Edit which machines this person can see",
+    "resend": "Resend invitation. The old token stops working.",
+    "deleteConfirm": "Delete {{name}}? Only somebody who never signed in can be deleted.",
+    "deleteTitle": "Delete (never signed in)",
+    "suspendPrompt": "Why is {{name}} being suspended?",
+    "cantSuspendSuperAdmin": "The Super Admin can't be suspended",
+    "empty": "No users found."
+  },
+  "invite": {
+    "title": "Invite User",
+    "sent": "Invitation Sent",
+    "failed": "Could not invite this person.",
+    "canAccept": "<b>{{name}}</b> can accept with this token.",
+    "token": "Invitation Token",
+    "copyToken": "Copy token",
+    "expires": "Expires {{date}}. There is no password to hand over — they set their own via the accept-invitation link with this token.",
+    "fullName": "Full Name",
+    "emailHint": "This is how they'll sign in — there is no separate username.",
+    "phone": "Phone",
+    "inviting": "Inviting…",
+    "send": "Send Invitation"
+  },
+  "access": {
+    "failed": "Could not update access.",
+    "title": "{{name}}'s access",
+    "tenantInfo": "The \"{{role}}\" role sees the whole account — site/machine access does not apply to it.",
+    "emptyPlantWarning": "Leaving this empty means {{name}} sees no sites and no machines — not everything.",
+    "sites": "Sites",
+    "noSitesSelected": "No sites selected",
+    "machinesFollowSite": "Machines follow the site they're on automatically — no need to pick them separately.",
+    "emptyEquipmentWarning": "Leaving this empty means {{name}} sees no machines — not everything.",
+    "machines": "Machines",
+    "noMachinesSelected": "No machines selected",
+    "save": "Save access"
+  },
+  "roles": {
+    "adminTab": "Administration (Plants, Devices, Equipment)",
+    "intro": "A role decides which pages its users can open, and what its users can do — two different questions, both bundled into every custom role.",
+    "add": "Add Role",
+    "edit": "Edit Role",
+    "create": "Create Role",
+    "delete": "Delete Role",
+    "builtIn": "One of the roles every account starts with",
+    "builtInNoDelete": "One of the roles every account starts with — can't be deleted",
+    "hasHolders": "Move its holders to another role first",
+    "editTitle": "Edit name and pages",
+    "noPages": "No pages granted",
+    "usersAssigned_one": "{{count}} user assigned",
+    "usersAssigned_other": "{{count}} users assigned",
+    "empty": "No roles found.",
+    "needPage": "Grant at least one page to this role.",
+    "needBase": "Pick a role to base this one on.",
+    "saveFailed": "Could not save the role.",
+    "createFailed": "Could not create the role.",
+    "name": "Role Name",
+    "namePlaceholder": "e.g. Plant Manager",
+    "basedOn": "Based on",
+    "basedOnHint": "What this role can do (not just which pages) starts as a copy of the role you pick here.",
+    "pages": "Pages this role can open"
+  },
+  "platformRole": {
+    "Operational": "Operational",
+    "Executive": "Executive",
+    "Support": "Support",
+    "Admin": "Admin",
+    "Super Admin": "Super Admin"
+  },
+  "platformUsers": {
+    "usernameTaken": "That username is already taken by another user.",
+    "employeeIdTaken": "That Employee ID is already in use.",
+    "invalidEmail": "Please enter a valid email address.",
+    "edit": "Edit User",
+    "add": "Add New User",
+    "create": "Create User",
+    "delete": "Delete User",
+    "id": "ID",
+    "employeeId": "Employee ID",
+    "emailId": "Email ID",
+    "phoneNo": "Phone No",
+    "action": "Action",
+    "totalUsers": "Total Users",
+    "activeUsers": "Active Users",
+    "adminUsers": "Admin Users",
+    "searchPlaceholder": "Search User Details",
+    "selectRole": "Select Role",
+    "bulkUploadTitle": "Bulk user upload isn't wired to a backend yet",
+    "bulkUpload": "Upload Bulk Users",
+    "exportCsv": "Export CSV",
+    "deactivate": "Deactivate user",
+    "activate": "Activate user"
+  }
+}

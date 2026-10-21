@@ -9,12 +9,11 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { DeviceItem } from '../../types';
 
-const STATUS_OPTIONS = [
-  { label: 'Online', value: 'Online' },
-  { label: 'Offline', value: 'Offline' },
-];
+// Labels are status.<value> in the devices namespace; the values stay as the data has them.
+const STATUS_VALUES = ['Online', 'Offline'];
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value: n }));
 
@@ -29,6 +28,8 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
   onNavigateToSetup,
   onDeleteDevice,
 }) => {
+  const { t } = useTranslation('devices');
+  const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -69,7 +70,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                 setSearchTerm(value);
                 setCurrentPage(1);
               }}
-              placeholder="Search Devices..."
+              placeholder={t('list.searchPlaceholder')}
               size="sm"
               className="w-full pl-9! pr-4"
             />
@@ -83,7 +84,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
               setSelectedStatus(value ?? 'All');
               setCurrentPage(1);
             }}
-            placeholder="Select Status (All)"
+            placeholder={t('list.statusPlaceholder')}
             searchable={false}
             cleanable={selectedStatus !== 'All'}
             size="sm"
@@ -98,7 +99,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
             className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Device</span>
+            <span>{t('list.add')}</span>
           </button>
         </div>
       </div>
@@ -109,12 +110,12 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-4 text-center">ID</th>
-                <th className="py-3 px-4">Device Name</th>
-                <th className="py-3 px-4">IMEI Number</th>
-                <th className="py-3 px-4">Client</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className="py-3 px-4 text-center">{t('list.col.id')}</th>
+                <th className="py-3 px-4">{t('list.col.name')}</th>
+                <th className="py-3 px-4">{t('list.col.imei')}</th>
+                <th className="py-3 px-4">{t('translation:common.client')}</th>
+                <th className="py-3 px-4">{t('list.col.status')}</th>
+                <th className="py-3 px-4 text-center">{t('pool.col.action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
@@ -134,7 +135,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                       {d.imei}
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                      {d.clientName || <span className="text-slate-400 italic">Unassigned</span>}
+                      {d.clientName || <span className="text-slate-400 italic">{t('pool.unassigned')}</span>}
                     </td>
                     <td className="py-3 px-4">
                       <span
@@ -145,7 +146,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                         }`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${d.status === 'Online' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                        {d.status}
+                        {t(`status.${d.status}`, { defaultValue: d.status })}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -153,14 +154,14 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                         <button
                           onClick={onNavigateToSetup}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title="Edit Device Configuration"
+                          title={t('list.editHint')}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => onDeleteDevice(d.id)}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer"
-                          title="Decommission Device"
+                          title={t('list.deleteHint')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -171,7 +172,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400 font-sans">
-                    No devices found matching criteria.
+                    {t('pool.empty')}
                   </td>
                 </tr>
               )}
@@ -182,12 +183,12 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
         {/* Pagination */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
           <div>
-            Total Rows: <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+            {t('pool.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
+              <span>{t('list.rowsPerPage')}</span>
               <SelectPicker
                 data={ROWS_PER_PAGE_OPTIONS}
                 value={rowsPerPage}
@@ -204,6 +205,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
             <div className="flex items-center gap-1">
               <button
                 disabled={currentPage <= 1}
+                aria-label={t('list.previousPage')}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
@@ -226,6 +228,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
 
               <button
                 disabled={currentPage >= totalPages}
+                aria-label={t('list.nextPage')}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >

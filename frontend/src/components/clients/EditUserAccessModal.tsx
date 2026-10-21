@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, AlertCircle, Info } from 'lucide-react';
 import { CheckPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentProfile, Plant, SetUserAccessInput, TenantRole, TenantUser,
 } from '../../lib/api';
@@ -20,6 +21,7 @@ const equipmentKey = (sourceSystem: string, externalId: string) => `${sourceSyst
 export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
   isOpen, onClose, user, roles, plants, equipment, onSetAccess,
 }) => {
+  const { t } = useTranslation('users');
   const [selectedPlantIds, setSelectedPlantIds] = useState<string[]>([]);
   const [selectedEquipmentKeys, setSelectedEquipmentKeys] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update access.');
+      setError(err instanceof ApiError ? err.message : t('access.failed'));
     } finally {
       setBusy(false);
     }
@@ -70,7 +72,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 max-h-[85vh]">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 shrink-0">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{user.fullName}'s access</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('access.title', { name: user.fullName })}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
             <X className="w-5 h-5" />
           </button>
@@ -80,7 +82,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
           {scopeShape === 'tenant' && (
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
               <Info className="w-3.5 h-3.5 shrink-0" />
-              <span>The "{role?.name}" role sees the whole account — site/machine access does not apply to it.</span>
+              <span>{t('access.tenantInfo', { role: role?.name })}</span>
             </div>
           )}
 
@@ -88,20 +90,20 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
             <>
               <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>Leaving this empty means {user.fullName} sees no sites and no machines — not everything.</span>
+                <span>{t('access.emptyPlantWarning', { name: user.fullName })}</span>
               </div>
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Sites</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">{t('access.sites')}</label>
                 <CheckPicker
                   data={plantOptions}
                   value={selectedPlantIds}
                   onChange={(value) => setSelectedPlantIds(value ?? [])}
-                  placeholder="No sites selected"
+                  placeholder={t('access.noSitesSelected')}
                   block
                   searchable={plantOptions.length > 6}
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Machines follow the site they're on automatically — no need to pick them separately.
+                  {t('access.machinesFollowSite')}
                 </p>
               </div>
             </>
@@ -111,15 +113,15 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
             <>
               <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>Leaving this empty means {user.fullName} sees no machines — not everything.</span>
+                <span>{t('access.emptyEquipmentWarning', { name: user.fullName })}</span>
               </div>
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Machines</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">{t('access.machines')}</label>
                 <CheckPicker
                   data={equipmentOptions}
                   value={selectedEquipmentKeys}
                   onChange={(value) => setSelectedEquipmentKeys(value ?? [])}
-                  placeholder="No machines selected"
+                  placeholder={t('access.noMachinesSelected')}
                   block
                   searchable={equipmentOptions.length > 6}
                 />
@@ -140,7 +142,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium"
             >
-              {scopeShape === 'tenant' ? 'Close' : 'Cancel'}
+              {scopeShape === 'tenant' ? t('common.close') : t('common.cancel')}
             </button>
             {scopeShape !== 'tenant' && (
               <button
@@ -149,7 +151,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
                 className="px-5 py-2 rounded-lg bg-[#0077b6] hover:bg-[#023e8a] text-white font-medium shadow-xs flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4" />
-                {busy ? 'Saving…' : 'Save access'}
+                {busy ? t('common.saving') : t('access.save')}
               </button>
             )}
           </div>

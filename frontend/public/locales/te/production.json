@@ -1,0 +1,122 @@
+{
+  "page": {
+    "subtitle": "లభ్యత & వినియోగం",
+    "detailSubtitle": "ఉత్పత్తి పర్యవేక్షణ వివరాలు",
+    "machineNotFound": "యంత్రం కనుగొనబడలేదు"
+  },
+  "hero": {
+    "lastDays_one": "గత {{count}} రోజు",
+    "lastDays_other": "గత {{count}} రోజులు",
+    "tooltip": "లభ్యత అంటే షెడ్యూల్ చేసిన షిఫ్ట్ గంటలతో పోలిస్తే నడిచిన సమయం. OEE దీన్ని పనితీరు (బ్రేక్‌డౌన్‌లలో పోయిన సమయం), నాణ్యత (నామమాత్ర విలువతో పోలిస్తే కాలిన ఇంధనం)తో గుణిస్తుంది, ప్రతి క్యాలెండర్ వారానికి.",
+    "title": "ఉత్పత్తి పర్యవేక్షణ & లభ్యత"
+  },
+  "common": {
+    "loading": "లోడ్ అవుతోంది…",
+    "prev": "మునుపటి",
+    "next": "తదుపరి",
+    "pageOf": "పేజీ {{page}} / {{total}}",
+    "details": "వివరాలు",
+    "createWorkOrder": "పని ఆర్డర్ సృష్టించండి",
+    "viewEquipmentPage": "యంత్రం పేజీ చూడండి",
+    "notAvailable": "అందుబాటులో లేదు",
+    "oeeNotAvailable": "OEE అందుబాటులో లేదు",
+    "uptimeTitle": "నడిచిన గంటలు",
+    "downtimeTitle": "ఆగిన గంటలు",
+    "hoursUp": "{{hours}} గం. నడిచింది",
+    "hoursDown": "{{hours}} గం. ఆగింది"
+  },
+  "kpi": {
+    "machinesMeasured": "కొలిచిన యంత్రాలు",
+    "fleetAvailability": "ఫ్లీట్ లభ్యత",
+    "uptime": "నడిచిన సమయం",
+    "downtime": "ఆగిన సమయం",
+    "siteOee_one": "సైట్ OEE · ఈ వారం ({{count}} యంత్రం)",
+    "siteOee_other": "సైట్ OEE · ఈ వారం ({{count}} యంత్రాలు)"
+  },
+  "list": {
+    "heading": "యంత్రాలు",
+    "count_one": "{{count}} యంత్రం",
+    "count_other": "{{count}} యంత్రాలు",
+    "empty": "చూపించడానికి యంత్రాలు లేవు.",
+    "excluded": "పై మొత్తాల నుంచి మినహాయించినవి: షిఫ్ట్ షెడ్యూల్ లేనివి {{noShift}}, రీడింగ్‌లు లేనివి {{noReadings}}."
+  },
+  "card": {
+    "oeeTitle": "ఈ క్యాలెండర్ వారం OEE",
+    "oeeWeek": "OEE {{value}}% · ఈ వారం"
+  },
+  "reason": {
+    "no_shift_schedule": "షిఫ్ట్ షెడ్యూల్ సెట్ చేయలేదు",
+    "no_readings": "ఈ వ్యవధిలో రీడింగ్‌లు లేవు"
+  },
+  "detailReason": {
+    "no_shift_schedule": "ఈ యంత్రానికి షిఫ్ట్ షెడ్యూల్ సెట్ చేయలేదు",
+    "no_readings": "ఈ వ్యవధిలో రీడింగ్‌లు లేవు"
+  },
+  "oeeReason": {
+    "no_shift_schedule": "ఈ యంత్రానికి షిఫ్ట్ షెడ్యూల్ లేదు",
+    "no_readings": "ఈ వ్యవధిలో రీడింగ్‌లు లేవు",
+    "parameter_not_set": "అవసరమైన పారామీటర్ సెట్ చేయలేదు",
+    "insufficient_coverage": "అంచనా వేయడానికి సరిపడా రీడింగ్‌లు లేవు",
+    "unbound": "అవసరమైన సిగ్నల్ బైండ్ చేయలేదు",
+    "unit_mismatch": "ఇంధన యూనిట్లు నామమాత్ర విలువతో సరిపోలడం లేదు",
+    "stale": "రీడింగ్‌లు పాతవి",
+    "undefined_result": "కొలవడానికి అందుబాటులో సమయం లేదు",
+    "not_available": "అందుబాటులో లేదు"
+  },
+  "source": {
+    "equipment": "ఈ యంత్రం",
+    "class": "దాని తరగతి",
+    "site": "దాని సైట్",
+    "client": "ఖాతా",
+    "oem": "OEM విలువ"
+  },
+  "oee": {
+    "title": "మొత్తం యంత్ర ప్రభావశీలత",
+    "formula": "లభ్యత × పనితీరు × నాణ్యత · UTC {{window}}",
+    "windowUnit": {
+      "day": "రోజు",
+      "week": "వారం",
+      "month": "నెల"
+    },
+    "window": {
+      "day": "ఈ రోజు",
+      "week": "ఈ వారం",
+      "month": "ఈ నెల"
+    },
+    "availability": "లభ్యత",
+    "performance": "పనితీరు",
+    "quality": "నాణ్యత",
+    "availableOfScheduled": "షెడ్యూల్ చేసిన {{scheduled}} నిమిషాల్లో {{available}}",
+    "scheduled": "షెడ్యూల్ చేసిన {{scheduled}} నిమిషాలు",
+    "breakdowns_one": "{{count}} బ్రేక్‌డౌన్ · {{minutes}} నిమి",
+    "breakdowns_other": "{{count}} బ్రేక్‌డౌన్‌లు · {{minutes}} నిమి",
+    "oneOngoing": "ఒకటి కొనసాగుతోంది",
+    "idleThreshold": "{{minutes}} నిమిషాలకు మించి ఖాళీగా ఉంటే లెక్కిస్తారు",
+    "idleThresholdSetBy": "{{minutes}} నిమిషాలకు మించి ఖాళీగా ఉంటే లెక్కిస్తారు, సెట్ చేసింది: {{source}}",
+    "burnedVsNominal": "{{actual}} {{unit}} కాలింది, నామమాత్రం {{nominal}}",
+    "overNominal": "నామమాత్రం కంటే {{litres}} L ఎక్కువ",
+    "nominalSetBy": "నామమాత్రం సెట్ చేసింది: {{source}}",
+    "breakdownsInWindow": "ఈ వ్యవధిలో బ్రేక్‌డౌన్‌లు",
+    "noneRecorded": "ఏదీ నమోదు కాలేదు.",
+    "ongoing": "కొనసాగుతోంది"
+  },
+  "detail": {
+    "availabilityNotAvailable": "లభ్యత సమాచారం అందుబాటులో లేదు"
+  },
+  "shifts": {
+    "title": "షిఫ్ట్ చరిత్ర",
+    "empty": "ఈ వ్యవధిలో నమోదైన షిఫ్ట్‌లు లేవు.",
+    "col": {
+      "date": "తేదీ",
+      "shift": "షిఫ్ట్",
+      "productive": "ఉత్పాదక సమయం",
+      "idle": "ఖాళీ",
+      "utilization": "వినియోగం"
+    }
+  },
+  "errors": {
+    "loadAvailability": "లభ్యతను లోడ్ చేయలేకపోయాం.",
+    "loadOee": "OEE లోడ్ చేయలేకపోయాం.",
+    "loadMachine": "ఈ యంత్రాన్ని లోడ్ చేయలేకపోయాం."
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare, History } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
 import { Modal } from '../common/Modal';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
@@ -35,6 +36,7 @@ function representativePerSlug(rows: NamedFormula[]): NamedFormula[] {
 export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   formulas, error, onCreateFormula, onUpdateFormula, onPublishFormula,
 }) => {
+  const { t } = useTranslation('catalog');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFormula, setEditingFormula] = useState<NamedFormula | null>(null);
@@ -60,7 +62,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
     try {
       await onPublishFormula(f.slug, f.version);
     } catch (err) {
-      setPublishError((prev) => ({ ...prev, [f.slug]: err instanceof ApiError ? err.message : 'Could not publish.' }));
+      setPublishError((prev) => ({ ...prev, [f.slug]: err instanceof ApiError ? err.message : t('formulas.publishFailed') }));
     } finally {
       setBusySlug(null);
     }
@@ -71,10 +73,10 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder="Search Name, Slug, Category or Description..." className="w-full pl-9!" />
+          <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder={t('formulas.searchPlaceholder')} className="w-full pl-9!" />
         </div>
         <SelectPicker
-          data={[{ label: 'All statuses', value: 'all' }, { label: 'Draft', value: 'draft' }, { label: 'Published', value: 'published' }]}
+          data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' }, { label: t('common.statusLabel.published'), value: 'published' }]}
           value={statusFilter}
           onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
           searchable={false}
@@ -87,7 +89,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           className="px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>New Formula</span>
+          <span>{t('formulas.newFormula')}</span>
         </button>
       </div>
 
@@ -110,14 +112,14 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                   <button
                     onClick={() => setHistoryOf(f)}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Version history"
+                    title={t('formulas.versionHistory')}
                   >
                     <History className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => { setEditingFormula(f); setIsModalOpen(true); }}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={f.status === 'published' ? 'View (published, read-only)' : 'Edit (working draft)'}
+                    title={f.status === 'published' ? t('formulas.viewPublished') : t('classes.editDraft')}
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -133,11 +135,11 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
               <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0" />
               <span className="truncate">{f.expression}</span>
             </div>
-            <p className="text-[11px] text-slate-400">{f.inputs.length} role{f.inputs.length === 1 ? '' : 's'} · {f.resultDimension ?? (f.resultUnit ? `unit: ${f.resultUnit}` : 'dimension inferred')}</p>
+            <p className="text-[11px] text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
-                {f.status}
+                {t(`common.status.${f.status}`, { defaultValue: f.status })}
               </span>
               {f.status === 'draft' && (
                 <button
@@ -146,14 +148,14 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>Publish</span>
+                  <span>{t('common.publish')}</span>
                 </button>
               )}
             </div>
             {publishError[f.slug] && (
               <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
-                <span>Not published: {publishError[f.slug]}</span>
+                <span>{t('formulas.notPublished', { error: publishError[f.slug] })}</span>
               </div>
             )}
           </div>
@@ -162,7 +164,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
         {filtered.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No named formulas found.</span>
+            <span>{t('formulas.noneFound')}</span>
           </div>
         )}
       </div>
@@ -178,7 +180,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
       <Modal
         isOpen={!!historyOf}
         onClose={() => setHistoryOf(null)}
-        title="Version history"
+        title={t('formulas.versionHistory')}
         subtitle={historyOf ? `${historyOf.name} · #${historyOf.slug}` : undefined}
         maxWidth="max-w-2xl"
       >
@@ -191,6 +193,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
 /** Every version of one formula, newest first. Published versions are immutable, so
  *  this is where an older expression a class may still be bound to can be read. */
 const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
+  const { t } = useTranslation('catalog');
   const [versions, setVersions] = useState<NamedFormula[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -198,12 +201,12 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
     let live = true;
     apiGetNamedFormulaVersions(slug)
       .then((v) => { if (live) setVersions(v); })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the version history.'); });
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('formulas.historyFailed')); });
     return () => { live = false; };
   }, [slug]);
 
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!versions) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!versions) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
 
   return (
     <ol className="space-y-2.5">
@@ -213,11 +216,11 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">v{v.version}</span>
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
-                {v.status}
+                {t(`common.status.${v.status}`, { defaultValue: v.status })}
               </span>
             </div>
             <span className="text-[11px] text-slate-400">
-              {v.publishedAt ? `Published ${new Date(v.publishedAt).toLocaleString()}` : `Last edited ${new Date(v.updatedAt).toLocaleString()}`}
+              {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString() }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString() })}
             </span>
           </div>
           {v.name !== versions[0].name && <p className="text-xs text-slate-600 dark:text-slate-300">{v.name}</p>}
@@ -226,13 +229,13 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
             <span className="break-all">{v.expression}</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            {v.inputs.length ? v.inputs.map((i) => `${i.role} (${i.dimension})`).join(', ') : 'No input roles'}
+            {v.inputs.length ? v.inputs.map((i) => `${i.role} (${i.dimension})`).join(', ') : t('formulas.noInputRoles')}
             {' · '}
-            {v.resultDimension ?? (v.resultUnit ? `unit: ${v.resultUnit}` : 'dimension inferred')}
+            {v.resultDimension ?? (v.resultUnit ? t('formulas.unit', { unit: v.resultUnit }) : t('formulas.dimensionInferred'))}
           </p>
         </li>
       ))}
-      {versions.length === 0 && <p className="text-sm text-slate-400">No versions recorded.</p>}
+      {versions.length === 0 && <p className="text-sm text-slate-400">{t('formulas.noVersions')}</p>}
     </ol>
   );
 };

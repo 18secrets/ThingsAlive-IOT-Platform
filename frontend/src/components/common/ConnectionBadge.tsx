@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Chip } from './Chip';
 
 /**
@@ -7,8 +8,9 @@ import { Chip } from './Chip';
  * with no device-health verdict at all — it matches neither Online nor Offline, so it
  * says "no link data" rather than being read as either.
  */
-export const ConnectionBadge: React.FC<{ state: 'online' | 'offline' | null }> = ({ state }) => (
-  state === 'online' ? <Chip tone="emerald" title="Its logger reported in the latest health window">Online</Chip>
-    : state === 'offline' ? <Chip tone="rose" title="Its logger went dark in the latest health window">Offline</Chip>
-      : <Chip tone="slate" title="No device-health verdict yet, so it matches neither Online nor Offline">No link data</Chip>
-);
+export const ConnectionBadge: React.FC<{ state: 'online' | 'offline' | null }> = ({ state }) => {
+  const { t } = useTranslation('shared');
+  return state === 'online' ? <Chip tone="emerald" title={t('connection.onlineHint')}>{t('connection.online')}</Chip>
+    : state === 'offline' ? <Chip tone="rose" title={t('connection.offlineHint')}>{t('connection.offline')}</Chip>
+      : <Chip tone="slate" title={t('connection.noDataHint')}>{t('connection.noData')}</Chip>;
+};

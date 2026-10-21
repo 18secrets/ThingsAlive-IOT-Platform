@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, Calendar, User, Pencil, History } from 'lucide-react';
 import { DatePicker, Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, ShieldEvidence, ShieldEvidenceInput, ShieldResult, ShieldStatus } from '../../lib/api';
 
 // Dates are picked as calendar days and sent as local midnight, so the day shown in the
@@ -11,9 +12,8 @@ function toDay(value: string | null): Date | null {
 
 const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
-export const STATUS_LABEL: Record<ShieldStatus, string> = {
-  action_required: 'Action required', overdue: 'Overdue', due_soon: 'Due soon', current: 'Current', not_recorded: 'Not recorded',
-};
+// Labels live in shield.json under status.* and result.*, read at render time so they
+// follow the language switch.
 
 const STATUS_STYLE: Record<ShieldStatus, string> = {
   current: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900',
@@ -31,8 +31,6 @@ const STATUS_TEXT: Record<ShieldStatus, string> = {
   not_recorded: 'text-slate-500 dark:text-slate-400',
 };
 
-const RESULT_LABEL: Record<ShieldResult, string> = { passed: 'Passed', attention: 'Attention', failed: 'Failed' };
-
 /**
  * One record. `status` is only passed for the record the category's status was read
  * from; older and corrected records show their result, not a status of their own.
@@ -42,6 +40,7 @@ export const EvidenceRecordCard: React.FC<{
   status?: ShieldStatus;
   onCorrect?: () => void;
 }> = ({ record, status, onCorrect }) => {
+  const { t } = useTranslation('shield');
   const corrected = record.supersededById !== null;
   const tone: ShieldStatus = status ?? (corrected ? 'not_recorded' : record.result === 'passed' ? 'current' : 'action_required');
   return (
@@ -49,17 +48,17 @@ export const EvidenceRecordCard: React.FC<{
       <div className="flex items-start justify-between gap-2">
         <h4 className={`font-semibold text-slate-900 dark:text-white text-base truncate ${corrected ? 'line-through' : ''}`}>{record.title}</h4>
         <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[tone]}`}>
-          {corrected ? 'Corrected' : status ? STATUS_LABEL[status] : RESULT_LABEL[record.result]}
+          {corrected ? t('record.corrected') : status ? t(`status.${status}`) : t(`result.${record.result}`)}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-        <span className="inline-flex items-center gap-1" title="When the check was performed"><History className="w-3.5 h-3.5" />{fmtDay(record.performedAt)}</span>
-        <span className="inline-flex items-center gap-1" title="Next check due"><Calendar className="w-3.5 h-3.5" />{record.dueAt ? `due ${fmtDay(record.dueAt)}` : 'one-off'}</span>
+        <span className="inline-flex items-center gap-1" title={t('record.performedTitle')}><History className="w-3.5 h-3.5" />{fmtDay(record.performedAt)}</span>
+        <span className="inline-flex items-center gap-1" title={t('record.dueTitle')}><Calendar className="w-3.5 h-3.5" />{record.dueAt ? t('record.due', { date: fmtDay(record.dueAt) }) : t('record.oneOff')}</span>
         {(record.ownerName || record.ownerUserId) && (
-          <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" />{record.ownerName ?? 'Account user'}</span>
+          <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" />{record.ownerName ?? t('record.accountUser')}</span>
         )}
         {record.reference && <span className="font-mono text-[11px] text-slate-400" title={record.reference}>{record.reference}</span>}
-        <span className="text-[11px] text-slate-400">· {RESULT_LABEL[record.result]}</span>
+        <span className="text-[11px] text-slate-400">· {t(`result.${record.result}`)}</span>
       </div>
       {record.findings && (
         <p className="text-xs text-slate-500 dark:text-slate-400" title={record.findings}>{record.findings}</p>
@@ -67,11 +66,11 @@ export const EvidenceRecordCard: React.FC<{
       <div className="flex items-center justify-between pt-1">
         {onCorrect && !corrected ? (
           <button onClick={onCorrect} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400 cursor-pointer">
-            <Pencil className="w-3.5 h-3.5" /> Correct
+            <Pencil className="w-3.5 h-3.5" /> {t('record.correct')}
           </button>
         ) : <span />}
-        <span className="text-[11px] text-slate-400" title="Recorded in the platform; corrections are added, never overwritten">
-          Recorded {new Date(record.recordedAt).toLocaleString()}{record.supersedesId ? ' · a correction' : ''}
+        <span className="text-[11px] text-slate-400" title={t('record.recordedTitle')}>
+          {t('record.recorded', { date: new Date(record.recordedAt).toLocaleString() })}{record.supersedesId ? ` · ${t('record.aCorrection')}` : ''}
         </span>
       </div>
     </div>
@@ -86,6 +85,7 @@ export const EvidenceRecordForm: React.FC<{
   onCancel: () => void;
   onSave: (input: ShieldEvidenceInput) => Promise<void>;
 }> = ({ initial, onCancel, onSave }) => {
+  const { t } = useTranslation('shield');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [result, setResult] = useState<ShieldResult>(initial?.result ?? 'passed');
   const [performedAt, setPerformedAt] = useState<Date | null>(toDay(initial?.performedAt ?? null) ?? new Date());
@@ -121,7 +121,7 @@ export const EvidenceRecordForm: React.FC<{
             findings: findings.trim() || null,
           });
         } catch (err) {
-          setError(err instanceof ApiError ? err.message : 'Could not save this record.');
+          setError(err instanceof ApiError ? err.message : t('form.saveFailed'));
         } finally {
           setBusy(false);
         }
@@ -129,7 +129,7 @@ export const EvidenceRecordForm: React.FC<{
     >
       {initial && (
         <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
-          A correction is saved as a new record that replaces this one. The original stays in the history, and a record can be corrected once.
+          {t('form.correctionNote')}
         </p>
       )}
       {error && (
@@ -138,14 +138,14 @@ export const EvidenceRecordForm: React.FC<{
         </div>
       )}
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">What was checked</span>
-        <Input required value={title} onChange={(value) => setTitle(value)} placeholder="e.g. Guard / isolation inspection" className="w-full" />
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.whatChecked')}</span>
+        <Input required value={title} onChange={(value) => setTitle(value)} placeholder={t('form.whatCheckedPlaceholder')} className="w-full" />
       </label>
       <div className="grid grid-cols-2 gap-3">
         <div className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Result</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.result')}</span>
           <SelectPicker
-            data={RESULT_OPTIONS.map((r) => ({ label: RESULT_LABEL[r], value: r }))}
+            data={RESULT_OPTIONS.map((r) => ({ label: t(`result.${r}`), value: r }))}
             value={result}
             onChange={(value) => setResult((value ?? 'passed') as ShieldResult)}
             searchable={false}
@@ -154,7 +154,7 @@ export const EvidenceRecordForm: React.FC<{
           />
         </div>
         <div className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Performed on</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.performedOn')}</span>
           <DatePicker
             value={performedAt}
             onChange={(date) => setPerformedAt(date)}
@@ -167,33 +167,33 @@ export const EvidenceRecordForm: React.FC<{
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Next check due (optional)</span>
-          <DatePicker value={dueAt} onChange={(date) => setDueAt(date)} format="yyyy-MM-dd" placeholder="One-off" block />
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.nextDue')}</span>
+          <DatePicker value={dueAt} onChange={(date) => setDueAt(date)} format="yyyy-MM-dd" placeholder={t('form.oneOff')} block />
         </div>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Owner</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.owner')}</span>
           <Input
             value={ownerName}
             onChange={(value) => setOwnerName(value)}
-            placeholder={keepsUserOwner ? 'Kept: the account user who owns it' : 'e.g. R. Kulkarni (contractor)'}
+            placeholder={keepsUserOwner ? t('form.ownerKept') : t('form.ownerPlaceholder')}
             className="w-full"
           />
         </label>
       </div>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Requirement / document reference</span>
-        <Input value={reference} onChange={(value) => setReference(value)} placeholder="e.g. CHK-2026-0412" className="w-full" />
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.reference')}</span>
+        <Input value={reference} onChange={(value) => setReference(value)} placeholder={t('form.referencePlaceholder')} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Findings</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.findings')}</span>
         <Input as="textarea" value={findings} onChange={(value) => setFindings(value)} rows={3} className="w-full" />
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-          Cancel
+          {t('form.cancel')}
         </button>
         <button type="submit" disabled={!valid || busy} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
-          {busy ? 'Saving…' : initial ? 'Save correction' : 'Save record'}
+          {busy ? t('form.saving') : initial ? t('form.saveCorrection') : t('form.saveRecord')}
         </button>
       </div>
     </form>

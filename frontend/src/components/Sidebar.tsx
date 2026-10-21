@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Home,
   UserCheck,
@@ -55,30 +56,31 @@ const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff'
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, isCollapsed, onToggleCollapsed,
 }) => {
+  const { t } = useTranslation();
   const allNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
-    { id: 'things-care', label: 'ThingsCare', icon: HeartPulse },
-    { id: 'things-shield', label: 'ThingsShield', icon: ShieldCheck },
-    { id: 'incident-management', label: 'Incident Management', icon: Siren },
-    { id: 'production-monitoring', label: 'Production Monitoring', icon: Factory },
-    { id: 'ai-onboarding', label: 'AI Onboarding', icon: Sparkles },
+    { id: 'dashboard', label: t('sidebar.dashboard'), icon: Home },
+    { id: 'things-care', label: t('sidebar.thingsCare'), icon: HeartPulse },
+    { id: 'things-shield', label: t('sidebar.thingsShield'), icon: ShieldCheck },
+    { id: 'incident-management', label: t('sidebar.incidentManagement'), icon: Siren },
+    { id: 'production-monitoring', label: t('sidebar.productionMonitoring'), icon: Factory },
+    { id: 'ai-onboarding', label: t('sidebar.aiOnboarding'), icon: Sparkles },
     // 'alert-agent' is deliberately not in this list — it stays reachable by
     // direct link (Alerts' "Create alert" / "Edit, assign" buttons navigate
     // to it) but no longer has its own sidebar entry.
-    { id: 'alerts', label: 'Alerts', icon: AlertTriangle },
-    { id: 'predictions', label: 'Live Predictions', icon: Activity },
-    { id: 'scenarios', label: 'Scenarios', icon: GitBranch },
-    { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
-    { id: 'cost-administration', label: 'Cost Administration', icon: Receipt },
-    { id: 'admin', label: 'Administration', icon: UserCheck },
-    { id: 'clients', label: 'Clients', icon: Briefcase },
-    { id: 'staff', label: 'Staff', icon: ShieldCheck },
-    { id: 'devices', label: 'Devices', icon: Cpu },
-    { id: 'equipment', label: 'Equipment', icon: Wrench },
-    { id: 'client-users', label: 'Client Users', icon: UserCog },
-    { id: 'roles', label: 'Roles & Permissions', icon: KeyRound },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'alerts', label: t('sidebar.alerts'), icon: AlertTriangle },
+    { id: 'predictions', label: t('sidebar.livePredictions'), icon: Activity },
+    { id: 'scenarios', label: t('sidebar.scenarios'), icon: GitBranch },
+    { id: 'work-orders', label: t('sidebar.workOrders'), icon: ClipboardList },
+    { id: 'cost-administration', label: t('sidebar.costAdministration'), icon: Receipt },
+    { id: 'admin', label: t('sidebar.administration'), icon: UserCheck },
+    { id: 'clients', label: t('sidebar.clients'), icon: Briefcase },
+    { id: 'staff', label: t('sidebar.staff'), icon: ShieldCheck },
+    { id: 'devices', label: t('sidebar.devices'), icon: Cpu },
+    { id: 'equipment', label: t('sidebar.equipment'), icon: Wrench },
+    { id: 'client-users', label: t('sidebar.clientUsers'), icon: UserCog },
+    { id: 'roles', label: t('sidebar.roles'), icon: KeyRound },
+    { id: 'users', label: t('sidebar.users'), icon: Users },
+    { id: 'settings', label: t('sidebar.settings'), icon: Settings },
   ];
 
   const allowed = allowedTabs || [];
@@ -94,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       id="main-navigation-sidebar"
-      className={`${isCollapsed ? 'w-[76px]' : 'w-60'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0 select-none z-20 transition-[width] duration-200`}
+      className={`${isCollapsed ? 'w-[76px]' : 'w-60'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full shrink-0 select-none z-20 transition-[width] duration-200`}
       data-purpose="main-navigation-sidebar"
     >
       <div className="min-w-0 shrink-0 border-b border-slate-100 dark:border-slate-800">
@@ -104,7 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           tabIndex={0}
           onClick={onToggleCollapsed}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggleCollapsed(); }}
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={isCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
           className={`w-full flex flex-col cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
             isCollapsed ? 'items-center py-3' : ''
           }`}
@@ -165,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Version Footer */}
       {!isCollapsed && (
         <div className="shrink-0 px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500">
-          <span>Version: 1.0.5</span>
+          <span>{t('sidebar.version', { version: '1.0.5' })}</span>
         </div>
       )}
     </aside>

@@ -1,0 +1,38 @@
+{
+  "tabs": {
+    "industryType": "Industry Type",
+    "plant": "Plant",
+    "equipmentClasses": "Equipment Classes",
+    "namedFormulas": "Named Formulas",
+    "sensor": "Sensor",
+    "toolMapping": "Tool Mapping",
+    "signalAliases": "Signal Aliases",
+    "signalStates": "Signal States",
+    "telemetryArchive": "Telemetry Archive"
+  },
+  "archive": {
+    "loadFailed": "Could not load the telemetry archive.",
+    "intro": "Raw readings older than 90 days are exported to Parquet per account and month, verified by reading the object back, then their partition is dropped. This page only shows what has happened; archive passes are run by operations.",
+    "refresh": "Refresh",
+    "exports": "Exports",
+    "month": "Month",
+    "account": "Account",
+    "part": "Part",
+    "rows": "Rows",
+    "size": "Size",
+    "exported": "Exported",
+    "verified": "Verified",
+    "loading": "Loading…",
+    "noArchives": "No month has been archived yet.",
+    "status": {
+      "verified": "verified",
+      "failed": "failed",
+      "pending": "pending"
+    },
+    "droppedPartitions": "Dropped partitions",
+    "droppedHint": "A partition is dropped only after every account's rows for that month have a verified archive.",
+    "noDrops": "No partition has been dropped yet.",
+    "rowsDropped_one": "{{formatted}} row",
+    "rowsDropped_other": "{{formatted}} rows"
+  }
+}

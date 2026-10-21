@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { DateRangePicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 
 type LiveParamType = 'gauge' | 'value' | 'status';
 
@@ -167,27 +168,31 @@ const SEVERITY_BADGE_STYLE: Record<AlertSeverity, string> = {
   low: 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300',
 };
 
-const AlertCard: React.FC<{ alert: AlertInsightItem }> = ({ alert }) => (
+const AlertCard: React.FC<{ alert: AlertInsightItem }> = ({ alert }) => {
+  const { t } = useTranslation('onboarding');
+  return (
   <div className={`rounded-lg border border-slate-100 dark:border-slate-800 border-l-4 p-3 ${SEVERITY_CARD_STYLE[alert.severity]}`}>
     <div className="flex items-center justify-between gap-2">
       <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{alert.parameter}</span>
       <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${SEVERITY_BADGE_STYLE[alert.severity]}`}>
-        {alert.severity}
+        {t(`details.severity.${alert.severity}`, { defaultValue: alert.severity })}
       </span>
     </div>
     <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-      <span>Value:</span>
+      <span>{t('details.value')}</span>
       <span className="font-semibold text-slate-700 dark:text-slate-200">{alert.actualValue}</span>
     </div>
     <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
-      <span>Threshold:</span>
+      <span>{t('details.threshold')}</span>
       <span className="font-semibold text-slate-700 dark:text-slate-200">{alert.thresholdValue}</span>
     </div>
     <div className="text-[10px] text-slate-400 dark:text-slate-500 text-right mt-1 italic">{alert.occurredAt}</div>
   </div>
-);
+  );
+};
 
 export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equipment = SAMPLE_EQUIPMENT }) => {
+  const { t } = useTranslation('onboarding');
   const eq = equipment;
   const [dateRange, setDateRange] = useState<[Date, Date] | null>(null);
 
@@ -200,7 +205,7 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
         <DateRangePicker
           value={dateRange}
           onChange={setDateRange}
-          placeholder="Select Date Range"
+          placeholder={t('details.dateRange')}
           format="dd MMM yyyy"
           character=" – "
           placement="bottomEnd"
@@ -211,35 +216,35 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
       {/* Info grid + location */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col lg:flex-row gap-6">
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-5">
-          <InfoItem label="Equipment" value={eq.equipment} />
-          <InfoItem label="Project Code" value={eq.projectCode} />
-          <InfoItem label="Description" value={eq.description} />
-          <InfoItem label="Benchmark" value={`${eq.benchmarkLitresPerHour} Litres/Hour`} />
-          <InfoItem label="Manufacturer" value={eq.manufacturer} />
+          <InfoItem label={t('details.equipment')} value={eq.equipment} />
+          <InfoItem label={t('details.projectCode')} value={eq.projectCode} />
+          <InfoItem label={t('details.description')} value={eq.description} />
+          <InfoItem label={t('details.benchmark')} value={t('details.litresPerHour', { value: eq.benchmarkLitresPerHour })} />
+          <InfoItem label={t('details.manufacturer')} value={eq.manufacturer} />
 
           <InfoItem
-            label="Device Status"
+            label={t('details.deviceStatus')}
             value={
               <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-semibold ${DEVICE_STATUS_STYLE[eq.deviceStatus]}`}>
-                {eq.deviceStatus}
+                {t(`details.deviceState.${eq.deviceStatus}`, { defaultValue: eq.deviceStatus })}
               </span>
             }
           />
-          <InfoItem label="Asset Verified" value={eq.assetVerified} />
-          <InfoItem label="Engine Working Hours" value={`${eq.engineWorkingHours.toFixed(2)} (${eq.engineWorkingHm})`} />
-          <InfoItem label="Machine Breakdown Hours" value={`${eq.machineBreakdownHours.toFixed(2)} (${eq.machineBreakdownHm})`} />
-          <InfoItem label="Idle Hours" value={`${eq.idleHours.toFixed(2)} (${eq.idleHm})`} />
+          <InfoItem label={t('details.assetVerified')} value={t(`details.yesNo.${eq.assetVerified}`, { defaultValue: eq.assetVerified })} />
+          <InfoItem label={t('details.engineWorkingHours')} value={`${eq.engineWorkingHours.toFixed(2)} (${eq.engineWorkingHm})`} />
+          <InfoItem label={t('details.machineBreakdownHours')} value={`${eq.machineBreakdownHours.toFixed(2)} (${eq.machineBreakdownHm})`} />
+          <InfoItem label={t('details.idleHours')} value={`${eq.idleHours.toFixed(2)} (${eq.idleHm})`} />
 
-          <InfoItem label="Fuel Consumption" value={`${eq.fuelConsumptionLitres} Litres`} />
-          <InfoItem label="Avg Fuel Consumption" value={`${eq.avgFuelConsumptionLitresPerHour} Litres/Hour`} />
-          <InfoItem label="PM Orders" value={eq.pmOrders} />
-          <InfoItem label="MTTR" value={`${eq.mttrHours.toFixed(2)} Hours`} />
-          <InfoItem label="MTBF" value={`${eq.mtbfHours.toFixed(2)} Hours`} />
+          <InfoItem label={t('details.fuelConsumption')} value={t('details.litres', { value: eq.fuelConsumptionLitres })} />
+          <InfoItem label={t('details.avgFuelConsumption')} value={t('details.litresPerHour', { value: eq.avgFuelConsumptionLitresPerHour })} />
+          <InfoItem label={t('details.pmOrders')} value={eq.pmOrders} />
+          <InfoItem label="MTTR" value={t('details.hours', { value: eq.mttrHours.toFixed(2) })} />
+          <InfoItem label="MTBF" value={t('details.hours', { value: eq.mtbfHours.toFixed(2) })} />
         </div>
 
         <div className="w-full lg:w-72 h-56 lg:h-auto shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
           <iframe
-            title="Equipment location"
+            title={t('details.location')}
             className="w-full h-full border-0"
             loading="lazy"
             src={`https://maps.google.com/maps?q=${eq.location.lat},${eq.location.lng}&z=12&output=embed`}
@@ -251,8 +256,8 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Live Parameters</h3>
-            <span className="text-xs text-slate-400 dark:text-slate-500">Information Report | Trends</span>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">{t('details.liveParameters')}</h3>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t('details.reportTrends')}</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -263,7 +268,7 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
               >
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 text-center">
-                    {p.label}
+                    {t(`details.param.${p.key}`, { defaultValue: p.label })}
                   </span>
                   {p.showStatusDot && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
                 </div>
@@ -295,9 +300,9 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
         </div>
 
         <div className="w-full lg:w-80 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-3">Alert Insight</h3>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-3">{t('details.alertInsight')}</h3>
           {eq.alerts.length === 0 ? (
-            <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-10">No active alerts</div>
+            <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-10">{t('details.noAlerts')}</div>
           ) : (
             <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
               {eq.alerts.map((a) => <AlertCard key={a.id} alert={a} />)}

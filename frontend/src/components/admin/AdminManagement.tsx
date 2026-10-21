@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Disc,
@@ -317,20 +318,21 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onDeleteStaff,
   restrictToClientAdmin,
 }) => {
+  const { t } = useTranslation('admin');
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'industry', label: 'Industry Type', icon: BarChart3 },
-    { id: 'clients', label: 'Clients', icon: Briefcase },
-    { id: 'staff', label: 'Staff', icon: ShieldCheck },
-    { id: 'plant', label: 'Plant', icon: Building2 },
-    { id: 'category', label: 'Equipment Classes', icon: LayoutGrid },
-    { id: 'named-formula', label: 'Named Formulas', icon: FunctionSquare },
-    { id: 'sensor', label: 'Sensor', icon: Disc },
-    { id: 'tool-mapping', label: 'Tool Mapping', icon: Wrench },
-    { id: 'signal-alias', label: 'Signal Aliases', icon: Disc },
-    { id: 'signal-state', label: 'Signal States', icon: Disc },
-    { id: 'devices', label: 'Devices', icon: Cpu },
-    { id: 'equipment', label: 'Equipment', icon: Wrench },
-    { id: 'telemetry-archive', label: 'Telemetry Archive', icon: Disc },
+    { id: 'industry', label: t('tabs.industryType'), icon: BarChart3 },
+    { id: 'clients', label: t('translation:sidebar.clients'), icon: Briefcase },
+    { id: 'staff', label: t('translation:sidebar.staff'), icon: ShieldCheck },
+    { id: 'plant', label: t('tabs.plant'), icon: Building2 },
+    { id: 'category', label: t('tabs.equipmentClasses'), icon: LayoutGrid },
+    { id: 'named-formula', label: t('tabs.namedFormulas'), icon: FunctionSquare },
+    { id: 'sensor', label: t('tabs.sensor'), icon: Disc },
+    { id: 'tool-mapping', label: t('tabs.toolMapping'), icon: Wrench },
+    { id: 'signal-alias', label: t('tabs.signalAliases'), icon: Disc },
+    { id: 'signal-state', label: t('tabs.signalStates'), icon: Disc },
+    { id: 'devices', label: t('translation:sidebar.devices'), icon: Cpu },
+    { id: 'equipment', label: t('translation:sidebar.equipment'), icon: Wrench },
+    { id: 'telemetry-archive', label: t('tabs.telemetryArchive'), icon: Disc },
   ];
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —

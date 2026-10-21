@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Bug } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ApiError, MeDiagnostics, apiGetMe } from '../../lib/api';
 
-function formatScope(value: string[] | 'unrestricted'): string {
-  if (value === 'unrestricted') return 'Unrestricted';
-  return value.length ? value.join(', ') : 'None';
+function formatScope(value: string[] | 'unrestricted', t: (key: string) => string): string {
+  if (value === 'unrestricted') return t('diagnostics.unrestricted');
+  return value.length ? value.join(', ') : t('diagnostics.none');
 }
 
 /** A raw dump of the token's resolved scope — for support to ask someone to
  *  read off when something looks wrong, not a screen anyone visits for its
  *  own sake. */
 export const SessionDiagnostics: React.FC = () => {
+  const { t } = useTranslation('accounts');
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<MeDiagnostics | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -21,9 +23,9 @@ export const SessionDiagnostics: React.FC = () => {
     setLoading(true);
     apiGetMe()
       .then((d) => { setData(d); setError(undefined); })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load session diagnostics.'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t('diagnostics.loadFailed')))
       .finally(() => setLoading(false));
-  }, [open, data, loading]);
+  }, [open, data, loading, t]);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
@@ -36,8 +38,8 @@ export const SessionDiagnostics: React.FC = () => {
             <Bug className="w-4.5 h-4.5" />
           </div>
           <div className="text-left">
-            <div className="font-semibold text-base text-slate-800 dark:text-slate-100">Session Diagnostics</div>
-            <div className="text-sm text-slate-400">What this sign-in resolves to — for support</div>
+            <div className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('diagnostics.title')}</div>
+            <div className="text-sm text-slate-400">{t('diagnostics.subtitle')}</div>
           </div>
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -45,17 +47,17 @@ export const SessionDiagnostics: React.FC = () => {
 
       {open && (
         <div className="px-5 pb-5 text-sm">
-          {loading && <p className="text-slate-400">Loading…</p>}
+          {loading && <p className="text-slate-400">{t('diagnostics.loading')}</p>}
           {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
           {data && (
             <div className="space-y-2.5 font-mono text-xs">
-              <Row label="Tenant" value={data.tenantId} />
-              <Row label="User" value={data.userId} />
-              <Row label="Roles" value={data.roles.join(', ') || '—'} />
-              <Row label="Platform role" value={data.isPlatformRole ? 'Yes' : 'No'} />
-              <Row label="Plants" value={formatScope(data.scope.plants)} />
-              <Row label="Equipment" value={formatScope(data.scope.equipment)} />
-              <Row label="Devices" value={formatScope(data.scope.devices)} />
+              <Row label={t('diagnostics.tenant')} value={data.tenantId} />
+              <Row label={t('diagnostics.user')} value={data.userId} />
+              <Row label={t('diagnostics.roles')} value={data.roles.join(', ') || '—'} />
+              <Row label={t('diagnostics.platformRole')} value={data.isPlatformRole ? t('diagnostics.yes') : t('diagnostics.no')} />
+              <Row label={t('diagnostics.plants')} value={formatScope(data.scope.plants, t)} />
+              <Row label={t('diagnostics.equipment')} value={formatScope(data.scope.equipment, t)} />
+              <Row label={t('diagnostics.devices')} value={formatScope(data.scope.devices, t)} />
             </div>
           )}
         </div>

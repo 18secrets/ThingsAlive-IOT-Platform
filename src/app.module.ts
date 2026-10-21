@@ -18,6 +18,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { FleetImportModule } from './fleet-import/fleet-import.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
+import { RecFrameModule } from './rec-frame/rec-frame.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
 import { IncidentModule } from './incident/incident.module';
@@ -33,6 +34,7 @@ import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
+import { EvaluationModule } from './evaluation/evaluation.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
@@ -112,6 +114,7 @@ export class AppModule {
               ShiftModule,
               ForecastModule,
               ForecastSchedulingModule,
+              EvaluationModule,
               TelemetryPartitionModule,
               TelemetryArchiveModule,
               UtilizationModule,
@@ -124,6 +127,7 @@ export class AppModule {
               ParameterModule,
               AssistantModule,
               RecEngineModule,
+              RecFrameModule,
             ]
           : []),
       ],

@@ -22,6 +22,7 @@ import {
   INITIAL_CLIENT_USERS,
   INITIAL_ROLES,
 } from './data/mockData';
+import i18n from './i18n';
 import { AuthProvider, useAuth } from './lib/AuthProvider';
 import { PageHeaderProvider } from './lib/PageHeaderContext';
 import { RequireAuth, GuestOnly } from './routes/guards';
@@ -832,7 +833,7 @@ function AppData() {
     if (!current) return;
     try {
       if (current.status === 'Active') {
-        const reason = window.prompt(`Why is ${current.clientName} being suspended?`);
+        const reason = window.prompt(i18n.t('prompts.suspendReason', { name: current.clientName }));
         if (!reason) return;
         await apiSuspendAccount(id, reason);
       } else {
@@ -1026,7 +1027,7 @@ function AppData() {
   };
 
   const handleReleaseDevice = async (imei: string) => {
-    const reason = window.prompt(`Why is ${imei} being taken back into stock?`);
+    const reason = window.prompt(i18n.t('prompts.takeBackReason', { imei }));
     if (!reason) return;
     try {
       reportBadOutcome(await apiReleaseDevices([imei], reason));
@@ -1037,7 +1038,7 @@ function AppData() {
   };
 
   const handleRetireDevice = async (imei: string) => {
-    const reason = window.prompt(`Why is ${imei} being retired?`);
+    const reason = window.prompt(i18n.t('prompts.retireReason', { imei }));
     if (!reason) return;
     try {
       reportBadOutcome(await apiRetireDevices([imei], reason));

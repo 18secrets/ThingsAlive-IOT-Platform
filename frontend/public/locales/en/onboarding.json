@@ -1,0 +1,201 @@
+{
+  "page": {
+    "title": "AI Onboarding",
+    "subtitle": "Onboarding progress by site",
+    "chatTitle": "ChatBot Assistant",
+    "chatSubtitle": "AI Setup Assistant"
+  },
+  "progress": {
+    "loadFailed": "Could not load onboarding progress.",
+    "noSite": "Machines with no site",
+    "sites": "Sites",
+    "search": "Search sites...",
+    "allStatuses": "Select Status (All)",
+    "refresh": "Refresh progress",
+    "newOnboarding": "New AI Onboarding",
+    "col": {
+      "site": "Site",
+      "equipment": "Equipment",
+      "onboarded": "Onboarded",
+      "steps": "Steps done (machines)",
+      "status": "Status",
+      "view": "View"
+    },
+    "loading": "Loading…",
+    "stepTitle": "{{step}}: {{done}} done, {{pending}} pending, {{blocked}} blocked",
+    "viewMachines": "View machines and their steps",
+    "noMatch": "No sites match.",
+    "asOf": "As of {{date}} · progress is read live from devices, bindings, scenarios, alert rules and user access",
+    "stepsPerMachine": "Onboarding steps per machine",
+    "noMachines": "No machines found on this site in your register.",
+    "machineLoadFailed": "Could not load this machine.",
+    "fullyOnboarded": "Fully onboarded",
+    "inProgress": "In progress",
+    "class": "class {{slug}}",
+    "waitingOn": "Waiting on: {{step}}"
+  },
+  "siteStatus": {
+    "completed": "Completed",
+    "in_progress": "In Progress",
+    "no_equipment": "No equipment"
+  },
+  "step": {
+    "equipment": "Equipment classified",
+    "device": "Device fitted",
+    "mapping": "Signals mapped",
+    "validation": "Readings validated",
+    "activation": "Scenario active",
+    "alerts": "Alert rules",
+    "access": "User access"
+  },
+  "stepShort": {
+    "equipment": "Equipment",
+    "device": "Device",
+    "mapping": "Signals",
+    "validation": "Readings",
+    "activation": "Scenario",
+    "alerts": "Alert",
+    "access": "User"
+  },
+  "stepState": {
+    "done": "done",
+    "pending": "pending",
+    "blocked": "blocked"
+  },
+  "reason": {
+    "unclassified": "The machine has no equipment class",
+    "no_device_claimed": "No device is fitted to the machine",
+    "unbound": "A required signal is not bound",
+    "mapping_required": "A required signal needs mapping",
+    "no_requirements": "The class declares no required signals",
+    "stale": "Readings are stale",
+    "no_readings": "No readings yet",
+    "no_active_scenario": "No scenario is active on the machine",
+    "no_alert_rule": "No enabled alert rule covers the machine",
+    "no_user_access": "Nobody but the super admins can see the machine",
+    "blocked_by_step": "Waiting on an earlier step"
+  },
+  "list": {
+    "totalSessions": "Total Sessions",
+    "search": "Search Onboarding Sessions...",
+    "col": {
+      "session": "Session",
+      "sites": "Sites",
+      "equipment": "Equipment",
+      "progress": "Progress",
+      "created": "Created",
+      "updated": "Updated",
+      "print": "Print",
+      "view": "View",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "printQr": "Print QR Label",
+    "viewSession": "View Session",
+    "inactive": "Inactive",
+    "editSession": "Edit Session",
+    "refreshStatus": "Refresh Status",
+    "empty": "No onboarding sessions found.",
+    "close": "Close",
+    "print": "Print"
+  },
+  "chat": {
+    "heading": "Let's set up your assets.",
+    "intro": "Tell us what you run. We'll take care of the rest - you can change anything after.",
+    "assistantName": "Things Alive Assistant",
+    "underDevelopment": "This AI setup assistant is still under development — I can't act on that yet, but your message is recorded here so we can review how the conversation looks.",
+    "placeholder": "Add more details or ask a question...",
+    "send": "Send",
+    "manualSetup": "I will set it up myself",
+    "setupStatus": "Setup Status",
+    "quick": {
+      "assets": {
+        "title": "Assets",
+        "description": "Every machine, one place.",
+        "prompt": "Show me everything you know about my assets."
+      },
+      "ask": {
+        "title": "Ask anything",
+        "description": "Plain English queries.",
+        "prompt": "Which equipment is due for maintenance this week?"
+      },
+      "alerts": {
+        "title": "Auto-alerts",
+        "description": "Told before it breaks.",
+        "prompt": "Set up an alert for low fuel and high engine temperature."
+      },
+      "reports": {
+        "title": "Reports",
+        "description": "One-tap summaries.",
+        "prompt": "Give me a summary report for this month."
+      }
+    },
+    "step": {
+      "device": "Selecting Device",
+      "equipment": "Selecting Equipment",
+      "equipmentSub": "Tractors (2) • Gensets (4)",
+      "mapping": "Mapping Device & Equipment",
+      "onboarding": "Onboarding",
+      "validation": "Data Validation (Communication)",
+      "alerts": "Configure Alerts",
+      "access": "Assign User Access",
+      "done": "Done"
+    },
+    "state": {
+      "done": "done",
+      "active": "active",
+      "pending": "pending"
+    }
+  },
+  "details": {
+    "dateRange": "Select Date Range",
+    "equipment": "Equipment",
+    "projectCode": "Project Code",
+    "description": "Description",
+    "benchmark": "Benchmark",
+    "manufacturer": "Manufacturer",
+    "deviceStatus": "Device Status",
+    "assetVerified": "Asset Verified",
+    "engineWorkingHours": "Engine Working Hours",
+    "machineBreakdownHours": "Machine Breakdown Hours",
+    "idleHours": "Idle Hours",
+    "fuelConsumption": "Fuel Consumption",
+    "avgFuelConsumption": "Avg Fuel Consumption",
+    "pmOrders": "PM Orders",
+    "litresPerHour": "{{value}} Litres/Hour",
+    "litres": "{{value}} Litres",
+    "hours": "{{value}} Hours",
+    "location": "Equipment location",
+    "liveParameters": "Live Parameters",
+    "reportTrends": "Information Report | Trends",
+    "alertInsight": "Alert Insight",
+    "noAlerts": "No active alerts",
+    "value": "Value:",
+    "threshold": "Threshold:",
+    "deviceState": {
+      "Online": "Online",
+      "Offline": "Offline",
+      "Not Onboarded": "Not Onboarded"
+    },
+    "yesNo": {
+      "Yes": "Yes",
+      "No": "No"
+    },
+    "severity": {
+      "critical": "critical",
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "param": {
+      "fuel_level": "Fuel Level",
+      "engine_coolant_temperature": "Engine Coolant Temperature",
+      "engine_oil_pressure": "Engine Oil Pressure",
+      "engine_oil_temperature": "Engine Oil Temperature",
+      "throttle_position": "Throttle Position",
+      "engine_load": "Engine Load",
+      "engine_running_status": "Engine Running Status",
+      "device_engine_runtime": "Device Engine Runtime"
+    }
+  }
+}
