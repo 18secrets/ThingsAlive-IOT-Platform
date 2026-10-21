@@ -4,7 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { writeFileSync } from 'node:fs';
 import { dataSourceOptions } from './database/data-source';
 import { EvaluationModule } from './evaluation/evaluation.module';
-import { EvaluationService } from './evaluation/evaluation.service';
+import { EvaluationService, EvalSummary } from './evaluation/evaluation.service';
+import { RecommendationReplayService } from './evaluation/recommendation-replay.service';
 
 /**
  * The evaluation CLI (QEVAL1 §6). No HTTP: results are read from the summary it prints,
@@ -14,6 +15,9 @@ import { EvaluationService } from './evaluation/evaluation.service';
  *                   [--from 2026-09-01] [--to 2026-10-20] [--replay-days 7]
  *                   [--model <forecast_model id>] [--budget-seconds 900] [--budget-series 5000]
  *                   [--note "…"] [--out summary.json]
+ *   npm run eval -- --kind recommendation_replay --dataset seeded|real
+ *                   [--from …] [--to …] [--moments-per-machine 200]
+ *                   [--budget-seconds 900] [--budget-series 5000] [--note "…"] [--out summary.json]
  *
  * `--dataset` is required rather than defaulted: which data a number came from is the
  * first thing anyone reading it needs, and a default would be a guess (§5). A run over
@@ -29,7 +33,6 @@ class EvalMainModule {}
 
 const NOT_YET: Record<string, string> = {
   retrieval: 'QEVAL1b: waits on QEMB1 (pgvector on Railway) and a golden set authored by domain experts',
-  recommendation_replay: 'QEVAL1c: waits on QREC2 (the deterministic renderer)',
 };
 
 function arg(argv: string[], name: string): string | undefined {
@@ -41,7 +44,9 @@ async function main(argv: string[]): Promise<number> {
   const logger = new Logger('EvalMain');
   const kind = arg(argv, 'kind');
   if (kind && NOT_YET[kind]) { logger.error(`${kind} cannot run yet. ${NOT_YET[kind]}`); return 2; }
-  if (kind !== 'ttm_backtest') { logger.error('--kind ttm_backtest is the only kind available'); return 2; }
+  if (kind !== 'ttm_backtest' && kind !== 'recommendation_replay') {
+    logger.error('--kind ttm_backtest|recommendation_replay'); return 2;
+  }
   const dataset = arg(argv, 'dataset');
   if (dataset !== 'seeded' && dataset !== 'real') { logger.error('--dataset seeded|real is required'); return 2; }
   const date = (s?: string) => (s ? new Date(s) : undefined);
@@ -49,11 +54,15 @@ async function main(argv: string[]): Promise<number> {
 
   const app = await NestFactory.createApplicationContext(EvalMainModule, { logger: ['log', 'warn', 'error'] });
   try {
-    const s = await app.get(EvaluationService).runBacktest({
-      dataset, datasetNote: arg(argv, 'note'), modelId: arg(argv, 'model'),
-      from: date(arg(argv, 'from')), to: date(arg(argv, 'to')), replayDays: num(arg(argv, 'replay-days')),
+    const common = {
+      dataset, datasetNote: arg(argv, 'note'), from: date(arg(argv, 'from')), to: date(arg(argv, 'to')),
       budgetSeconds: num(arg(argv, 'budget-seconds')), budgetSeries: num(arg(argv, 'budget-series')),
-    });
+    } as const;
+    const s: EvalSummary = kind === 'ttm_backtest'
+      ? await app.get(EvaluationService).runBacktest({
+        ...common, modelId: arg(argv, 'model'), replayDays: num(arg(argv, 'replay-days')),
+      })
+      : await app.get(RecommendationReplayService).run({ ...common, momentsPerMachine: num(arg(argv, 'moments-per-machine')) });
     const text = JSON.stringify(s, null, 2);
     const out = arg(argv, 'out');
     if (out) writeFileSync(out, `${text}\n`, 'utf8');
