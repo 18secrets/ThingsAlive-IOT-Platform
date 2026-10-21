@@ -6,6 +6,16 @@
  * effect — see the same note that used to live on the React Flow rules below. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Breakpoints, after the 1.0 platform's media queries (iot_platform/src/*.css):
+ * xs is its 480px large-phone step and 3xl its 2560px large-monitor step. Tailwind's
+ * own sm/md/lg/xl/2xl (640/768/1024/1280/1536) are kept as they are — every existing
+ * `md:`/`lg:` class depends on them. The shell switches on lg (1024px): below it the
+ * sidebar is a drawer; from lg to xl it starts collapsed. */
+@theme {
+  --breakpoint-xs: 30rem;
+  --breakpoint-3xl: 160rem;
+}
+
 /* Matches the house font from ~/projects/iot_platform. Two variable-font
  * files cover the whole weight range (100-900) instead of the ~20 static
  * weight files also sitting in assets/fonts/ — same visual result, far

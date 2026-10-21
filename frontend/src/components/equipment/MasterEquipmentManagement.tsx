@@ -3,6 +3,7 @@ import {
   Search, Plus, AlertCircle, Edit2, Ban, History, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentInput, EquipmentPlacementEvent, EquipmentProfile, Plant,
 } from '../../lib/api';
@@ -29,15 +30,15 @@ interface MasterEquipmentManagementProps {
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
 }
 
-const STATUS_OPTIONS = [
-  { label: 'Active', value: 'active' },
-  { label: 'Retired', value: 'retired' },
-];
+// Labels are equipment.status.<value> in the devices namespace.
+const STATUS_VALUES: EquipmentProfile['status'][] = ['active', 'retired'];
 
 export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps> = ({
   equipment, error, clients, onCreateEquipment, onUpdateEquipment, onMoveEquipment, onRetireEquipment,
   onGetEquipmentPlacementHistory, onListPlantsForTenant,
 }) => {
+  const { t } = useTranslation(['devices', 'shared']);
+  const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`equipment.status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | EquipmentProfile['status']>('active');
@@ -56,7 +57,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   }, [clients]);
 
   const plantName = (tenantId: string, plantId: string | null) => {
-    if (!plantId) return 'No site';
+    if (!plantId) return t('equipment.noSite');
     return plantsByTenant[tenantId]?.find((p) => p.id === plantId)?.name ?? plantId;
   };
 
@@ -64,7 +65,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   // table can resolve a site id to a name without fetching every account's sites
   // up front for a page that may only ever look at one of them.
   useEffect(() => {
-    const unknown = [...new Set(equipment.map((e) => e.tenantId))].filter((t) => !(t in plantsByTenant));
+    const unknown = [...new Set(equipment.map((e) => e.tenantId))].filter((tid) => !(tid in plantsByTenant));
     if (!unknown.length) return;
     unknown.forEach((tenantId) => {
       onListPlantsForTenant(tenantId)
@@ -75,8 +76,8 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   }, [equipment]);
 
   const clientOptions = useMemo(
-    () => [{ label: 'All clients', value: 'All' }, ...clients.map((c) => ({ label: c.clientName, value: c.id }))],
-    [clients],
+    () => [{ label: t('equipment.allClients'), value: 'All' }, ...clients.map((c) => ({ label: c.clientName, value: c.id }))],
+    [clients, t],
   );
 
   const filteredList = useMemo(() => {
@@ -95,14 +96,14 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   const key = (item: EquipmentProfile) => `${item.tenantId}:${item.sourceSystem}:${item.externalId}`;
 
   const handleRetire = async (item: EquipmentProfile) => {
-    const reason = window.prompt(`Why is ${item.name ?? item.externalId} being retired?`);
+    const reason = window.prompt(t('equipment.retirePrompt', { name: item.name ?? item.externalId }));
     if (!reason) return;
     setRetiringKey(key(item));
     setActionError(undefined);
     try {
       await onRetireEquipment(item.sourceSystem, item.externalId, reason, item.tenantId);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Could not retire this machine.');
+      setActionError(err instanceof ApiError ? err.message : t('equipment.retireFailed'));
     } finally {
       setRetiringKey(null);
     }
@@ -117,7 +118,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
     try {
       setHistory(await onGetEquipmentPlacementHistory(item.sourceSystem, item.externalId, item.tenantId));
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Could not load placement history.');
+      setActionError(err instanceof ApiError ? err.message : t('equipment.historyFailed'));
     } finally {
       setHistoryLoading(false);
     }
@@ -132,7 +133,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder="Search machine, code or client..."
+              placeholder={t('equipment.searchPlaceholder')}
               size="sm"
               className="w-full pl-9!"
             />
@@ -147,7 +148,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
             className="min-w-[180px]"
           />
           <SelectPicker
-            data={[{ label: 'All statuses', value: 'All' }, ...STATUS_OPTIONS]}
+            data={[{ label: t('equipment.allStatuses'), value: 'All' }, ...STATUS_OPTIONS]}
             value={selectedStatus}
             onChange={(value) => setSelectedStatus((value ?? 'All') as typeof selectedStatus)}
             searchable={false}
@@ -161,7 +162,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Register Equipment</span>
+          <span>{t('equipment.register')}</span>
         </button>
       </div>
 
@@ -177,13 +178,13 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
               <tr>
-                <th className="py-3 px-4">Client</th>
-                <th className="py-3 px-4">Code</th>
-                <th className="py-3 px-4">Name</th>
-                <th className="py-3 px-4">Site</th>
-                <th className="py-3 px-4">Tier</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-center">Actions</th>
+                <th className="py-3 px-4">{t('translation:common.client')}</th>
+                <th className="py-3 px-4">{t('equipment.col.code')}</th>
+                <th className="py-3 px-4">{t('equipment.col.name')}</th>
+                <th className="py-3 px-4">{t('equipment.col.site')}</th>
+                <th className="py-3 px-4">{t('equipment.col.tier')}</th>
+                <th className="py-3 px-4">{t('list.col.status')}</th>
+                <th className="py-3 px-4 text-center">{t('equipment.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
@@ -198,14 +199,14 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                         <td className="py-3 px-4 font-mono text-[11px]">{item.externalId}</td>
                         <td className="py-3 px-4 text-slate-900 dark:text-white">{item.name || '—'}</td>
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{plantName(item.tenantId, item.plantId)}</td>
-                        <td className="py-3 px-4 capitalize text-slate-600 dark:text-slate-400">{item.tier}</td>
+                        <td className="py-3 px-4 capitalize text-slate-600 dark:text-slate-400">{t(`equipment.tier.${item.tier}`, { defaultValue: item.tier })}</td>
                         <td className="py-3 px-4">
                           <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
                             item.status === 'active'
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                           }`}>
-                            {item.status}
+                            {t(`equipment.status.${item.status}`, { defaultValue: item.status })}
                           </span>
                         </td>
                         <td className="py-3 px-4">
@@ -213,14 +214,14 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                             <button
                               onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                              title="Edit"
+                              title={t('equipment.edit')}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleToggleHistory(item)}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                              title="Placement history"
+                              title={t('equipment.placementHistory')}
                             >
                               {historyKey === k ? <ChevronUp className="w-3.5 h-3.5" /> : <History className="w-3.5 h-3.5" />}
                             </button>
@@ -229,7 +230,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                                 onClick={() => handleRetire(item)}
                                 disabled={busy}
                                 className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
-                                title="Retire"
+                                title={t('equipment.retire')}
                               >
                                 <Ban className="w-3.5 h-3.5" />
                               </button>
@@ -241,9 +242,9 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                         <tr>
                           <td colSpan={7} className="px-4 pb-3 bg-slate-50/60 dark:bg-slate-800/30">
                             <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 p-2.5 space-y-1.5 max-h-40 overflow-y-auto">
-                              {historyLoading && <p className="text-[11px] text-slate-400">Loading…</p>}
+                              {historyLoading && <p className="text-[11px] text-slate-400">{t('shared:loading')}</p>}
                               {!historyLoading && history.length === 0 && (
-                                <p className="text-[11px] text-slate-400">No placement history for this asset yet.</p>
+                                <p className="text-[11px] text-slate-400">{t('equipment.noHistory')}</p>
                               )}
                               {history.map((h) => (
                                 <div key={h.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
@@ -264,7 +265,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
               ) : (
                 <tr>
                   <td colSpan={7} className="py-10 text-center text-slate-400 font-sans">
-                    No equipment found matching criteria.
+                    {t('equipment.empty')}
                   </td>
                 </tr>
               )}
@@ -273,7 +274,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
         </div>
 
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-600 dark:text-slate-400">
-          Total Rows: <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredList.length}</span>
+          {t('pool.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredList.length}</span>
         </div>
       </div>
 

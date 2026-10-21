@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, Plant, PlantInput } from '../../lib/api';
 
 interface AddPlantModalProps {
@@ -17,6 +18,7 @@ const slugify = (name: string) =>
 export const AddPlantModal: React.FC<AddPlantModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingPlant,
 }) => {
+  const { t } = useTranslation('equipment');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
@@ -64,7 +66,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'register'} the site.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('plants.saveFailed') : t('plants.registerFailed')));
     } finally {
       setBusy(false);
     }
@@ -82,10 +84,10 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {isEditing ? 'Edit Plant / Depot' : 'Register New Plant / Depot'}
+                {isEditing ? t('plants.editTitle') : t('plants.addTitle')}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
-                Regional production facility, maintenance depot, or assembly site — in your own account.
+                {t('plants.modalSubtitle')}
               </p>
             </div>
           </div>
@@ -101,7 +103,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
         <form onSubmit={handleSubmit} className="px-7 py-6 space-y-5">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Plant Name <span className="text-rose-500">*</span>
+              {t('plants.name')} <span className="text-rose-500">*</span>
             </label>
             <Input
               size="sm"
@@ -109,49 +111,49 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
               autoFocus
               value={name}
               onChange={(value) => handleNameChange(value)}
-              placeholder="e.g. Hyderabad Central Works"
+              placeholder={t('common.eg', { example: 'Hyderabad Central Works' })}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Address <span className="text-slate-400 font-normal">(optional)</span>
+                {t('plants.address')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
               </label>
               <Input
                 size="sm"
                 value={address}
                 onChange={(value) => setAddress(value)}
-                placeholder="e.g. Hyderabad, Telangana"
+                placeholder={t('common.eg', { example: 'Hyderabad, Telangana' })}
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Plant Code <span className="text-rose-500">*</span>
+                {t('plants.code')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 size="sm"
                 required
                 value={code}
                 onChange={(value) => { setCode(value); setCodeTouched(true); }}
-                placeholder="e.g. HYD-WKS"
+                placeholder={t('common.eg', { example: 'HYD-WKS' })}
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Letters, digits, dots, hyphens or underscores — unique within your account.
+                {t('plants.codeHint')}
               </p>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Site Area <span className="text-slate-400 font-normal">(optional)</span>
+              {t('plants.siteArea')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
             </label>
             <Input
               size="sm"
               value={siteArea}
               onChange={(value) => setSiteArea(value)}
-              placeholder="e.g. 12 acres"
+              placeholder={t('plants.siteAreaPlaceholder')}
             />
           </div>
 
@@ -164,7 +166,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory
+              <Trans i18nKey="common.mandatoryNote" t={t}>Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory</Trans>
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -172,7 +174,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -180,7 +182,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : (isEditing ? 'Save Plant' : 'Register Plant')}</span>
+                <span>{busy ? t('common.saving') : (isEditing ? t('plants.save') : t('plants.register'))}</span>
               </button>
             </div>
           </div>

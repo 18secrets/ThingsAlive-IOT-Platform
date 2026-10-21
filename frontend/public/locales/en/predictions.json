@@ -1,0 +1,54 @@
+{
+  "hero": {
+    "title": "Things Predictions",
+    "tagline": "From machine signals to your next best action."
+  },
+  "common": {
+    "loading": "Loading…",
+    "details": "Details",
+    "createWorkOrder": "Create work order"
+  },
+  "errors": {
+    "loadScenarios": "Could not load prediction scenarios.",
+    "loadMachines": "Could not load machines.",
+    "toggle": "Could not change this scenario."
+  },
+  "scenarios": {
+    "title": "Prediction scenarios",
+    "manage": "Manage in Scenarios",
+    "info": "New scenarios come from the Things Alive library with your equipment classes; here you switch them on or off.",
+    "empty": "No prediction scenarios for this selection.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "tier": "Tier {{tier}}",
+    "needs": "Needs {{signals}}",
+    "noSignals": "no signals",
+    "history_one": "{{count}}d history",
+    "history_other": "{{count}}d history"
+  },
+  "kpis": {
+    "title": "Prediction KPIs",
+    "subtitle": "Each machine's latest scored predictions — the worst one leads.",
+    "noMatch": "No machines match this filter.",
+    "unavailable": "Predictions not available for your role.",
+    "notScored": "No active scenario has scored this machine yet.",
+    "outOf100": "/ 100 risk",
+    "confidence": "confidence {{value}}",
+    "scenariosScored_one": "{{count}} scenario scored",
+    "scenariosScored_other": "{{count}} scenarios scored",
+    "scoredAt_one": "Scored {{time}} over {{count}} day",
+    "scoredAt_other": "Scored {{time}} over {{count}} days"
+  },
+  "severity": {
+    "none": "none",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "critical": "critical"
+  },
+  "confidence": {
+    "full": "full",
+    "partial": "partial",
+    "none": "none"
+  }
+}

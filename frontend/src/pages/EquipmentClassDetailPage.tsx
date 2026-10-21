@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Activity, Bell, GitBranch, Image as ImageIcon } from 'lucide-react';
 import {
   AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput, EquipmentClass, Scenario, ScenarioInput,
@@ -47,12 +48,13 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
 }) => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('catalog');
   const [tab, setTab] = useState<DetailTab>('predictions');
 
   usePageHeader({
-    title: 'Equipment Class Configuration',
-    subtitle: 'Prediction Scenarios & Alert Rules',
-    breadcrumb: 'Equipment Classes',
+    title: t('classDetail.title'),
+    subtitle: t('classDetail.subtitle'),
+    breadcrumb: t('classDetail.breadcrumb'),
     onBack: () => navigate('/admin/category'),
   });
 
@@ -60,24 +62,24 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
   if (!cls) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center text-slate-400 text-sm">
-        <p>No equipment class found.</p>
+        <p>{t('classDetail.notFound')}</p>
         <button onClick={() => navigate('/admin/category')} className="mt-3 text-sky-600 dark:text-sky-400 font-semibold text-xs cursor-pointer">
-          Back to Equipment Classes
+          {t('classDetail.back')}
         </button>
       </div>
     );
   }
 
   const scenariosForClass = scenarios.filter((s) => s.equipmentClassSlug === cls.slug);
-  const alertTemplatesForClass = alertTemplates.filter((t) => t.equipmentClassSlug === cls.slug);
+  const alertTemplatesForClass = alertTemplates.filter((a) => a.equipmentClassSlug === cls.slug);
   const causalChainsForClass = causalChains.filter((c) => c.equipmentClassSlug === cls.slug);
   const availableSignals = cls.expectedSignals.map((s) => s.signal);
 
   const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
-    { id: 'predictions', label: 'Predictive Maintenance', icon: Activity, count: scenariosForClass.length },
-    { id: 'alerts', label: 'Alert Rules', icon: Bell, count: alertTemplatesForClass.length },
-    { id: 'chains', label: 'Causal Chains', icon: GitBranch, count: causalChainsForClass.length },
-    { id: 'visual', label: 'Visual', icon: ImageIcon },
+    { id: 'predictions', label: t('classDetail.tabs.predictions'), icon: Activity, count: scenariosForClass.length },
+    { id: 'alerts', label: t('classDetail.tabs.alerts'), icon: Bell, count: alertTemplatesForClass.length },
+    { id: 'chains', label: t('classDetail.tabs.chains'), icon: GitBranch, count: causalChainsForClass.length },
+    { id: 'visual', label: t('classDetail.tabs.visual'), icon: ImageIcon },
   ];
 
   return (
@@ -98,13 +100,13 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
       </div>
 
       <div className="flex items-center gap-2.5">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const isActive = tab === t.id;
+        {tabs.map((dt) => {
+          const Icon = dt.icon;
+          const isActive = tab === dt.id;
           return (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+              key={dt.id}
+              onClick={() => setTab(dt.id)}
               className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer ${
                 isActive
                   ? 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 shadow-xs font-semibold'
@@ -112,9 +114,9 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
               }`}
             >
               <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
-              <span>{t.label}</span>
-              {t.count !== undefined && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{t.count}</span>
+              <span>{dt.label}</span>
+              {dt.count !== undefined && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{dt.count}</span>
               )}
             </button>
           );

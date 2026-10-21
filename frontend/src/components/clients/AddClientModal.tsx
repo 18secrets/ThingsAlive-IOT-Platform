@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Copy, CheckCheck } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, Account, CreateAccountResult } from '../../lib/api';
 import { ClientAccount } from '../../types';
 import { copyToClipboard } from '../../lib/clipboard';
@@ -25,6 +26,7 @@ const slugify = (name: string) =>
 export const AddClientModal: React.FC<AddClientModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingClient,
 }) => {
+  const { t } = useTranslation(['accounts', 'shared']);
   const [clientName, setClientName] = useState('');
   const [tenantId, setTenantId] = useState('');
   const [tenantIdTouched, setTenantIdTouched] = useState(false);
@@ -90,7 +92,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
         setCreated(result);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${existingClient ? 'save' : 'create'} the account.`);
+      setError(err instanceof ApiError ? err.message : (existingClient ? t('addClient.saveFailed') : t('addClient.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -115,10 +117,11 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
 
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {created ? 'Client Created' : isEditing ? 'Edit Client' : 'Add New Client'}
+            {created ? t('addClient.createdTitle') : isEditing ? t('addClient.editTitle') : t('addClient.addTitle')}
           </h3>
           <button
             onClick={onClose}
+            aria-label={t('shared:close')}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -128,12 +131,16 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
         {created ? (
           <div className="p-6 space-y-4 text-sm">
             <p className="text-slate-600 dark:text-slate-300">
-              <strong className="text-slate-900 dark:text-white">{created.tenant.name}</strong> is provisioned, with{' '}
-              <strong className="font-mono">{created.superAdmin.email}</strong> as its first Super Admin.
+              <Trans
+                t={t}
+                i18nKey="addClient.provisioned"
+                values={{ name: created.tenant.name, email: created.superAdmin.email }}
+                components={{ 1: <strong className="text-slate-900 dark:text-white" />, 3: <strong className="font-mono" /> }}
+              />
             </p>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Invitation Token
+                {t('shared:token.label')}
               </label>
               <div className="relative">
                 <Input
@@ -145,14 +152,18 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                   type="button"
                   onClick={handleCopyToken}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  title="Copy token"
+                  title={t('shared:token.copy')}
                 >
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Expires {new Date(created.invitationExpiresAt).toLocaleString()}. There is no password to hand
-                over — the client sets their own via <code>POST /auth/accept-invitation</code> with this token.
+                <Trans
+                  t={t}
+                  i18nKey="addClient.tokenHelp"
+                  values={{ when: new Date(created.invitationExpiresAt).toLocaleString() }}
+                  components={{ 1: <code /> }}
+                />
               </p>
             </div>
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
@@ -160,7 +171,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer"
               >
-                Done
+                {t('shared:done')}
               </button>
             </div>
           </div>
@@ -168,80 +179,80 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
           <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Client Name <span className="text-rose-500">*</span>
+                {t('addClient.clientName')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 autoFocus
                 value={clientName}
                 onChange={(value) => handleClientNameChange(value)}
-                placeholder="e.g. Acme Cement Works"
+                placeholder={t('addClient.clientNamePlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Account ID <span className="text-rose-500">*</span>
+                {t('addClient.accountId')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 disabled={isEditing}
                 value={tenantId}
                 onChange={(value) => { setTenantId(value); setTenantIdTouched(true); }}
-                placeholder="e.g. acme-cement"
+                placeholder={t('addClient.accountIdPlaceholder')}
                 className="font-mono"
               />
               <p className="text-[11px] text-slate-400 mt-1">
                 {isEditing
-                  ? "Permanent — the API keys everything to it, so it can't be changed here."
-                  : 'Auto-filled from the client name. This is permanent once created — the API keys everything to it.'}
+                  ? t('addClient.accountIdLocked')
+                  : t('addClient.accountIdHint')}
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Super Admin's Full Name <span className="text-rose-500">*</span>
+                {t('addClient.fullName')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 value={fullName}
                 onChange={(value) => setFullName(value)}
-                placeholder="e.g. Rohan Kapoor"
+                placeholder={t('addClient.fullNamePlaceholder')}
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Super Admin's Phone <span className="text-rose-500">*</span>
+                  {t('addClient.phone')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
                   type="tel"
                   required
                   value={phone}
                   onChange={(value) => setPhone(value)}
-                  placeholder="e.g. +91 98100 22341"
+                  placeholder={t('addClient.phonePlaceholder')}
                   className="font-mono"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Super Admin's Email <span className="text-rose-500">*</span>
+                  {t('addClient.email')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
                   type="email"
                   required
                   value={email}
                   onChange={(value) => setEmail(value)}
-                  placeholder="e.g. rohan@acmecement.com"
+                  placeholder={t('addClient.emailPlaceholder')}
                 />
               </div>
             </div>
             <p className="text-[11px] text-slate-400 -mt-2">
               {isEditing
-                ? 'Changing this changes what they sign in with — they are not notified separately.'
-                : "This is how they'll sign in — there is no separate username on the real account."}
+                ? t('addClient.emailEditHint')
+                : t('addClient.emailHint')}
             </p>
 
             {error && (
@@ -256,7 +267,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('shared:cancel')}
               </button>
               <button
                 type="submit"
@@ -264,7 +275,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4" />
-                <span>{busy ? (isEditing ? 'Saving…' : 'Creating…') : (isEditing ? 'Save Changes' : 'Create Client')}</span>
+                <span>{busy ? (isEditing ? t('shared:saving') : t('shared:creating')) : (isEditing ? t('shared:saveChanges') : t('addClient.create'))}</span>
               </button>
             </div>
           </form>

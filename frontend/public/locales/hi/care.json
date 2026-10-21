@@ -1,0 +1,165 @@
+{
+  "page": {
+    "subtitle": "नियम-आधारित परिदृश्य जोखिम",
+    "detailSubtitle": "ThingsCare विवरण",
+    "machineNotFound": "मशीन नहीं मिली"
+  },
+  "hero": {
+    "eyebrow": "नियम-आधारित स्कोरिंग",
+    "tooltip": "जोखिम स्कोर नियम-आधारित है (टियर 1): 70% सबसे खराब सिग्नल + 30% औसत, दोनों बेसलाइन की तुलना में। यह कोई गढ़ी हुई संभावना नहीं है, और शेष उपयोगी जीवन का कोई अनुमान नहीं दिया जाता।",
+    "title": "ThingsCare: परिदृश्य जोखिम"
+  },
+  "common": {
+    "loading": "लोड हो रहा है…",
+    "prev": "पिछला",
+    "next": "अगला",
+    "pageOf": "पृष्ठ {{page}} / {{total}}",
+    "details": "विवरण",
+    "createWorkOrder": "कार्य आदेश बनाएँ",
+    "viewEquipmentPage": "उपकरण पेज देखें"
+  },
+  "kpi": {
+    "inScope": "दायरे में मशीनें",
+    "meanRisk": "औसत जोखिम स्कोर",
+    "highCritical": "उच्च / गंभीर",
+    "noActive": "कोई सक्रिय परिदृश्य नहीं"
+  },
+  "list": {
+    "heading": "मशीनें",
+    "count_one": "{{count}} मशीन",
+    "count_other": "{{count}} मशीनें",
+    "noMatch": "इस फ़िल्टर से कोई मशीन मेल नहीं खाती।"
+  },
+  "card": {
+    "gaugeTitle": "जोखिम स्कोर: 0–100, नियम-आधारित",
+    "noScenario": "कोई परिदृश्य नहीं",
+    "riskTitle": "नियम-आधारित संयुक्त जोखिम स्कोर",
+    "risk": "{{score}} जोखिम",
+    "confidenceTitle": "पूरी तस्वीर का कितना हिस्सा उपलब्ध था",
+    "abnormalTitle": "बेसलाइन से बाहर के सिग्नल",
+    "na": "लागू नहीं"
+  },
+  "severity": {
+    "none": "कोई नहीं",
+    "low": "कम",
+    "medium": "मध्यम",
+    "high": "उच्च",
+    "critical": "गंभीर"
+  },
+  "confidence": {
+    "full": "पूर्ण",
+    "partial": "आंशिक",
+    "none": "कोई नहीं"
+  },
+  "signalState": {
+    "normal": "सामान्य",
+    "warning": "चेतावनी",
+    "critical": "गंभीर",
+    "unscored": "स्कोर नहीं"
+  },
+  "workOrderStatus": {
+    "created": "बनाया गया",
+    "in-progress": "प्रगति में",
+    "completed": "पूर्ण",
+    "cancelled": "रद्द"
+  },
+  "errors": {
+    "loadEquipment": "उपकरण लोड नहीं हो सके।",
+    "loadBaselines": "बेसलाइन लोड नहीं हो सकीं।",
+    "recomputeBaselines": "बेसलाइन दोबारा गणना नहीं हो सकीं।",
+    "loadPredictions": "पूर्वानुमान लोड नहीं हो सके।",
+    "scoreNow": "इस मशीन को अभी स्कोर नहीं किया जा सका।"
+  },
+  "baselines": {
+    "title": "बेसलाइन",
+    "subtitle": "हर सिग्नल का औसत/मानक विचलन किससे मापा जाता है",
+    "recompute": "दोबारा गणना करें",
+    "empty": "इस मशीन के लिए अभी तक कोई बेसलाइन नहीं बनी।",
+    "col": {
+      "signal": "सिग्नल",
+      "mean": "औसत",
+      "stddev": "मानक विचलन",
+      "samples": "नमूने",
+      "coverage": "कवरेज",
+      "source": "स्रोत",
+      "computed": "गणना का समय"
+    }
+  },
+  "detail": {
+    "scoreNow": "अभी स्कोर करें",
+    "scored_one": "{{count}} परिदृश्य स्कोर हुआ।",
+    "scored_other": "{{count}} परिदृश्य स्कोर हुए।",
+    "skipped_one": "{{count}} छोड़ा गया।",
+    "skipped_other": "{{count}} छोड़े गए।",
+    "raised_one": "{{count}} जॉब बनाया गया।",
+    "raised_other": "{{count}} जॉब बनाए गए।",
+    "activeScenarios": "सक्रिय परिदृश्य",
+    "noPrediction": "किसी सक्रिय परिदृश्य ने अभी तक इस मशीन के लिए पूर्वानुमान नहीं दिया है।",
+    "abnormal_one": "{{count}} असामान्य",
+    "abnormal_other": "{{count}} असामान्य",
+    "window_one": "{{count}} दिन की अवधि",
+    "window_other": "{{count}} दिन की अवधि",
+    "maintenanceHistory": "रखरखाव इतिहास",
+    "noWorkOrders": "इस मशीन के लिए अभी तक कोई कार्य आदेश नहीं है।",
+    "needsScenario": "पूर्वानुमान बनने से पहले पर्याप्त बेसलाइन इतिहास वाला एक सक्रिय क्लाइंट परिदृश्य चाहिए।"
+  },
+  "chain": {
+    "title": "मूल-कारण निदान",
+    "origins_one": "{{count}} मूल",
+    "origins_other": "{{count}} मूल",
+    "noStageOff": "कोई चरण अपने वक्र से बाहर नहीं",
+    "notEnoughReadings": "पर्याप्त रीडिंग नहीं",
+    "diagnosing": "निदान हो रहा है…",
+    "noChain": "इस मशीन की श्रेणी के लिए कोई प्रकाशित कारण-श्रृंखला नहीं है।",
+    "noChainForClass": "इस मशीन की श्रेणी ({{classSlug}}) के लिए कोई प्रकाशित कारण-श्रृंखला नहीं है।",
+    "confidence": "विश्वसनीयता {{value}}",
+    "confidenceLevel": {
+      "high": "उच्च",
+      "medium": "मध्यम",
+      "low": "कम",
+      "none": "कोई नहीं"
+    },
+    "notEvaluated": "मूल्यांकन नहीं हुआ: {{reason}}",
+    "separateFaults_one": "आगे एक अलग खराबी: {{list}}",
+    "separateFaults_other": "आगे अलग खराबियाँ: {{list}}",
+    "notRun": "नहीं चलाई गई: {{list}}",
+    "whatIf": "अगर ऐसा हो तो…",
+    "lookAt": "यहाँ देखें: {{name}}",
+    "reads": "रीडिंग {{actual}} है, जबकि इसके कारक {{expected}} बताते हैं",
+    "exceedance": "चेतावनी सीमा का {{value}}×",
+    "verdict": {
+      "normal": "अपने वक्र पर",
+      "origin": "मूल",
+      "additional": "अलग खराबी",
+      "unevaluated": "स्कोर नहीं"
+    },
+    "stageReason": {
+      "no-target": "इस सिग्नल की कोई रीडिंग नहीं",
+      "driver-missing": "एक कारक की रीडिंग नहीं है",
+      "out-of-range": "कारक उस दायरे से बाहर हैं जिस पर श्रृंखला बनाई गई थी"
+    },
+    "chainReason": {
+      "no-nodes": "श्रृंखला में कोई चरण नहीं है",
+      "cycle": "श्रृंखला खुद में घूमती है",
+      "nothing-evaluable": "किसी चरण के पास ज़रूरी रीडिंग नहीं थीं",
+      "no-inputs": "कोई इनपुट मान नहीं दिया गया"
+    },
+    "breach": {
+      "none": "कोई नहीं",
+      "warning": "चेतावनी",
+      "critical": "गंभीर"
+    },
+    "noRating": "कोई रेटिंग नहीं",
+    "noInputs": "इस श्रृंखला में सेट करने के लिए कोई बाहरी इनपुट नहीं है।",
+    "project": "अनुमान लगाएँ",
+    "projecting": "अनुमान लगाया जा रहा है…",
+    "notProjected": "अनुमान नहीं लगा: {{reason}}",
+    "firstBreach": "{{name}} लगभग {{time}} में अपनी रेटिंग ({{breach}}) पार कर लेगा",
+    "noBreach": "इन इनपुट पर कोई रेटेड चरण सीमा पार नहीं करता।",
+    "after": "{{time}} बाद",
+    "errors": {
+      "diagnose": "इस मशीन का निदान नहीं हो सका।",
+      "project": "इस श्रृंखला का अनुमान नहीं लगाया जा सका।"
+    }
+  }
+}

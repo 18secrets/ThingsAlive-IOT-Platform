@@ -1,0 +1,201 @@
+{
+  "page": {
+    "title": "AI ऑनबोर्डिंग",
+    "subtitle": "साइट-वार ऑनबोर्डिंग प्रगति",
+    "chatTitle": "चैटबॉट सहायक",
+    "chatSubtitle": "AI सेटअप सहायक"
+  },
+  "progress": {
+    "loadFailed": "ऑनबोर्डिंग प्रगति लोड नहीं हो सकी।",
+    "noSite": "बिना साइट वाली मशीनें",
+    "sites": "साइटें",
+    "search": "साइटें खोजें...",
+    "allStatuses": "स्थिति चुनें (सभी)",
+    "refresh": "प्रगति रीफ़्रेश करें",
+    "newOnboarding": "नई AI ऑनबोर्डिंग",
+    "col": {
+      "site": "साइट",
+      "equipment": "उपकरण",
+      "onboarded": "ऑनबोर्ड हुए",
+      "steps": "पूरे चरण (मशीनें)",
+      "status": "स्थिति",
+      "view": "देखें"
+    },
+    "loading": "लोड हो रहा है…",
+    "stepTitle": "{{step}}: {{done}} पूरे, {{pending}} लंबित, {{blocked}} रुके",
+    "viewMachines": "मशीनें और उनके चरण देखें",
+    "noMatch": "कोई साइट मेल नहीं खाती।",
+    "asOf": "{{date}} तक · प्रगति डिवाइस, बाइंडिंग, परिदृश्य, अलर्ट नियम और उपयोगकर्ता पहुँच से सीधे पढ़ी जाती है",
+    "stepsPerMachine": "प्रति मशीन ऑनबोर्डिंग चरण",
+    "noMachines": "आपके रजिस्टर में इस साइट पर कोई मशीन नहीं मिली।",
+    "machineLoadFailed": "यह मशीन लोड नहीं हो सकी।",
+    "fullyOnboarded": "पूरी तरह ऑनबोर्ड",
+    "inProgress": "प्रगति में",
+    "class": "वर्ग {{slug}}",
+    "waitingOn": "प्रतीक्षा: {{step}}"
+  },
+  "siteStatus": {
+    "completed": "पूर्ण",
+    "in_progress": "प्रगति में",
+    "no_equipment": "कोई उपकरण नहीं"
+  },
+  "step": {
+    "equipment": "उपकरण वर्गीकृत",
+    "device": "डिवाइस लगा",
+    "mapping": "सिग्नल मैप हुए",
+    "validation": "रीडिंग सत्यापित",
+    "activation": "परिदृश्य सक्रिय",
+    "alerts": "अलर्ट नियम",
+    "access": "उपयोगकर्ता पहुँच"
+  },
+  "stepShort": {
+    "equipment": "उपकरण",
+    "device": "डिवाइस",
+    "mapping": "सिग्नल",
+    "validation": "रीडिंग",
+    "activation": "परिदृश्य",
+    "alerts": "अलर्ट",
+    "access": "पहुँच"
+  },
+  "stepState": {
+    "done": "पूरा",
+    "pending": "लंबित",
+    "blocked": "रुका"
+  },
+  "reason": {
+    "unclassified": "मशीन का कोई उपकरण वर्ग नहीं है",
+    "no_device_claimed": "मशीन पर कोई डिवाइस नहीं लगा है",
+    "unbound": "एक ज़रूरी सिग्नल बाइंड नहीं है",
+    "mapping_required": "एक ज़रूरी सिग्नल की मैपिंग बाकी है",
+    "no_requirements": "वर्ग में कोई ज़रूरी सिग्नल घोषित नहीं है",
+    "stale": "रीडिंग पुरानी हैं",
+    "no_readings": "अभी कोई रीडिंग नहीं",
+    "no_active_scenario": "मशीन पर कोई परिदृश्य सक्रिय नहीं है",
+    "no_alert_rule": "कोई सक्रिय अलर्ट नियम मशीन को कवर नहीं करता",
+    "no_user_access": "सुपर एडमिन के अलावा कोई मशीन नहीं देख सकता",
+    "blocked_by_step": "पिछले चरण की प्रतीक्षा"
+  },
+  "list": {
+    "totalSessions": "कुल सत्र",
+    "search": "ऑनबोर्डिंग सत्र खोजें...",
+    "col": {
+      "session": "सत्र",
+      "sites": "साइटें",
+      "equipment": "उपकरण",
+      "progress": "प्रगति",
+      "created": "बनाया",
+      "updated": "अपडेट",
+      "print": "प्रिंट",
+      "view": "देखें",
+      "status": "स्थिति",
+      "actions": "कार्रवाइयाँ"
+    },
+    "printQr": "QR लेबल प्रिंट करें",
+    "viewSession": "सत्र देखें",
+    "inactive": "निष्क्रिय",
+    "editSession": "सत्र संपादित करें",
+    "refreshStatus": "स्थिति रीफ़्रेश करें",
+    "empty": "कोई ऑनबोर्डिंग सत्र नहीं मिला।",
+    "close": "बंद करें",
+    "print": "प्रिंट करें"
+  },
+  "chat": {
+    "heading": "आइए आपकी संपत्तियाँ सेट करें।",
+    "intro": "बताइए आप क्या चलाते हैं। बाकी हम संभाल लेंगे - बाद में आप कुछ भी बदल सकते हैं।",
+    "assistantName": "Things Alive सहायक",
+    "underDevelopment": "यह AI सेटअप सहायक अभी विकास में है — मैं अभी इस पर कार्रवाई नहीं कर सकता, लेकिन आपका संदेश यहाँ दर्ज है ताकि हम देख सकें कि बातचीत कैसी दिखती है।",
+    "placeholder": "और विवरण जोड़ें या प्रश्न पूछें...",
+    "send": "भेजें",
+    "manualSetup": "मैं इसे खुद सेट करूँगा",
+    "setupStatus": "सेटअप स्थिति",
+    "quick": {
+      "assets": {
+        "title": "संपत्तियाँ",
+        "description": "हर मशीन, एक जगह।",
+        "prompt": "मेरी संपत्तियों के बारे में आप जो कुछ जानते हैं वह सब दिखाइए।"
+      },
+      "ask": {
+        "title": "कुछ भी पूछें",
+        "description": "सरल भाषा में सवाल।",
+        "prompt": "इस हफ़्ते किस उपकरण का रखरखाव देय है?"
+      },
+      "alerts": {
+        "title": "ऑटो-अलर्ट",
+        "description": "खराबी से पहले सूचना।",
+        "prompt": "कम ईंधन और इंजन के ज़्यादा तापमान के लिए अलर्ट सेट करें।"
+      },
+      "reports": {
+        "title": "रिपोर्ट",
+        "description": "एक टैप में सारांश।",
+        "prompt": "मुझे इस महीने की सारांश रिपोर्ट दीजिए।"
+      }
+    },
+    "step": {
+      "device": "डिवाइस चुनना",
+      "equipment": "उपकरण चुनना",
+      "equipmentSub": "ट्रैक्टर (2) • जेनसेट (4)",
+      "mapping": "डिवाइस और उपकरण की मैपिंग",
+      "onboarding": "ऑनबोर्डिंग",
+      "validation": "डेटा सत्यापन (संचार)",
+      "alerts": "अलर्ट कॉन्फ़िगर करें",
+      "access": "उपयोगकर्ता पहुँच दें",
+      "done": "पूर्ण"
+    },
+    "state": {
+      "done": "पूरा",
+      "active": "जारी",
+      "pending": "लंबित"
+    }
+  },
+  "details": {
+    "dateRange": "तारीख सीमा चुनें",
+    "equipment": "उपकरण",
+    "projectCode": "प्रोजेक्ट कोड",
+    "description": "विवरण",
+    "benchmark": "बेंचमार्क",
+    "manufacturer": "निर्माता",
+    "deviceStatus": "डिवाइस स्थिति",
+    "assetVerified": "संपत्ति सत्यापित",
+    "engineWorkingHours": "इंजन कार्य घंटे",
+    "machineBreakdownHours": "मशीन ब्रेकडाउन घंटे",
+    "idleHours": "निष्क्रिय घंटे",
+    "fuelConsumption": "ईंधन खपत",
+    "avgFuelConsumption": "औसत ईंधन खपत",
+    "pmOrders": "PM ऑर्डर",
+    "litresPerHour": "{{value}} लीटर/घंटा",
+    "litres": "{{value}} लीटर",
+    "hours": "{{value}} घंटे",
+    "location": "उपकरण का स्थान",
+    "liveParameters": "लाइव पैरामीटर",
+    "reportTrends": "सूचना रिपोर्ट | रुझान",
+    "alertInsight": "अलर्ट विश्लेषण",
+    "noAlerts": "कोई सक्रिय अलर्ट नहीं",
+    "value": "मान:",
+    "threshold": "सीमा:",
+    "deviceState": {
+      "Online": "ऑनलाइन",
+      "Offline": "ऑफ़लाइन",
+      "Not Onboarded": "ऑनबोर्ड नहीं"
+    },
+    "yesNo": {
+      "Yes": "हाँ",
+      "No": "नहीं"
+    },
+    "severity": {
+      "critical": "गंभीर",
+      "high": "उच्च",
+      "medium": "मध्यम",
+      "low": "निम्न"
+    },
+    "param": {
+      "fuel_level": "ईंधन स्तर",
+      "engine_coolant_temperature": "इंजन कूलेंट तापमान",
+      "engine_oil_pressure": "इंजन ऑयल दबाव",
+      "engine_oil_temperature": "इंजन ऑयल तापमान",
+      "throttle_position": "थ्रॉटल स्थिति",
+      "engine_load": "इंजन लोड",
+      "engine_running_status": "इंजन चालू स्थिति",
+      "device_engine_runtime": "डिवाइस इंजन रनटाइम"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Siren, Info as InfoIcon, User, Wrench, Pencil } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { FleetThing } from '../../data/fleetMockData';
 import { IncidentCategory, IncidentSeverity, IncidentStatus, ShieldIncident } from '../../data/shieldMockData';
 
@@ -23,6 +24,7 @@ const SEVERITY_ICON: Record<IncidentSeverity, React.FC<{ className?: string }>> 
 };
 
 export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => void; onViewWorkOrder: () => void }> = ({ incident, onEdit, onViewWorkOrder }) => {
+  const { t } = useTranslation('incidents');
   const SeverityIcon = SEVERITY_ICON[incident.severity];
   return (
     <div className={`border rounded-xl p-3.5 space-y-2 ${SEVERITY_STYLE[incident.severity]}`}>
@@ -32,25 +34,25 @@ export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => vo
           <h4 className="font-semibold text-slate-800 dark:text-white text-base truncate">{incident.title}</h4>
         </div>
         <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-white dark:bg-slate-900/50 ${SEVERITY_TEXT[incident.severity]}`}>
-          {incident.severity}
+          {t(`mock.severity.${incident.severity}`, { defaultValue: incident.severity })}
         </span>
       </div>
-      <p className="text-md text-slate-700 dark:text-slate-400 truncate">{incident.equipmentCode} · {incident.category}</p>
+      <p className="text-md text-slate-700 dark:text-slate-400 truncate">{incident.equipmentCode} · {t(`mock.category.${incident.category}`, { defaultValue: incident.category })}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500 dark:text-slate-300">
         <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" />{incident.owner}</span>
-        <span className="inline-flex items-center gap-1"><Wrench className="w-3.5 h-3.5" />{incident.workOrderStatus}</span>
-        <span className="px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/50 text-sm font-medium">{incident.status}</span>
+        <span className="inline-flex items-center gap-1"><Wrench className="w-3.5 h-3.5" />{t(`mock.status.${incident.workOrderStatus}`, { defaultValue: incident.workOrderStatus })}</span>
+        <span className="px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/50 text-sm font-medium">{t(`mock.status.${incident.status}`, { defaultValue: incident.status })}</span>
       </div>
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-2">
           <button onClick={onEdit} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-sky-400">
-            <Pencil className="w-3.5 h-3.5" /> Edit
+            <Pencil className="w-3.5 h-3.5" /> {t('mock.edit')}
           </button>
           <button onClick={onViewWorkOrder} className="px-2.5 py-1 text-xs font-medium rounded-md bg-sky-600 text-white hover:bg-sky-700">
-            Work order
+            {t('mock.workOrder')}
           </button>
         </div>
-        <span className="text-[11px] text-slate-400" title="Browser-local demonstration history; not a tamper-proof regulatory audit.">
+        <span className="text-[11px] text-slate-400" title={t('mock.historyNote')}>
           {new Date(incident.createdAt).toLocaleDateString()}
         </span>
       </div>
@@ -83,6 +85,7 @@ export const IncidentForm: React.FC<{
   onCancel: () => void;
   onSave: (values: IncidentFormValues) => void;
 }> = ({ things, initial, defaultThingId, onCancel, onSave }) => {
+  const { t } = useTranslation('incidents');
   const [equipmentCode, setEquipmentCode] = useState(initial?.equipmentCode ?? defaultThingId ?? things[0]?.id ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [category, setCategory] = useState<IncidentCategory>(initial?.category ?? 'Human safety');
@@ -105,9 +108,9 @@ export const IncidentForm: React.FC<{
       }}
     >
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Thing</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.thing')}</span>
         <SelectPicker
-          data={things.map((t) => ({ label: t.name, value: t.id }))}
+          data={things.map((th) => ({ label: th.name, value: th.id }))}
           value={equipmentCode}
           onChange={(value) => setEquipmentCode(value ?? things[0]?.id ?? '')}
           searchable={false}
@@ -116,13 +119,13 @@ export const IncidentForm: React.FC<{
         />
       </div>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Incident title</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.incidentTitle')}</span>
         <Input required value={title} onChange={(value) => setTitle(value)} className="w-full" />
       </label>
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Category</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.categoryLabel')}</span>
         <SelectPicker
-          data={CATEGORY_OPTIONS.map((c) => ({ label: c, value: c }))}
+          data={CATEGORY_OPTIONS.map((c) => ({ label: t(`mock.category.${c}`), value: c }))}
           value={category}
           onChange={(value) => setCategory((value ?? CATEGORY_OPTIONS[0]) as IncidentCategory)}
           searchable={false}
@@ -131,9 +134,9 @@ export const IncidentForm: React.FC<{
         />
       </div>
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Severity</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.severityLabel')}</span>
         <SelectPicker
-          data={SEVERITY_OPTIONS.map((s) => ({ label: s, value: s }))}
+          data={SEVERITY_OPTIONS.map((s) => ({ label: t(`mock.severity.${s}`), value: s }))}
           value={severity}
           onChange={(value) => setSeverity((value ?? SEVERITY_OPTIONS[0]) as IncidentSeverity)}
           searchable={false}
@@ -142,9 +145,9 @@ export const IncidentForm: React.FC<{
         />
       </div>
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Status</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.statusLabel')}</span>
         <SelectPicker
-          data={STATUS_OPTIONS.map((s) => ({ label: s, value: s }))}
+          data={STATUS_OPTIONS.map((s) => ({ label: t(`mock.status.${s}`), value: s }))}
           value={status}
           onChange={(value) => setStatus((value ?? STATUS_OPTIONS[0]) as IncidentStatus)}
           searchable={false}
@@ -153,36 +156,36 @@ export const IncidentForm: React.FC<{
         />
       </div>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Action owner</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.actionOwner')}</span>
         <Input value={owner} onChange={(value) => setOwner(value)} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Investigation / root cause</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.investigation')}</span>
         <Input as="textarea" value={investigation} onChange={(value) => setInvestigation(value)} rows={3} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Corrective action</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.correctiveAction')}</span>
         <Input as="textarea" value={correctiveAction} onChange={(value) => setCorrectiveAction(value)} rows={3} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Closure evidence</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.closureEvidence')}</span>
         <Input as="textarea" value={closureEvidence} onChange={(value) => setClosureEvidence(value)} rows={3} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Independent reviewer</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.independentReviewer')}</span>
         <Input value={independentReviewer} onChange={(value) => setIndependentReviewer(value)} className="w-full" />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Recorded by</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.recordedBy')}</span>
         <Input value={recordedBy} onChange={(value) => setRecordedBy(value)} className="w-full" />
       </label>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">Closure needs completed investigation and evidence, an independent reviewer and approval of any linked work order.</p>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('mock.closureRule')}</p>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-          Cancel
+          {t('mock.cancel')}
         </button>
         <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors">
-          Save incident
+          {t('mock.save')}
         </button>
       </div>
     </form>

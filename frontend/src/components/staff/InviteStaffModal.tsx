@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Copy, CheckCheck } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
 
@@ -12,13 +13,11 @@ interface InviteStaffModalProps {
   }) => Promise<InvitePlatformStaffResult>;
 }
 
-const ROLES: { value: PlatformStaffRole; label: string; description: string }[] = [
-  { value: 'master-admin', label: 'Master Admin', description: 'Full platform control — accounts, staff, the catalog, everything.' },
-  { value: 'platform-support', label: 'Platform Support', description: 'Operational access without staff or catalog authoring.' },
-  { value: 'catalog-author', label: 'Catalog Author', description: 'Authors the equipment class catalog only.' },
-];
+// Label and description are staff.role.<value> and staff.roleDescription.<value>.
+const ROLES: PlatformStaffRole[] = ['master-admin', 'platform-support', 'catalog-author'];
 
 export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onClose, onInvite }) => {
+  const { t } = useTranslation(['accounts', 'shared']);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<PlatformStaffRole>('catalog-author');
@@ -51,7 +50,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
       const result = await onInvite({ email: finalEmail, fullName: finalName, role });
       setInvited(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not invite this person.');
+      setError(err instanceof ApiError ? err.message : t('invite.failed'));
     } finally {
       setBusy(false);
     }
@@ -73,10 +72,11 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
 
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {invited ? 'Staff Invited' : 'Invite Staff'}
+            {invited ? t('invite.invitedTitle') : t('staff.invite')}
           </h3>
           <button
             onClick={onClose}
+            aria-label={t('shared:close')}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -86,12 +86,16 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
         {invited ? (
           <div className="p-6 space-y-4 text-sm">
             <p className="text-slate-600 dark:text-slate-300">
-              <strong className="text-slate-900 dark:text-white">{invited.fullName}</strong> is invited as{' '}
-              <strong className="font-mono">{invited.role}</strong>.
+              <Trans
+                t={t}
+                i18nKey="invite.invitedAs"
+                values={{ name: invited.fullName, role: t(`staff.role.${invited.role}`, { defaultValue: invited.role }) }}
+                components={{ 1: <strong className="text-slate-900 dark:text-white" />, 3: <strong className="font-mono" /> }}
+              />
             </p>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Invitation Token
+                {t('shared:token.label')}
               </label>
               <div className="relative">
                 <Input
@@ -103,14 +107,18 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                   type="button"
                   onClick={handleCopyToken}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  title="Copy token"
+                  title={t('shared:token.copy')}
                 >
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Expires {new Date(invited.invitationExpiresAt).toLocaleString()}. There is no password to hand
-                over — they set their own via <code>POST /platform/auth/accept-invitation</code> with this token.
+                <Trans
+                  t={t}
+                  i18nKey="invite.tokenHelp"
+                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString() }}
+                  components={{ 1: <code /> }}
+                />
               </p>
             </div>
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
@@ -118,7 +126,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                 onClick={onClose}
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer"
               >
-                Done
+                {t('shared:done')}
               </button>
             </div>
           </div>
@@ -126,40 +134,40 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
           <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Full Name <span className="text-rose-500">*</span>
+                {t('invite.fullName')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 autoFocus
                 value={fullName}
                 onChange={(value) => setFullName(value)}
-                placeholder="e.g. Deepak Rao"
+                placeholder={t('invite.fullNamePlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Email <span className="text-rose-500">*</span>
+                {t('translation:common.email')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 type="email"
                 required
                 value={email}
                 onChange={(value) => setEmail(value)}
-                placeholder="e.g. deepak@thingsalive.io"
+                placeholder={t('invite.emailPlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Role <span className="text-rose-500">*</span>
+                {t('translation:settings.role')} <span className="text-rose-500">*</span>
               </label>
               <div className="space-y-2">
                 {ROLES.map((r) => (
                   <label
-                    key={r.value}
+                    key={r}
                     className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                      role === r.value
+                      role === r
                         ? 'border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40'
                         : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
@@ -167,14 +175,14 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                     <input
                       type="radio"
                       name="platform-role"
-                      value={r.value}
-                      checked={role === r.value}
-                      onChange={() => setRole(r.value)}
+                      value={r}
+                      checked={role === r}
+                      onChange={() => setRole(r)}
                       className="mt-0.5 cursor-pointer"
                     />
                     <div>
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{r.label}</p>
-                      <p className="text-[11px] text-slate-400">{r.description}</p>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t(`staff.role.${r}`)}</p>
+                      <p className="text-[11px] text-slate-400">{t(`staff.roleDescription.${r}`)}</p>
                     </div>
                   </label>
                 ))}
@@ -193,14 +201,14 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                 onClick={onClose}
                 className="px-5 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('shared:cancel')}
               </button>
               <button
                 type="submit"
                 disabled={busy}
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer disabled:opacity-60"
               >
-                {busy ? 'Inviting…' : 'Send Invitation'}
+                {busy ? t('invite.inviting') : t('invite.send')}
               </button>
             </div>
           </form>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Side-by-side trial of the two client dashboards: the original command center (mock
@@ -8,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
  */
 export const DashboardSwitch: React.FC<{ current: 'classic' | 'live' }> = ({ current }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('dashboard');
   const item = (id: 'classic' | 'live', label: string, to: string) => (
     <button
       onClick={() => navigate(to)}
@@ -18,10 +20,10 @@ export const DashboardSwitch: React.FC<{ current: 'classic' | 'live' }> = ({ cur
   );
   return (
     <div className="flex items-center justify-end gap-2">
-      <span className="text-[11px] text-slate-400">Dashboard:</span>
+      <span className="text-[11px] text-slate-400">{t('switch.label')}</span>
       <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
-        {item('classic', 'Classic (sample data)', '/dashboard')}
-        {item('live', 'Live (new)', '/dashboard-live')}
+        {item('classic', t('switch.classic'), '/dashboard')}
+        {item('live', t('switch.live'), '/dashboard-live')}
       </div>
     </div>
   );

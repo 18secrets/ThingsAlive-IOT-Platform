@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, ListChecks, Check, Boxes, MessageCircleQuestion, BellRing, FileBarChart } from 'lucide-react';
 import { Input } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 
 interface ChatMessage {
   id: string;
@@ -10,10 +11,10 @@ interface ChatMessage {
 
 type StatusState = 'done' | 'active' | 'pending';
 
+// Labels are onboarding.json's chat.step.<id> (and chat.step.<id>Sub for a sublabel).
 interface SetupStatusItem {
   id: string;
-  label: string;
-  sublabel?: string;
+  hasSublabel?: boolean;
   status: StatusState;
 }
 
@@ -21,24 +22,23 @@ interface AIOnboardingProps {
   onSkipToManualSetup: () => void;
 }
 
-const QUICK_CARDS: { title: string; description: string; icon: React.FC<{ className?: string }>; prompt: string }[] = [
-  { title: 'Assets', description: 'Every machine, one place.', icon: Boxes, prompt: 'Show me everything you know about my assets.' },
-  { title: 'Ask anything', description: 'Plain English queries.', icon: MessageCircleQuestion, prompt: 'Which equipment is due for maintenance this week?' },
-  { title: 'Auto-alerts', description: "Told before it breaks.", icon: BellRing, prompt: 'Set up an alert for low fuel and high engine temperature.' },
-  { title: 'Reports', description: 'One-tap summaries.', icon: FileBarChart, prompt: 'Give me a summary report for this month.' },
+// Title, description and prompt are onboarding.json's chat.quick.<id>.*.
+const QUICK_CARDS: { id: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: 'assets', icon: Boxes },
+  { id: 'ask', icon: MessageCircleQuestion },
+  { id: 'alerts', icon: BellRing },
+  { id: 'reports', icon: FileBarChart },
 ];
 
-const UNDER_DEVELOPMENT_REPLY = "This AI setup assistant is still under development — I can't act on that yet, but your message is recorded here so we can review how the conversation looks.";
-
 const INITIAL_STATUS: SetupStatusItem[] = [
-  { id: 'device', label: 'Selecting Device', status: 'done' },
-  { id: 'equipment', label: 'Selecting Equipment', sublabel: 'Tractors (2) • Gensets (4)', status: 'active' },
-  { id: 'mapping', label: 'Mapping Device & Equipment', status: 'pending' },
-  { id: 'onboarding', label: 'Onboarding', status: 'pending' },
-  { id: 'validation', label: 'Data Validation (Communication)', status: 'pending' },
-  { id: 'alerts', label: 'Configure Alerts', status: 'pending' },
-  { id: 'access', label: 'Assign User Access', status: 'pending' },
-  { id: 'done', label: 'Done', status: 'pending' },
+  { id: 'device', status: 'done' },
+  { id: 'equipment', hasSublabel: true, status: 'active' },
+  { id: 'mapping', status: 'pending' },
+  { id: 'onboarding', status: 'pending' },
+  { id: 'validation', status: 'pending' },
+  { id: 'alerts', status: 'pending' },
+  { id: 'access', status: 'pending' },
+  { id: 'done', status: 'pending' },
 ];
 
 const STATUS_BADGE_STYLES: Record<StatusState, string> = {
@@ -54,6 +54,7 @@ const STATUS_CARD_STYLES: Record<StatusState, string> = {
 };
 
 export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup }) => {
+  const { t } = useTranslation('onboarding');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const statusList = INITIAL_STATUS;
   const [draft, setDraft] = useState('');
@@ -74,7 +75,7 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
     setIsThinking(true);
 
     setTimeout(() => {
-      setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: UNDER_DEVELOPMENT_REPLY }]);
+      setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: t('chat.underDevelopment') }]);
       setIsThinking(false);
     }, 650);
   };
@@ -99,10 +100,10 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
           {!hasStarted && (
             <div className="text-center mb-6">
               <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
-                Let's set up your assets.
+                {t('chat.heading')}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
-                Tell us what you run. We'll take care of the rest - you can change anything after.
+                {t('chat.intro')}
               </p>
             </div>
           )}
@@ -123,7 +124,7 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
                   </div>
                   <div className="max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-md px-4 py-3 shadow-xs">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 mb-1">
-                      Things Alive Assistant
+                      {t('chat.assistantName')}
                     </div>
                     <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
                       {msg.text}
@@ -157,17 +158,17 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
                 const Icon = card.icon;
                 return (
                   <button
-                    key={card.title}
+                    key={card.id}
                     type="button"
-                    onClick={() => sendMessage(card.prompt)}
+                    onClick={() => sendMessage(t(`chat.quick.${card.id}.prompt`))}
                     className="text-left p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all cursor-pointer"
                   >
                     <Icon className="w-4 h-4 text-sky-600 dark:text-sky-400 mb-2" />
                     <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">
-                      {card.title}
+                      {t(`chat.quick.${card.id}.title`)}
                     </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {card.description}
+                      {t(`chat.quick.${card.id}.description`)}
                     </div>
                   </button>
                 );
@@ -184,14 +185,14 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
             <Input
               value={draft}
               onChange={(value) => setDraft(value)}
-              placeholder="Add more details or ask a question..."
+              placeholder={t('chat.placeholder')}
               className="flex-1 bg-transparent border-none! shadow-none! outline-none!"
             />
             <button
               type="submit"
               disabled={!draft.trim()}
               className="w-9 h-9 rounded-full bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              title="Send"
+              title={t('chat.send')}
             >
               <Send className="w-4 h-4" />
             </button>
@@ -202,7 +203,7 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
             onClick={onSkipToManualSetup}
             className="block text-center text-xs text-slate-500 dark:text-slate-400 underline hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer mt-3 mx-auto"
           >
-            I will set it up myself
+            {t('chat.manualSetup')}
           </button>
         </div>
       </div>
@@ -212,7 +213,7 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5">
           <div className="flex items-center justify-between pb-3 mb-1 border-b border-slate-100 dark:border-slate-800">
             <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">
-              Setup Status
+              {t('chat.setupStatus')}
             </h3>
             <ListChecks className="w-4 h-4 text-slate-400" />
           </div>
@@ -239,17 +240,17 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
                   )}
                   <div className="min-w-0">
                     <div className={`text-sm font-medium leading-snug ${item.status === 'pending' ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                      {item.label}
+                      {t(`chat.step.${item.id}`)}
                     </div>
-                    {item.sublabel && (
+                    {item.hasSublabel && (
                       <div className="text-[11px] text-sky-600 dark:text-sky-400 truncate">
-                        {item.sublabel}
+                        {t(`chat.step.${item.id}Sub`)}
                       </div>
                     )}
                   </div>
                 </div>
                 <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5 ${STATUS_BADGE_STYLES[item.status]}`}>
-                  {item.status}
+                  {t(`chat.state.${item.status}`)}
                 </span>
               </div>
             ))}

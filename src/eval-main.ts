@@ -7,6 +7,7 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { EvalSummary, EvaluationService } from './evaluation/evaluation.service';
 import { GoldenSetInvalid, loadGoldenSet } from './evaluation/retrieval-golden';
 import { RetrievalEvalService } from './evaluation/retrieval-eval.service';
+import { RecommendationReplayService } from './evaluation/recommendation-replay.service';
 
 /**
  * The evaluation CLI (QEVAL1 §6). No HTTP: results are read from the summary it prints,
@@ -19,6 +20,9 @@ import { RetrievalEvalService } from './evaluation/retrieval-eval.service';
  *   npm run eval -- --kind retrieval --dataset seeded|real --golden <file>
  *                   [--tenant a,b] [--budget-seconds 900] [--budget-series 5000]
  *                   [--note "…"] [--out summary.json]
+ *   npm run eval -- --kind recommendation_replay --dataset seeded|real
+ *                   [--from …] [--to …] [--moments-per-machine 200]
+ *                   [--budget-seconds 900] [--budget-series 5000] [--note "…"] [--out summary.json]
  *
  * A retrieval golden set's format is in docs/ai/eval/retrieval/README.md. A smoke set is
  * labelled seeded whatever it was told.
@@ -36,9 +40,7 @@ import { RetrievalEvalService } from './evaluation/retrieval-eval.service';
 })
 class EvalMainModule {}
 
-const NOT_YET: Record<string, string> = {
-  recommendation_replay: 'QEVAL1c: waits on QREC2 (the deterministic renderer)',
-};
+const NOT_YET: Record<string, string> = {};
 
 function arg(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(`--${name}`);
@@ -49,7 +51,10 @@ async function main(argv: string[]): Promise<number> {
   const logger = new Logger('EvalMain');
   const kind = arg(argv, 'kind');
   if (kind && NOT_YET[kind]) { logger.error(`${kind} cannot run yet. ${NOT_YET[kind]}`); return 2; }
-  if (kind !== 'ttm_backtest' && kind !== 'retrieval') { logger.error('--kind ttm_backtest|retrieval'); return 2; }
+  if (kind !== 'ttm_backtest' && kind !== 'retrieval' && kind !== 'recommendation_replay') {
+    logger.error('--kind ttm_backtest|retrieval|recommendation_replay');
+    return 2;
+  }
   const dataset = arg(argv, 'dataset');
   if (dataset !== 'seeded' && dataset !== 'real') { logger.error('--dataset seeded|real is required'); return 2; }
   const date = (s?: string) => (s ? new Date(s) : undefined);
@@ -68,16 +73,20 @@ async function main(argv: string[]): Promise<number> {
 
   const app = await NestFactory.createApplicationContext(EvalMainModule, { logger: ['log', 'warn', 'error'] });
   try {
-    const s: EvalSummary = golden
+    const common = {
+      dataset, datasetNote: arg(argv, 'note'), from: date(arg(argv, 'from')), to: date(arg(argv, 'to')),
+      budgetSeconds: num(arg(argv, 'budget-seconds')), budgetSeries: num(arg(argv, 'budget-series')),
+    } as const;
+    const s: EvalSummary = kind === 'retrieval'
       ? await app.get(RetrievalEvalService).runRetrieval({
-        dataset, datasetNote: arg(argv, 'note'), golden: golden.set, goldenSha256: golden.sha256,
+        dataset, datasetNote: arg(argv, 'note'), golden: golden!.set, goldenSha256: golden!.sha256,
         tenants: arg(argv, 'tenant')?.split(',').map((t) => t.trim()).filter(Boolean),
         budgetSeconds: num(arg(argv, 'budget-seconds')), budgetPairs: num(arg(argv, 'budget-series')),
       })
+      : kind === 'recommendation_replay'
+      ? await app.get(RecommendationReplayService).run({ ...common, momentsPerMachine: num(arg(argv, 'moments-per-machine')) })
       : await app.get(EvaluationService).runBacktest({
-        dataset, datasetNote: arg(argv, 'note'), modelId: arg(argv, 'model'),
-        from: date(arg(argv, 'from')), to: date(arg(argv, 'to')), replayDays: num(arg(argv, 'replay-days')),
-        budgetSeconds: num(arg(argv, 'budget-seconds')), budgetSeries: num(arg(argv, 'budget-series')),
+        ...common, modelId: arg(argv, 'model'), replayDays: num(arg(argv, 'replay-days')),
       });
     const text = JSON.stringify(s, null, 2);
     const out = arg(argv, 'out');

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import {
   ApiError, CausalChain, CausalChainInput, ChainDirection, ChainDriver, ChainNode,
 } from '../../../lib/api';
@@ -18,11 +19,7 @@ interface AddCausalChainModalProps {
 const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-const DIRECTION_OPTIONS: { label: string; value: ChainDirection }[] = [
-  { label: 'Above expectation', value: 'above' },
-  { label: 'Below expectation', value: 'below' },
-  { label: 'Either direction', value: 'either' },
-];
+const DIRECTIONS: ChainDirection[] = ['above', 'below', 'either'];
 
 const emptyDriver = (): ChainDriver => ({ signal: '', coefficient: 0 });
 
@@ -46,6 +43,8 @@ const emptyNode = (signals: string[]): ChainNode => ({
 export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
   isOpen, onClose, equipmentClassSlug, availableSignals, onCreate, existingChain,
 }) => {
+  const { t } = useTranslation('catalog');
+  const DIRECTION_OPTIONS = DIRECTIONS.map((d) => ({ label: t(`chainModal.direction.${d}`), value: d }));
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [name, setName] = useState('');
@@ -135,7 +134,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
       await onCreate(finalSlug, input);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} this chain.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('chainModal.saveFailed') : t('chainModal.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -150,12 +149,12 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {isEditing ? 'Edit Causal Chain' : 'New Causal Chain'}
+                {isEditing ? t('chainModal.editTitle') : t('chains.new')}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
                 {isEditing
-                  ? 'Editing the working draft — publishing it is a separate step, from the card.'
-                  : 'Created as a draft. Publishing makes the version immutable.'}
+                  ? t('formulaModal.editSubtitle')
+                  : t('chainModal.newSubtitle')}
               </p>
             </div>
           </div>
@@ -172,26 +171,26 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Chain Name <span className="text-rose-500">*</span>
+                {t('chainModal.name')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 autoFocus
                 value={name}
                 onChange={(value) => handleNameChange(value)}
-                placeholder="e.g. Load to Coolant Overheat"
+                placeholder={t('chainModal.namePlaceholder')}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Slug <span className="text-rose-500">*</span>
+                {t('classModal.slug')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 disabled={isEditing}
                 value={slug}
                 onChange={(value) => { setSlug(value); setSlugTouched(true); }}
-                placeholder="e.g. load-to-coolant-overheat"
+                placeholder={t('chainModal.slugPlaceholder')}
                 className="font-mono"
               />
             </div>
@@ -199,58 +198,58 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Description
+              {t('classModal.description')}
             </label>
             <Input
               as="textarea"
               rows={2}
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="How the fault moves through this machine..."
+              placeholder={t('chainModal.descriptionPlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Outcome <span className="text-slate-400 font-normal">(optional)</span>
+                {t('chainModal.outcome')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
               </label>
-              <Input value={outcome} onChange={(value) => setOutcome(value)} placeholder="What the far end is watching for" />
+              <Input value={outcome} onChange={(value) => setOutcome(value)} placeholder={t('chainModal.outcomePlaceholder')} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Scenario Slug <span className="text-slate-400 font-normal">(optional)</span>
+                {t('chainModal.scenarioSlug')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
               </label>
-              <Input value={scenarioSlug} onChange={(value) => setScenarioSlug(value)} placeholder="the failure mode this is intelligence for" className="font-mono" />
+              <Input value={scenarioSlug} onChange={(value) => setScenarioSlug(value)} placeholder={t('chainModal.scenarioSlugPlaceholder')} className="font-mono" />
             </div>
           </div>
 
           <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-white">Stages</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">{t('chainModal.stages')}</span>
               <button
                 type="button"
                 onClick={addNode}
                 className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add stage</span>
+                <span>{t('chainModal.addStage')}</span>
               </button>
             </div>
             <p className="text-[10px] text-slate-400 -mt-2">
-              In order, upstream first — each stage predicts one signal from the drivers below it.
+              {t('chainModal.stagesHint')}
             </p>
 
             {nodes.map((node, ni) => (
               <div key={ni} className="p-3.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Stage {ni + 1}</span>
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.stage', { n: ni + 1 })}</span>
                   <button
                     type="button"
                     onClick={() => removeNode(ni)}
                     disabled={nodes.length <= 1}
                     className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Remove stage"
+                    title={t('chainModal.removeStage')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -258,13 +257,13 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                   <div className="col-span-2 md:col-span-1">
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Signal</label>
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.signal')}</label>
                     <SelectPicker
                       size="sm"
                       data={availableSignals.map((s) => ({ label: s, value: s }))}
                       value={node.signal}
                       onChange={(value) => updateNode(ni, { signal: value ?? '' })}
-                      placeholder="no signals on this class"
+                      placeholder={t('alertModal.noSignals')}
                       block
                       searchable={false}
                       cleanable={false}
@@ -272,15 +271,15 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Label</label>
-                    <Input size="sm" value={node.label ?? ''} onChange={(value) => updateNode(ni, { label: value })} placeholder="optional" />
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.label')}</label>
+                    <Input size="sm" value={node.label ?? ''} onChange={(value) => updateNode(ni, { label: value })} placeholder={t('chainModal.optionalPlaceholder')} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Intercept</label>
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.intercept')}</label>
                     <InputNumber size="sm" value={node.intercept} onChange={(value) => updateNode(ni, { intercept: Number(value) || 0 })} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Direction</label>
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.directionLabel')}</label>
                     <SelectPicker
                       size="sm"
                       data={DIRECTION_OPTIONS}
@@ -292,25 +291,25 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Warn above</label>
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.warnAbove')}</label>
                     <InputNumber size="sm" value={node.warnAbove} onChange={(value) => updateNode(ni, { warnAbove: Number(value) || 0 })} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Critical above</label>
+                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.criticalAbove')}</label>
                     <InputNumber size="sm" value={node.criticalAbove} onChange={(value) => updateNode(ni, { criticalAbove: Number(value) || 0 })} />
                   </div>
                 </div>
 
                 <div className="pl-3 border-l-2 border-amber-200 dark:border-amber-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Drivers</span>
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.drivers')}</span>
                     <button
                       type="button"
                       onClick={() => addDriver(ni)}
                       className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
-                      <span>Add driver</span>
+                      <span>{t('chainModal.addDriver')}</span>
                     </button>
                   </div>
                   {node.drivers.map((driver, di) => (
@@ -319,27 +318,27 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                         size="sm"
                         value={driver.signal}
                         onChange={(value) => updateDriver(ni, di, { signal: value })}
-                        placeholder="driver signal, e.g. load_pct"
+                        placeholder={t('chainModal.driverPlaceholder')}
                         className="font-mono"
                       />
                       <InputNumber
                         size="sm"
                         value={driver.coefficient}
                         onChange={(value) => updateDriver(ni, di, { coefficient: Number(value) || 0 })}
-                        placeholder="coefficient"
+                        placeholder={t('chainModal.coefficient')}
                       />
                       <InputNumber
                         size="sm"
                         value={driver.lagSeconds ?? ''}
                         onChange={(value) => updateDriver(ni, di, { lagSeconds: value === '' ? undefined : Number(value) })}
-                        placeholder="lag (s)"
+                        placeholder={t('chainModal.lag')}
                       />
                       <button
                         type="button"
                         onClick={() => removeDriver(ni, di)}
                         disabled={node.drivers.length <= 1}
                         className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                        title="Remove driver"
+                        title={t('chainModal.removeDriver')}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -352,7 +351,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
 
           {stagesLost && (
             <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-              This draft's stages were lost when it was saved, by a bug that has since been fixed. Enter them again and save.
+              {t('chainModal.stagesLost')}
             </div>
           )}
           {error && (
@@ -364,7 +363,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory
+              <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -372,7 +371,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -380,7 +379,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : (isEditing ? 'Save Draft' : 'Create Draft')}</span>
+                <span>{busy ? t('common.saving') : (isEditing ? t('classModal.saveDraft') : t('classModal.createDraft'))}</span>
               </button>
             </div>
           </div>

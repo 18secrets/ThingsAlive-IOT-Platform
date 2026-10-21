@@ -14,6 +14,7 @@ import { ClientEquipmentClassRecommendation } from '../entities/client-equipment
 import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
 import { loadLayout } from '../../catalog/services/class-layout';
 import { loadAnchors } from '../../catalog/services/class-visual.service';
+import { loadModelAnchors } from '../../catalog/services/class-model.service';
 import { ClientEquipmentClassVisualAnchor } from '../entities/client-equipment-class-visual-anchor.entity';
 import { WidgetSize, WidgetType } from '../../catalog/layout/widget-types';
 import {
@@ -31,6 +32,8 @@ export interface CopyResult {
   recommendationsCopied: number;
   layoutWidgetsCopied: number;
   anchorsCopied: number;
+  /** The 3-D model's markers (task QTWIN1), counted apart from the schematic's. */
+  modelAnchorsCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -76,6 +79,7 @@ export class CopyOnGrantService {
     const recommendations = await loadRecommendations(this.ds.manager, templateSlug, template.version);
     const layout = await loadLayout(this.ds.manager, templateSlug, template.version);
     const anchors = await loadAnchors(this.ds.manager, templateSlug, template.version);
+    const modelAnchors = await loadModelAnchors(this.ds.manager, templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
@@ -113,6 +117,7 @@ export class CopyOnGrantService {
           recommendationsCopied: 0,
           layoutWidgetsCopied: 0,
           anchorsCopied: 0,
+          modelAnchorsCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -286,6 +291,15 @@ export class CopyOnGrantService {
           placementCustom: false, templateVersion: template.version, copiedAt: now,
         })));
       }
+      // And the model's (task QTWIN1): the same rows with a position in place of hotspots.
+      // `template_version` is what the database checks the position against.
+      if (modelAnchors.length) {
+        await clientAnchors.save(modelAnchors.map((a) => clientAnchors.create({
+          tenantId, clientEquipmentClassSlug: template.slug, tier: 'model', signal: a.signal,
+          posX: a.x, posY: a.y, posZ: a.z, label: a.label,
+          placementCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
 
       this.logger.log(
         `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
@@ -302,6 +316,7 @@ export class CopyOnGrantService {
         recommendationsCopied: recommendations.length,
         layoutWidgetsCopied: layout.length,
         anchorsCopied: anchors.length,
+        modelAnchorsCopied: modelAnchors.length,
         alreadyPresent: false,
       };
     });

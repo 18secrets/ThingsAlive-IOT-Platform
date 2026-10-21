@@ -41,22 +41,28 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
 
-export function describeWorkflowNode(data: WorkflowNodeData): { title: string; subtitle?: string } {
+/** The caller's i18next `t`, bound to the alerts namespace. Passed in rather than
+ *  imported so this module stays free of React and re-renders follow the language. */
+export type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+export function describeWorkflowNode(data: WorkflowNodeData, t: Translate): { title: string; subtitle?: string } {
   switch (data.kind) {
     case 'trigger':
-      return { title: 'Schedule', subtitle: data.scheduleLabel };
+      return { title: t('workflow.palette.schedule'), subtitle: data.scheduleLabel };
     case 'readSensor':
-      return { title: data.sensor || 'Read Sensor', subtitle: data.sensor };
+      return { title: data.sensor || t('workflow.palette.readSensor'), subtitle: data.sensor };
     case 'condition':
-      return { title: data.sensor || 'Condition', subtitle: `${data.sensor ?? '?'} ${data.operator ?? '>'} ${data.value ?? ''}` };
+      return { title: data.sensor || t('workflow.palette.condition'), subtitle: `${data.sensor ?? '?'} ${data.operator ?? '>'} ${data.value ?? ''}` };
     case 'guard':
-      return { title: data.field || 'Guard', subtitle: data.field ? `${data.field} = ${data.value ?? ''}` : undefined };
+      return { title: data.field || t('workflow.palette.guard'), subtitle: data.field ? `${data.field} = ${data.value ?? ''}` : undefined };
     case 'gate':
-      return { title: data.logic ?? 'AND', subtitle: 'Expression' };
-    case 'action':
-      return { title: data.actionType ?? 'Webhook' };
+      return { title: data.logic ?? 'AND', subtitle: t('workflow.node.expression') };
+    case 'action': {
+      const type = data.actionType ?? 'Webhook';
+      return { title: t(`workflow.actionType.${type}`, { defaultValue: type }) };
+    }
     case 'processing':
-      return { title: data.title ?? 'Step' };
+      return { title: data.title ?? t('workflow.node.step') };
   }
 }
 
@@ -256,55 +262,68 @@ export function flowToSpec(nodes: WorkflowNode[], name: string): WorkflowSpec {
 export interface WorkflowValidation {
   ok: boolean;
   message: string;
+  /** alerts-namespace key for `message`, with its interpolation values, so the
+   *  editor can show it in the reader's language. */
+  key: string;
+  values?: Record<string, unknown>;
 }
 
 export function validateWorkflow(nodes: WorkflowNode[]): WorkflowValidation {
   const triggerCount = nodes.filter((n) => n.data.kind === 'trigger').length;
-  if (triggerCount !== 1) return { ok: false, message: `Needs exactly one trigger (found ${triggerCount})` };
+  if (triggerCount !== 1) {
+    return { ok: false, message: `Needs exactly one trigger (found ${triggerCount})`, key: 'workflow.validation.oneTrigger', values: { count: triggerCount } };
+  }
 
   const conditions = nodes.filter((n) => n.data.kind === 'condition');
   const incomplete = conditions.find((n) => !n.data.sensor?.trim() || !n.data.value?.trim());
-  if (incomplete) return { ok: false, message: 'A condition is missing its sensor or threshold value' };
+  if (incomplete) return { ok: false, message: 'A condition is missing its sensor or threshold value', key: 'workflow.validation.incompleteCondition' };
 
   const actionCount = nodes.filter((n) => n.data.kind === 'action').length;
-  if (actionCount === 0) return { ok: false, message: 'Needs at least one action' };
+  if (actionCount === 0) return { ok: false, message: 'Needs at least one action', key: 'workflow.validation.noAction' };
 
-  return { ok: true, message: 'Workflow validated' };
+  return { ok: true, message: 'Workflow validated', key: 'workflow.validation.ok' };
 }
 
 export interface PaletteItem {
+  /** Stable id; the on-screen name is alerts:workflow.palette.<id>. */
+  id: string;
   label: string;
   icon: React.FC<{ className?: string }>;
   kind: WorkflowNodeKind;
   actionType?: WorkflowActionType;
 }
 
-export const PALETTE_SECTIONS: { title: string; items: PaletteItem[] }[] = [
-  { title: 'TRIGGERS', items: [{ label: 'Schedule', icon: Clock, kind: 'trigger' }] },
+// `id` keys the on-screen names (alerts:workflow.section.<id> / workflow.palette.<id>);
+// `label` stays English because it also keys drag-and-drop and seeds a processing node's title.
+export const PALETTE_SECTIONS: { id: string; title: string; items: PaletteItem[] }[] = [
+  { id: 'triggers', title: 'TRIGGERS', items: [{ id: 'schedule', label: 'Schedule', icon: Clock, kind: 'trigger' }] },
   {
+    id: 'data',
     title: 'DATA',
     items: [
-      { label: 'Read Sensor', icon: Settings, kind: 'readSensor' },
-      { label: 'Database Query', icon: Database, kind: 'processing' },
+      { id: 'readSensor', label: 'Read Sensor', icon: Settings, kind: 'readSensor' },
+      { id: 'databaseQuery', label: 'Database Query', icon: Database, kind: 'processing' },
     ],
   },
   {
+    id: 'logic',
     title: 'LOGIC & PROCESSING',
     items: [
-      { label: 'Aggregate', icon: Sigma, kind: 'processing' },
-      { label: 'Calculation', icon: Calculator, kind: 'processing' },
-      { label: 'Condition', icon: Flag, kind: 'condition' },
-      { label: 'Group Join', icon: Link2, kind: 'processing' },
-      { label: 'Guard', icon: Settings, kind: 'guard' },
-      { label: 'Logic Gate', icon: GitMerge, kind: 'gate' },
+      { id: 'aggregate', label: 'Aggregate', icon: Sigma, kind: 'processing' },
+      { id: 'calculation', label: 'Calculation', icon: Calculator, kind: 'processing' },
+      { id: 'condition', label: 'Condition', icon: Flag, kind: 'condition' },
+      { id: 'groupJoin', label: 'Group Join', icon: Link2, kind: 'processing' },
+      { id: 'guard', label: 'Guard', icon: Settings, kind: 'guard' },
+      { id: 'logicGate', label: 'Logic Gate', icon: GitMerge, kind: 'gate' },
     ],
   },
   {
+    id: 'actions',
     title: 'ACTIONS',
     items: [
-      { label: 'Webhook', icon: WebhookIcon, kind: 'action', actionType: 'Webhook' },
-      { label: 'Email', icon: Mail, kind: 'action', actionType: 'Email' },
-      { label: 'SMS', icon: MessageSquare, kind: 'action', actionType: 'SMS' },
+      { id: 'webhook', label: 'Webhook', icon: WebhookIcon, kind: 'action', actionType: 'Webhook' },
+      { id: 'email', label: 'Email', icon: Mail, kind: 'action', actionType: 'Email' },
+      { id: 'sms', label: 'SMS', icon: MessageSquare, kind: 'action', actionType: 'SMS' },
     ],
   },
 ];

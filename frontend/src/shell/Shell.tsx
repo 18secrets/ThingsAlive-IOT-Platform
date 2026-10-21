@@ -1,11 +1,14 @@
-import React, { useRef, useState } from 'react';
+import React, { Suspense, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { NavigationTab, UserRole } from '../types';
 import { useAuth } from '../lib/AuthProvider';
 import { PageHeaderConfig, usePageHeaderValue } from '../lib/PageHeaderContext';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { AskAIWidget } from '../components/AskAIWidget';
+import { DESKTOP_QUERY, WIDE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 
 interface ShellProps {
   /** Clears any cross-page drill-down state (Master Admin's "Manage Access"
@@ -43,32 +46,18 @@ function tabFromPath(pathname: string, state: unknown, role?: UserRole): Navigat
 
 /** Static per-route title/subtitle — a page overrides this via usePageHeader
  *  when it has more than one internal view (AI Onboarding, Alert Agent). */
-function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean): PageHeaderConfig {
-  switch (tab) {
-    case 'admin': return { title: 'Administration', subtitle: 'Master Configuration' };
-    case 'clients': return { title: 'Clients', subtitle: 'Accounts & Entitlements' };
-    case 'staff': return { title: 'Staff', subtitle: 'Things Alive Team' };
-    case 'devices': return { title: 'Devices', subtitle: 'Stock & Assignment' };
-    case 'equipment': return { title: 'Equipment', subtitle: 'Fleet Register' };
-    case 'things-care': return { title: 'ThingsCare', subtitle: 'Health & Prognostics' };
-    case 'things-shield': return { title: 'ThingsShield', subtitle: 'Safety, Compliance & Risk' };
-    case 'incident-management': return { title: 'Incident Management', subtitle: 'People, Machine Wellbeing & Security' };
-    case 'production-monitoring': return { title: 'Production Monitoring', subtitle: 'Output & Performance' };
-    case 'ai-onboarding': return { title: 'AI Onboarding', subtitle: 'Guided Setup Sessions' };
-    case 'alert-agent': return { title: 'Alert Agent', subtitle: 'Automated Dispatch' };
-    case 'alerts': return { title: 'Alerts', subtitle: 'Fleet Attention Feed' };
-    case 'predictions': return { title: 'Live Predictions', subtitle: 'Automated Dispatch' };
-    case 'scenarios': return { title: 'Scenarios', subtitle: 'Monitoring Workflows' };
-    case 'work-orders': return { title: 'Work Orders', subtitle: 'Maintenance Tasks' };
-    case 'cost-administration': return { title: 'Cost Administration', subtitle: 'Fuel & Maintenance Rates' };
-    case 'users': return { title: 'User Management', subtitle: 'Access & Permissions' };
-    case 'client-users': return { title: 'Client Users', subtitle: 'People & Access' };
-    case 'roles': return { title: 'Roles & Permissions', subtitle: 'Page Access Control' };
-    case 'settings': return { title: 'Settings', subtitle: 'System Parameters' };
-    case 'dashboard':
-    default:
-      return { title: 'Dashboard', subtitle: isMasterAdmin ? 'Platform Overview' : 'Fleet Telematics' };
-  }
+const TAB_PAGE_KEY: Partial<Record<NavigationTab, string>> = {
+  admin: 'admin', clients: 'clients', staff: 'staff', devices: 'devices', equipment: 'equipment',
+  'things-care': 'thingsCare', 'things-shield': 'thingsShield', 'incident-management': 'incidentManagement',
+  'production-monitoring': 'productionMonitoring', 'ai-onboarding': 'aiOnboarding', 'alert-agent': 'alertAgent',
+  alerts: 'alerts', predictions: 'predictions', scenarios: 'scenarios', 'work-orders': 'workOrders',
+  'cost-administration': 'costAdministration', users: 'users', 'client-users': 'clientUsers', roles: 'roles',
+  settings: 'settings',
+};
+
+function defaultHeaderFor(tab: NavigationTab, isMasterAdmin: boolean, t: TFunction): PageHeaderConfig {
+  const key = TAB_PAGE_KEY[tab] ?? (isMasterAdmin ? 'dashboardPlatform' : 'dashboard');
+  return { title: t(`pages.${key}.title`), subtitle: t(`pages.${key}.subtitle`) };
 }
 
 const THEME_KEY = 'ta_theme';
@@ -99,12 +88,23 @@ function initialSidebarCollapsed(): boolean {
 
 export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const { authUser, signOut } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(initialDarkMode);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(initialSidebarCollapsed);
   const override = usePageHeaderValue();
   const mainRef = useRef<HTMLElement>(null);
+  // Below lg (phones, tablets) the sidebar would take 240px of a 375px screen, so it
+  // becomes a drawer. From lg to xl (small laptops) it starts as icons; the person's
+  // own expand/collapse there is kept for the session but not saved, so it never
+  // overrides their choice on a wide screen.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const isWide = useMediaQuery(WIDE_QUERY);
+  const [navOpen, setNavOpen] = useState(false);
+  const [smallLaptopExpanded, setSmallLaptopExpanded] = useState(false);
+  const collapsed = isWide ? isSidebarCollapsed : !smallLaptopExpanded;
+  const toggleCollapsed = () => (isWide ? setIsSidebarCollapsed((v) => !v) : setSmallLaptopExpanded((v) => !v));
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -130,12 +130,16 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   // same-path navigations with new state — e.g. Alert Agent's view switcher.
   React.useEffect(() => {
     mainRef.current?.scrollTo(0, 0);
+    setNavOpen(false);
   }, [location.key]);
+
+  // The drawer is a phone/tablet thing; widening the window past lg closes it.
+  React.useEffect(() => { if (isDesktop) setNavOpen(false); }, [isDesktop]);
 
   if (!authUser) return null; // RequireAuth guarantees this never renders signed out.
 
   const currentTab = tabFromPath(location.pathname, location.state, authUser.role);
-  const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin');
+  const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin', t);
 
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
@@ -153,16 +157,39 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F4F7FB] dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 transition-colors selection:bg-[#0B7285] selection:text-white">
-      <Sidebar
-        currentTab={currentTab}
-        role={authUser.role}
-        clientName={authUser.clientName}
-        allowedTabs={authUser.allowedTabs}
-        isSuperAdmin={authUser.isSuperAdmin}
-        onSelectTab={goToTab}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
-      />
+      {isDesktop ? (
+        <Sidebar
+          currentTab={currentTab}
+          role={authUser.role}
+          clientName={authUser.clientName}
+          allowedTabs={authUser.allowedTabs}
+          isSuperAdmin={authUser.isSuperAdmin}
+          onSelectTab={goToTab}
+          isCollapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+        />
+      ) : navOpen && (
+        <div id="nav-drawer" className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label={t('sidebar.closeMenu')}
+            onClick={() => setNavOpen(false)}
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs cursor-default"
+          />
+          <div className="relative h-full shadow-2xl animate-in slide-in-from-left duration-150">
+            <Sidebar
+              currentTab={currentTab}
+              role={authUser.role}
+              clientName={authUser.clientName}
+              allowedTabs={authUser.allowedTabs}
+              isSuperAdmin={authUser.isSuperAdmin}
+              onSelectTab={(tab) => { setNavOpen(false); goToTab(tab); }}
+              isCollapsed={false}
+              onToggleCollapsed={() => setNavOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#F4F7FB] dark:bg-slate-950">
         <Header
@@ -173,6 +200,7 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode((v) => !v)}
           onLogout={signOut}
+          onOpenNav={isDesktop ? undefined : () => setNavOpen(true)}
         />
 
         {/* pb-28/32 instead of the plain p-3 bottom — the floating AI
@@ -184,8 +212,12 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
             itself is hidden (aiIndicator lit — AI Onboarding's chat, Alert
             Agent) since there's nothing there to clear. */}
         <main ref={mainRef} className={`flex-1 overflow-y-auto p-3 bg-[#F4F7FB] dark:bg-slate-950 ${header.aiIndicator ? '' : 'pb-15 md:pb-20'}`}>
-          <div className="max-w-7xl mx-auto space-y-3">
-            <Outlet />
+          <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1920px] mx-auto space-y-3">
+            {/* A page's own translation file loads the first time it opens; only the
+                page waits for it, not the sidebar and header around it. */}
+            <Suspense fallback={null}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

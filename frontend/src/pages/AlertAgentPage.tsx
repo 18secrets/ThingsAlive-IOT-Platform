@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { WorkflowSpec } from '../utils/workflowParser';
 import { AlertAgentView } from '../components/views/AlertAgentView';
@@ -19,6 +20,7 @@ interface AlertAgentNavState {
 }
 
 export const AlertAgentPage: React.FC = () => {
+  const { t } = useTranslation('alerts');
   const location = useLocation();
   const navigate = useNavigate();
   const navState = location.state as AlertAgentNavState | null;
@@ -28,10 +30,10 @@ export const AlertAgentPage: React.FC = () => {
 
   usePageHeader(
     view === 'assistant'
-      ? { title: 'AI Assistant', aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('list') }
+      ? { title: t('agent.assistantTitle'), aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('list') }
       : view === 'workflow'
-        ? { title: 'Work Flow', aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('assistant') }
-        : { title: 'Alert Agent', subtitle: 'Automated Dispatch' },
+        ? { title: t('agent.workflowTitle'), aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('assistant') }
+        : { title: t('translation:pages.alertAgent.title'), subtitle: t('translation:pages.alertAgent.subtitle') },
   );
 
   if (view === 'assistant') {

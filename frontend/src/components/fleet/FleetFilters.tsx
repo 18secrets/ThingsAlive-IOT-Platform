@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal, Search, X } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { FLEET_CATEGORIES, FLEET_LOCATIONS, FleetThing } from '../../data/fleetMockData';
 
 export interface FleetScope {
@@ -32,6 +33,7 @@ export const FleetFilters: React.FC<{
   onSelectId?: (id: string) => void;
   things?: FleetThing[];
 }> = ({ scope, onChange, selectedId, onSelectId, things }) => {
+  const { t } = useTranslation('fleet');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(scope);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,16 +82,16 @@ export const FleetFilters: React.FC<{
         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors cursor-pointer"
       >
         <SlidersHorizontal className="w-4 h-4" />
-        Filters
+        {t('filters.button')}
         {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
       </button>
 
       {onSelectId && (
         <div className="flex items-center gap-2 text-sm ml-auto">
-          <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">Selected Thing</span>
+          <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{t('filters.selectedThing')}</span>
           <SelectPicker
-            data={[{ label: 'All matching Things', value: 'all' }, ...visible.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))]}
-            value={selectedId && visible.some((t) => t.id === selectedId) ? selectedId : 'all'}
+            data={[{ label: t('filters.allMatching'), value: 'all' }, ...visible.map((th) => ({ label: `${th.id} · ${th.name}`, value: th.id }))]}
+            value={selectedId && visible.some((th) => th.id === selectedId) ? selectedId : 'all'}
             onChange={(value) => onSelectId(value ?? 'all')}
             searchable
             cleanable={false}
@@ -102,8 +104,8 @@ export const FleetFilters: React.FC<{
         <div className="absolute top-full left-0 mt-2 w-[340px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden z-30">
           <div className="bg-sky-600 px-5 py-4 flex items-start justify-between text-white">
             <div>
-              <h3 className="font-bold text-base">Filter Things</h3>
-              <p className="text-xs text-sky-100 mt-0.5">Choose your scope, then apply.</p>
+              <h3 className="font-bold text-base">{t('filters.title')}</h3>
+              <p className="text-xs text-sky-100 mt-0.5">{t('filters.intro')}</p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -116,9 +118,9 @@ export const FleetFilters: React.FC<{
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Site / Plant</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.site')}</span>
                 <SelectPicker
-                  data={[{ label: 'All sites / plants', value: 'all' }, ...FLEET_LOCATIONS.map((l) => ({ label: l, value: l }))]}
+                  data={[{ label: t('filters.allSites'), value: 'all' }, ...FLEET_LOCATIONS.map((l) => ({ label: l, value: l }))]}
                   value={draft.site}
                   onChange={(value) => setDraft({ ...draft, site: value ?? 'all' })}
                   searchable={false}
@@ -127,9 +129,9 @@ export const FleetFilters: React.FC<{
                 />
               </div>
               <div className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Thing type</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.type')}</span>
                 <SelectPicker
-                  data={[{ label: 'All Thing types', value: 'all' }, ...FLEET_CATEGORIES.map((c) => ({ label: c, value: c }))]}
+                  data={[{ label: t('filters.allTypes'), value: 'all' }, ...FLEET_CATEGORIES.map((c) => ({ label: c, value: c }))]}
                   value={draft.type}
                   onChange={(value) => setDraft({ ...draft, type: value ?? 'all' })}
                   searchable={false}
@@ -138,12 +140,12 @@ export const FleetFilters: React.FC<{
                 />
               </div>
               <div className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Connection status</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.connection')}</span>
                 <SelectPicker
                   data={[
-                    { label: 'All connections', value: 'all' },
-                    { label: 'Online', value: 'online' },
-                    { label: 'Offline', value: 'offline' },
+                    { label: t('filters.allConnections'), value: 'all' },
+                    { label: t('filters.online'), value: 'online' },
+                    { label: t('filters.offline'), value: 'offline' },
                   ]}
                   value={draft.connection}
                   onChange={(value) => setDraft({ ...draft, connection: (value ?? 'all') as FleetScope['connection'] })}
@@ -153,13 +155,13 @@ export const FleetFilters: React.FC<{
                 />
               </div>
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Find a Thing</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.find')}</span>
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 z-10" />
                   <Input
                     value={draft.query}
                     onChange={(value) => setDraft({ ...draft, query: value })}
-                    placeholder="Name or Thing ID"
+                    placeholder={t('filters.findPlaceholder')}
                     className="pl-8!"
                   />
                 </div>
@@ -168,10 +170,10 @@ export const FleetFilters: React.FC<{
 
             <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
               <button onClick={clearAll} className="text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer">
-                Clear selections
+                {t('filters.clear')}
               </button>
               <button onClick={applyDraft} className="px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold cursor-pointer">
-                Apply filters
+                {t('filters.apply')}
               </button>
             </div>
           </div>

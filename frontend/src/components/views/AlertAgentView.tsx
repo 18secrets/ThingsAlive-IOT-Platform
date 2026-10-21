@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Sparkles, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 
 interface AlertRuleRow {
   id: number;
@@ -188,6 +189,7 @@ interface AlertAgentViewProps {
 }
 
 export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) => {
+  const { t } = useTranslation('alerts');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -228,7 +230,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
                 setSearchTerm(value);
                 setCurrentPage(1);
               }}
-              placeholder="Search Alert Rules..."
+              placeholder={t('agentList.searchPlaceholder')}
               size="sm"
               className="pl-9!"
             />
@@ -237,10 +239,10 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
           {/* Status Filter */}
           <SelectPicker
             data={[
-              { label: 'Select Status (All)', value: 'All' },
-              { label: 'Deployed', value: 'Deployed' },
-              { label: 'Draft', value: 'Draft' },
-              { label: 'Disabled', value: 'Disabled' },
+              { label: t('agentList.allStatuses'), value: 'All' },
+              { label: t('agentList.status.Deployed'), value: 'Deployed' },
+              { label: t('agentList.status.Draft'), value: 'Draft' },
+              { label: t('agentList.status.Disabled'), value: 'Disabled' },
             ]}
             value={selectedStatus}
             onChange={(value) => {
@@ -260,7 +262,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
           className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Sparkles className="w-4 h-4" />
-          <span>Add Alert</span>
+          <span>{t('agentList.addAlert')}</span>
         </button>
       </div>
 
@@ -270,12 +272,12 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-4 text-center">ID</th>
-                <th className="py-3 px-4">Workflow Name</th>
-                <th className="py-3 px-4 min-w-[260px]">Description</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Sensors</th>
-                <th className="py-3 px-4 min-w-[220px]">Conditions</th>
+                <th className="py-3 px-4 text-center">{t('agentList.columns.id')}</th>
+                <th className="py-3 px-4">{t('agentList.columns.workflowName')}</th>
+                <th className="py-3 px-4 min-w-[260px]">{t('agentList.columns.description')}</th>
+                <th className="py-3 px-4">{t('agentList.columns.status')}</th>
+                <th className="py-3 px-4">{t('agentList.columns.sensors')}</th>
+                <th className="py-3 px-4 min-w-[220px]">{t('agentList.columns.conditions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
@@ -299,7 +301,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
                         className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLES[rule.status]}`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${STATUS_DOT[rule.status]}`}></span>
-                        {rule.status}
+                        {t(`agentList.status.${rule.status}`, { defaultValue: rule.status })}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-normal text-slate-600 dark:text-slate-400">
@@ -313,7 +315,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
               ) : (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400 font-sans">
-                    No alert rules found matching criteria.
+                    {t('agentList.empty')}
                   </td>
                 </tr>
               )}
@@ -324,12 +326,12 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
         {/* Pagination — matches Device Management's footer */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
           <div>
-            Total Rows: <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+            {t('agentList.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
+              <span>{t('agentList.rowsPerPage')}</span>
               <SelectPicker
                 data={[
                   { label: '10', value: 10 },
@@ -352,6 +354,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
               <button
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label={t('agentList.previousPage')}
                 className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -374,6 +377,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert }) =>
               <button
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                aria-label={t('agentList.nextPage')}
                 className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
