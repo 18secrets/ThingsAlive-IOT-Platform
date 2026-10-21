@@ -1,5 +1,5 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, IsNull, MoreThan } from 'typeorm';
 import { ResolvedIdentity, ScopeResolver } from '../../auth/scope-resolver';
 import { withTenantId } from '../../scope/tenant-session';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -9,6 +9,7 @@ import { Tenant } from '../../tenancy/entities/tenant.entity';
 import { AppUser } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
+import { UserSession } from '../entities/user-session.entity';
 
 /**
  * Turning a signed-in person into the authority for one request (task P1-84).
@@ -28,13 +29,23 @@ export class ScopeResolverService implements ScopeResolver {
 
   constructor(private readonly ds: DataSource) {}
 
-  async resolve(tenantId: string, userId: string): Promise<ResolvedIdentity | null> {
+  async resolve(tenantId: string, userId: string, sessionId?: string): Promise<ResolvedIdentity | null> {
     return withTenantId(this.ds, tenantId, async (m) => {
       const user = await m.getRepository(AppUser).findOne({ where: { tenantId, id: userId } });
       // Not a user of this account. Returning null lets the guard fall back to the
       // token, which is what a platform role needs — Things Alive staff have no row
       // in any customer's account and must not be invented one.
       if (!user) return null;
+
+      // The sign-in before the account (D-003). Live while any row of its family is
+      // unrevoked and unexpired — a rotated row stays unrevoked, so a refresh keeps it
+      // live — and refused once sign-out, reuse detection or a suspension revokes it.
+      if (sessionId) {
+        const live = await m.getRepository(UserSession).exists({
+          where: { tenantId, userId, family: sessionId, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+        });
+        if (!live) throw new UnauthorizedException('This sign-in has ended. Please sign in again.');
+      }
 
       // The account before the person. Suspending a whole account is the commercial
       // lever — non-payment, a contract ending — and it has to stop everybody at once

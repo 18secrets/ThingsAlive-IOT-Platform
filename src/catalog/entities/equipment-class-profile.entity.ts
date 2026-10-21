@@ -61,6 +61,10 @@ export class EquipmentClassProfile {
   /**
    * Written by someone who knows the machines (task P1-02), not inferred from data.
    * A failure mode nobody in the field recognises produces alerts nobody acts on.
+   *
+   * Deprecated by task QREC0a: still written, never read. `equipment_class_failure_mode`
+   * is the source — a recommendation needs a row to point at. Kept until QREC0c so a
+   * conversion that turns out wrong has a way back.
    */
   @Column({ name: 'failure_modes', type: 'jsonb', default: () => `'[]'::jsonb` })
   failureModes: FailureMode[];
@@ -80,6 +84,38 @@ export class EquipmentClassProfile {
   @Column({ name: 'service_interval_hours', type: 'int', nullable: true })
   serviceIntervalHours: number | null;
 
+  /**
+   * The OEM figures OEE needs (task QCLASS-OEM, ahead of QOEE1), unset until the library
+   * team authors them, for the same reason as `serviceIntervalHours`: an invented
+   * nominal would put a confident wrong Quality on every machine of the class at once.
+   *
+   * Fuel the class should burn per **productive** hour, in its own unit — the nominal
+   * and its unit are set together or not at all. Comparing it to telemetry in another
+   * unit is refused by QOEE1, never converted.
+   */
+  @Column({ name: 'nominal_fuel_per_hour', type: 'double precision', nullable: true })
+  nominalFuelPerHour: number | null;
+
+  @Column({ name: 'nominal_fuel_unit', type: 'text', nullable: true })
+  nominalFuelUnit: string | null;
+
+  /** How long idle-with-fuel inside a shift lasts before it is a breakdown. Never below 5. */
+  @Column({ name: 'idle_breakdown_threshold_minutes', type: 'int', default: 30 })
+  idleBreakdownThresholdMinutes: number;
+
+  /** The class's running indicator and the value at or below which it is idle — named
+   * together, and only from the class's own declared signals. */
+  @Column({ name: 'running_signal', type: 'text', nullable: true })
+  runningSignal: string | null;
+
+  @Column({ name: 'running_idle_bound', type: 'double precision', nullable: true })
+  runningIdleBound: number | null;
+
+  /** Fuel level or power present: what tells "idle and could work" from "idle and
+   * waiting on a refuel". A declared signal of the class. */
+  @Column({ name: 'availability_signal', type: 'text', nullable: true })
+  availabilitySignal: string | null;
+
   @Column({ type: 'text', default: 'draft' })
   @Index('ix_equipment_class_profile_status')
   status: CatalogStatus;
@@ -89,4 +125,19 @@ export class EquipmentClassProfile {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
+
+  /** `'manual'` unless written by an import; see `1757990000000-CatalogImportProvenance.ts`. */
+  @Column({ type: 'text', default: 'manual' })
+  source: 'manual' | 'excel-import';
+
+  /**
+   * Authored by the demo seeder for the demo tenant only, never library content (task
+   * QSEED1). The database refuses to grant one without the seeder's session flag; see
+   * `1758900000000-SeedOnlyClass.ts`.
+   */
+  @Column({ name: 'seed_only', type: 'boolean', default: false })
+  seedOnly: boolean;
+
+  @Column({ name: 'import_batch_id', type: 'uuid', nullable: true })
+  importBatchId: string | null;
 }

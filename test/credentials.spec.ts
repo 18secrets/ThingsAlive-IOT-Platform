@@ -7,7 +7,7 @@ import { AppUser } from '../src/identity/entities/app-user.entity';
 import { UserSecurityEvent } from '../src/identity/entities/user-security-event.entity';
 import { UserSession } from '../src/identity/entities/user-session.entity';
 import { CredentialService } from '../src/identity/services/credential.service';
-import { PasswordService, MINIMUM_PASSWORD_LENGTH } from '../src/identity/services/password.service';
+import { PasswordService } from '../src/identity/services/password.service';
 import { RoleService } from '../src/identity/services/role.service';
 import { ScopeResolverService } from '../src/identity/services/scope-resolver.service';
 import { UserService } from '../src/identity/services/user.service';
@@ -16,22 +16,28 @@ import { createAppDataSource, createTestDataSource, describeDb } from './db';
 describe('password policy', () => {
   const passwords = new PasswordService();
 
-  it('asks for length and nothing else', () => {
-    // Composition rules produce Password1! and nothing else: the rule is satisfied by
-    // the most predictable string that satisfies it. Length is what costs an attacker
-    // something, so length is what is required.
-    expect(() => passwords.assertAcceptable('short')).toThrow(/at least 12 characters/);
-    expect(() => passwords.assertAcceptable('correct horse battery staple')).not.toThrow();
-    expect(() => passwords.assertAcceptable('aaaaaaaaaaaaaaa')).not.toThrow();
+  it('requires one of each character class', () => {
+    expect(() => passwords.assertAcceptable('alllowercase1!')).toThrow(/uppercase/);
+    expect(() => passwords.assertAcceptable('ALLUPPERCASE1!')).toThrow(/lowercase/);
+    expect(() => passwords.assertAcceptable('NoDigitsHere!')).toThrow(/number/);
+    expect(() => passwords.assertAcceptable('NoSpecial123')).toThrow(/special character/);
+    expect(() => passwords.assertAcceptable('Correct-Horse-1')).not.toThrow();
   });
 
   it('refuses the handful anybody tries first', () => {
-    expect(() => passwords.assertAcceptable('password1234')).toThrow(/first anybody tries/);
+    expect(() => passwords.assertAcceptable('Password1!')).toThrow(/first anybody tries/);
   });
 
   it('refuses a password containing the person\'s own address', () => {
-    expect(() => passwords.assertAcceptable('dana-loves-cats', 'dana@acme.test'))
+    expect(() => passwords.assertAcceptable('Dana-loves-cats1', 'dana@acme.test'))
       .toThrow(/should not contain your own email/);
+  });
+
+  it('says which part of the address the password contains', () => {
+    // Dashboard testing, issue 3: the whole address never appeared in the password,
+    // so the refusal read as a bug until it named the part that matched.
+    expect(() => passwords.assertAcceptable('Test@sbi123', 'sbi@gmail.com'))
+      .toThrow('A password should not contain your own email address, including "sbi", the part before the @.');
   });
 
   it('caps the length, which is not a strength rule', () => {
@@ -46,13 +52,12 @@ describe('password policy', () => {
   });
 
   it('hashes differently every time, and verifies either way', () => {
-    const a = passwords.hash('correct horse battery staple');
-    const b = passwords.hash('correct horse battery staple');
+    const a = passwords.hash('Correct-Horse-1');
+    const b = passwords.hash('Correct-Horse-1');
     expect(a).not.toBe(b);
-    expect(passwords.verify('correct horse battery staple', a)).toBe(true);
-    expect(passwords.verify('correct horse battery staple', b)).toBe(true);
+    expect(passwords.verify('Correct-Horse-1', a)).toBe(true);
+    expect(passwords.verify('Correct-Horse-1', b)).toBe(true);
     expect(passwords.verify('wrong', a)).toBe(false);
-    expect(MINIMUM_PASSWORD_LENGTH).toBe(12);
   });
 });
 
@@ -65,7 +70,7 @@ describeDb('credentials', () => {
   let resolver: ScopeResolverService;
 
   const NOW = new Date('2026-09-13T09:00:00.000Z');
-  const PASSWORD = 'correct horse battery staple';
+  const PASSWORD = 'Correct-Horse-1';
 
   const boss: RequestScope = {
     tenantId: 'acme', userId: 'u-boss', roles: ['ceo-manager'], isPlatformRole: false,
@@ -179,10 +184,19 @@ describeDb('credentials', () => {
     beforeEach(async () => { await accept(); });
 
     it('gives the same answer for a wrong password and an address nobody has', async () => {
-      const wrong = credentials.signIn('dana@acme.test', 'not the password', {}, NOW);
-      const missing = credentials.signIn('nobody@acme.test', PASSWORD, {}, NOW);
-      await expect(wrong).rejects.toThrow('Email or password is incorrect.');
-      await expect(missing).rejects.toThrow('Email or password is incorrect.');
+      // Settled together (task QFIX-FLAKY). Awaiting the two one after the other left
+      // the second's rejection unobserved while the first was pending — whenever it
+      // rejected first, that surfaced as an unhandled rejection and failed the test in
+      // CI. The assertion is unchanged: both refused, with the same words.
+      const [wrong, missing] = await Promise.allSettled([
+        credentials.signIn('dana@acme.test', 'not the password', {}, NOW),
+        credentials.signIn('nobody@acme.test', PASSWORD, {}, NOW),
+      ]);
+      for (const outcome of [wrong, missing]) {
+        expect(outcome.status).toBe('rejected');
+        expect((outcome as PromiseRejectedResult).reason).toBeInstanceOf(UnauthorizedException);
+        expect((outcome as PromiseRejectedResult).reason.message).toBe('Email or password is incorrect.');
+      }
     });
 
     it('records the attempt for an address nobody has, which is the useful row', async () => {
@@ -229,7 +243,8 @@ describeDb('credentials', () => {
       const other = await users.invite(
         boss, { email: 'sam@acme.test', fullName: 'Sam', roleSlug: 'operator' }, NOW,
       );
-      expect(other.passwordHash).toBeNull();
+      // UserView never carries passwordHash at all — not even null. See user.service.ts.
+      expect(Object.prototype.hasOwnProperty.call(other, 'passwordHash')).toBe(false);
       await expect(credentials.signIn('sam@acme.test', PASSWORD, {}, NOW))
         .rejects.toThrow('Email or password is incorrect.');
     });
@@ -279,7 +294,7 @@ describeDb('credentials', () => {
     it('ends every session when a password is set', async () => {
       const session = await accept();
       const { token } = await credentials.issueInvitation(boss, userId, 'reset', NOW);
-      await credentials.acceptInvitation(token, 'a different long password', {}, NOW);
+      await credentials.acceptInvitation(token, 'A-Different-1', {}, NOW);
       // Setting a password is what somebody does when they think one is compromised.
       // Leaving old sessions alive would make the act useless in exactly that case.
       await expect(credentials.refresh(session.refreshToken, {}, NOW)).rejects.toThrow();

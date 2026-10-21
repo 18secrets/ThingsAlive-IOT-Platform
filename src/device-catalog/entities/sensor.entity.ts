@@ -1,0 +1,72 @@
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+
+/** One telemetry channel this sensor exposes, and the range it is expected to sit in. */
+export interface SensorParameterSpec {
+  parameter: string;
+  unit: string;
+  /** null until someone sets it: a sensor created from a catalog import knows its
+   *  channels and units, but the workbook carries no range. */
+  min: number | null;
+  max: number | null;
+  normalRange: string;
+  notes?: string;
+}
+
+/**
+ * A reference sensor Master Admin can wire into a Tool Mapping (task: master-data
+ * pipeline for device onboarding).
+ *
+ * Platform-owned, flat master data — no tenant column, no row-level security, no
+ * draft/publish lifecycle. Unlike `EquipmentClassProfile` this is never versioned:
+ * the user asked for these as a plain reference table, not a product a tenant is
+ * entitled to.
+ *
+ * No delete: a Tool Mapping stores a sensor's id, and removing the row out from
+ * under a mapping would leave it pointing at nothing. Editing in place corrects it;
+ * retiring (task QCAT2) takes a mistake out of circulation without breaking whatever
+ * already points at it.
+ */
+@Entity('sensor')
+export class Sensor {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ name: 'sensor_name', type: 'text' })
+  sensorName: string;
+
+  /** The stable key the import path resolves against (task QIMP5) — `sensor_name` is
+   * a display string, and matching on it exactly is how the same physical sensor
+   * spelled two ways in two workbooks becomes two unrelated capabilities. */
+  @Column({ type: 'text' })
+  @Index('uq_sensor_slug', { unique: true })
+  slug: string;
+
+  @Column({ name: 'category_id', type: 'uuid', nullable: true })
+  @Index('ix_sensor_category')
+  categoryId: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  protocol: string | null;
+
+  @Column({ name: 'parameter_specs', type: 'jsonb', default: () => `'[]'::jsonb` })
+  parameterSpecs: SensorParameterSpec[];
+
+  /**
+   * Retired: no longer offered for new work, still resolving everywhere it is already
+   * used (task QCAT2, `1758410000000-SensorRetirement.ts`). Null is live.
+   */
+  @Column({ name: 'retired_at', type: 'timestamptz', nullable: true })
+  retiredAt: Date | null;
+
+  @Column({ name: 'retired_by', type: 'text', nullable: true })
+  retiredBy: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt: Date;
+}

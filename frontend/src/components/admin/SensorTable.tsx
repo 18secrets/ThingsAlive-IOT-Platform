@@ -1,0 +1,273 @@
+import React, { useState, useMemo } from 'react';
+import { Search, Plus, Eye, Edit2, AlertCircle, ChevronsUpDown, Archive, RotateCcw, Trash2, Tags } from 'lucide-react';
+import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
+import { ApiError, Sensor, SensorCategory, SensorInput } from '../../lib/api';
+import { compareByCategoryOrder, sortByCategory } from '../../lib/sensorCategoryOrder';
+import { AddSensorModal } from './AddSensorModal';
+import { SensorDetailModal } from './SensorDetailModal';
+import { ManageSensorCategoriesModal } from './ManageSensorCategoriesModal';
+
+interface SensorTableProps {
+  sensors: Sensor[];
+  error?: string;
+  categories: SensorCategory[];
+  showRetired: boolean;
+  onToggleShowRetired: (next: boolean) => void;
+  onCreateSensor: (input: SensorInput) => Promise<Sensor>;
+  onUpdateSensor: (id: string, input: SensorInput) => Promise<Sensor>;
+  onRetireSensor: (id: string) => Promise<Sensor>;
+  onUnretireSensor: (id: string) => Promise<Sensor>;
+  onDeleteSensor: (id: string) => Promise<void>;
+  onCreateCategory: (name: string) => Promise<SensorCategory>;
+  onRetireCategory: (id: string) => Promise<SensorCategory>;
+  onUnretireCategory: (id: string) => Promise<SensorCategory>;
+  onRenameCategory: (id: string, name: string) => Promise<SensorCategory>;
+  onDeleteCategory: (id: string) => Promise<void>;
+}
+
+export const SensorTable: React.FC<SensorTableProps> = ({
+  sensors, error, categories, showRetired, onToggleShowRetired,
+  onCreateSensor, onUpdateSensor, onRetireSensor, onUnretireSensor, onDeleteSensor,
+  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory, onRenameCategory,
+}) => {
+  const { t } = useTranslation('catalog');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
+  const [viewingSensor, setViewingSensor] = useState<Sensor | null>(null);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | undefined>(undefined);
+
+  const categoryName = useMemo(() => {
+    const byId = new Map(categories.map((c) => [c.id, c.name]));
+    return (id: string | null) => (id ? byId.get(id) ?? '—' : '—');
+  }, [categories]);
+
+  const filteredSensors = useMemo(() => {
+    const filtered = sensors.filter((s) => {
+      const name = categoryName(s.categoryId);
+      const matchesSearch =
+        s.sensorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'All' || s.categoryId === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+    return sortByCategory(filtered, (s) => categoryName(s.categoryId), (s) => s.sensorName);
+  }, [sensors, searchTerm, selectedCategory, categoryName]);
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => compareByCategoryOrder(a.name, b.name)),
+    [categories],
+  );
+
+  const categoryOptions = useMemo(
+    () => [
+      { label: t('sensors.filterByCategory'), value: 'All' },
+      ...sortedCategories.map((c) => ({ label: c.name, value: c.id })),
+    ],
+    [sortedCategories, t],
+  );
+
+  const withBusy = async (id: string, action: () => Promise<unknown>) => {
+    setBusyId(id);
+    setActionError(undefined);
+    try {
+      await action();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : t('common.actionFailed'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div id="sensor-management-view" className="space-y-4">
+      <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              value={searchTerm}
+              onChange={(value) => setSearchTerm(value)}
+              placeholder={t('sensors.searchPlaceholder')}
+              size="sm"
+              className="w-full pl-9!"
+            />
+          </div>
+
+          <SelectPicker
+            data={categoryOptions}
+            value={selectedCategory}
+            onChange={(value) => setSelectedCategory(value ?? 'All')}
+            size="sm"
+            searchable={categoryOptions.length > 6}
+            cleanable={false}
+          />
+
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showRetired}
+              onChange={(e) => onToggleShowRetired(e.target.checked)}
+              className="accent-sky-600"
+            />
+            {t('common.showRetired')}
+          </label>
+
+          <button
+            onClick={() => setIsCategoriesModalOpen(true)}
+            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:border-sky-300 hover:text-sky-600 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title={t('sensors.manageCategories')}
+          >
+            <Tags className="w-3.5 h-3.5" />
+            {t('sensors.categories')}
+          </button>
+        </div>
+
+        <button
+          id="add-sensor-btn"
+          onClick={() => { setEditingSensor(null); setIsAddModalOpen(true); }}
+          className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{t('sensors.addSensor')}</span>
+        </button>
+      </div>
+
+      {(error || actionError) && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error ?? actionError}</span>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 text-xs font-normal">
+              <tr>
+                <th className="py-3 px-6 font-medium">
+                  <div className="flex items-center gap-1">
+                    <span>{t('sensors.category')}</span>
+                    <ChevronsUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
+                </th>
+                <th className="py-3 px-6 font-medium">{t('sensors.sensorName')}</th>
+                <th className="py-3 px-6 font-medium">{t('sensors.parameters')}</th>
+                <th className="py-3 px-6 font-medium">{t('common.statusHeader')}</th>
+                <th className="py-3 px-6 font-medium">{t('sensors.updatedAt')}</th>
+                <th className="py-3 px-4 font-medium text-center">{t('common.view')}</th>
+                <th className="py-3 px-4 font-medium text-center">{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-sm">
+              {filteredSensors.length > 0 ? (
+                filteredSensors.map((sensor) => {
+                  const retired = !!sensor.retiredAt;
+                  return (
+                  <tr key={sensor.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-6 font-normal">{categoryName(sensor.categoryId)}</td>
+                    <td className="py-3.5 px-6 font-normal text-slate-800 dark:text-slate-200">{sensor.sensorName}</td>
+                    <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
+                      {sensor.parameterSpecs.length}
+                    </td>
+                    <td className="py-3.5 px-6">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        retired
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        {retired ? t('common.statusLabel.retired') : t('sensors.live')}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
+                      {new Date(sensor.updatedAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        onClick={() => setViewingSensor(sensor)}
+                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors inline-flex items-center justify-center cursor-pointer"
+                        title={t('sensors.viewDetails')}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
+                          className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
+                          title={t('sensors.editSensor')}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => (retired ? onUnretireSensor(sensor.id) : onRetireSensor(sensor.id)))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title={retired ? t('sensors.unretireHint') : t('sensors.retireHint')}
+                        >
+                          {retired ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => onDeleteSensor(sensor.id))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title={t('sensors.deleteHint')}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-slate-400 text-sm">
+                    {t('sensors.noMatch')}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
+          {t('common.totalRows')} <span className="font-medium text-slate-700 dark:text-slate-300">{filteredSensors.length}</span>
+        </div>
+      </div>
+
+      <AddSensorModal
+        isOpen={isAddModalOpen}
+        onClose={() => { setIsAddModalOpen(false); setEditingSensor(null); }}
+        onCreate={onCreateSensor}
+        onUpdate={onUpdateSensor}
+        categories={categories.filter((c) => !c.retiredAt || c.id === editingSensor?.categoryId)}
+        onCreateCategory={onCreateCategory}
+        existingSensor={editingSensor}
+      />
+
+      <SensorDetailModal
+        sensor={viewingSensor}
+        categoryName={viewingSensor ? categoryName(viewingSensor.categoryId) : undefined}
+        onClose={() => setViewingSensor(null)}
+      />
+
+      <ManageSensorCategoriesModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        categories={categories}
+        showRetired={showRetired}
+        onToggleShowRetired={onToggleShowRetired}
+        onRetire={onRetireCategory}
+        onUnretire={onUnretireCategory}
+        onDelete={onDeleteCategory}
+        onRename={onRenameCategory}
+      />
+    </div>
+  );
+};

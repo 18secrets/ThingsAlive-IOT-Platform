@@ -1,7 +1,7 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
-import { withTenantSession } from '../../scope/tenant-session';
+import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentProfile } from '../equipment-profile.entity';
 import { Plant, PlantStatus } from '../entities/plant.entity';
 
@@ -31,12 +31,22 @@ const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
 export class PlantService {
   constructor(private readonly ds: DataSource) {}
 
-  async list(scope: RequestScope, includeRetired = false): Promise<Plant[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+  /** `onBehalfOfTenantId` is Master Admin's own override (task: Equipment on the
+   *  sidebar handles any client, 2026-10-10) — populates the site picker when
+   *  managing another account's equipment. Refused for anyone else. */
+  async list(scope: RequestScope, includeRetired = false, onBehalfOfTenantId?: string): Promise<Plant[]> {
+    let tenantId = scope.tenantId;
+    if (onBehalfOfTenantId) {
+      if (!scope.isPlatformRole) {
+        throw new ForbiddenException('Only Things Alive staff can read another account\'s sites.');
+      }
+      tenantId = onBehalfOfTenantId;
+    }
+    return withTenantId(this.ds, tenantId, (m) =>
       m.getRepository(Plant).find({
         where: includeRetired
-          ? { tenantId: scope.tenantId }
-          : { tenantId: scope.tenantId, status: 'active' },
+          ? { tenantId }
+          : { tenantId, status: 'active' },
         order: { name: 'ASC' },
       }));
   }
@@ -98,6 +108,26 @@ export class PlantService {
         'operationalStatus', 'description'] as const) {
         if (input[key] !== undefined) (plant as any)[key] = input[key] ?? null;
       }
+      plant.updatedBy = scope.userId;
+      return repo.save(plant);
+    });
+  }
+
+  /**
+   * Set or clear a site's boundary (task QGEO1). The shape is the database's to judge —
+   * `site_boundary_problem` is the same function its CHECK uses — asked first only so
+   * the refusal can say what is wrong instead of naming a constraint.
+   */
+  async setBoundary(scope: RequestScope, id: string, boundary: unknown | null): Promise<Plant> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const repo = m.getRepository(Plant);
+      const plant = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
+      if (!plant) throw new NotFoundException('No such site in this account.');
+      if (boundary !== null) {
+        const [{ problem }] = await m.query(`SELECT site_boundary_problem($1::jsonb) AS problem`, [JSON.stringify(boundary)]);
+        if (problem) throw new BadRequestException(`Boundary refused: ${problem}.`);
+      }
+      plant.boundary = boundary as Plant['boundary'];
       plant.updatedBy = scope.userId;
       return repo.save(plant);
     });

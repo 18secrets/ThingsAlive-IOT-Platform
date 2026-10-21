@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/retrieval-hit.v1.json",
+  "title": "RetrievalHitV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "citation_id", "document_version_id", "chunk_id", "title",
+    "applicability", "relevance_rank", "retrieval_methods"
+  ],
+  "properties": {
+    "citation_id": { "type": "string", "format": "uuid" },
+    "document_version_id": { "type": "string", "format": "uuid" },
+    "chunk_id": { "type": "string", "format": "uuid" },
+    "title": { "type": "string" },
+    "issuer": { "type": ["string", "null"] },
+    "locators": {
+      "type": "object",
+      "properties": {
+        "page_start": { "type": ["integer", "null"] },
+        "page_end": { "type": ["integer", "null"] },
+        "heading_path": { "type": ["string", "null"] },
+        "table_ref": { "type": ["string", "null"] },
+        "char_start": { "type": ["integer", "null"] },
+        "char_end": { "type": ["integer", "null"] }
+      }
+    },
+    "text_excerpt": { "type": "string" },
+    "source_hash": { "type": "string" },
+    "applicability": { "enum": ["exact", "class", "generic"] },
+    "relevance_rank": {
+      "type": "integer",
+      "description": "A rank, not a confidence."
+    },
+    "retrieval_methods": {
+      "type": "array",
+      "items": { "enum": ["semantic", "lexical", "exact_identifier"] }
+    },
+    "review_status": { "type": ["string", "null"] },
+    "effective_from": {
+      "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+    },
+    "effective_to": {
+      "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+    },
+    "generated_prefix": {
+      "type": ["string", "null"],
+      "description": "Search metadata. Never citable as source text."
+    }
+  }
+}

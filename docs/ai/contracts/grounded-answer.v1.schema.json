@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/grounded-answer.v1.json",
+  "title": "GroundedAnswerV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "answer_id", "context_id", "status", "summary", "observations",
+    "hypotheses", "next_steps", "citations", "missing_inputs", "as_of", "limitations"
+  ],
+  "properties": {
+    "answer_id": { "type": "string", "format": "uuid" },
+    "context_id": { "type": "string", "format": "uuid" },
+    "status": {
+      "enum": ["answered", "partial", "needs_input", "insufficient_evidence", "unavailable"]
+    },
+    "summary": { "type": "string" },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "evidence_refs"],
+        "properties": {
+          "claim": { "type": "string" },
+          "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      },
+      "description": "A numeric current-condition claim must point to structured evidence."
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "evidence_refs", "limitations"],
+        "properties": {
+          "claim": { "type": "string" },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "limitations": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "description": "A suspected cause is not a confirmed diagnosis."
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["aim", "expected_outcome", "required_capability", "simulation_available"],
+        "properties": {
+          "aim": { "type": "string" },
+          "expected_outcome": { "type": "string" },
+          "required_capability": {
+            "type": "string",
+            "description": "Reported, never granting."
+          },
+          "simulation_available": { "type": "boolean" }
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": { "$ref": "https://things-alive.io/schemas/retrieval-hit.v1.json" }
+    },
+    "missing_inputs": { "type": "array", "items": { "type": "string" } },
+    "as_of": { "type": "string", "format": "date-time" },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "proposal_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" }
+    }
+  }
+}

@@ -18,8 +18,10 @@ export interface ResolvedIdentity {
 }
 
 export interface ScopeResolver {
-  /** Null when this caller has no row in the account — a platform role, typically. */
-  resolve(tenantId: string, userId: string): Promise<ResolvedIdentity | null>;
+  /** Null when this caller has no row in the account — a platform role, typically.
+   * `sessionId` is the sign-in the token came from, when it carries one; a sign-in
+   * since ended is a refusal, not a fallback. */
+  resolve(tenantId: string, userId: string, sessionId?: string): Promise<ResolvedIdentity | null>;
 }
 
 export const SCOPE_RESOLVER = Symbol('ta:scope-resolver');

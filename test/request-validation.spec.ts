@@ -92,7 +92,7 @@ describe('the request validation boundary (P1-127)', () => {
         slug: 'diesel-generator',
         name: 'Diesel generator',
         category: 'power',
-        expectedSignals: [{ signal: 'coolant_temp_c', unit: 'C' }],
+        expectedSignals: [{ signal: 'coolant_temp_c', unit: 'C', required: true }],
       })).resolves.toMatchObject({ slug: 'diesel-generator' });
     });
 

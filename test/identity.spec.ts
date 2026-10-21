@@ -184,7 +184,8 @@ describeDb('identity', () => {
       // Lower-cased and trimmed once, so a stray capital never creates a twin.
       expect(user.email).toBe('dana@acme.test');
       expect(user.status).toBe('invited');
-      expect(user.passwordHash).toBeNull();
+      // UserView never carries passwordHash at all — not even null. See user.service.ts.
+      expect(Object.prototype.hasOwnProperty.call(user, 'passwordHash')).toBe(false);
       expect(user.plants).toEqual([{ plantId: plantIds['PLANT-A'] }]);
     });
 
@@ -224,6 +225,24 @@ describeDb('identity', () => {
       // The rows stop mattering, because a tenant-shaped role does not read them.
       // Deleting them would destroy the record of what this person used to run.
       expect(promoted.plants).toEqual([{ plantId: plantIds['PLANT-A'] }]);
+    });
+
+    it('keeps at least one ceo-manager, so an account is never locked out of managing itself', async () => {
+      // 'u-boss' carries no app_user row in this fixture, so this invite is Acme's
+      // only ceo-manager the moment it exists.
+      const chief = await users.invite(boss, { email: 'chief@acme.test', fullName: 'Chief', roleSlug: 'ceo-manager' }, NOW);
+
+      await expect(users.setRole(boss, chief.id, 'operator')).rejects.toThrow(/only ceo-manager/);
+      expect((await users.list(boss)).find((u) => u.id === chief.id)!.roleSlug).toBe('ceo-manager');
+    });
+
+    it('allows a demotion once somebody else already holds ceo-manager', async () => {
+      const chief = await users.invite(boss, { email: 'chief@acme.test', fullName: 'Chief', roleSlug: 'ceo-manager' }, NOW);
+      const deputy = await users.invite(boss, { email: 'deputy@acme.test', fullName: 'Deputy', roleSlug: 'operator' }, NOW);
+      await users.setRole(boss, deputy.id, 'ceo-manager');
+
+      const demoted = await users.setRole(boss, chief.id, 'operator');
+      expect(demoted.roleSlug).toBe('operator');
     });
 
     it('cannot reach a person in another account', async () => {

@@ -1,3 +1,4 @@
+import { absorbAlerts } from '../../incident/incident-absorb';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -141,6 +142,14 @@ export class AlertService {
       const repo = m.getRepository(AlertRule);
       const rule = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
       if (!rule) throw new NotFoundException('No such alert rule in this account.');
+      // The sentence; `trg_alert_rule_compiled_guard` is the backstop. A compiled rule
+      // is edited through its graph, or the two stop describing the same thing (D16).
+      if (rule.compiledFromWorkflowId) {
+        throw new ConflictException(
+          `"${rule.name}" is compiled from workflow ${rule.compiledFromWorkflowId}. `
+          + 'Edit the workflow and republish it; switching the rule off is still allowed.',
+        );
+      }
 
       const merged: RuleInput = {
         slug: input.slug ?? rule.slug,
@@ -182,7 +191,11 @@ export class AlertService {
   }
 
   async listEvents(
-    scope: RequestScope, filter: { state?: string[]; externalId?: string } = {},
+    scope: RequestScope,
+    // `limit: null` is unbounded. The default stays 200 for the alert list; the
+    // incident view (closeout §4) asks for every open alert, because an incident list
+    // cut short at 200 silently drops whichever machines happened to fire earliest.
+    filter: { state?: string[]; externalId?: string; limit?: number | null } = {},
   ): Promise<AlertEvent[]> {
     return withTenantSession(this.ds, scope, (m) => {
       const where: Record<string, unknown> = { tenantId: scope.tenantId };
@@ -199,7 +212,8 @@ export class AlertService {
         if (!filter.externalId) where.externalId = In([...scope.equipmentIds]);
       }
       return m.getRepository(AlertEvent).find({
-        where: where as any, order: { firedAt: 'DESC' }, take: 200,
+        where: where as any, order: { firedAt: 'DESC' },
+        ...(filter.limit === null ? {} : { take: filter.limit ?? 200 }),
       });
     });
   }
@@ -313,6 +327,9 @@ export class AlertService {
           resolvedBy: null, resolvedAt: null, resolutionNote: null,
         })));
       }
+      // Into incidents in this same transaction (phase 2): an alert and the incident
+      // that owns it commit together or not at all.
+      await absorbAlerts(m, context.tenantId, fired);
       return fired;
     });
   }
@@ -337,20 +354,11 @@ export class AlertService {
           select: { plantId: true, equipmentClassSlug: true },
         })
       : null;
-    const plantId = profile?.plantId ?? null;
-    const classSlug = profile?.equipmentClassSlug ?? null;
-
-    return rules.filter((rule) => {
-      if (rule.appliesTo === 'account') return true;
-      if (rule.appliesTo === 'plant') return !!plantId && rule.plantId === plantId;
-      // A machine with no class matches no class-scoped rule. Not an oversight: an
-      // unclassified machine has nothing the rule was written about, and treating the
-      // missing class as a match would fire generator rules on anything unlabelled.
-      if (rule.appliesTo === 'equipment-class') {
-        return !!classSlug && rule.equipmentClassSlug === classSlug;
-      }
-      return rule.sourceSystem === context.sourceSystem && rule.externalId === context.externalId;
-    });
+    const machine = {
+      sourceSystem: context.sourceSystem, externalId: context.externalId,
+      plantId: profile?.plantId ?? null, equipmentClassSlug: profile?.equipmentClassSlug ?? null,
+    };
+    return rules.filter((rule) => ruleCoversMachine(rule, machine));
   }
 
   private async validate(scope: RequestScope, input: RuleInput): Promise<void> {
@@ -360,6 +368,11 @@ export class AlertService {
       );
     }
     if (!input.name?.trim()) throw new BadRequestException('A rule needs a name.');
+    // Compiler-only (task QWF1): a hand-written composite would be the one rule kind
+    // with no graph to read it back from. The table's CHECK refuses it too.
+    if (input.trigger === 'composite') {
+      throw new BadRequestException('A composite rule is written by publishing a workflow, not by hand.');
+    }
 
     const problem = validateParams(input.trigger, input.params);
     if (problem) throw new BadRequestException(problem);
@@ -389,4 +402,24 @@ export class AlertService {
       if (!exists) throw new NotFoundException('No such machine in this account.');
     }
   }
+}
+
+/**
+ * Whether a rule is written about this machine. Exported so onboarding status
+ * (QONBOARD-STATUS) answers "does an alert cover it" with the engine's own rule, not a
+ * copy that drifts the first time a new `applies_to` is added.
+ */
+export function ruleCoversMachine(
+  rule: Pick<AlertRule, 'appliesTo' | 'plantId' | 'equipmentClassSlug' | 'sourceSystem' | 'externalId'>,
+  machine: { sourceSystem: string; externalId: string; plantId: string | null; equipmentClassSlug: string | null },
+): boolean {
+  if (rule.appliesTo === 'account') return true;
+  if (rule.appliesTo === 'plant') return !!machine.plantId && rule.plantId === machine.plantId;
+  // A machine with no class matches no class-scoped rule. Not an oversight: an
+  // unclassified machine has nothing the rule was written about, and treating the
+  // missing class as a match would fire generator rules on anything unlabelled.
+  if (rule.appliesTo === 'equipment-class') {
+    return !!machine.equipmentClassSlug && rule.equipmentClassSlug === machine.equipmentClassSlug;
+  }
+  return rule.sourceSystem === machine.sourceSystem && rule.externalId === machine.externalId;
 }

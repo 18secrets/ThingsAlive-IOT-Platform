@@ -1,12 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { ScenarioDefinition } from '../../catalog/entities/scenario-definition.entity';
 import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
 import { AlertRule } from '../../alert/entities/alert-rule.entity';
 import { withTenantId } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
+import { ClientFormula } from '../entities/client-formula.entity';
 import { ClientScenario } from '../entities/client-scenario.entity';
+import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
+import { ClientEquipmentClassRecommendation } from '../entities/client-equipment-class-recommendation.entity';
+import { ClientEquipmentClassLayout } from '../entities/client-equipment-class-layout.entity';
+import { loadLayout } from '../../catalog/services/class-layout';
+import { loadAnchors } from '../../catalog/services/class-visual.service';
+import { loadModelAnchors } from '../../catalog/services/class-model.service';
+import { ClientEquipmentClassVisualAnchor } from '../entities/client-equipment-class-visual-anchor.entity';
+import { WidgetSize, WidgetType } from '../../catalog/layout/widget-types';
+import {
+  loadFailureModes, loadRecommendations, toFailureModeJsonb,
+} from '../../catalog/services/class-failure-modes';
 import { alertRuleContentChecksum, classContentChecksum, scenarioContentChecksum } from './provenance';
 
 export interface CopyResult {
@@ -14,6 +27,13 @@ export interface CopyResult {
   templateVersion: number;
   scenariosCopied: number;
   alertRulesCopied: number;
+  formulasCopied: number;
+  failureModesCopied: number;
+  recommendationsCopied: number;
+  layoutWidgetsCopied: number;
+  anchorsCopied: number;
+  /** The 3-D model's markers (task QTWIN1), counted apart from the schematic's. */
+  modelAnchorsCopied: number;
   alreadyPresent: boolean;
 }
 
@@ -48,24 +68,56 @@ export class CopyOnGrantService {
   ): Promise<CopyResult> {
     const template = await this.latestPublishedClass(templateSlug);
     if (!template) {
-      throw new Error(`No published template "${templateSlug}" to copy.`);
+      throw new BadRequestException(`No published template "${templateSlug}" to copy.`);
     }
 
     const scenarios = await this.latestPublishedScenarios(templateSlug);
     const alertTemplates = await this.latestPublishedAlertTemplates(templateSlug);
+    const formulas = await this.latestPublishedFormulas(templateSlug, template.version);
+    // Rows, never the deprecated jsonb (task QREC0a) — the same version being granted.
+    const failureModes = await loadFailureModes(this.ds.manager, templateSlug, template.version);
+    const recommendations = await loadRecommendations(this.ds.manager, templateSlug, template.version);
+    const layout = await loadLayout(this.ds.manager, templateSlug, template.version);
+    const anchors = await loadAnchors(this.ds.manager, templateSlug, template.version);
+    const modelAnchors = await loadModelAnchors(this.ds.manager, templateSlug, template.version);
 
     return withTenantId(this.ds, tenantId, async (m: EntityManager) => {
       const classes = m.getRepository(ClientEquipmentClass);
       const existing = await classes.findOne({ where: { tenantId, slug: template.slug } });
       if (existing) {
+        // Task QGRANT0 §4: re-grant was previously a silent no-op regardless of
+        // which version the tenant already held — including this case, where a
+        // newer class version has since been published and the tenant's copy is
+        // quietly stale. Made explicit: same version is still a no-op; a newer
+        // version is refused rather than silently skipped, because upgrading an
+        // existing copy (merging what the tenant customised against what changed)
+        // is a real feature this is not — that is QUPGRADE1's job.
+        if ((existing.templateVersion ?? 0) < template.version) {
+          // A plain Error here would 500 — this is a foreseeable refusal an HTTP
+          // caller (the master admin re-granting) needs to see as a 400, not a
+          // crash. test/formula-copy-on-grant.spec.ts calls this service directly
+          // and only matches the message, so BadRequestException (itself an Error)
+          // changes nothing there.
+          throw new BadRequestException(
+            `Tenant ${tenantId} holds "${template.slug}" v${existing.templateVersion}, and v${template.version} `
+              + 'is now published. Upgrading an existing copy to a newer class version is not built here — '
+              + "that is QUPGRADE1's job. Nothing was changed.",
+          );
+        }
         this.logger.log(
-          `Tenant ${tenantId} already has "${template.slug}"; leaving their copy alone.`,
+          `Tenant ${tenantId} already has "${template.slug}" v${existing.templateVersion}; leaving their copy alone.`,
         );
         return {
           classSlug: existing.slug,
           templateVersion: existing.templateVersion ?? template.version,
           scenariosCopied: 0,
           alertRulesCopied: 0,
+          formulasCopied: 0,
+          failureModesCopied: 0,
+          recommendationsCopied: 0,
+          layoutWidgetsCopied: 0,
+          anchorsCopied: 0,
+          modelAnchorsCopied: 0,
           alreadyPresent: true,
         };
       }
@@ -77,11 +129,17 @@ export class CopyOnGrantService {
         description: template.description,
         category: template.category,
         expectedSignals: template.expectedSignals,
-        failureModes: template.failureModes,
+        // Deprecated, still populated (task QREC0a) — from the rows, so the jsonb and
+        // client_equipment_class_failure_mode cannot start out disagreeing.
+        failureModes: toFailureModeJsonb(failureModes),
         defaultThresholds: template.defaultThresholds,
         templateSlug: template.slug,
         templateVersion: template.version,
-        templateChecksum: classContentChecksum(template),
+        // Hashed over what this copy actually holds, not the template's own jsonb —
+        // the rows come back ordered by code, which need not be the jsonb's order,
+        // and a checksum taken over one and compared against the other would call
+        // every copy edited the moment it was written.
+        templateChecksum: classContentChecksum({ ...template, failureModes: toFailureModeJsonb(failureModes) }),
         copiedAt: now,
         status: 'active',
         updatedBy: copiedBy,
@@ -148,15 +206,117 @@ export class CopyOnGrantService {
         rulesCopied += 1;
       }
 
+      // Formulas (task QGRANT0) — copied as data, the same way `compiled_plan`
+      // already lived on the platform row: nothing here is a reference the
+      // tenant could resolve against `named_formula` later. Publishing a new
+      // named-formula version changes nothing already copied, for the same
+      // reason a template edit does not reach an existing `ClientEquipmentClass`.
+      const clientFormulas = m.getRepository(ClientFormula);
+      let formulasCopied = 0;
+      for (const f of formulas) {
+        const already = await clientFormulas.findOne({
+          where: { tenantId, clientEquipmentClassSlug: template.slug, formulaKey: f.formulaKey },
+        });
+        if (already) continue;
+        await clientFormulas.save(clientFormulas.create({
+          tenantId,
+          clientEquipmentClassSlug: template.slug,
+          formulaKey: f.formulaKey,
+          kind: f.kind,
+          expression: f.expression,
+          compiledPlan: f.compiledPlan,
+          compiledAt: f.compiledAt,
+          compilerVersion: f.compilerVersion,
+          resultUnit: f.resultUnit,
+          requiredSignals: f.requiredSignals,
+          requiredParameters: f.requiredParameters,
+          namedFormulaSlug: f.namedFormulaSlug,
+          namedFormulaVersion: f.namedFormulaVersion,
+          bindings: f.bindings,
+          resultKind: f.resultKind,
+          displayUnit: f.displayUnit,
+          displayFormat: f.displayFormat,
+          targetValue: f.targetValue,
+          targetMin: f.targetMin,
+          targetMax: f.targetMax,
+          targetDirection: f.targetDirection,
+          comparisonBasis: f.comparisonBasis,
+          aggregationWindow: f.aggregationWindow,
+          chartType: f.chartType,
+          templateVersion: template.version,
+          copiedAt: now,
+          status: 'active',
+          updatedBy: copiedBy,
+        }));
+        formulasCopied += 1;
+      }
+
+      // Failure modes, then the recommendations that point at them (task QREC0a) —
+      // in that order because the tenant copy carries the same foreign key the
+      // platform row does. Copied whole: this branch only runs for a class the
+      // tenant did not already hold, so there is no earlier copy to merge with.
+      const clientModes = m.getRepository(ClientEquipmentClassFailureMode);
+      if (failureModes.length) {
+        await clientModes.save(failureModes.map((f) => clientModes.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...f,
+          templateVersion: template.version, copiedAt: now,
+        })));
+      }
+      const clientRecommendations = m.getRepository(ClientEquipmentClassRecommendation);
+      if (recommendations.length) {
+        await clientRecommendations.save(recommendations.map((r) => clientRecommendations.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...r,
+          templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
+      // The page layout (task QREC0b), as the class authored it: nothing hidden, no
+      // position customised. A class with no layout copies nothing, and the tenant's
+      // page is the same computed fallback the platform's would be.
+      const clientLayout = m.getRepository(ClientEquipmentClassLayout);
+      if (layout.length) {
+        await clientLayout.save(layout.map((w) => clientLayout.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...w,
+          widgetType: w.widgetType as WidgetType, size: w.size as WidgetSize,
+          hidden: false, positionCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
+      // The visual's anchors (task QREC0c) — rows, and the tenant's from here on. The
+      // image itself is not copied: one object serves every tenant with the class.
+      const clientAnchors = m.getRepository(ClientEquipmentClassVisualAnchor);
+      if (anchors.length) {
+        await clientAnchors.save(anchors.map((a) => clientAnchors.create({
+          tenantId, clientEquipmentClassSlug: template.slug, ...a,
+          placementCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
+      // And the model's (task QTWIN1): the same rows with a position in place of hotspots.
+      // `template_version` is what the database checks the position against.
+      if (modelAnchors.length) {
+        await clientAnchors.save(modelAnchors.map((a) => clientAnchors.create({
+          tenantId, clientEquipmentClassSlug: template.slug, tier: 'model', signal: a.signal,
+          posX: a.x, posY: a.y, posZ: a.z, label: a.label,
+          placementCustom: false, templateVersion: template.version, copiedAt: now,
+        })));
+      }
+
       this.logger.log(
-        `Copied "${template.slug}" v${template.version}, ${copied} scenario(s) and `
-        + `${rulesCopied} alert rule(s) to tenant ${tenantId}.`,
+        `Copied "${template.slug}" v${template.version}, ${copied} scenario(s), `
+        + `${rulesCopied} alert rule(s), ${formulasCopied} formula(s), ${failureModes.length} failure mode(s) `
+        + `and ${recommendations.length} recommendation(s) to tenant ${tenantId}.`,
       );
       return {
         classSlug: template.slug,
         templateVersion: template.version,
         scenariosCopied: copied,
         alertRulesCopied: rulesCopied,
+        formulasCopied,
+        failureModesCopied: failureModes.length,
+        recommendationsCopied: recommendations.length,
+        layoutWidgetsCopied: layout.length,
+        anchorsCopied: anchors.length,
+        modelAnchorsCopied: modelAnchors.length,
         alreadyPresent: false,
       };
     });
@@ -183,6 +343,20 @@ export class CopyOnGrantService {
       if (!seen || row.version > seen.version) latest.set(row.slug, row);
     }
     return [...latest.values()];
+  }
+
+  /** Formulas belong to one specific (class_slug, class_version), unlike
+   * scenarios and alert templates which version independently — so this takes
+   * the exact version being granted, not "latest published" of its own. Only
+   * those the compiler actually produced a plan for: every formula under a
+   * published class version was compiled at that class's own publish, so this
+   * is a safety net, not a filter expected to exclude anything in practice. */
+  private async latestPublishedFormulas(classSlug: string, classVersion: number): Promise<EquipmentClassFormula[]> {
+    return this.ds.getRepository(EquipmentClassFormula).createQueryBuilder('f')
+      .where('f.class_slug = :classSlug', { classSlug })
+      .andWhere('f.class_version = :classVersion', { classVersion })
+      .andWhere('f.compiled_plan IS NOT NULL')
+      .getMany();
   }
 
   private async latestPublishedAlertTemplates(classSlug: string): Promise<AlertRuleTemplate[]> {

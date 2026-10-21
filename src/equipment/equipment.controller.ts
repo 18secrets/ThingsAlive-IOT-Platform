@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsISO8601, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDefined, IsIn, IsISO8601, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -44,6 +44,8 @@ export class EquipmentDto {
   @IsOptional() @IsIn(['basic', 'standard', 'advanced', 'full']) tier?: ServiceTier;
   @IsOptional() @IsISO8601() commissionedAt?: string;
   @IsOptional() @IsInt() serviceIntervalHours?: number;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
 }
 
 export class EquipmentPatchDto {
@@ -56,24 +58,39 @@ export class EquipmentPatchDto {
   @IsOptional() @IsIn(['basic', 'standard', 'advanced', 'full']) tier?: ServiceTier;
   @IsOptional() @IsISO8601() commissionedAt?: string;
   @IsOptional() @IsInt() serviceIntervalHours?: number;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
 }
 
 export class MoveDto {
   /** Null takes the machine off site without retiring it. */
   @IsOptional() @IsString() toPlantId?: string | null;
   @IsString() @IsNotEmpty() reason: string;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
 }
 
 export class ReasonDto {
   @IsString() @IsNotEmpty() reason: string;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
 }
 
 /**
  * The client's sites and machines (tasks P1-85, P1-86).
  *
- * Owned by their CEO or manager. Every route runs inside the caller's own account,
- * so nothing here needs to check which customer is asking.
+ * Owned by their CEO or manager. Every route runs inside the caller's own account
+ * by default. Master Admin is the one exception (task: Equipment on the sidebar
+ * handles any client, 2026-10-10) — an optional `tenantId` lets them act on a named
+ * account instead, refused by the service for anyone else.
  */
+/** A GeoJSON Polygon or null (task QGEO1). Its shape is checked by the database. */
+export class PlantBoundaryDto {
+  @IsDefined({ message: 'boundary is required — send null to remove it.' })
+  @ValidateIf((_, v) => v !== null) @IsObject()
+  boundary: Record<string, unknown> | null;
+}
+
 @ApiTags('Equipment')
 @Controller('equipment')
 export class EquipmentController {
@@ -85,8 +102,12 @@ export class EquipmentController {
   @Get('plants')
   @Requires('catalog.read')
   @ApiOperation({ summary: 'Sites in this account' })
-  listPlants(@CurrentScope() scope: RequestScope, @Query('includeRetired') includeRetired?: string) {
-    return this.plants.list(scope, includeRetired === 'true');
+  listPlants(
+    @CurrentScope() scope: RequestScope,
+    @Query('includeRetired') includeRetired?: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.plants.list(scope, includeRetired === 'true', tenantId);
   }
 
   @Post('plants')
@@ -107,6 +128,13 @@ export class EquipmentController {
     return this.plants.update(scope, id, body);
   }
 
+  @Put('plants/:id/boundary')
+  @Requires('equipment.write')
+  @ApiOperation({ summary: 'Set a site\'s boundary (GeoJSON Polygon), or null to remove it' })
+  setPlantBoundary(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() body: PlantBoundaryDto) {
+    return this.plants.setBoundary(scope, id, body.boundary);
+  }
+
   @Post('plants/:id/retire')
   @Requires('equipment.write')
   @ApiOperation({ summary: 'Close a site, once nothing is standing on it' })
@@ -121,6 +149,13 @@ export class EquipmentController {
     return this.plants.reopen(scope, id);
   }
 
+  @Get('all')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Every account\'s equipment register in one read — Master Admin only' })
+  listAll(@CurrentScope() scope: RequestScope) {
+    return this.equipment.listAcrossTenants(scope);
+  }
+
   @Get()
   @Requires('catalog.read')
   @ApiOperation({ summary: 'The equipment register for this account' })
@@ -128,8 +163,9 @@ export class EquipmentController {
     @CurrentScope() scope: RequestScope,
     @Query('plantId') plantId?: string,
     @Query('includeRetired') includeRetired?: string,
+    @Query('tenantId') tenantId?: string,
   ) {
-    return this.equipment.list(scope, { plantId, includeRetired: includeRetired === 'true' });
+    return this.equipment.list(scope, { plantId, includeRetired: includeRetired === 'true' }, tenantId);
   }
 
   @Post()
@@ -139,7 +175,7 @@ export class EquipmentController {
     return this.equipment.create(scope, {
       ...body,
       commissionedAt: body.commissionedAt ? new Date(body.commissionedAt) : null,
-    });
+    }, body.tenantId);
   }
 
   @Patch(':sourceSystem/:externalId')
@@ -154,7 +190,7 @@ export class EquipmentController {
     return this.equipment.update(scope, { sourceSystem, externalId }, {
       ...body,
       commissionedAt: body.commissionedAt ? new Date(body.commissionedAt) : undefined,
-    });
+    }, body.tenantId);
   }
 
   @Post(':sourceSystem/:externalId/move')
@@ -166,7 +202,7 @@ export class EquipmentController {
     @Param('externalId') externalId: string,
     @Body() body: MoveDto,
   ) {
-    return this.equipment.move(scope, { sourceSystem, externalId }, body.toPlantId ?? null, body.reason);
+    return this.equipment.move(scope, { sourceSystem, externalId }, body.toPlantId ?? null, body.reason, body.tenantId);
   }
 
   @Get(':sourceSystem/:externalId/placements')
@@ -176,8 +212,9 @@ export class EquipmentController {
     @CurrentScope() scope: RequestScope,
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
+    @Query('tenantId') tenantId?: string,
   ) {
-    return this.equipment.placementHistory(scope, { sourceSystem, externalId });
+    return this.equipment.placementHistory(scope, { sourceSystem, externalId }, tenantId);
   }
 
   @Post(':sourceSystem/:externalId/retire')
@@ -189,7 +226,7 @@ export class EquipmentController {
     @Param('externalId') externalId: string,
     @Body() body: ReasonDto,
   ) {
-    return this.equipment.retire(scope, { sourceSystem, externalId }, body.reason);
+    return this.equipment.retire(scope, { sourceSystem, externalId }, body.reason, body.tenantId);
   }
 
   @Post('import/:sourceSystem')

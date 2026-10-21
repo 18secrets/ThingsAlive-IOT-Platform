@@ -18,9 +18,28 @@ import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
  *  - `fuel-loss` — fuel left a machine that was switched off and did not move. First
  *    in Things Alive's own build order, and the one case here that needs no model, no
  *    baseline and no history at all: a tank, a key and a GPS fix.
+ *  - `composite` — several of the above at once, or any one of them (task QWF1, D16).
+ *    Written only by the workflow compiler: a hand-written composite would be the one
+ *    rule kind with no graph to read it back from, and the database refuses one.
  */
 export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry'
-  | 'fuel-loss' | 'chain-origin';
+  | 'fuel-loss' | 'chain-origin' | 'composite';
+
+/**
+ * Every trigger kind, as a value. A `Record` over the union, so adding a kind to
+ * `AlertTrigger` without adding it here fails to type-check — and anything that must
+ * cover every kind (the renderer's registry test, in particular) iterates this rather
+ * than a hand-kept list that drifts.
+ */
+const ALERT_TRIGGER_SET: Record<AlertTrigger, true> = {
+  'prediction-severity': true, 'signal-threshold': true, 'no-telemetry': true,
+  'fuel-loss': true, 'chain-origin': true, composite: true,
+};
+export const ALERT_TRIGGERS = Object.keys(ALERT_TRIGGER_SET) as AlertTrigger[];
+
+/** The kinds a composite may combine. Everything but itself: nesting is a tree of
+ * `allOf` / `anyOf`, never a composite leaf inside a composite. */
+export type CompositeLeafTrigger = Exclude<AlertTrigger, 'composite'>;
 
 export interface PredictionSeverityParams {
   /** Fires at this severity or above. */
@@ -34,7 +53,75 @@ export interface SignalThresholdParams {
   /** Either bound may be omitted; at least one is required. */
   max?: number | null;
   min?: number | null;
+  /**
+   * How many recent readings, by source_timestamp, to look at before comparing to
+   * the bound (task QALERT1, D34). Unset means the default applies — D32: an
+   * unsupplied value is not a declaration, so this is never written as a literal
+   * 10 at write time, only read as one.
+   */
+  lookbackReadings?: number;
+  /**
+   * Of the last `lookbackReadings`, how many must individually breach the bound
+   * before the rule fires (task QALERT2). Replaces D34's max/min-of-the-window
+   * reduction outright: reducing a window to its single worst reading and
+   * comparing once is indistinguishable from comparing every reading on its own
+   * the moment that worst reading is the only one that breaches, which is exactly
+   * the single-spike behaviour D34 was supposed to remove and did not. Unset means
+   * the default applies, same as `lookbackReadings`.
+   */
+  requiredBreaches?: number;
 }
+
+/** How many recent readings a signal-threshold rule considers absent an explicit
+ * `lookbackReadings` (task QALERT1, D34). At the platform's 30-60s sampling rate
+ * this is roughly a five-to-ten-minute view: long enough to absorb a spike, short
+ * enough not to delay a real excursion. Defined once, read everywhere. */
+export const DEFAULT_LOOKBACK_READINGS = 10;
+export const MIN_LOOKBACK_READINGS = 1;
+export const MAX_LOOKBACK_READINGS = 1000;
+
+/** Of the last `lookbackReadings`, how many must breach absent an explicit
+ * `requiredBreaches` (task QALERT2). Six of ten is a majority with margin: a
+ * machine genuinely running hot stays over the line for most of a five-to-ten
+ * minute window; one bad sample among nine clean ones does not. */
+export const DEFAULT_REQUIRED_BREACHES = 6;
+export const MIN_REQUIRED_BREACHES = 1;
+
+/**
+ * The field names above, kept in sync with the interface by the compiler rather than
+ * by memory: adding or removing a field from `SignalThresholdParams` without updating
+ * this object fails to type-check. Exported so anything staging threshold data outside
+ * this module — the catalog import template, in particular — can be checked against
+ * the same list instead of drifting out of sync with it by hand.
+ */
+const SIGNAL_THRESHOLD_PARAM_KEY_SET: Record<keyof SignalThresholdParams, true> = {
+  signal: true, max: true, min: true, lookbackReadings: true, requiredBreaches: true,
+};
+export const SIGNAL_THRESHOLD_PARAM_KEYS = Object.keys(SIGNAL_THRESHOLD_PARAM_KEY_SET) as
+  (keyof SignalThresholdParams)[];
+
+/**
+ * Every engine parameter is either staged from the workbook or carries a default in
+ * code (task QALERT1). There is no third state, and no key is exempt by silence:
+ * adding a parameter to `SignalThresholdParams` forces a choice here too, because
+ * this is also `Record<keyof SignalThresholdParams, ...>` — the same compiler-enforced
+ * total mapping `SIGNAL_THRESHOLD_PARAM_KEYS` uses, not a narrower view of it.
+ *
+ * `catalog-import-parse.spec.ts` enforces both halves: every `'staged'` key has a
+ * workbook column, and every `'defaulted'` key has a default defined in code. Neither
+ * check is allowed to pass by a key going unmentioned in either place.
+ */
+export const SIGNAL_THRESHOLD_PARAM_SOURCE: Record<keyof SignalThresholdParams, 'staged' | 'defaulted'> = {
+  signal: 'staged',
+  min: 'staged',
+  max: 'staged',
+  // Lands with QREC0's template v4 (task QALERT1 item 4). Flipping this to 'staged'
+  // is a one-word change — the moment it happens, the workbook-column half of the
+  // sync test starts demanding the column, by construction.
+  lookbackReadings: 'defaulted',
+  // Same reasoning, same template v4 (task QALERT2).
+  requiredBreaches: 'defaulted',
+};
 
 export interface NoTelemetryParams {
   /** Nothing to configure. A shift that produced no readings at all fires it. */
@@ -66,14 +153,55 @@ export interface ChainOriginParams {
   stageSignal?: string | null;
 }
 
+/**
+ * One condition inside a composite: a leaf trigger and exactly the parameters a rule
+ * of that kind would carry on its own (task QWF1, D43 Q2). Not an expression. D25 and
+ * D34 keep free text out of the alert path, and a structured tree of the leaf
+ * parameter sets is what lets each leaf be evaluated, validated and rendered by the
+ * code that already does that for a rule of its kind.
+ */
+export interface CompositeLeaf {
+  trigger: CompositeLeafTrigger;
+  params: AlertParams;
+}
+
+/** Exactly one of the two, with at least two terms. */
+export interface CompositeGroup {
+  allOf?: CompositeTerm[];
+  anyOf?: CompositeTerm[];
+}
+
+export type CompositeTerm = CompositeLeaf | CompositeGroup;
+
+/**
+ * Each leaf keeps its own sustained window (D43 Q3): an `allOf` of two thresholds
+ * fires when each one's own M-of-N holds in the shift, not when both are true in the
+ * same M of N readings. A combined window would need readings aligned across signals
+ * that arrive on different clocks, and nobody has decided how to align them.
+ */
+export interface CompositeParams {
+  condition: CompositeGroup;
+}
+
 export type AlertParams = PredictionSeverityParams | SignalThresholdParams
-  | NoTelemetryParams | FuelLossParams | ChainOriginParams;
+  | NoTelemetryParams | FuelLossParams | ChainOriginParams | CompositeParams;
+
+export const isCompositeLeaf = (t: CompositeTerm): t is CompositeLeaf =>
+  typeof (t as CompositeLeaf)?.trigger === 'string';
 
 export interface WindowReading {
   signal: string;
   value: number;
   unit?: string | null;
   sourceTimestamp: string;
+  /**
+   * Which logger reported it. Optional because most trigger kinds never cared
+   * (duty cycle, chain diagnosis) — signal-threshold does now (task QALERT1, D34):
+   * a window is built per (imei, signal), never by pooling every logger that has
+   * ever reported a signal name into one series. Absent means the same as any
+   * other reading with no imei — they group together, not with a named one.
+   */
+  imei?: string | null;
 }
 
 export interface WindowPrediction {
@@ -120,6 +248,60 @@ export interface Firing {
 const atOrAbove = (value: Severity, floor: Severity): boolean =>
   SEVERITY_ORDER.indexOf(value) >= SEVERITY_ORDER.indexOf(floor);
 
+/** The last `lookbackReadings` of a signal, grouped by logger and ordered
+ * most-recent-first by `source_timestamp` (task QALERT1, D34). */
+export interface SignalWindow {
+  imei: string | null;
+  /** Most-recent-first, capped to `lookbackReadings`. */
+  readings: WindowReading[];
+  /** Why this window cannot possibly reach `requiredBreaches`; null once it can. */
+  skippedReason: string | null;
+}
+
+/**
+ * Groups a shift's readings by (imei, signal) and keeps each group's most recent
+ * `lookbackReadings`, without counting breaches yet (task QALERT1, D34; QALERT2).
+ *
+ * Grouped by imei rather than pooled across every logger that ever reported this
+ * signal name: a device swap mid-shift, or two loggers that happen to report the
+ * same signal, must not let one logger's noise smear into another's clean window,
+ * or dilute a real breach on one logger with a quiet reading from another.
+ *
+ * A window shorter than `requiredBreaches` is flagged here rather than left for the
+ * caller to notice zero breaches on its own — fewer readings than the count needed
+ * to fire makes firing mathematically impossible, not merely unlikely, and D34's
+ * original fixed floor of 3 was this same reasoning before `requiredBreaches`
+ * existed to say it directly (task QALERT2).
+ *
+ * Exported so a test can assert the skip reason directly, and so a caller wanting
+ * to know *why* a rule stayed quiet is not left re-deriving it from a bare `null`.
+ */
+export function signalWindows(
+  readings: WindowReading[], signal: string, lookbackReadings: number, requiredBreaches: number,
+): SignalWindow[] {
+  const byImei = new Map<string | null, WindowReading[]>();
+  for (const r of readings) {
+    if (r.signal !== signal) continue;
+    const key = r.imei ?? null;
+    const group = byImei.get(key);
+    if (group) group.push(r); else byImei.set(key, [r]);
+  }
+  return [...byImei.entries()].map(([imei, group]) => {
+    const ordered = group
+      .slice()
+      .sort((a, b) => new Date(b.sourceTimestamp).getTime() - new Date(a.sourceTimestamp).getTime())
+      .slice(0, lookbackReadings);
+    return {
+      imei,
+      readings: ordered,
+      skippedReason: ordered.length < requiredBreaches
+        ? `only ${ordered.length} reading(s) available in the window; at least `
+          + `${requiredBreaches} are needed for that many to possibly breach.`
+        : null,
+    };
+  });
+}
+
 /**
  * Does this rule fire for this shift window, and what is the evidence?
  *
@@ -160,36 +342,68 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
 
     case 'signal-threshold': {
       const params = input.params as SignalThresholdParams;
-      const values = input.readings.filter((r) => r.signal === params.signal);
-      if (values.length === 0) return null;
+      const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
+      const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
+      // Windows too short to possibly reach requiredBreaches are dropped here, not
+      // compared: a rule watches "this equipment", but a window that cannot say
+      // anything trustworthy must not fire just because it technically has zero
+      // breaches (task QALERT1, D34).
+      const usable = signalWindows(input.readings, params.signal, lookbackReadings, requiredBreaches)
+        .filter((w) => w.skippedReason === null);
+      if (usable.length === 0) return null;
 
-      const high = params.max != null
-        ? values.filter((r) => r.value > params.max!).sort((a, b) => b.value - a.value)[0]
-        : undefined;
-      const low = params.min != null
-        ? values.filter((r) => r.value < params.min!).sort((a, b) => a.value - b.value)[0]
-        : undefined;
-      // The worst breach in either direction, because a shift that went both too hot
-      // and too cold is one alert about an unstable machine, not two.
+      // A window fires on a bound only once at least `requiredBreaches` of its own
+      // readings individually breach it (task QALERT2) — max/min-of-the-window is
+      // gone: reducing a window to its single worst reading and comparing once is
+      // indistinguishable from comparing every reading on its own the moment that
+      // worst reading is the only one that breaches, which is the single-spike
+      // behaviour D34 was supposed to remove and did not. Each bound is still
+      // counted independently, never counted once and compared twice.
+      const above = params.max != null
+        ? usable
+          .map((w) => ({ w, matches: w.readings.filter((r) => r.value > params.max!) }))
+          .filter((x) => x.matches.length >= requiredBreaches)
+        : [];
+      const below = params.min != null
+        ? usable
+          .map((w) => ({ w, matches: w.readings.filter((r) => r.value < params.min!) }))
+          .filter((x) => x.matches.length >= requiredBreaches)
+        : [];
+
+      // Worst reading among the windows that actually qualified — not the worst
+      // reading in any window, which would let one extreme reading in a window
+      // that never reached requiredBreaches masquerade as evidence for one that
+      // did. A high breach still wins a tie against a low one, same as before: a
+      // shift that went both too hot and too cold is one alert about an unstable
+      // machine.
+      const high = above
+        .flatMap((x) => x.matches.map((r) => ({ r, w: x.w, count: x.matches.length })))
+        .sort((a, b) => b.r.value - a.r.value)[0];
+      const low = below
+        .flatMap((x) => x.matches.map((r) => ({ r, w: x.w, count: x.matches.length })))
+        .sort((a, b) => a.r.value - b.r.value)[0];
       const breach = high ?? low;
       if (!breach) return null;
 
       const direction = breach === high ? 'above' : 'below';
-      const bound = breach === high ? params.max : params.min;
+      const bound = direction === 'above' ? params.max! : params.min!;
+      const window = breach.w.readings;
       return {
-        summary: `${params.signal} reached ${breach.value}${breach.unit ? ` ${breach.unit}` : ''}, `
-          + `${direction} ${bound}`,
+        summary: `${params.signal} breached ${bound}${breach.r.unit ? ` ${breach.r.unit}` : ''} `
+          + `${direction} on ${breach.count} of the last ${window.length} readings; `
+          + `worst was ${breach.r.value}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
         evidence: {
           signal: params.signal,
-          worstValue: breach.value,
-          unit: breach.unit ?? null,
-          at: breach.sourceTimestamp,
+          worstValue: breach.r.value,
+          unit: breach.r.unit ?? null,
+          at: breach.r.sourceTimestamp,
           direction,
           bound,
-          readingsInWindow: values.length,
-          breaches: values.filter((r) =>
-            (params.max != null && r.value > params.max) || (params.min != null && r.value < params.min),
-          ).length,
+          imei: breach.w.imei,
+          lookbackReadings,
+          requiredBreaches,
+          readingsInWindow: window.length,
+          breaches: breach.count,
         },
       };
     }
@@ -261,13 +475,79 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       };
     }
 
+    case 'composite':
+      return evaluateGroup((input.params as CompositeParams).condition, input);
+
     default:
       return null;
   }
 }
 
+/**
+ * A composite group, evaluated by evaluating its leaves as the rules they would be on
+ * their own. No leaf logic is repeated here: a threshold inside a composite is counted
+ * by the same `signalWindows` and the same M-of-N as a threshold rule, so the two
+ * cannot disagree about what "breached" means.
+ */
+function evaluateGroup(group: CompositeGroup, input: EvaluationInput): Firing | null {
+  const all = !!group.allOf;
+  const terms = group.allOf ?? group.anyOf ?? [];
+  const fired: { term: CompositeTerm; firing: Firing }[] = [];
+  for (const term of terms) {
+    const firing = isCompositeLeaf(term)
+      ? evaluateRule({ ...input, trigger: term.trigger, params: term.params })
+      : evaluateGroup(term, input);
+    if (firing) fired.push({ term, firing });
+    else if (all) return null;
+  }
+  if (!fired.length) return null;
+  return {
+    summary: fired.map((f) => f.firing.summary).join(all ? '; and ' : '; or '),
+    predictionId: fired.find((f) => f.firing.predictionId)?.firing.predictionId ?? null,
+    evidence: {
+      [all ? 'allOf' : 'anyOf']: fired.map((f) => ({
+        trigger: isCompositeLeaf(f.term) ? f.term.trigger : 'group',
+        evidence: f.firing.evidence,
+      })),
+    },
+  };
+}
+
+/**
+ * A composite's structure, then each leaf through `validateParams` itself — so an
+ * M greater than N inside a composite is refused in the same sentence it would be on
+ * a rule of its own, with where it sits prefixed.
+ */
+function validateGroup(group: CompositeGroup, path: string): string | null {
+  if (!group || typeof group !== 'object') return `${path} must be an allOf or an anyOf.`;
+  const hasAll = Array.isArray(group.allOf);
+  const hasAny = Array.isArray(group.anyOf);
+  if (hasAll === hasAny) return `${path} must be exactly one of allOf or anyOf.`;
+  const terms = (group.allOf ?? group.anyOf)!;
+  if (terms.length < 2) return `${path} combines ${terms.length} condition(s); a composite needs at least two.`;
+  for (const [i, term] of terms.entries()) {
+    const at = `${path}.${hasAll ? 'allOf' : 'anyOf'}[${i}]`;
+    if (isCompositeLeaf(term)) {
+      // Checked at runtime because the params arrive as stored JSON, not as the type says.
+      const leafTrigger = term.trigger as AlertTrigger;
+      if (!ALERT_TRIGGERS.includes(leafTrigger) || leafTrigger === 'composite') {
+        return `${at}: "${term.trigger}" is not a trigger a composite can combine.`;
+      }
+      const problem = validateParams(term.trigger, term.params);
+      if (problem) return `${at}: ${problem}`;
+    } else {
+      const problem = validateGroup(term, at);
+      if (problem) return problem;
+    }
+  }
+  return null;
+}
+
 /** Everything a rule of each kind must carry, checked once on write. */
 export function validateParams(trigger: AlertTrigger, params: AlertParams): string | null {
+  if (trigger === 'composite') {
+    return validateGroup((params as CompositeParams)?.condition, 'condition');
+  }
   if (trigger === 'prediction-severity') {
     const p = params as PredictionSeverityParams;
     if (!p?.atLeast || !SEVERITY_ORDER.includes(p.atLeast)) {
@@ -304,7 +584,68 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
       // Nothing can be both, so this rule can never fire and would look configured.
       return 'The minimum has to be below the maximum, or the rule can never fire.';
     }
+    if (p.lookbackReadings != null && (
+      !Number.isInteger(p.lookbackReadings)
+      || p.lookbackReadings < MIN_LOOKBACK_READINGS
+      || p.lookbackReadings > MAX_LOOKBACK_READINGS
+    )) {
+      return `lookback_readings has to be a whole number from ${MIN_LOOKBACK_READINGS} `
+        + `to ${MAX_LOOKBACK_READINGS}.`;
+    }
+    // Bounded by this rule's own lookback_readings, not a fixed ceiling (task
+    // QALERT2): requiring more breaches than the window can ever hold would look
+    // configured but could never fire.
+    const effectiveLookback = p.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
+    if (p.requiredBreaches != null && (
+      !Number.isInteger(p.requiredBreaches)
+      || p.requiredBreaches < MIN_REQUIRED_BREACHES
+      || p.requiredBreaches > effectiveLookback
+    )) {
+      return `required_breaches has to be a whole number from ${MIN_REQUIRED_BREACHES} `
+        + `to this rule's lookback_readings (${effectiveLookback}).`;
+    }
     return null;
   }
   return null;
+}
+
+/** What a renderer needs to name a signal in a sentence — its own vocabulary, not
+ * the slug telemetry uses for it. */
+export interface SignalDisplayInfo {
+  displayName: string;
+  unit?: string | null;
+}
+
+/**
+ * Renders a signal-threshold rule back into the one sentence it means (task
+ * QALERT2): "Fires when at least 6 of the last 10 readings of coolant temperature
+ * rise above 105 degC." An alert rule is stored parameters a person can read back,
+ * never free text — this is that read-back.
+ *
+ * Pure and framework-free — no repository, no request — so QWF1 (or anything else
+ * composing a plain-English summary of a rule) can import it directly rather than
+ * this living behind a controller only that one caller can reach.
+ */
+export function describeSignalThresholdRule(
+  params: SignalThresholdParams, signal: SignalDisplayInfo,
+): string {
+  const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
+  const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
+  const unitSuffix = signal.unit ? ` ${signal.unit}` : '';
+  const clauses: string[] = [];
+  if (params.max != null) {
+    clauses.push(
+      `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
+        + `rise above ${params.max}${unitSuffix}`,
+    );
+  }
+  if (params.min != null) {
+    clauses.push(
+      clauses.length
+        ? `at least ${requiredBreaches} fall below ${params.min}${unitSuffix}`
+        : `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
+          + `fall below ${params.min}${unitSuffix}`,
+    );
+  }
+  return `Fires when ${clauses.join(', or ')}.`;
 }

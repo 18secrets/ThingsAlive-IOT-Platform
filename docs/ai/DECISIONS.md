@@ -1,0 +1,377 @@
+# Decisions
+
+Settled architecture and the reason. Record once; do not reopen in every conversation.
+A decision here is only reversed by a new dated entry that says so.
+
+## D01 — 2.0 never writes to the 1.0 telemetry backend
+Read-only through a bounded adapter (`src/legacy`). Users are created in 2.0; the existing
+platform keeps the raw data. Any layer that needs to write upstream is wrong about where
+its data lives. Matches G05.
+
+## D02 — Row-level security runs under an unprivileged role
+`ta_app` owns nothing and cannot `BYPASSRLS`; tenant context is transaction-local; policies
+are `FORCE`d. RLS is inert under a superuser even with FORCE, so the role and the
+`SET LOCAL` are load-bearing rather than belt-and-braces. Found by a test returning rows it
+should not have, not by reading the schema.
+
+## D03 — Capabilities are code, roles are rows
+A client can define roles Things Alive has never heard of, so a console that switches on a
+role name breaks the first time a customer renames one. `capabilitiesFor(scope)` is the one
+answer, used by both the guard and `/me/permissions`; a resolved tenant role wins outright
+rather than merging with the static table, or a client could not take a capability away.
+
+## D04 — Granting copies; the copy is the client's
+An entitlement copies equipment classes, scenarios, alert templates and causal chains into
+the account. Things Alive cannot then write them. Provenance is a content checksum:
+`unchangedSinceCopy` compares a fresh checksum against the one stored at copy time,
+`newerTemplateAvailable` compares copied version against latest published. Re-granting never
+overwrites an existing copy.
+
+This **overrides** shared-contract §2A's "persist versioned references, do not duplicate
+authoritative values into an independently editable profile". Both console READMEs endorse
+the copy behaviour ("tuned per tenant without touching the underlying Scenario Definition").
+Upgrades are surfaced and adopted explicitly, never propagated silently.
+
+## D05 — Published definitions are immutable
+`(slug, version)` is unique. A change publishes a new version rather than moving thresholds
+under alerts already running on the old one.
+
+## D06 — Mirrors stay upstream-owned; 2.0 owns a table beside them
+`equipment_projection` is a read-only mirror and `equipment_profile` holds 2.0's own
+attributes next to it. A 2.0 column inside a mirror leaves the next full reconcile unable to
+tell upstream drift from a local edit. **Q08S follows this precedent**: `sensor_map_projection`
+is not altered, and `signal_binding_version` is a new tenant-owned table beside it.
+
+## D07 — Readiness is per layer; the badge is derived
+Storage keeps per-layer availability (shared contract §2A): a machine can be physics-ready,
+forecast-blocked and ML-unavailable at once. Display collapses that into the G04 grouping —
+Operational, Analytical, Prediction, each row Ready, Pending or Blocked with its reason.
+The shipped `availableNow` / `availableLater` / `notApplicable` buckets are retired. Settled
+because the delivery kit's G04 and both console READMEs arrived at the same vocabulary
+independently.
+
+## D08 — Two model registries, never one control
+`llm_provider_config` (answer model) is Master Admin configuration, effective next request.
+The embedding profile is pinned and immutable per index generation; changing it invalidates
+every stored vector, so it is a reindex migration behind an explicit job and is not reachable
+from the provider screen. One combined control is how retrieval gets destroyed silently.
+
+## D09 — Vectors live in the database that holds tenancy
+pgvector goes in the existing Postgres, migrated to a pgvector-capable image. No second
+database for vectors: one visibility predicate must cover the semantic branch, the lexical
+branch and citation downloads, and splitting the store moves retrieval authorization out of
+RLS and into application code.
+
+Amended 2026-10-20 by D47: vectors stay in this database, but as `real[]` without pgvector
+until the corpus needs an index. The image change is deferred, not done.
+
+## D10 — MCP is internal for now
+The adapter is consumed in-process. Remote transport, token audience validation and
+client-token forwarding are deliberately out of v1 and are required before any external
+consumer. The adapter never implements a second permission policy.
+
+## D11 — The queue is the PostgreSQL outbox
+`domain_event` plus the `shift_run` lease ledger. Redis and RabbitMQ are not present and are
+not added by assumption.
+
+## D12 — No streaming evaluation layer; scoring stays on shift boundaries
+Readings arrive every 30–60 seconds. At ~170 assets and ~10 signals that is ~57 rows/second,
+about 0.2% of what one Postgres does with batched inserts, and the next reading is 30,000 ms
+away. There is no latency budget to optimise, so no Rust/Go stream worker, no PG-Strom (GPU
+only, and not attachable to managed Postgres), no Materialize, and no alerting from memory.
+
+Compute-in-motion also conflicts with the model on purpose: readings are persisted first and
+scored on shift boundaries **so a late reading can revise an outcome**. A stream evaluator
+cannot revise — it has already alerted.
+
+Four principles from the proposals do transfer, none of them about speed: bounded
+pre-allocated buffers for backpressure (the real burst is a store-and-forward logger dumping
+an eight-hour backlog, ~960 readings per signal at once); pipelined stages with bounded
+queues; deterministic work per cycle — no unbounded query in the hot path, a timeout on
+everything, a cap on rows per batch; and fixed-function over dynamic dispatch, which P04's
+allowlisted formula AST already is.
+
+**LISTEN/NOTIFY is rejected as an alert path.** Notifications reach only currently-connected
+listeners, so a redeploy loses them with no replay; the payload caps at 8000 bytes; a trigger
+fires at COMMIT rather than per statement; and PgBouncer in transaction mode breaks LISTEN
+outright. An alert lost during a deploy is worse than a polled one, and `domain_event` is
+already durable. It remains available as a *wake signal* for the outbox drainer.
+
+## D13 — The scaling axis is storage, not speed
+The same arithmetic gives ~1.8B rows/year for one 170-asset tenant — roughly **450 GB**
+with the heap tuple plus the dedupe and lookup indexes. That is where this hurts: vacuum,
+query planning, backup windows and Railway storage cost.
+
+So: **partition `telemetry_reading` by month with native PostgreSQL declarative
+partitioning.** No extension, no image change, no conflict with pgvector, and retention
+becomes `DROP TABLE` on a partition rather than a `DELETE` that leaves bloat behind.
+
+TimescaleDB is revisited later and on evidence. Its compression on time-series is genuinely
+good, and that is a storage argument rather than an ingest-speed one. If adopted it must be
+the **same image that carries pgvector**, or the database splits and D09 breaks.
+
+Nothing in the ingest path changes now. Batched inserts, the dedupe index, watermarks and
+late-arrival reconciliation already handle this volume without noticing.
+
+## D14 — 90 days hot, then Parquet outside the database
+
+Raw readings stay at full resolution in `telemetry_reading` for **90 days** — about 441M rows
+and ~110 GB for a 170-asset tenant, three or four monthly partitions live at a time — then
+export to **Parquet** in object storage and drop the partition. Roughly 11 GB per 90 days
+compressed, ~45 GB/year archived. Archives serve model training and historical analytics;
+**DuckDB over Parquet** answers the analytics need, so there is no second database.
+
+Four requirements on the export, each for a failure that only appears later:
+
+1. **Archived rows are self-describing.** A raw row is `(imei, signal, value, unit)`, which is
+   meaningless in three years once the binding that interpreted it has been superseded and its
+   calibration replaced. Denormalise at export: `signal_key`, `measurement_role`, canonical
+   unit, `binding_version_id`, `calibration_version_id`, quality flags, and the equipment and
+   component it resolved to. Otherwise the archive is numbers nobody can read, and P14's
+   dataset is unusable for exactly the reason P14 warns about.
+2. **Export, verify, then drop.** Row count and checksum compared against the partition
+   before `DROP TABLE`; the drop is refused if they disagree. The failure mode is dropping
+   first and discovering the truncation afterwards.
+3. **Isolation does not follow the data out.** RLS protects the table; object storage has
+   none. Per-tenant prefixes with per-tenant credentials — decided before the first export,
+   not after a training job has read across the whole bucket.
+4. **90 days is a revision boundary.** Late-arrival handling rewinds and rescores; past the
+   window it cannot. An outcome older than 90 days is final, which is a promise to customers
+   rather than an operational detail, and belongs somewhere they can see it.
+
+## D15 — Regulatory mandates are library metadata, not a compliance gate
+
+`regulatory_mandates` on a class or model (AIS-140, ICEMA) is descriptive reference data for
+the library and for download. **No compliance obligation is attached and none is claimed.**
+
+This corrects an earlier recommendation in this project: that a signal required by a mandate
+should report `Blocked` rather than `Pending` when unbound. That assumed the mandates were
+obligations. They are not, so mandate-derived signals stay ordinary required or optional per
+their class and carry no special severity — presenting them as a gate would imply a
+certification nothing here performs. For the same reason the archive in D14 needs no
+immutability guarantee and no regulatory retention floor.
+
+## D16 — Alert workflows compile to `alert_rule`; only agent workflows need a new runtime
+
+`alert_rule` stays the runtime's unit of evaluation. `workflow_definition` is the **authored**
+layer above it, with a compiler between them. WF04 is a front end plus a compiler, not a new
+engine — for `kind = 'alert'`.
+
+Today's triggers already are graph leaves: `signal-threshold` is ReadSignal + Condition,
+`no-telemetry` is a freshness gate, `fuel-loss` and `chain-origin` are composite detectors.
+A single-condition graph compiles onto the existing table with no schema change. The only
+shape that does not fit is multi-condition AND/OR with a sustained window, and that is **one
+new trigger kind** holding a compiled expression — not a second runtime.
+
+This avoids the expensive risk: **no migration of live customer alerts.** Hand-authored rules
+keep working untouched. Rules the compiler emits carry `compiled_from_workflow_id` and
+`graph_hash` and are **not hand-editable** — edit the graph and republish — so there is one
+source of truth rather than a rule and a graph drifting apart.
+
+The exception is real and splits the package:
+
+| `kind` | Executes on | Cost |
+|---|---|---|
+| `alert` | compiler → `alert_rule` → existing runtime | small, can land soon |
+| `agent` | `workflow_run` + `workflow_node_state` durable engine | large, waits for Q21E anyway |
+
+Agent graphs genuinely need the durable engine: `HumanApproval` pauses mid-execution and
+`alert_rule` has no run state to pause.
+
+## D17 — `frontend/` is the only front end; no UI pages are created here
+
+Corrected 2026-09-24: this originally said both front ends stay. `web/` was already fully
+deleted in shared history before `feature/dev` was merged into this branch — the deletion
+predates the point the two branches diverged, so merging it brought no decision with it,
+deliberate or otherwise. `frontend/` is the only front end and is what ships. No UI pages
+are authored from the backend side.
+
+Amended 2026-10-13: for the dashboard-testing fixes (issues 1 to 11 of *Dashboard testing
+new 1*), Tapas asked for the matching `frontend/` changes to ship with the backend fix
+rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The rule above
+still holds everywhere else: no new pages are authored from the backend side, and any
+other `frontend/` change needs the same explicit ask.
+
+## D42 — QREC1's thirteen questions, answered
+
+Answered by Tapas, 2026-10-19, taking every recommendation in
+`prompts/QREC1-prompt.md` §12. Numbered D42 because D18–D41 are already used in
+`decisions/ai-layer-decisions.md` — including D21, the decision this task implements.
+
+1. **Ship without QML1.** Detect's residual source reports `not_available` /
+   `no_forecast_model` for every forecast-declared signal until a forecast exists.
+2. **A bundle belongs to a machine at an instant**, with a nullable `incident_id`
+   (foreign key to `incident`) set when a live incident exists.
+3. **`prediction.read` may POST.** The write is a derived, immutable record of reads
+   the caller could make anyway.
+4. **Downtime cost stays `pending`.** `operating_cost_per_hour` is not the cost of a
+   machine standing; a `downtime_cost_per_hour` parameter is a follow-up.
+5. **`estimated_hours` is labour only.** No downtime line, no fuel line, until the
+   library can author either.
+6. **Parts are an unpriced list.** Pricing them needs a per-tenant price list.
+7. **Precedent searches all history** the tenant holds for the machine.
+8. **Precedent is this machine only.** Fleet precedent is a separate, labelled section later.
+9. **Module `rec-engine`, routes `rec-evidence`.** The scenario `RecommendationService` keeps its name.
+10. **No per-tenant enable/disable** of recommendations yet.
+11. **On request only.** Opening a page reads; it never evaluates.
+12. **Acceptance into work is its own task**, after QREC2, with its own concurrency test.
+13. **`ajv` and `ajv-formats` are devDependencies**, for validating contract payloads in
+    tests only. Whether either becomes a runtime dependency is QREC2's question.
+
+## D43 — Workflow compiler: the nine questions QWF1 asked, answered
+
+2026-10-19, answered by Tapas before QWF1 started.
+
+1. **Vocabulary.** The Visual Workflow addendum (WF01–WF08) is not in the repository or
+   on any machine that has looked. QWF1's node set is the one derived from D16:
+   `ReadSignal`, `Threshold`, `FreshnessGate`, `PredictionSeverity`, `FuelLoss`,
+   `ChainOrigin`, `AllOf` / `AnyOf`, `Notify`. If the addendum surfaces, it is reconciled
+   against this list, not merged beside it.
+2. **The composite is a structured tree of the existing leaf parameter sets**, not a
+   formula plan. It satisfies D25 literally — no expression enters the alert path — and
+   reuses the leaf evaluators and their wording.
+3. **Each leaf keeps its own M-of-N.** A combined window would need readings aligned
+   across signals on different clocks, and nobody has decided how.
+4. **Caps: 50 nodes, depth 8** (`MAX_WORKFLOW_NODES`, `MAX_WORKFLOW_DEPTH`). An alert
+   workflow is a handful of conditions feeding a Notify; raising either is one constant.
+5. **No workflow-template table yet.** Assembly composes from the account's copies of
+   alert templates and its failure modes.
+6. **Everything on `alert.author`**, reads on `prediction.read`. Operator drafting and
+   delegated publish (G03) are a later task that adds a capability and a scope, once.
+7. **A compiled rule can be switched off and on by itself.** That is operational, not
+   semantic; its content still changes only by republishing. The workflow's read shows
+   which of its rules are off.
+8. **Site- and class-scope publish goes ahead with per-machine readiness listed**, and is
+   refused only when no covered machine is ready. Machine scope with any signal unbound
+   is refused, as a rule on a machine that is not there is today.
+9. **Replay for hand-drawn workflows** comes after QGEN1, as information, never a gate.
+
+## D44 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
+
+Decided 2026-10-19 by Tapas. A **dated exception to D01**, narrow and named: 2.0 writes
+class visuals (and later the 3-D twin's assets) into IoT Platform 1.0's Utho object
+storage bucket, `bucket-huod37sz` in Noida, under the key prefix `ta2/`
+(`ASSET_S3_KEY_PREFIX`). It does not write anywhere else in that bucket, and it writes
+nothing to 1.0's database.
+
+Why an exception rather than a bucket of 2.0's own, which was the first choice: the only
+Utho credential available is 1.0's object-storage key, and Utho refuses it
+`CreateBucket` (403 AccessDenied, tried path-style, with a location constraint and
+virtual-host style). A new bucket needs the Utho console or an account API token.
+
+What it costs, stated so it is not forgotten: that key can read and delete everything in
+the bucket, including 1.0's nightly `db-backups/` of `iotdb`. Any service holding
+`ASSET_S3_*` therefore holds the means to delete 1.0's backups. The prefix keeps 2.0's
+*writes* apart; it does not limit the key.
+
+Lifted when a bucket of 2.0's own exists, ideally with a key scoped to it: set the six
+`ASSET_S3_*` variables to it and copy `ta2/` across. Stored keys carry no prefix, so
+nothing in the database changes.
+
+Found while doing this: 1.0's `.env` names its bucket `bucket-huod37s`, which Utho
+refuses; the bucket the key can see is `bucket-huod37sz`. 1.0's backup script uploads to
+the first. Its backups may not be landing — for 1.0's owners to check.
+
+## D45 — Who hears about an escalation, and how (QNOTIFY1)
+
+Decided 2026-10-19 by Tapas, taking the recommendations in `prompts/QNOTIFY1-prompt.md` §8.
+
+- **Who.** Level 1 (acknowledgement overdue): the incident's owner; with no owner who
+  can see the machine, everyone who holds `action.assign`. Level 2 (resolution
+  overdue): the owner and everyone with `action.assign`. "Holds" and "can see" are
+  resolved per person through the same `ScopeResolver` the API uses, so suspended and
+  invited users are never told, and a site-scoped user only about machines in their
+  sites.
+- **How.** Email only. SMS or WhatsApp is a separate task with its own provider decision.
+- **Backlog.** An event older than 24 hours is not delivered; it is marked `failed`
+  with the reason, so nobody gets a day-old page.
+- **No opt-outs or quiet hours** in v1: an escalation is something already ignored once.
+- **Retries.** 5 attempts, waiting 1, 2, 4 and 8 minutes between them, then `failed`.
+- **Levels stand alone.** A level-2 email does not resend a level-1 that failed.
+
+## D46 — How QML1 forecasts: the answers to its seventeen questions
+
+Decided 2026-10-19, answered by Tapas. Numbering follows `prompts/QML1-prompt.md`'s
+Questions section; the code that holds each answer is named.
+
+1. **Process boundary.** Node owns the database; Python is a pure stdin/stdout function,
+   one child per pass (`src/forecast/forecast-worker.ts`, `python/forecast/infer.py`).
+2. **Image.** glibc for both services. The api image (`Dockerfile`, now
+   `node:22-bookworm-slim`) never carries Python or torch; the scheduler's
+   (`Dockerfile.scheduler`) adds Python 3.11, CPU torch, granite-tsfm and the weights,
+   below the source copy. Railway picks a Dockerfile per service, not a build target, so
+   the split is two files. **Not yet wired:** `test/deployment.spec.ts` asserts both
+   services build from `Dockerfile`, and pointing `railway.scheduler.json` at
+   `Dockerfile.scheduler` is that test's change to make, with Deepak confirming the
+   scheduler service reads `railway.scheduler.json`.
+3. **Cadence.** A platform constant of four hours (`FORECAST_CADENCE_MS`); no column.
+4. **Budget.** 25% of the cadence (`FORECAST_BUDGET_RATIO`).
+5. **Step and rollup.** Hourly steps; `forecast_input_bucket`, extended incrementally.
+6. **Gaps.** Refused below `MIN_COVERAGE_RATIO` (0.5, the KPI evaluator's, reused); only
+   gaps between two real buckets are filled, on a straight line; a gap at either end is
+   refused; the count of filled steps is on the forecast row (`buildContext`).
+7. **Intervals.** Empirical quantiles of the (machine, signal, model)'s clean residuals at
+   the same lead time, pooled where a lead has fewer than 20. No band, no forecast shown:
+   a machine's first 14 days read `baseline_not_established` (`ForecastReader.chart`).
+8. **Residual grain.** Per forecast step, not per raw reading.
+9. **Retention.** 90 days for residuals, daily samples, the rollup and skip records.
+10. **Model retirement** restarts the 14-day clock: the band is keyed by model.
+11. **Band width.** The 2.5th–97.5th percentile of clean residuals, 95% (`BAND_QUANTILES`).
+12. **Operating periods only.** Each residual records whether its hour was operating, by the
+    KPI baseline's own gate; a machine with no shift schedule never learns a band, and says
+    `no_shift_schedule`.
+13. **Stale forecast.** Older than the cadence plus one tick (`forecastStaleAfterMs`).
+14. **Tenant-added signals** are out of scope for QML1; a follow-up.
+15. **CI.** The real-model check is not in CI yet; it is run locally in the amd64 image
+    for the MR (`scripts/forecast/real-model-check.js`). A CI job follows the image wiring.
+16. **Licence.** granite-timeseries-ttm-r2 at d6a79570… is **Apache-2.0** by its model card
+    at that revision (commercial use permitted). The same card says IBM "will not be
+    maintaining this code going forward". Recorded on the `forecast_model` row and in the
+    migration comment.
+17. **Activation.** The migration seeds the pinned row `active`; that seeding is Tapas's
+    recorded approval of 19 Oct 2026. Any later activation is a platform-staff action with
+    an audit row, after QEVAL1 has reported on the candidate.
+
+## D47 — Vectors without pgvector, for now (QEMB1)
+
+Decided 2026-10-20 by Tapas. **Amends D09**, which put pgvector in the existing Postgres
+"migrated to a pgvector-capable image". The first half stands; the second is deferred.
+
+Embeddings are stored as `real[]` in the same Postgres, under the same row-level security,
+and compared exhaustively by dot product (the vectors are unit length, so that is the
+cosine). No extension, no index structure, no change to the image of the database every
+Development service uses. D09's reason — one visibility predicate over everything retrieval
+reads — is kept whole, because nothing moves out of the database.
+
+Why: Railway's standard Postgres image (`ghcr.io/railwayapp-templates/postgres-ssl:18`)
+does not carry pgvector, so getting it means swapping the image of the live database, and a
+tenant's library today is hundreds of entries. Brute force is linear in the vectors one
+account holds: measured at 71 ms median for 1,000 and 576 ms for 10,000, on a loaded laptop
+(`docs/ai/measurements/QEMB1.md`). At today's size that is tens of milliseconds; an index
+now would be bought with the riskiest infrastructure change available, for no gain yet.
+
+Approved at the same time, by name: **`@huggingface/transformers`** as a runtime dependency,
+pinned to an exact version, for running `bge-small-en-v1.5` as ONNX in the api (D19). The
+model files are baked into the image at build time; nothing is downloaded at runtime.
+
+Revisited on measurement, not on a date. QEMB1's recommendation for the trigger: one tenant
+past ~3,000 vectors, or search p95 past 250 ms on Development. The measured curve puts the
+first at roughly the second. Moving is one migration that
+adds a `vector` column and an HNSW index; the embedding profile and the stored values do not
+change, so it is not a reindex.
+
+## Open, and blocking something
+
+- **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
+  The adapter needs **one table, four columns**: `device_sensor_measurement_logs`
+  (`device_sensor_measurement_id`, `timestamp`, `value`, `created_at`), via a login role with
+  `default_transaction_read_only = on` and a column-level `SELECT` grant — no write privilege
+  anywhere, enforced by the database rather than trusted to our code. Then the seven
+  `LEGACY_DB_*` variables on the api and scheduler services. Usually blocked by network reach
+  from Railway's egress and by SSL/CA requirements rather than by the credentials themselves.
+- **Retention policy** — answered; see D14.
+- **Is `device_sensor_measurement_id` → IMEI mapping theirs or ours?** The adapter assumes
+  ours, via `sensor_map_projection`. Worth confirming before the first pull.
+- ~~Visual Workflow Backend Addendum v1.1~~ — reconstructed 22 September, WF01–WF08. Lives in
+  the kit as `layers/Visual-Workflow-Backend-Addendum-v1.1.md`; still to be copied into the
+  repository. If the original surfaces, reconcile rather than merging both into the queue.

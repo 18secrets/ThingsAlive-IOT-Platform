@@ -1,4 +1,6 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column, Entity, Index, PrimaryColumn, PrimaryGeneratedColumn,
+} from 'typeorm';
 
 export type ReadingSource = 'live' | 'replayed' | 'simulated';
 
@@ -10,6 +12,13 @@ export type ReadingSource = 'live' | 'replayed' | 'simulated';
  * rolling baseline, and a corrupted baseline silently corrupts every z-score built
  * on it. That failure is invisible until someone asks why a healthy machine is
  * flagged, which is why the constraint is in the schema rather than in a service.
+ *
+ * Range-partitioned by month on `source_timestamp` (task QPART1,
+ * `1758030000000-TelemetryPartitioning`) — not `received_at`: every query and the
+ * dedupe key above use `source_timestamp`, and a late arrival must land in the month
+ * it was measured, not the month it turned up. See `prediction.entity.ts` for the
+ * same requirement on the same kind of table; `source_timestamp` joins the primary
+ * key for the identical reason `occurred_at` does there.
  */
 @Entity('telemetry_reading')
 @Index('uq_telemetry_reading_dedupe', ['imei', 'signal', 'sourceTimestamp'], { unique: true })
@@ -41,8 +50,12 @@ export class TelemetryReading {
    * it. Field loggers drift and reconnect with backlogs, so these diverge routinely.
    * Anything time-ordered must state which one it means — a prediction keyed to the
    * wrong clock is wrong in a way that looks like a model problem.
+   *
+   * Also part of the primary key, because Postgres requires the partition key in
+   * every unique constraint on a partitioned table — the same requirement
+   * `prediction` carries on `occurred_at`.
    */
-  @Column({ name: 'source_timestamp', type: 'timestamptz' })
+  @PrimaryColumn({ name: 'source_timestamp', type: 'timestamptz' })
   sourceTimestamp: Date;
 
   @Column({ name: 'received_at', type: 'timestamptz' })

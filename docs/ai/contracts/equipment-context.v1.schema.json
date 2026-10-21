@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/equipment-context.v1.json",
+  "title": "EquipmentContextV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "context_id", "tenant_id", "equipment_id", "as_of", "window",
+    "mode", "scope_revision", "equipment", "signals", "calculations",
+    "active_events", "missing_inputs", "knowledge_filters", "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "context_id": { "type": "string", "format": "uuid" },
+    "tenant_id": {
+      "type": "string", "format": "uuid",
+      "description": "From authenticated server context. Never from a request or model field."
+    },
+    "equipment_id": { "type": "string", "format": "uuid" },
+    "as_of": { "type": "string", "format": "date-time" },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      },
+      "description": "Half-open [start,end)."
+    },
+    "mode": { "enum": ["live", "simulation"] },
+    "run_id": {
+      "oneOf": [{ "type": "string", "format": "uuid" }, { "type": "null" }],
+      "description": "Required when mode is simulation."
+    },
+    "scope_revision": {
+      "type": "integer",
+      "description": "Reference to a server-side authorization snapshot. Not a grant."
+    },
+    "truncated": { "type": "boolean" },
+    "equipment": {
+      "type": "object",
+      "required": ["class_version_id", "revision"],
+      "properties": {
+        "class_version_id": { "type": "string", "format": "uuid" },
+        "make": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "revision": { "type": "integer" }
+      }
+    },
+    "intelligence_profile": {
+      "type": "object",
+      "description": "Resolved profile id/version plus per-layer availability.",
+      "properties": {
+        "profile_id": { "type": "string", "format": "uuid" },
+        "version": { "type": "integer" },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["layer", "availability", "reasons", "last_evaluated_at"],
+            "properties": {
+              "layer": {
+                "enum": [
+                  "data_quality", "physics_calculation", "physics_forecast",
+                  "approved_rule", "statistical_anomaly", "recommendation_ai",
+                  "predictive_ml", "agent_action"
+                ]
+              },
+              "availability": {
+                "enum": ["ready", "blocked", "not_configured", "not_available"]
+              },
+              "group": {
+                "enum": ["operational", "analytical", "prediction"],
+                "description": "G04 display grouping. Derived, never the stored truth."
+              },
+              "reasons": { "type": "array", "items": { "type": "string" } },
+              "missing_inputs": { "type": "array", "items": { "type": "string" } },
+              "prerequisite_refs": { "type": "array", "items": { "type": "string" } },
+              "validation_state": { "type": "string" },
+              "execution_enabled": { "type": "boolean" },
+              "last_evaluated_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "binding_id", "binding_version", "signal_key", "measurement_role", "origin",
+          "unit", "event_time", "coverage_kind", "quality_flags",
+          "calibration_state", "freshness_state"
+        ],
+        "properties": {
+          "binding_id": { "type": "string", "format": "uuid" },
+          "binding_version": { "type": "integer" },
+          "signal_key": { "type": "string" },
+          "measurement_role": { "type": "string" },
+          "component_id": {
+            "oneOf": [{ "type": "string", "format": "uuid" }, { "type": "null" }]
+          },
+          "origin": { "enum": ["physical", "ecu_derived", "virtual"] },
+          "value": { "type": ["number", "null"] },
+          "unit": { "type": "string" },
+          "aggregate_method": { "type": ["string", "null"] },
+          "event_time": {
+            "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+          },
+          "received_time": {
+            "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+          },
+          "sample_count": { "type": "integer" },
+          "coverage_kind": { "type": "string" },
+          "coverage": { "type": ["number", "null"] },
+          "quality_flags": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "missing", "invalid_range", "bad_unit", "calibration_expired",
+                "calibration_unknown", "stale", "late", "duplicate_collision",
+                "clock_skew", "source_error"
+              ]
+            }
+          },
+          "calibration_state": { "type": "string" },
+          "freshness_state": { "type": "string" }
+        },
+        "description": "A null value is never zero and never healthy."
+      }
+    },
+    "calculations": {
+      "type": "array",
+      "items": { "$ref": "https://things-alive.io/schemas/calculation-result.v1.json" }
+    },
+    "active_events": { "type": "array", "items": { "type": "object" } },
+    "missing_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["signal_key", "reason"],
+        "properties": {
+          "signal_key": { "type": "string" },
+          "reason": {
+            "enum": [
+              "unbound", "mapping_required", "no_primary_selected", "calibration_expired",
+              "calibration_unknown", "unit_unresolved", "stale", "no_readings"
+            ],
+            "description": "unbound and stale are different facts and must not be merged."
+          },
+          "role": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "knowledge_filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "equipment_class_ids": {
+          "type": "array",
+          "items": { "type": "string", "format": "uuid" }
+        },
+        "make": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "component_roles": { "type": "array", "items": { "type": "string" } },
+        "signal_keys": { "type": "array", "items": { "type": "string" } },
+        "fault_codes": { "type": "array", "items": { "type": "string" } }
+      },
+      "description": "Guides applicability. Grants nothing."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_revision", "policy_versions", "snapshot_hash", "mixed_time"],
+      "properties": {
+        "binding_revision": { "type": "integer" },
+        "policy_versions": { "type": "array", "items": { "type": "string" } },
+        "snapshot_hash": { "type": "string" },
+        "source_watermark": {
+          "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+        },
+        "mixed_time": {
+          "type": "boolean",
+          "description": "True when telemetry was fetched outside the domain transaction."
+        }
+      }
+    }
+  }
+}

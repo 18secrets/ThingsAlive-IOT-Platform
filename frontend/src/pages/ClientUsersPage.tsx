@@ -1,0 +1,61 @@
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  InviteUserInput, InviteUserResult, TenantRole, TenantUser, Plant, EquipmentProfile, SetUserAccessInput,
+} from '../lib/api';
+import { useAuth } from '../lib/AuthProvider';
+import { ClientUserManagement } from '../components/clients/ClientUserManagement';
+import { NotAvailableNotice } from '../components/NotAvailableNotice';
+
+interface ClientUsersPageProps {
+  users: TenantUser[];
+  roles: TenantRole[];
+  error?: string;
+  /** Master Admin's drill-down pick from the Clients tab — absent for a client's own view. */
+  manageAccessClientId: string | null;
+  onBackToClients: () => void;
+  onInviteUser: (input: InviteUserInput) => Promise<InviteUserResult>;
+  onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
+  onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
+  onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
+  plants: Plant[];
+  equipment: EquipmentProfile[];
+  onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
+}
+
+export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
+  users, roles, error, manageAccessClientId, onBackToClients,
+  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser, plants, equipment, onSetUserAccess,
+}) => {
+  const { authUser } = useAuth();
+  const { t } = useTranslation('users');
+  if (!authUser) return null;
+
+  // user.manage is that account's own super admin only — there is no cross-tenant
+  // read or write for it, so a Master Admin drilling into a specific client from
+  // the Clients tab has nothing real to see here yet.
+  if (authUser.role === 'master-admin' || manageAccessClientId) {
+    return (
+      <NotAvailableNotice title={t('common.notAvailableYet')} onBack={onBackToClients}>
+        {t('notAvailable.users')}
+      </NotAvailableNotice>
+    );
+  }
+
+  return (
+    <ClientUserManagement
+      users={users}
+      roles={roles}
+      error={error}
+      onInviteUser={onInviteUser}
+      onSetUserRole={onSetUserRole}
+      onSuspendUser={onSuspendUser}
+      onReinstateUser={onReinstateUser}
+      onDeleteUser={onDeleteUser}
+      plants={plants}
+      equipment={equipment}
+      onSetUserAccess={onSetUserAccess}
+    />
+  );
+};

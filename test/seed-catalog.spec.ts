@@ -7,7 +7,7 @@ import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { CatalogService } from '../src/catalog/services/catalog.service';
 import { RecommendationService } from '../src/catalog/services/recommendation.service';
 import { seedCatalog } from '../src/database/seeds/seed-catalog';
-import { DEMO_FLEET, seedDemoFleet } from '../src/database/seeds/seed-demo-fleet';
+import { DEMO_FLEET, seedDemoFleet } from './fixtures/recommendation-fleet';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
 /**

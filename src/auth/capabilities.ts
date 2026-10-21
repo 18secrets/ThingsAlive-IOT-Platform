@@ -20,16 +20,26 @@ export type Capability =
   | 'action.assign'
   | 'catalog.read'
   | 'catalog.write'
+  | 'catalog.publish'
   | 'client-catalog.read'
   | 'client-catalog.write'
   | 'device.manage'
   | 'device.read'
   | 'device.claim'
+  | 'device-catalog.read'
+  | 'device-catalog.write'
+  | 'equipment-template.read'
+  | 'equipment-template.write'
   | 'prediction.read'
   | 'prediction.run'
+  | 'proposal.approve'
   | 'utilization.read'
+  | 'parameters.read'
+  | 'parameters.write'
   | 'entitlement.grant'
-  | 'platform.admin';
+  | 'platform.admin'
+  | 'shield.read'
+  | 'shield.write';
 
 /** The four consumer roles, plus the Things Alive roles that act across tenants. */
 const GRANTS: Record<Capability, readonly string[]> = {
@@ -61,9 +71,17 @@ const GRANTS: Record<Capability, readonly string[]> = {
     'super admin', 'admin', 'operational', 'support',
     'master-admin', 'catalog-author', 'platform-support',
   ],
-  // Authoring the *templates*. Things Alive only: the catalog is what Things Alive
-  // sells, and a customer editing it would be editing the product.
+  // Authoring the *templates* — loading content, still a draft. Things Alive only:
+  // the catalog is what Things Alive sells, and a customer editing it would be
+  // editing the product. Separate from `catalog.publish` (task QPA2): a
+  // catalog-author can build and stage a version, but making it grantable to a
+  // tenant is a narrower act than writing one, the same reason `scenario.activate`
+  // is not implied by `scenario.author`.
   'catalog.write': ['master-admin', 'catalog-author'],
+  // Publishing a draft version so tenants can be granted it. Master admin alone —
+  // a catalog-author who could also publish could ship what nobody with broader
+  // authority reviewed.
+  'catalog.publish': ['master-admin'],
   // Reading the *client's own copies*. Every role inside the tenant; Things Alive
   // roles are absent on purpose — a platform role reaching a client's copy goes
   // through the audited cross-tenant path, not through an ordinary read.
@@ -86,6 +104,28 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // Fitting a device to a machine and taking it off again. The customer's act, not
   // ours — nobody at Things Alive knows which generator the logger ended up on.
   'device.claim': ['super admin', 'admin'],
+  // Sensors, tool mappings and their categories: the hardware-wiring reference data
+  // devices are registered against. Distinct from `catalog.write` (prediction
+  // templates, also grants catalog-author) and `device.manage` (the stock ledger's
+  // commercial acts) even though today all three resolve to master-admin alone.
+  'device-catalog.write': ['master-admin'],
+  // Seeing that same reference data — what a sensor's parameters are, what
+  // categories exist. A tenant role holds this (granted explicitly in its own
+  // `capabilities`, per ROLE_TEMPLATES) so a client can see which sensors are
+  // attached to their equipment templates without being able to add or rename one
+  // in the shared catalog.
+  'device-catalog.read': ['master-admin'],
+  // Common onboarding fields (manufacturer, engine type, tank capacity...) for a
+  // named/categorised kind of equipment. Deliberately separate from `catalog.write`:
+  // EquipmentClassProfile is the prediction catalog (expected signals, failure
+  // modes) and stays untouched by this — a template here is onboarding convenience,
+  // not a product a tenant is entitled to.
+  'equipment-template.write': ['master-admin'],
+  // Seeing the templates and their attached sensors/alert-rules/KPI/predictive
+  // config — what a client's Equipment Template page reads to show Master Admin's
+  // defaults alongside their own additions. Granted to tenant roles the same way as
+  // `device-catalog.read` above; editing the template itself stays master-admin only.
+  'equipment-template.read': ['master-admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it
@@ -95,12 +135,38 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // stored outcome, and an outcome that changes without an explanation is worse than
   // a stale one.
   'prediction.run': ['super admin', 'admin'],
+  // Approving a generated draft (task QGEN1, question 3). Approval materialises an
+  // artifact for the whole account — a KPI on its class copy, alert rules on its
+  // machines — and D27 makes that the tenant super admin's act. Not `alert.author`,
+  // which an admin also holds: writing a rule by hand and accepting one a generator
+  // wrote are different decisions. No platform role: a class-scope candidate is
+  // reviewed under `catalog.write`, once question 2 decides what may reach it.
+  'proposal.approve': ['super admin'],
   // How the fleet spent its time. Every role inside the tenant, plus platform
   // support: it is a report about the customer's own machines, and the narrowing
   // that matters — which machines — is done by the assignment list rather than here.
   'utilization.read': ['super admin', 'admin', 'operational', 'support', 'platform-support'],
+  // The client's parameters and cost profiles (task QPARAM1). No platform role in
+  // either list, and adding one would be a change of model, not of permission: costs
+  // and currency are client configuration with no platform scope at all (D39), and a
+  // master admin seeing a customer's fuel price is a breach rather than a feature.
+  // Reading is narrower than `client-catalog.read` on purpose — an operator does not
+  // need the labour rate to do the work.
+  'parameters.read': ['super admin', 'admin'],
+  // Setting them. Super admin alone — not `catalog.write`, which is a platform
+  // capability for the templates Things Alive sells.
+  'parameters.write': ['super admin'],
   'entitlement.grant': ['master-admin'],
   'platform.admin': ['master-admin'],
+  // ThingsShield evidence: inspections and checks on the client's own machines (task
+  // QSHIELD1). Reading is every role inside the tenant — whether a guard was found
+  // loose is something the operator standing next to it most needs to know. No
+  // platform role: a customer's safety record reached from Things Alive goes through
+  // the audited cross-tenant path, not an ordinary read.
+  'shield.read': ['super admin', 'admin', 'operational', 'support'],
+  // Recording and correcting it. Not `action.work`: an operator closes jobs, but
+  // signing off a safety check is an attestation the account's own admins make.
+  'shield.write': ['super admin', 'admin'],
 };
 
 /**

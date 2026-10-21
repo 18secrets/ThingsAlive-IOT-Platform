@@ -32,7 +32,7 @@ describeDb('provisioning', () => {
   let users: UserService;
 
   const NOW = new Date('2026-09-13T10:00:00.000Z');
-  const PASSWORD = 'correct horse battery staple';
+  const PASSWORD = 'Correct-Horse-1';
 
   const master: RequestScope = {
     tenantId: 'platform', userId: 'u-master', roles: ['master-admin'], isPlatformRole: true,

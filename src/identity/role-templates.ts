@@ -1,5 +1,6 @@
 import { Capability } from '../auth/capabilities';
 import { ScopeShape } from './entities/tenant-role.entity';
+import { TENANT_ASSIGNABLE_PAGES } from './pages';
 
 export interface RoleTemplate {
   slug: string;
@@ -7,6 +8,7 @@ export interface RoleTemplate {
   description: string;
   scopeShape: ScopeShape;
   capabilities: Capability[];
+  allowedTabs: string[];
 }
 
 /**
@@ -34,7 +36,17 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'catalog.read', 'client-catalog.read', 'client-catalog.write',
       'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
+      'equipment-template.read', 'device-catalog.read',
+      'parameters.read', 'parameters.write',
+      'shield.read', 'shield.write',
+      'proposal.approve',
     ],
+    // The account's own administrator gets every page the console has, not a
+    // curated subset — "CEO/Manager" is this account's Super Admin (holds
+    // user.manage + role.manage, see AuthProvider.tsx's isSuperAdmin check on
+    // the frontend), and nothing should be hidden from the person who can
+    // already grant it to everyone else.
+    allowedTabs: [...TENANT_ASSIGNABLE_PAGES],
   },
   {
     slug: 'site-manager',
@@ -48,7 +60,11 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'catalog.read', 'client-catalog.read',
       'prediction.read', 'prediction.run', 'utilization.read',
       'device.read', 'device.claim',
+      'equipment-template.read', 'device-catalog.read',
+      'parameters.read',
+      'shield.read', 'shield.write',
     ],
+    allowedTabs: ['dashboard', 'ai-onboarding', 'predictions', 'admin', 'settings'],
   },
   {
     slug: 'operator',
@@ -60,7 +76,10 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     capabilities: [
       'action.work', 'catalog.read', 'client-catalog.read',
       'prediction.read', 'utilization.read', 'device.read',
+      'equipment-template.read', 'device-catalog.read',
+      'shield.read',
     ],
+    allowedTabs: ['dashboard', 'settings'],
   },
 ];
 

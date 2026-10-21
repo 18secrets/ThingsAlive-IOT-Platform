@@ -65,6 +65,10 @@ export class DomainEvent {
   @Column({ name: 'last_error', type: 'text', nullable: true })
   lastError: string | null;
 
+  /** Not before this. Set after a failed delivery, so a retry waits its backoff (QNOTIFY1). */
+  @Column({ name: 'next_attempt_at', type: 'timestamptz', nullable: true })
+  nextAttemptAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

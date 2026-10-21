@@ -99,7 +99,11 @@ types:
 
 build:
   stage: verify
-  script: [npm run build]
+  # verify:migrations catches a stale dist/ (task QGRANT0 §5): `tsc` does not prune
+  # orphaned output, so a compiled migration left over from a different branch's
+  # build can ride along in the chain with no error anywhere else. `npm run build`
+  # already clears dist/ first; this is the check that would have caught it sooner.
+  script: [npm run build, npm run verify:migrations]
   artifacts:
     paths: [dist/]
     expire_in: 1 day

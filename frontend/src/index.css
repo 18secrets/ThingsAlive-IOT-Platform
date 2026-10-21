@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+/* Opts every `dark:` utility into the header's light/dark toggle (a `.dark`
+ * class on <html>, set in Shell.tsx) instead of Tailwind v4's own default of
+ * following `prefers-color-scheme` only. Without this, the toggle has no
+ * effect — see the same note that used to live on the React Flow rules below. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Breakpoints, after the 1.0 platform's media queries (iot_platform/src/*.css):
+ * xs is its 480px large-phone step and 3xl its 2560px large-monitor step. Tailwind's
+ * own sm/md/lg/xl/2xl (640/768/1024/1280/1536) are kept as they are — every existing
+ * `md:`/`lg:` class depends on them. The shell switches on lg (1024px): below it the
+ * sidebar is a drawer; from lg to xl it starts collapsed. */
+@theme {
+  --breakpoint-xs: 30rem;
+  --breakpoint-3xl: 160rem;
+}
+
+/* Matches the house font from ~/projects/iot_platform. Two variable-font
+ * files cover the whole weight range (100-900) instead of the ~20 static
+ * weight files also sitting in assets/fonts/ — same visual result, far
+ * fewer requests. */
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../assets/fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../assets/fonts/Montserrat-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@layer base {
+  body {
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #F4F7FB;
+    color: #1E293B;
+  }
+}
+
+/* rsuite's picker/dropdown popups default to z-index 5-7 (meant for a page
+ * with no overlays of its own). Every modal in this app is a plain fixed
+ * div at Tailwind's z-50, so without this, a SelectPicker/CheckPicker/
+ * DatePicker opened inside any modal renders its menu behind the modal —
+ * not missing, just invisible underneath it.
+ *
+ * `!important` on purpose: rsuite's own `:root` block declares the same
+ * variables, and which `:root` block wins a plain same-specificity tie
+ * depends on source order — reliable in a production bundle, NOT reliable
+ * in Vite's dev server, which injects each CSS module as its own <style>
+ * tag at runtime (order can drift from the real import order after enough
+ * HMR updates). `!important` wins regardless of that order. */
+:root {
+  --rs-zindex-dropdown: 1100 !important;
+  --rs-zindex-picker-toggle: 1100 !important;
+  --rs-zindex-picker-input: 1100 !important;
+  --rs-zindex-picker-popup: 1100 !important;
+}
+
+.font-sans {
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.font-serif {
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.border-ink {
+  border-color: #E2E8F0;
+}
+
+.dark .border-ink {
+  border-color: #334155;
+}
+
+.border-ink-subtle {
+  border-color: #F1F5F9;
+}
+
+.dark .border-ink-subtle {
+  border-color: #1E293B;
+}
+
+.bg-accent {
+  background-color: #0B7285;
+}
+
+.text-accent {
+  color: #0284C7;
+}
+
+.border-accent {
+  border-color: #0284C7;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1E293B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+/*
+ * React Flow (Work Flow canvas) — restyle default chrome to match the app's
+ * slate/sky palette in both themes, keyed off the same `.dark` class as every
+ * `dark:` Tailwind utility elsewhere (see the `@custom-variant dark` above),
+ * so the canvas follows the header's light/dark toggle instead of the OS
+ * theme.
+ */
+.react-flow {
+  background-color: #FFFFFF;
+}
+
+.react-flow__background-pattern {
+  color: #CBD5E1; /* slate-300 */
+}
+
+.react-flow__edge-path {
+  stroke: #CBD5E1; /* slate-300 */
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #0284C7; /* sky-600 */
+}
+
+.react-flow__controls {
+  box-shadow: none;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  color: #475569;
+}
+
+.react-flow__controls-button:hover {
+  background: #F8FAFC;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__minimap {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.dark {
+  .react-flow {
+    background-color: #0F172A; /* slate-900 */
+  }
+
+  .react-flow__background-pattern {
+    color: #334155; /* slate-700 */
+  }
+
+  .react-flow__edge-path {
+    stroke: #334155; /* slate-700 */
+  }
+
+  .react-flow__controls {
+    border-color: #334155;
+  }
+
+  .react-flow__controls-button {
+    background: #1E293B;
+    border-bottom-color: #334155;
+    color: #CBD5E1;
+  }
+
+  .react-flow__controls-button:hover {
+    background: #334155;
+  }
+}
+
+

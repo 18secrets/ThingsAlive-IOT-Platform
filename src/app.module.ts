@@ -12,19 +12,43 @@ import { HealthController } from './health/health.controller';
 import { MeController } from './me/me.controller';
 import { ProjectionModule } from './projection/projection.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { FleetImportModule } from './fleet-import/fleet-import.module';
+import { RecEngineModule } from './rec-engine/rec-engine.module';
+import { EmbeddingModule } from './embedding/embedding.module';
+import { RecFrameModule } from './rec-frame/rec-frame.module';
+import { SignalBindingModule } from './signal-binding/signal-binding.module';
+import { KpiModule } from './kpi/kpi.module';
+import { IncidentModule } from './incident/incident.module';
+import { ShieldModule } from './shield/shield.module';
+import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
+import { PageModule } from './page/page.module';
+import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
+import { WorkflowModule } from './workflow/workflow.module';
+import { ProposalModule } from './proposal/proposal.module';
+import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
+import { ForecastModule } from './forecast/forecast.module';
+import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
+import { EvaluationModule } from './evaluation/evaluation.module';
+import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
+import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
+import { MailModule } from './mail/mail.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { DeviceCatalogModule } from './device-catalog/device-catalog.module';
+import { EquipmentTemplateModule } from './equipment-template/equipment-template.module';
 import { PredictionModule } from './prediction/prediction.module';
 import { ActivationModule } from './activation/activation.module';
 import { ScopeModule } from './scope/scope.module';
@@ -69,21 +93,45 @@ export class AppModule {
               ScopeModule,
               ProjectionModule,
               CatalogModule,
+              CatalogImportModule,
               ClientCatalogModule,
               ActivationModule,
               PredictionModule,
               InventoryModule,
+              DeviceCatalogModule,
+              EquipmentTemplateModule,
               IdentityModule,
+              MailModule,
               TenancyModule,
               EquipmentModule,
+              FleetImportModule,
+              SignalBindingModule,
+              KpiModule,
+      PageModule,
+      IncidentModule,
+      ShieldModule,
+      OnboardingStatusModule,
+      AssetsModule,
               WorkModule,
               ShiftModule,
+              ForecastModule,
+              ForecastSchedulingModule,
+              EvaluationModule,
+              TelemetryPartitionModule,
+              TelemetryArchiveModule,
               UtilizationModule,
               ServiceModule,
               DeviceHealthModule,
               IntelligenceModule,
               LegacyModule,
               AlertModule,
+              WorkflowModule,
+              ProposalModule,
+              ParameterModule,
+              AssistantModule,
+              RecEngineModule,
+              EmbeddingModule,
+              RecFrameModule,
             ]
           : []),
       ],

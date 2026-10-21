@@ -1,0 +1,222 @@
+{
+  "loading": "Loading…",
+  "hero": {
+    "title": "Things Alerts",
+    "subtitle": "From machine signals to your next best action."
+  },
+  "errors": {
+    "loadRules": "Could not load alert rules.",
+    "loadAlerts": "Could not load alerts.",
+    "acknowledge": "Could not acknowledge this alert.",
+    "resolve": "Could not resolve this alert.",
+    "toggle": "Could not change this rule.",
+    "save": "Could not save this rule."
+  },
+  "prompts": {
+    "resolve": "What was found / done?"
+  },
+  "severity": {
+    "none": "none",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "critical": "critical"
+  },
+  "state": {
+    "open": "open",
+    "acknowledged": "acknowledged",
+    "resolved": "resolved"
+  },
+  "trigger": {
+    "prediction-severity": "Prediction severity",
+    "signal-threshold": "Signal threshold",
+    "no-telemetry": "No telemetry",
+    "fuel-loss": "Fuel loss",
+    "chain-origin": "Chain origin"
+  },
+  "scope": {
+    "unknownPlant": "Unknown plant",
+    "equipmentClass": "Equipment class",
+    "account": "Whole account",
+    "oneSite": "One site",
+    "oneMachine": "One machine"
+  },
+  "rules": {
+    "heading": "Configured alert rules",
+    "create": "Create alert",
+    "createWithAi": "Create alert with AI",
+    "empty": "No alert rules configured yet.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "fromTemplate": "from template",
+    "edit": "Edit"
+  },
+  "events": {
+    "heading": "Open alerts",
+    "counts": "{{open}} open · {{acknowledged}} acknowledged",
+    "empty": "No open alerts.",
+    "acknowledge": "Acknowledge",
+    "resolve": "Resolve",
+    "viewMachine": "View machine"
+  },
+  "form": {
+    "editTitle": "Edit alert rule",
+    "createTitle": "Create alert rule",
+    "subtitle": "Alert Rule",
+    "name": "Name",
+    "namePlaceholder": "e.g. Coolant temperature guard",
+    "watches": "What it watches",
+    "signal": "Signal",
+    "min": "Min",
+    "max": "Max",
+    "optional": "optional",
+    "firesAtLeast": "Fires at least",
+    "scenario": "Scenario (optional)",
+    "anyScenario": "any scenario",
+    "noTelemetryHint": "Fires when a shift produced no readings at all. Nothing else to configure.",
+    "severity": "Severity",
+    "appliesTo": "Applies to",
+    "site": "Site",
+    "description": "Description (optional)",
+    "cancel": "Cancel",
+    "save": "Save changes"
+  },
+  "agent": {
+    "assistantTitle": "AI Assistant",
+    "workflowTitle": "Work Flow"
+  },
+  "agentList": {
+    "searchPlaceholder": "Search Alert Rules...",
+    "allStatuses": "Select Status (All)",
+    "status": {
+      "Deployed": "Deployed",
+      "Draft": "Draft",
+      "Disabled": "Disabled"
+    },
+    "addAlert": "Add Alert",
+    "columns": {
+      "id": "ID",
+      "workflowName": "Workflow Name",
+      "description": "Description",
+      "status": "Status",
+      "sensors": "Sensors",
+      "conditions": "Conditions"
+    },
+    "empty": "No alert rules found matching criteria.",
+    "totalRows": "Total Rows:",
+    "rowsPerPage": "Rows per page:",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "assistant": {
+    "heroTitle": "Describe your alarm in natural language",
+    "heroBody": "ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust, industrial-grade monitoring workflows.",
+    "selectEquipment": "Select equipment…",
+    "createCustom": "Create Custom",
+    "selectThingFirst": "Select a Thing before describing or generating an alert.",
+    "aiPrompt": "AI PROMPT",
+    "promptPlaceholder": "e.g. \"{{example}}\"",
+    "voiceTitle": "Dictate your alert (demo only)",
+    "voice": "Voice",
+    "generate": "Generate Workflow",
+    "quickExamples": "Quick Try Examples",
+    "tags": {
+      "energy": "energy",
+      "efficiency": "efficiency",
+      "alert": "alert",
+      "pressure": "pressure",
+      "cluster": "cluster",
+      "safety": "safety",
+      "battery": "battery",
+      "voltage": "voltage",
+      "warning": "warning"
+    },
+    "building": "Building Your Alert",
+    "steps": {
+      "understand": "Understanding Requirement",
+      "sensors": "Identifying Sensors",
+      "conditions": "Defining Conditions",
+      "actions": "Selecting Actions",
+      "ready": "Ready to Generate"
+    },
+    "stepStatus": {
+      "done": "done",
+      "active": "active",
+      "pending": "pending"
+    },
+    "clarifyHint": "Tell me the sensor and the exact threshold — e.g. \"{{example}}\" — and I'll generate the workflow.",
+    "searchDrafts": "Search drafts...",
+    "exploreMore": "Explore more",
+    "drafts": "Drafts",
+    "draftTag": "Draft",
+    "resumeDraft": "Resume Draft",
+    "noDrafts": "No drafts match your search."
+  },
+  "workflow": {
+    "name": "Workflow name",
+    "selectEquipmentFirst": "Select the equipment this alert applies to",
+    "validate": "Validate",
+    "testRule": "Test Rule",
+    "testPassed": "Test run passed",
+    "update": "Update",
+    "searchNodes": "Search Nodes...",
+    "dragHint": "Drag onto the canvas to add this node",
+    "section": {
+      "triggers": "TRIGGERS",
+      "data": "DATA",
+      "logic": "LOGIC & PROCESSING",
+      "actions": "ACTIONS"
+    },
+    "palette": {
+      "schedule": "Schedule",
+      "readSensor": "Read Sensor",
+      "databaseQuery": "Database Query",
+      "aggregate": "Aggregate",
+      "calculation": "Calculation",
+      "condition": "Condition",
+      "groupJoin": "Group Join",
+      "guard": "Guard",
+      "logicGate": "Logic Gate",
+      "webhook": "Webhook",
+      "email": "Email",
+      "sms": "SMS"
+    },
+    "actionType": {
+      "Webhook": "Webhook",
+      "Email": "Email",
+      "SMS": "SMS"
+    },
+    "node": {
+      "expression": "Expression",
+      "step": "Step"
+    },
+    "inspector": {
+      "kind": {
+        "trigger": "Trigger node",
+        "readSensor": "Read sensor node",
+        "condition": "Condition node",
+        "guard": "Guard node",
+        "gate": "Gate node",
+        "action": "Action node",
+        "processing": "Processing node"
+      },
+      "schedule": "Schedule",
+      "schedulePlaceholder": "Every 5 minutes",
+      "sensor": "Sensor",
+      "operator": "Operator",
+      "threshold": "Threshold",
+      "field": "Field",
+      "value": "Value",
+      "logic": "Logic",
+      "type": "Type",
+      "label": "Label",
+      "visualOnly": "Visual step only — not yet part of the saved alert logic."
+    },
+    "validation": {
+      "oneTrigger": "Needs exactly one trigger (found {{count}})",
+      "incompleteCondition": "A condition is missing its sensor or threshold value",
+      "noAction": "Needs at least one action",
+      "ok": "Workflow validated"
+    }
+  }
+}

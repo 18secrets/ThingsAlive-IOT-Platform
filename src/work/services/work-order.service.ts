@@ -2,6 +2,8 @@ import {
   BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional,
 } from '@nestjs/common';
 import { DataSource, EntityManager, In, LessThan } from 'typeorm';
+import { AlertEvent } from '../../alert/entities/alert-event.entity';
+import { AppUser } from '../../identity/entities/app-user.entity';
 import { can } from '../../auth/capabilities';
 import { SCOPE_RESOLVER, ScopeResolver } from '../../auth/scope-resolver';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -22,6 +24,8 @@ export interface RaiseInput extends EquipmentRef {
   priority?: WorkOrderPriority;
   assignedToUserId?: string | null;
   predictionId?: string | null;
+  /** The alert this job answers. Must be on the same machine. */
+  alertId?: string | null;
   dueAt?: Date | null;
 }
 
@@ -61,6 +65,7 @@ export class WorkOrderService {
 
     return withTenantSession(this.ds, scope, async (m) => {
       await this.assertAssetVisible(m, scope, input);
+      if (input.alertId) await this.assertAlertOnMachine(m, scope, input.alertId, input);
       if (input.assignedToUserId) {
         await this.assertAssignable(scope, input.assignedToUserId, input);
       }
@@ -77,6 +82,7 @@ export class WorkOrderService {
         priority: input.priority ?? 'normal',
         assignedToUserId: input.assignedToUserId ?? null,
         predictionId: input.predictionId ?? null,
+        alertId: input.alertId ?? null,
         origin: 'manual',
         raisedForScenario: null,
         dueAt: input.dueAt ?? null,
@@ -195,6 +201,25 @@ export class WorkOrderService {
     });
   }
 
+  /**
+   * Who a job can name: the active people in this account, by name only (dashboard
+   * testing, issue 9). The console needs it for the assignee picker and to show a name
+   * instead of an id on a card or in a job's history. The people list behind
+   * `user.manage` is not usable for that: a site manager can assign jobs and cannot
+   * manage users. Whether a particular person can take a particular job is still
+   * `assign`'s decision, made against that machine when it happens.
+   */
+  async people(scope: RequestScope): Promise<{ id: string; fullName: string }[]> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const users = await m.getRepository(AppUser).find({
+        where: { tenantId: scope.tenantId, status: 'active' },
+        select: { id: true, fullName: true },
+        order: { fullName: 'ASC' },
+      });
+      return users.map((u) => ({ id: u.id, fullName: u.fullName }));
+    });
+  }
+
   async history(scope: RequestScope, id: string): Promise<WorkOrderEvent[]> {
     return withTenantSession(this.ds, scope, async (m) => {
       await this.load(m, scope, id);
@@ -257,6 +282,18 @@ export class WorkOrderService {
   }
 
   /** The machine has to be one this account holds, and one the caller can see. */
+  /** A readable refusal ahead of `fk_work_order_alert`, which refuses the same thing
+   * with a constraint name nobody at a console can act on. */
+  private async assertAlertOnMachine(
+    m: EntityManager, scope: RequestScope, alertId: string, ref: EquipmentRef,
+  ): Promise<void> {
+    const alert = await m.getRepository(AlertEvent).findOne({ where: { tenantId: scope.tenantId, id: alertId } });
+    if (!alert) throw new NotFoundException('No such alert in this account.');
+    if (alert.sourceSystem !== ref.sourceSystem || alert.externalId !== ref.externalId) {
+      throw new BadRequestException(`That alert is on ${alert.externalId}, not ${ref.externalId}.`);
+    }
+  }
+
   private async assertAssetVisible(
     m: EntityManager, scope: RequestScope, ref: EquipmentRef,
   ): Promise<void> {

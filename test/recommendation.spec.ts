@@ -14,6 +14,7 @@ import { runTenantSpanning } from '../src/scope/tenant-session';
 import { ClientEquipmentClass } from '../src/client-catalog/entities/client-equipment-class.entity';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 /**
  * Which scenarios an asset can run, and why not (task P1-10).
@@ -30,7 +31,12 @@ describeDb('recommendations', () => {
   let service: RecommendationService;
 
   const SOURCE = 'iot-platform-1';
-  const NOW = new Date('2026-09-12T00:00:00.000Z');
+  // Relative to the real clock, not a pinned calendar date (task fix/ci-green):
+  // a fixed NOW drifts away from `date_trunc('month', now() − 2 months)`, the
+  // earliest partition TelemetryPartitioning's forward-only buffer creates, and
+  // a reading seeded far enough behind a stale NOW eventually lands in a month
+  // with no partition at all — not a bug in the reading, a bug in the fixture.
+  const NOW = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
 
   const acme: RequestScope = {
     tenantId: 'acme', userId: 'u-acme', roles: ['admin'], isPlatformRole: false,
@@ -49,7 +55,7 @@ describeDb('recommendations', () => {
       ds.getRepository(ClientCatalogEntitlement),
     );
     service = new RecommendationService(ds, catalog);
-  });
+  }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
@@ -115,6 +121,7 @@ describeDb('recommendations', () => {
         payload: {}, sourceUpdatedAt: null, syncedAt: NOW, checksum: `c-${opts.externalId}`,
         status: 'live', imei, equipmentExternalId: opts.externalId, name: null,
       });
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: SOURCE, externalId: opts.externalId, imei });
       for (const signal of opts.signals ?? ['fuel_level']) {
         await m.getRepository(SensorMapProjection).save({
           sourceSystem: SOURCE, externalId: `${imei}-${signal}`, tenantId: 'acme',
@@ -157,7 +164,7 @@ describeDb('recommendations', () => {
     expect(rec.bucket).toBe('availableLater');
     expect(rec.blockedBy).toEqual([{ code: 'insufficient-history', haveDays: 10, needDays: 30 }]);
     // First reading was 10 days ago and it needs 30, so 20 days from now.
-    expect(rec.estimatedReadyDate).toBe('2026-10-02T00:00:00.000Z');
+    expect(rec.estimatedReadyDate).toBe(new Date(NOW.getTime() + 20 * 86_400_000).toISOString());
   });
 
   it('offers no date when the blockage is not time', async () => {

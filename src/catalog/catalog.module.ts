@@ -1,9 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
+import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { CatalogController } from './catalog.controller';
+import { NamedFormulaController } from './named-formula.controller';
+import { ClassModelController } from './class-model.controller';
+import { ClassVisualController } from './class-visual.controller';
+import { ClassModelService } from './services/class-model.service';
+import { ClassVisualService } from './services/class-visual.service';
 import { ClientCatalogEntitlement } from './entities/client-catalog-entitlement.entity';
+import { EquipmentClassFormula } from './entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from './entities/equipment-class-profile.entity';
+import { NamedFormula } from './entities/named-formula.entity';
 import { ScenarioDefinition } from './entities/scenario-definition.entity';
 import { SignalAlias } from './entities/signal-alias.entity';
 import { AlertRuleTemplate } from './entities/alert-rule-template.entity';
@@ -11,6 +19,7 @@ import { ClientCatalogModule } from '../client-catalog/client-catalog.module';
 import { CatalogAuthoringService } from './services/catalog-authoring.service';
 import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
+import { NamedFormulaService } from './services/named-formula.service';
 import { RecommendationService } from './services/recommendation.service';
 
 /**
@@ -25,13 +34,17 @@ import { RecommendationService } from './services/recommendation.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      EquipmentClassProfile, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
-      ClientCatalogEntitlement, EquipmentProfile,
+      EquipmentClassProfile, EquipmentClassFormula, ScenarioDefinition, SignalAlias, AlertRuleTemplate,
+      ClientCatalogEntitlement, EquipmentProfile, NamedFormula, SensorRoleCapability,
     ]),
     ClientCatalogModule,
   ],
-  controllers: [CatalogController],
-  providers: [CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService],
-  exports: [CatalogService, RecommendationService],
+  controllers: [CatalogController, NamedFormulaController, ClassVisualController, ClassModelController],
+  providers: [
+    CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService,
+    ClassVisualService,
+    ClassModelService,
+  ],
+  exports: [CatalogService, RecommendationService, NamedFormulaService],
 })
 export class CatalogModule {}

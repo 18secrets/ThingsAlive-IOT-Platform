@@ -31,11 +31,14 @@ describeDb('migrations', () => {
     return rows.map((r: any) => r.tablename);
   }
 
+  // 30s, matching every other DB spec's chain run: the full chain grows by a migration
+  // most tasks, and at 52 it took ~3s alone but passed the 5s default under load.
+  // A fixture timeout — what the test asserts is unchanged.
   it('creates every table on the way up', async () => {
     await ds.runMigrations({ transaction: 'all' });
     const names = await tableNames();
     for (const t of TABLES) expect(names).toContain(t);
-  });
+  }, 30_000);
 
   it('enforces the telemetry dedupe key at the database level', async () => {
     const idx = await ds.query(

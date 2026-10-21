@@ -1,0 +1,108 @@
+{
+  "hero": {
+    "subtitle": "आपके उपकरणों पर दर्ज किए गए काम"
+  },
+  "loading": "लोड हो रहा है…",
+  "empty": "इस चयन के लिए कोई कार्य आदेश नहीं है।",
+  "errors": {
+    "load": "कार्य आदेश लोड नहीं हो सके।",
+    "update": "यह काम अपडेट नहीं हो सका।",
+    "save": "यह काम सहेजा नहीं जा सका।",
+    "assign": "इस काम का ज़िम्मेदार नहीं बदला जा सका।",
+    "raise": "यह काम दर्ज नहीं हो सका।",
+    "history": "इतिहास लोड नहीं हो सका।"
+  },
+  "people": {
+    "someoneElse": "कोई और",
+    "nobody": "कोई नहीं"
+  },
+  "prompts": {
+    "complete": "क्या काम किया गया?",
+    "cancel": "इसे रद्द क्यों किया जा रहा है?",
+    "reopen": "इसे फिर से क्यों खोला जा रहा है?"
+  },
+  "service": {
+    "heading": "सर्विस बाकी",
+    "hoursOverdue": "{{hours}} घंटे की देरी",
+    "hoursRemaining": "{{hours}} घंटे बाकी",
+    "notSet": "अंतराल या मीटर सेट नहीं है",
+    "prefillTitle": "सर्विस — {{name}}"
+  },
+  "serviceStatus": {
+    "overdue": "देरी से",
+    "due": "बाकी",
+    "approaching": "नज़दीक",
+    "ok": "ठीक"
+  },
+  "status": {
+    "created": "खुला",
+    "in-progress": "प्रगति में",
+    "completed": "पूर्ण",
+    "cancelled": "रद्द"
+  },
+  "priority": {
+    "low": "कम",
+    "normal": "सामान्य",
+    "high": "उच्च",
+    "urgent": "अत्यावश्यक"
+  },
+  "event": {
+    "raised": "दर्ज किया गया",
+    "assigned": "सौंपा गया",
+    "unassigned": "हटाया गया",
+    "started": "शुरू किया गया",
+    "completed": "पूर्ण किया गया",
+    "cancelled": "रद्द किया गया",
+    "reopened": "फिर से खोला गया",
+    "edited": "संपादित किया गया"
+  },
+  "filters": {
+    "allStatuses": "सभी स्थितियाँ"
+  },
+  "actions": {
+    "create": "कार्य आदेश बनाएँ",
+    "raise": "कार्य आदेश दर्ज करें",
+    "start": "शुरू करें",
+    "complete": "पूर्ण करें",
+    "cancel": "रद्द करें",
+    "reopen": "फिर से खोलें",
+    "edit": "संपादित करें",
+    "assign": "सौंपें",
+    "reassign": "फिर से सौंपें",
+    "unassign": "सौंपना हटाएँ",
+    "history": "इतिहास",
+    "save": "बदलाव सहेजें"
+  },
+  "card": {
+    "resolution": "समाधान: {{resolution}}",
+    "assignedTo": "<b>{{name}}</b> को सौंपा गया",
+    "unassigned": "किसी को नहीं सौंपा गया",
+    "priority": "प्राथमिकता: <cap>{{priority}}</cap>",
+    "due": "नियत तिथि {{date}}"
+  },
+  "modals": {
+    "edit": "कार्य आदेश संपादित करें",
+    "assign": "कार्य आदेश सौंपें",
+    "history": "कार्य आदेश का इतिहास",
+    "create": "कार्य आदेश बनाएँ",
+    "createSubtitle": "नया रखरखाव कार्य"
+  },
+  "form": {
+    "task": "कार्य",
+    "taskPlaceholder": "जैसे कूलेंट सेंसर की जाँच करें",
+    "selectEquipment": "उपकरण चुनें",
+    "priority": "प्राथमिकता",
+    "dueDate": "नियत तिथि",
+    "description": "विवरण",
+    "assignTo": "किसे सौंपें",
+    "nobodyUnassign": "कोई नहीं (सौंपना हटाएँ)",
+    "noteOptional": "नोट (वैकल्पिक)",
+    "notePlaceholder": "बदलाव का कारण, ताकि इतिहास पढ़ने वाले को मदद मिले"
+  },
+  "history": {
+    "empty": "अभी तक कुछ दर्ज नहीं हुआ।",
+    "by": "{{name}} द्वारा",
+    "to": "{{name}} को",
+    "from": "{{name}} से"
+  }
+}

@@ -7,7 +7,7 @@ import { WORK_RAISER, WorkRaiser } from '../work-raiser';
 import {
   influenceModelFrom, InfluenceOutcome, Sample, scoreInfluence,
 } from './influence';
-import { DeviceProjection } from '../../projection/entities/device-projection.entity';
+import { boundImeis } from '../../signal-binding/services/signal-binding.service';
 import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { Prediction, PredictionSource } from '../entities/prediction.entity';
@@ -83,14 +83,9 @@ export class PredictionService {
       const result: ScoreResult = { written: [], skipped: [], raised: [] };
       if (active.length === 0) return result;
 
-      const devices = await m.getRepository(DeviceProjection).find({
-        where: {
-          tenantId: scope.tenantId,
-          sourceSystem: target.sourceSystem,
-          equipmentExternalId: target.externalId,
-        },
-      });
-      const imeis = [...new Set(devices.map((d) => d.imei))];
+      // The bindings, not `device_projection` (task QFIX-DEVICES-2): the devices on
+      // this machine at the moment being scored.
+      const imeis = await boundImeis(m, scope.tenantId, target, now, now);
 
       for (const row of active) {
         const scenario = await m.getRepository(ClientScenario).findOne({

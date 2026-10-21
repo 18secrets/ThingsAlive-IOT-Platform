@@ -1,11 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning } from '../../scope/tenant-session';
 import { DomainEvent } from '../../events/domain-event.entity';
-import { AppUser } from '../../identity/entities/app-user.entity';
+import { AppUser, UserStatus } from '../../identity/entities/app-user.entity';
 import { TenantRole } from '../../identity/entities/tenant-role.entity';
 import { UserInvitation } from '../../identity/entities/user-invitation.entity';
+import { loginEmailTaken, rethrowLoginEmailClash } from '../../identity/login-email';
+import { isPhoneClash, normalisePhone, phoneTaken, phoneTakenError } from '../../identity/phone';
+import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { ROLE_TEMPLATES } from '../../identity/role-templates';
 import { PasswordService } from '../../identity/services/password.service';
 import { TenantMap } from '../../projection/entities/tenant-map.entity';
@@ -17,9 +20,28 @@ export interface ProvisionInput {
   plan?: string | null;
   region?: string | null;
   /** The first person, who becomes the account's own administrator. */
-  superAdmin: { email: string; fullName: string };
+  superAdmin: { email: string; fullName: string; phone?: string | null };
   /** Optional: the upstream client identifiers whose data belongs to this account. */
   externalClients?: { sourceSystem: string; externalClientId: string }[];
+}
+
+/** The one person a freshly provisioned account has — shown alongside the tenant
+ *  itself wherever the account is listed, since a commercial account with nobody's
+ *  name or number attached to it is not something anyone can act on. */
+export interface SuperAdminContact {
+  fullName: string;
+  email: string;
+  phone: string | null;
+  /** 'invited' until they accept and set a password — the first-login signal the
+   *  console shows as "Awaiting First Login" vs "Password Set". */
+  status: UserStatus;
+}
+
+export interface UpdateInput {
+  name?: string;
+  plan?: string | null;
+  region?: string | null;
+  superAdmin?: { fullName?: string; email?: string; phone?: string | null };
 }
 
 export interface ProvisionResult {
@@ -77,6 +99,7 @@ export class ProvisioningService {
     }
     const email = input.superAdmin.email.trim().toLowerCase();
     if (!email.includes('@')) throw new BadRequestException('That is not an email address.');
+    const phone = normalisePhone(input.superAdmin.phone);
 
     return runTenantSpanning(this.ds, `provision ${tenantId} by ${scope.userId}`, async (m) => {
       const existing = await m.getRepository(Tenant).findOne({ where: { tenantId } });
@@ -90,15 +113,18 @@ export class ProvisioningService {
         );
       }
 
-      // Email is unique platform-wide, and finding out after the account exists would
-      // leave exactly the half-provisioned state this transaction is here to prevent.
-      const taken = await m.getRepository(AppUser).findOne({ where: { email }, select: { id: true } });
-      if (taken) throw new ConflictException(`${email} already has a login.`);
+      // Email is unique platform-wide, staff included, and finding out after the account
+      // exists would leave exactly the half-provisioned state this transaction is here
+      // to prevent.
+      if (await loginEmailTaken(m, email)) throw new ConflictException(`${email} already has a login.`);
+      if (phone && await phoneTaken(m, phone)) throw phoneTakenError(phone);
 
       const tenant = await this.createTenant(m, scope, tenantId, input, now);
       await this.mapExternalClients(m, tenantId, input, now);
       const roles = await this.copyRoleTemplates(m, tenantId, scope.userId, now);
-      const admin = await this.seedSuperAdmin(m, tenantId, email, input.superAdmin.fullName, scope.userId, now);
+      const admin = await this.seedSuperAdmin(
+        m, tenantId, email, input.superAdmin.fullName, phone, scope.userId, now,
+      );
       const invitation = await this.inviteSuperAdmin(m, tenant, admin, scope.userId, now);
 
       await this.announce(m, tenant, admin, now);
@@ -117,7 +143,7 @@ export class ProvisioningService {
   /** Turn an account off. Every sign-in stops; nothing about any user changes. */
   async suspend(
     scope: RequestScope, tenantId: string, reason: string, now = new Date(),
-  ): Promise<Tenant> {
+  ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
     this.requirePlatform(scope);
     if (!reason?.trim()) {
       throw new BadRequestException(
@@ -127,23 +153,165 @@ export class ProvisioningService {
     return this.setStatus(scope, tenantId, 'suspended', reason, now);
   }
 
-  async reinstate(scope: RequestScope, tenantId: string, now = new Date()): Promise<Tenant> {
+  async reinstate(
+    scope: RequestScope, tenantId: string, now = new Date(),
+  ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
     this.requirePlatform(scope);
     return this.setStatus(scope, tenantId, 'active', null, now);
   }
 
-  async list(scope: RequestScope): Promise<Tenant[]> {
+  /**
+   * Delete an account that was never used (dashboard testing, issue 6): created,
+   * perhaps mistyped, and never signed in to. It must be suspended first, nobody in
+   * it may have set a password, and it may hold nothing beyond what provisioning
+   * wrote. Those rules are `delete_unused_tenant`'s, which is the only way the
+   * application can delete an account. Anything that has been used stays suspended,
+   * because its machines and history belong to a customer.
+   */
+  async remove(scope: RequestScope, tenantId: string): Promise<void> {
     this.requirePlatform(scope);
-    return runTenantSpanning(this.ds, `tenant list by ${scope.userId}`, (m) =>
-      m.getRepository(Tenant).find({ order: { name: 'ASC' } }));
+    const [row] = await this.ds.query('SELECT delete_unused_tenant($1) AS deleted', [tenantId])
+      .catch((err) => rethrowDeleteRefusal(err));
+    if (!row.deleted) throw new NotFoundException(`No account "${tenantId}".`);
   }
 
-  async get(scope: RequestScope, tenantId: string): Promise<Tenant> {
+  async list(scope: RequestScope): Promise<(Tenant & { superAdmin: SuperAdminContact | null })[]> {
     this.requirePlatform(scope);
-    const tenant = await runTenantSpanning(this.ds, `tenant read by ${scope.userId}`, (m) =>
-      m.getRepository(Tenant).findOne({ where: { tenantId } }));
-    if (!tenant) throw new NotFoundException(`No account "${tenantId}".`);
-    return tenant;
+    return runTenantSpanning(this.ds, `tenant list by ${scope.userId}`, async (m) => {
+      const tenants = await m.getRepository(Tenant).find({ order: { name: 'ASC' } });
+      const admins = await this.superAdminsFor(m, tenants.map((t) => t.tenantId));
+      return tenants.map((t) => ({ ...t, superAdmin: admins.get(t.tenantId) ?? null }));
+    });
+  }
+
+  async get(scope: RequestScope, tenantId: string): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
+    this.requirePlatform(scope);
+    return runTenantSpanning(this.ds, `tenant read by ${scope.userId}`, async (m) => {
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId } });
+      if (!tenant) throw new NotFoundException(`No account "${tenantId}".`);
+      const admins = await this.superAdminsFor(m, [tenantId]);
+      return { ...tenant, superAdmin: admins.get(tenantId) ?? null };
+    });
+  }
+
+  /**
+   * The `ceo-manager` on each account — its slug never moves once provisioned (see
+   * IdentityController's own comment on renaming a role), so it is a stable way to
+   * find "the" super admin without a dedicated flag anywhere. If a tenant ever ends
+   * up with more than one, the earliest is shown; a second super admin does not
+   * change who the account was provisioned for.
+   */
+  private async superAdminsFor(m: EntityManager, tenantIds: string[]): Promise<Map<string, SuperAdminContact>> {
+    if (tenantIds.length === 0) return new Map();
+    const admins = await m.getRepository(AppUser).find({
+      where: tenantIds.map((tenantId) => ({ tenantId, roleSlug: 'ceo-manager' })),
+      order: { createdAt: 'ASC' },
+    });
+    const byTenant = new Map<string, SuperAdminContact>();
+    for (const admin of admins) {
+      if (byTenant.has(admin.tenantId)) continue;
+      byTenant.set(admin.tenantId, {
+        fullName: admin.fullName, email: admin.email, phone: admin.phone, status: admin.status,
+      });
+    }
+    return byTenant;
+  }
+
+  /**
+   * Renaming the account, or correcting its super admin's own contact details.
+   *
+   * Not everything is editable here on purpose: `tenantId` never moves (it is inside
+   * every row-level-security predicate this account owns), and there is no way to
+   * move the super admin role to a different person — that is `PUT
+   * /identity/users/:id/role`, inside the account's own session, because who holds
+   * that role is the client's decision, not something Things Alive corrects for them.
+   */
+  async update(
+    scope: RequestScope, tenantId: string, input: UpdateInput,
+  ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
+    this.requirePlatform(scope);
+    return runTenantSpanning(this.ds, `tenant update: ${tenantId} by ${scope.userId}`, async (m) => {
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId } });
+      if (!tenant) throw new NotFoundException(`No account "${tenantId}".`);
+
+      if (input.name !== undefined) tenant.name = input.name.trim();
+      if (input.plan !== undefined) tenant.plan = input.plan;
+      if (input.region !== undefined) tenant.region = input.region;
+      await m.getRepository(Tenant).save(tenant);
+
+      let superAdmin: SuperAdminContact | null = (await this.superAdminsFor(m, [tenantId])).get(tenantId) ?? null;
+
+      if (input.superAdmin) {
+        const users = m.getRepository(AppUser);
+        const admin = await users.findOne({ where: { tenantId, roleSlug: 'ceo-manager' } });
+        if (!admin) {
+          throw new NotFoundException(
+            `"${tenantId}" has no super admin to update — it may have been reassigned to a different role.`,
+          );
+        }
+        if (input.superAdmin.fullName !== undefined) admin.fullName = input.superAdmin.fullName.trim();
+        if (input.superAdmin.phone !== undefined) {
+          const phone = normalisePhone(input.superAdmin.phone);
+          if (phone && phone !== admin.phone && await phoneTaken(m, phone, admin.id)) throw phoneTakenError(phone);
+          admin.phone = phone;
+        }
+        if (input.superAdmin.email !== undefined) {
+          const email = input.superAdmin.email.trim().toLowerCase();
+          if (email !== admin.email) {
+            if (await loginEmailTaken(m, email)) throw new ConflictException(`${email} already has a login.`);
+            admin.email = email;
+          }
+        }
+        await users.save(admin).catch((err) => {
+          if (isPhoneClash(err) && admin.phone) throw phoneTakenError(admin.phone);
+          return rethrowLoginEmailClash(err, admin.email);
+        });
+        superAdmin = { fullName: admin.fullName, email: admin.email, phone: admin.phone, status: admin.status };
+      }
+
+      return { ...tenant, superAdmin };
+    });
+  }
+
+  /**
+   * A second copy of the same invitation, for when the first one is lost before
+   * anybody used it. Only works while the super admin has never set a password —
+   * once they have, this is not how they get back in (that is
+   * `POST /auth/forgot-password`, self-service, because by then only they should
+   * be able to trigger a reset on their own credential).
+   *
+   * Outstanding invite tokens are retired first, the same rule `CredentialService`
+   * follows: two live invitations means the older one still works, which defeats
+   * the point of replacing it.
+   */
+  async resendInvitation(
+    scope: RequestScope, tenantId: string, now = new Date(),
+  ): Promise<{ email: string; invitationToken: string; invitationExpiresAt: Date }> {
+    this.requirePlatform(scope);
+    return runTenantSpanning(this.ds, `resend invitation: ${tenantId} by ${scope.userId}`, async (m) => {
+      const admin = await m.getRepository(AppUser).findOne({ where: { tenantId, roleSlug: 'ceo-manager' } });
+      if (!admin) throw new NotFoundException(`"${tenantId}" has no super admin to invite.`);
+      if (admin.status !== 'invited') {
+        throw new BadRequestException(
+          `${admin.email} already has a password set. Resending an invitation would not help — `
+          + 'they need "forgot password" instead.',
+        );
+      }
+
+      const invitations = m.getRepository(UserInvitation);
+      await invitations.update(
+        { tenantId, userId: admin.id, purpose: 'invite', consumedAt: IsNull() },
+        { consumedAt: now },
+      );
+      const invitationToken = this.passwords.newToken();
+      const invitationExpiresAt = new Date(now.getTime() + 14 * 86_400_000);
+      await invitations.save(invitations.create({
+        tenantId, userId: admin.id,
+        tokenHash: this.passwords.fingerprint(invitationToken),
+        purpose: 'invite', expiresAt: invitationExpiresAt, consumedAt: null, createdBy: scope.userId,
+      }));
+      return { email: admin.email, invitationToken, invitationExpiresAt };
+    });
   }
 
   // ----------------------------------------------------------------------- pieces
@@ -198,6 +366,7 @@ export class ProvisioningService {
         description: template.description,
         capabilities: [...template.capabilities],
         scopeShape: template.scopeShape,
+        allowedTabs: [...template.allowedTabs],
         isBuiltIn: true,
         templateSlug: template.slug,
         copiedAt: now,
@@ -208,17 +377,20 @@ export class ProvisioningService {
   }
 
   private async seedSuperAdmin(
-    m: EntityManager, tenantId: string, email: string, fullName: string, by: string, now: Date,
+    m: EntityManager, tenantId: string, email: string, fullName: string, phone: string | null, by: string, now: Date,
   ): Promise<AppUser> {
     const repo = m.getRepository(AppUser);
     return repo.save(repo.create({
-      tenantId, email, fullName: fullName.trim(), phone: null,
+      tenantId, email, fullName: fullName.trim(), phone,
       roleSlug: 'ceo-manager', status: 'invited', passwordHash: null,
       externalUserId: null, externalSourceSystem: null,
       failedAttempts: 0, lockedUntil: null,
       invitedBy: by, invitedAt: now, activatedAt: null,
       suspendedAt: null, suspendedReason: null,
-    }));
+    })).catch((err) => {
+      if (isPhoneClash(err) && phone) throw phoneTakenError(phone);
+      return rethrowLoginEmailClash(err, email);
+    });
   }
 
   private async inviteSuperAdmin(
@@ -254,7 +426,7 @@ export class ProvisioningService {
   private async setStatus(
     scope: RequestScope, tenantId: string, status: 'active' | 'suspended',
     reason: string | null, now: Date,
-  ): Promise<Tenant> {
+  ): Promise<Tenant & { superAdmin: SuperAdminContact | null }> {
     return runTenantSpanning(this.ds, `tenant ${status}: ${tenantId}`, async (m) => {
       const repo = m.getRepository(Tenant);
       const tenant = await repo.findOne({ where: { tenantId } });
@@ -263,7 +435,9 @@ export class ProvisioningService {
       tenant.status = status;
       tenant.suspendedAt = status === 'suspended' ? now : null;
       tenant.suspendedReason = reason;
-      return repo.save(tenant);
+      const saved = await repo.save(tenant);
+      const superAdmin = (await this.superAdminsFor(m, [tenantId])).get(tenantId) ?? null;
+      return { ...saved, superAdmin };
     });
   }
 

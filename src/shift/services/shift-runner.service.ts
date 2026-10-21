@@ -11,7 +11,7 @@ import { DeviceHealthService } from '../../device-health/services/device-health.
 import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
 import { UtilizationService } from '../../utilization/services/utilization.service';
-import { runningStatusFor } from './running-status';
+import { alertWindow } from './alert-window';
 import { withTenantId } from '../../scope/tenant-session';
 import { ShiftRun } from '../entities/shift-run.entity';
 import { tryTakePassLock } from './pass-lock';
@@ -218,18 +218,16 @@ export class ShiftRunner {
 
       // The IMEI rides along: duty cycle and the alert rules do not care which logger
       // a reading came from, but the link check is per device and cannot be assembled
-      // without it.
-      const readings = pull.envelope.readings.map((r) => ({
-        imei: r.imei, signal: r.signal, value: r.value, unit: r.unit ?? null,
-        sourceTimestamp: r.sourceTimestamp,
-      }));
+      // without it. Shaped by `alertWindow`, which historical replay calls too (QGEN1):
+      // a replay that windowed differently would be replaying a different rule.
+      const { readings, evaluate } = alertWindow(pull.envelope.readings);
 
       // The machine's own account of whether it ran. A shift where the logger reported
       // all day and the engine never turned over is a shift's worth of readings that
       // look like telemetry and describe nothing — cold, still, unloaded — and scoring
       // them against a baseline built from a working machine produces a confident
       // answer about a machine that was not there.
-      if (runningStatusFor(readings) === 'not-running') {
+      if (!evaluate) {
         // Ingested anyway: the readings are true, they belong to the history, and the
         // question of whether a baseline should be built from idle periods is a
         // separate one (P1-123) that this must not quietly decide.
@@ -484,7 +482,14 @@ export class ShiftRunner {
    */
   private async evaluateAlerts(
     window: OwedWindow,
-    readings: { signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+    // imei rides along explicitly now (task QALERT1): a signal-threshold rule's
+    // window is built per (imei, signal), so alert-rules.ts needs it named here
+    // rather than merely tolerated by structural typing from the caller. Required,
+    // not optional: undefined is a representable value whose grouping behaviour is
+    // unspecified — most likely every device pooled into one window, exactly the
+    // cross-device mixing signalWindows() exists to prevent, reached by a path
+    // this parameter's own type would otherwise still permit.
+    readings: { imei: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
     predictions: {
       clientScenarioSlug: string; severity: any; riskScore: number;
       predictionId: string; confidence: string;

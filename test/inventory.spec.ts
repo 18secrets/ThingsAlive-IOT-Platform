@@ -6,6 +6,10 @@ import { DeviceInventoryEvent } from '../src/inventory/entities/device-inventory
 import { InventoryService } from '../src/inventory/services/inventory.service';
 import { INVENTORY_TRANSITIONS, inventoryTransition } from '../src/inventory/services/inventory-state-machine';
 import { EquipmentProfile } from '../src/equipment/equipment-profile.entity';
+import { DeviceCatalogService } from '../src/device-catalog/services/device-catalog.service';
+import { SensorCategory } from '../src/device-catalog/entities/sensor-category.entity';
+import { Sensor } from '../src/device-catalog/entities/sensor.entity';
+import { ToolMapping } from '../src/device-catalog/entities/tool-mapping.entity';
 import { runTenantSpanning, withTenantId } from '../src/scope/tenant-session';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
 
@@ -82,7 +86,12 @@ describeDb('device inventory', () => {
     await owner.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     await owner.runMigrations({ transaction: 'all' });
     ds = await createAppDataSource();
-    inventory = new InventoryService(ds);
+    const deviceCatalog = new DeviceCatalogService(
+      ds.getRepository(SensorCategory),
+      ds.getRepository(Sensor),
+      ds.getRepository(ToolMapping),
+    );
+    inventory = new InventoryService(ds, deviceCatalog);
   }, 30_000);
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });

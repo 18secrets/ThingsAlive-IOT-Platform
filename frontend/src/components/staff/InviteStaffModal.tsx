@@ -1,0 +1,219 @@
+import React, { useEffect, useState } from 'react';
+import { X, Copy, CheckCheck } from 'lucide-react';
+import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
+import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
+import { copyToClipboard } from '../../lib/clipboard';
+
+interface InviteStaffModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onInvite: (input: {
+    email: string; fullName: string; role: PlatformStaffRole;
+  }) => Promise<InvitePlatformStaffResult>;
+}
+
+// Label and description are staff.role.<value> and staff.roleDescription.<value>.
+const ROLES: PlatformStaffRole[] = ['master-admin', 'platform-support', 'catalog-author'];
+
+export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onClose, onInvite }) => {
+  const { t } = useTranslation(['accounts', 'shared']);
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState<PlatformStaffRole>('catalog-author');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [invited, setInvited] = useState<InvitePlatformStaffResult | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setEmail('');
+    setFullName('');
+    setRole('catalog-author');
+    setError(undefined);
+    setInvited(null);
+    setCopied(false);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalEmail = email.trim();
+    const finalName = fullName.trim();
+    if (!finalEmail || !finalName) return;
+
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await onInvite({ email: finalEmail, fullName: finalName, role });
+      setInvited(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('invite.failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    if (!invited) return;
+    copyToClipboard(invited.invitationToken).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
+
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
+          <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
+            {invited ? t('invite.invitedTitle') : t('staff.invite')}
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label={t('shared:close')}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {invited ? (
+          <div className="p-6 space-y-4 text-sm">
+            <p className="text-slate-600 dark:text-slate-300">
+              <Trans
+                t={t}
+                i18nKey="invite.invitedAs"
+                values={{ name: invited.fullName, role: t(`staff.role.${invited.role}`, { defaultValue: invited.role }) }}
+                components={{ 1: <strong className="text-slate-900 dark:text-white" />, 3: <strong className="font-mono" /> }}
+              />
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('shared:token.label')}
+              </label>
+              <div className="relative">
+                <Input
+                  readOnly
+                  value={invited.invitationToken}
+                  className="pr-9 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyToken}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  title={t('shared:token.copy')}
+                >
+                  {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                <Trans
+                  t={t}
+                  i18nKey="invite.tokenHelp"
+                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString() }}
+                  components={{ 1: <code /> }}
+                />
+              </p>
+            </div>
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer"
+              >
+                {t('shared:done')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('invite.fullName')} <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                required
+                autoFocus
+                value={fullName}
+                onChange={(value) => setFullName(value)}
+                placeholder={t('invite.fullNamePlaceholder')}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('translation:common.email')} <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="email"
+                required
+                value={email}
+                onChange={(value) => setEmail(value)}
+                placeholder={t('invite.emailPlaceholder')}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('translation:settings.role')} <span className="text-rose-500">*</span>
+              </label>
+              <div className="space-y-2">
+                {ROLES.map((r) => (
+                  <label
+                    key={r}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      role === r
+                        ? 'border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="platform-role"
+                      value={r}
+                      checked={role === r}
+                      onChange={() => setRole(r)}
+                      className="mt-0.5 cursor-pointer"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t(`staff.role.${r}`)}</p>
+                      <p className="text-[11px] text-slate-400">{t(`staff.roleDescription.${r}`)}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                {t('shared:cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {busy ? t('invite.inviting') : t('invite.send')}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};

@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { ProjectionModule } from '../projection/projection.module';
+import { LegacyFleetSyncController } from './legacy-fleet-sync.controller';
+import { LegacyFleetSyncScheduler } from './legacy-fleet-sync.scheduler';
+import { LegacyFleetSyncService } from './legacy-fleet-sync.service';
 import { LegacyTelemetryReader } from './legacy-telemetry.reader';
 import { initLegacyDataSource, LEGACY_DATA_SOURCE, legacyConfigFrom } from './legacy-source';
 
@@ -12,12 +16,16 @@ import { initLegacyDataSource, LEGACY_DATA_SOURCE, legacyConfigFrom } from './le
  * appears rather than being lost while there was none.
  */
 @Module({
+  imports: [ProjectionModule],
+  controllers: [LegacyFleetSyncController],
   providers: [
     {
       provide: LEGACY_DATA_SOURCE,
       useFactory: () => initLegacyDataSource(legacyConfigFrom(process.env)),
     },
     LegacyTelemetryReader,
+    LegacyFleetSyncService,
+    LegacyFleetSyncScheduler,
   ],
   exports: [LegacyTelemetryReader, LEGACY_DATA_SOURCE],
 })

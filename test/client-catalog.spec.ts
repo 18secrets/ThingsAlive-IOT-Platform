@@ -4,11 +4,14 @@ import { AuditService } from '../src/audit/audit.service';
 import { PlatformAccessLog } from '../src/audit/platform-access-log.entity';
 import { capabilitiesFor } from '../src/auth/capabilities';
 import { RequestScope } from '../src/auth/types/request-scope';
+import { EquipmentClassFormula } from '../src/catalog/entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { NamedFormula } from '../src/catalog/entities/named-formula.entity';
 import { ScenarioDefinition } from '../src/catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../src/catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../src/catalog/entities/alert-rule-template.entity';
 import { CatalogAuthoringService } from '../src/catalog/services/catalog-authoring.service';
+import { SensorRoleCapability } from '../src/device-catalog/entities/sensor-role-capability.entity';
 import { ClientScenario } from '../src/client-catalog/entities/client-scenario.entity';
 import { ClientCatalogService } from '../src/client-catalog/services/client-catalog.service';
 import { CopyOnGrantService } from '../src/client-catalog/services/copy-on-grant.service';
@@ -53,9 +56,12 @@ describeDb('client-owned catalog', () => {
 
     authoring = new CatalogAuthoringService(
       ds.getRepository(EquipmentClassProfile),
+      ds.getRepository(EquipmentClassFormula),
       ds.getRepository(ScenarioDefinition),
       ds.getRepository(SignalAlias),
       ds.getRepository(AlertRuleTemplate),
+      ds.getRepository(NamedFormula),
+      ds.getRepository(SensorRoleCapability),
     );
     copies = new CopyOnGrantService(ds);
     client = new ClientCatalogService(ds, copies);
@@ -329,7 +335,7 @@ describeDb('client-owned catalog', () => {
       expect(rule.params).toEqual({ signal: 'coolant_temp', max: 108 });
     });
 
-    it('keeps one account\\'s copies out of another', async () => {
+      it("keeps one account's copies out of another", async () => {
       await publishedTemplate();
       await copies.copyForTenant('globex', 'diesel-generator', 'u-master', NOW);
 
@@ -448,6 +454,30 @@ describeDb('client-owned catalog', () => {
           equipmentClassSlug: 'diesel-generator', requiredSignals: ['collant_temp'],
         }),
       ).rejects.toThrow(/does not declare/);
+    });
+
+    // Task QIMP4, finding 5: `crane-400-kw` (source = 'manual', never touched by
+    // the import) holds a signal `{"unit": null, "signal": "temp"}` — content the
+    // import validator would have refused outright. Same refusal, same shared
+    // module (`content-validation.ts`), on the door that let it through.
+    it('refuses a signal with no unit, the same rule the import path enforces', async () => {
+      await expect(
+        authoring.createClass(master, 'crane-400-kw', {
+          name: 'Crane 400kW',
+          expectedSignals: [{ signal: 'temp', unit: null, required: true }],
+        }),
+      ).rejects.toThrow(/"temp" has no unit/);
+    });
+
+    // The other half of the incident: a scenario with `required_signals: []` —
+    // nothing the import path could even produce (scenarios have no import
+    // surface), but the API path let it through with no check at all.
+    it('refuses a scenario requiring no signals at all, once published', async () => {
+      await authoring.createScenario(master, 'crane-idle-watch', {
+        equipmentClassSlug: 'diesel-generator', requiredSignals: [],
+      });
+      await expect(authoring.publishScenario(master, 'crane-idle-watch'))
+        .rejects.toThrow(/must require at least one signal/);
     });
 
     it('retires a template without disturbing copies already made from it', async () => {

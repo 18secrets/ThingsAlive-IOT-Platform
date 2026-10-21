@@ -7,6 +7,10 @@ import { TenantMap } from '../projection/entities/tenant-map.entity';
 import { TelemetryReading } from '../telemetry/telemetry-reading.entity';
 import { PlatformAccessLog } from '../audit/platform-access-log.entity';
 import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
+import { EquipmentClassFormula } from '../catalog/entities/equipment-class-formula.entity';
+import { NamedFormula } from '../catalog/entities/named-formula.entity';
+import { EquipmentClassSensorRequirement } from '../catalog/entities/equipment-class-sensor-requirement.entity';
+import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { ScenarioDefinition } from '../catalog/entities/scenario-definition.entity';
 import { SignalAlias } from '../catalog/entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../catalog/entities/alert-rule-template.entity';
@@ -14,6 +18,7 @@ import { ClientCatalogEntitlement } from '../catalog/entities/client-catalog-ent
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { ClientScenario } from '../client-catalog/entities/client-scenario.entity';
+import { ClientFormula } from '../client-catalog/entities/client-formula.entity';
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
 import { Plant } from '../equipment/entities/plant.entity';
@@ -21,6 +26,9 @@ import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placeme
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
+import { WorkflowDefinition } from '../workflow/entities/workflow-definition.entity';
+import { WorkflowLayout } from '../workflow/entities/workflow-layout.entity';
+import { WorkflowVersion } from '../workflow/entities/workflow-version.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { ShiftRun } from '../shift/entities/shift-run.entity';
@@ -35,14 +43,55 @@ import { UserSecurityEvent } from '../identity/entities/user-security-event.enti
 import { UserSession } from '../identity/entities/user-session.entity';
 import { TenantRole } from '../identity/entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../identity/entities/user-access.entity';
+import { PlatformUser } from '../identity/entities/platform-user.entity';
+import { PlatformSession } from '../identity/entities/platform-session.entity';
+import { PlatformInvitation } from '../identity/entities/platform-invitation.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
+import { SensorCategory } from '../device-catalog/entities/sensor-category.entity';
+import { Sensor } from '../device-catalog/entities/sensor.entity';
+import { ToolMapping } from '../device-catalog/entities/tool-mapping.entity';
+import { EquipmentTemplate } from '../equipment-template/entities/equipment-template.entity';
 import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';
+import { NotificationDelivery } from '../events/notification-delivery.entity';
+import { CatalogImportBatch } from '../catalog-import/entities/catalog-import-batch.entity';
+import { CatalogImportRow } from '../catalog-import/entities/catalog-import-row.entity';
+import { SignalBindingVersion } from '../signal-binding/entities/signal-binding-version.entity';
+import { SensorInstance } from '../signal-binding/entities/sensor-instance.entity';
+import { CalibrationVersion } from '../signal-binding/entities/calibration-version.entity';
+import { EquipmentParameter } from '../signal-binding/entities/equipment-parameter.entity';
+import { TenantParameter } from '../parameters/entities/tenant-parameter.entity';
+import { SignalState } from '../device-catalog/entities/signal-state.entity';
+import { EquipmentClassFailureMode } from '../catalog/entities/equipment-class-failure-mode.entity';
+import { EquipmentClassRecommendation } from '../catalog/entities/equipment-class-recommendation.entity';
+import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
+import { ClientEquipmentClassRecommendation } from '../client-catalog/entities/client-equipment-class-recommendation.entity';
+import { EquipmentClassLayout } from '../catalog/entities/equipment-class-layout.entity';
+import { SiteClass, SiteClassLayout } from '../catalog/entities/site-class.entity';
+import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-equipment-class-layout.entity';
+import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
+import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
+import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
+import { IndustryType } from '../device-catalog/entities/industry-type.entity';
+import { Incident } from '../incident/entities/incident.entity';
+import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
+import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity';
+import { AssistantUsage } from '../assistant/assistant-usage.entity';
+import { AssistantProposal } from '../assistant/assistant-proposal.entity';
+import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
+import { ArtifactProposal } from '../proposal/entities/artifact-proposal.entity';
+import { ReplayRun } from '../proposal/entities/replay-run.entity';
+import { ProposalRuleEnablement } from '../proposal/entities/proposal-rule-enablement.entity';
+import { RecFrame } from '../rec-frame/rec-frame.entity';
+import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
+import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
+import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
+import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
- * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
+ * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
  * foreign data arrives as projections through a contract, never as a cross-database
  * query. See the projection module for why.
  */
@@ -62,9 +111,11 @@ export const ENTITIES = [
   EquipmentProfile,
   ClientEquipmentClass,
   ClientScenario,
+  ClientFormula,
   EquipmentScenario,
   ScenarioActivationEvent,
   DomainEvent,
+  NotificationDelivery,
   Prediction,
   PredictionBaseline,
   DeviceInventory,
@@ -89,13 +140,64 @@ export const ENTITIES = [
   DeviceLinkHealth,
   CausalChainDefinition,
   AlertRule,
+  WorkflowDefinition,
+  WorkflowVersion,
+  WorkflowLayout,
   AlertEvent,
+  PlatformUser,
+  PlatformSession,
+  PlatformInvitation,
+  SensorCategory,
+  Sensor,
+  ToolMapping,
+  EquipmentTemplate,
+  CatalogImportBatch,
+  CatalogImportRow,
+  EquipmentClassFormula,
+  NamedFormula,
+  EquipmentClassSensorRequirement,
+  SensorRoleCapability,
+  SignalBindingVersion,
+  SensorInstance,
+  CalibrationVersion,
+  EquipmentParameter,
+  EquipmentClassFailureMode,
+  EquipmentClassRecommendation,
+  ClientEquipmentClassFailureMode,
+  ClientEquipmentClassRecommendation,
+  EquipmentClassLayout,
+  ClientEquipmentClassLayout,
+  SiteClass,
+  SiteClassLayout,
+  TenantParameter,
+  EquipmentClassVisual,
+  EquipmentClassVisualAnchor,
+  ClientEquipmentClassVisualAnchor,
+  SignalState,
+  ShieldEvidenceRecord,
+  BreakdownEvent,
+  IndustryType,
+  Incident,
+  IncidentAlert,
+  IncidentEvent,
+  IncidentSlaPolicy,
+  TelemetryArchive,
+  AssistantUsage,
+  AssistantProposal,
+  RecEvidenceBundle,
+  RecFrame,
+  ArtifactProposal,
+  ReplayRun,
+  ProposalRuleEnablement,
+  ...FORECAST_ENTITIES,
+  ...EMBEDDING_ENTITIES,
+  ...EVALUATION_ENTITIES,
 ];
 
 export interface DataSourceChoices {
   /**
    * The role every connection in this pool runs as. Null keeps the login user, which
-   * migrations need — they create tables, and `ta_app` cannot.
+   * migrations need — they create tables, and `ta_app` cannot.
    *
    * Everything else uses the constrained role. It is set at connection start rather
    * than per query, so a query that skipped ScopedRepository is *also* subject to

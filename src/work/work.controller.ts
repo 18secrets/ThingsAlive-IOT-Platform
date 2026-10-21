@@ -17,6 +17,7 @@ export class RaiseDto {
   @IsOptional() @IsIn(PRIORITIES as unknown as string[]) priority?: WorkOrderPriority;
   @IsOptional() @IsUUID() assignedToUserId?: string;
   @IsOptional() @IsUUID() predictionId?: string;
+  @IsOptional() @IsUUID() alertId?: string;
   @IsOptional() @IsISO8601() dueAt?: string;
 }
 
@@ -77,6 +78,13 @@ export class WorkOrderController {
       ...body,
       dueAt: body.dueAt ? new Date(body.dueAt) : null,
     });
+  }
+
+  @Get('people')
+  @Requires('action.work')
+  @ApiOperation({ summary: 'Active people in this account, by name — for assigning jobs and reading their history' })
+  people(@CurrentScope() scope: RequestScope) {
+    return this.orders.people(scope);
   }
 
   @Get(':id/history')

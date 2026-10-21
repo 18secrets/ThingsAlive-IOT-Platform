@@ -1,6 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray, IsBoolean, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
+} from 'class-validator';
+import { SEVERITY_VALUES } from '../catalog-import/template-schema';
+import { Severity } from '../common/severity';
+import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -10,13 +15,38 @@ import { CatalogService } from './services/catalog.service';
 import { EntitlementService } from './services/entitlement.service';
 import { RecommendationService } from './services/recommendation.service';
 
+export class ExpectedSignalDto {
+  @IsString() @IsNotEmpty() signal: string;
+  @IsOptional() @IsString() unit: string | null = null;
+  @IsBoolean() required: boolean;
+  @IsOptional() @IsString() description?: string;
+}
+
+export class FailureModeDto {
+  @IsString() @IsNotEmpty() code: string;
+  @IsString() @IsNotEmpty() name: string;
+  @IsString() @IsNotEmpty() symptom: string;
+  @IsArray() @IsString({ each: true }) signals: string[];
+  /** Task QREC0a. Optional, and omitting it on an edit keeps the severity already
+   * held — it does not clear it. */
+  @IsOptional() @IsIn(SEVERITY_VALUES) severity?: Severity;
+}
+
 export class TemplateClassDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
-  @IsOptional() expectedSignals?: any[];
-  @IsOptional() failureModes?: any[];
-  @IsOptional() defaultThresholds?: Record<string, unknown>;
+  // Bare `any[]` here used to reach the service as a corrupted `[[]]` — with
+  // no @Type() telling class-transformer what an array element is, its
+  // implicit-conversion pass (see main.ts's ValidationPipe) reduces every
+  // object item to an empty array instead of leaving it alone. The same
+  // class of bug this file already fixed once for a keyed slug; nested
+  // arrays need their own @ValidateNested, not just the property itself.
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExpectedSignalDto)
+  expectedSignals?: ExpectedSignalDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FailureModeDto)
+  failureModes?: FailureModeDto[];
+  @IsOptional() @IsObject() defaultThresholds?: Record<string, unknown>;
 }
 
 export class TemplateScenarioDto {
@@ -68,6 +98,10 @@ export class AliasDto {
   @IsString() @IsNotEmpty() canonical: string;
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsString() note?: string;
+}
+
+export class PublishClassDto {
+  @IsOptional() @IsBoolean() acknowledgeWarnings?: boolean;
 }
 
 export class GrantEntitlementDto {
@@ -161,6 +195,12 @@ export class CatalogController {
   // service behind them holds no repository for those tables, so "master admin
   // cannot edit a client's settings" is a property of the wiring rather than a rule
   // somebody has to remember to check.
+  //
+  // Every route needs `catalog.write` except the three `*/publish` routes (task
+  // QPA2): loading content — creating, editing, importing — always writes a draft;
+  // publishing a class version, a scenario or an alert-rule template is what makes
+  // it grantable to a tenant, and every one of those is the same boundary —
+  // `catalog.publish`, master admin alone — not just the class version.
 
   @Post('equipment-classes')
   @Requires('catalog.write')
@@ -184,10 +224,12 @@ export class CatalogController {
   }
 
   @Post('equipment-classes/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish the draft. Existing client copies are unaffected' })
-  publishClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
-    return this.authoring.publishClass(scope, slug);
+  publishClass(
+    @CurrentScope() scope: RequestScope, @Param('slug') slug: string, @Body() dto: PublishClassDto = {},
+  ) {
+    return this.authoring.publishClass(scope, slug, dto.acknowledgeWarnings ?? false);
   }
 
   @Post('equipment-classes/:slug/retire')
@@ -195,6 +237,14 @@ export class CatalogController {
   @ApiOperation({ summary: 'Stop offering it. Clients who have a copy keep running it' })
   retireClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.retireClass(scope, slug);
+  }
+
+  // catalog.publish, like publish: offering a class again makes it grantable to tenants.
+  @Post('equipment-classes/:slug/unretire')
+  @Requires('catalog.publish')
+  @ApiOperation({ summary: 'Offer a retired class again: its newest retired version is published' })
+  unretireClass(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.authoring.unretireClass(scope, slug);
   }
 
   @Post('scenarios')
@@ -217,7 +267,7 @@ export class CatalogController {
   }
 
   @Post('scenarios/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   publishScenario(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishScenario(scope, slug);
   }
@@ -309,7 +359,7 @@ export class CatalogController {
   }
 
   @Post('alert-templates/:slug/publish')
-  @Requires('catalog.write')
+  @Requires('catalog.publish')
   @ApiOperation({ summary: 'Publish it. Accounts granted the class from now on get a copy' })
   publishAlertTemplate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
     return this.authoring.publishAlertTemplate(scope, slug);

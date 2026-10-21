@@ -194,6 +194,23 @@ export function carryFor(sampleTimes: number[], options: DutyCycleOptions = {}):
   return Math.min(MAX_CARRY_SECONDS, Math.max(MIN_CARRY_SECONDS, carry));
 }
 
+/** The three states in which the engine was on. */
+const ENGINE_ON: ReadonlySet<DutyState> = new Set<DutyState>(['productive', 'idle', 'running-unclassified']);
+
+function samplesIn(readings: WindowReading[], startMs: number, endMs: number): Sample[] {
+  const wanted = new Set(DUTY_SIGNALS);
+  return readings
+    .filter((r) => wanted.has(r.signal) && Number.isFinite(r.value))
+    .map((r) => ({
+      at: new Date(r.sourceTimestamp).getTime(),
+      signal: r.signal,
+      value: r.value,
+      unit: r.unit ?? null,
+    }))
+    .filter((s) => Number.isFinite(s.at) && s.at >= startMs && s.at <= endMs)
+    .sort((a, b) => a.at - b.at);
+}
+
 export function computeDutyCycle(
   readings: WindowReading[],
   windowStart: Date,
@@ -205,18 +222,7 @@ export function computeDutyCycle(
   const endMs = windowEnd.getTime();
   const totalSeconds = Math.max(0, seconds(endMs - startMs));
 
-  const wanted = new Set(DUTY_SIGNALS);
-  const samples: Sample[] = readings
-    .filter((r) => wanted.has(r.signal) && Number.isFinite(r.value))
-    .map((r) => ({
-      at: new Date(r.sourceTimestamp).getTime(),
-      signal: r.signal,
-      value: r.value,
-      unit: r.unit ?? null,
-    }))
-    .filter((s) => Number.isFinite(s.at) && s.at >= startMs && s.at <= endMs)
-    .sort((a, b) => a.at - b.at);
-
+  const samples = samplesIn(readings, startMs, endMs);
   const runtime = runtimeDeltaOf(samples);
 
   // The hour meter says how much, never when, so it takes no part in the timeline.
@@ -227,7 +233,6 @@ export function computeDutyCycle(
   };
 
   const carrySeconds = carryFor(status.map((s) => s.at), options);
-  const carryMs = carrySeconds * 1000;
 
   if (totalSeconds === 0 || status.length === 0) {
     buckets.unknown = totalSeconds;
@@ -237,6 +242,52 @@ export function computeDutyCycle(
     );
   }
 
+  walkTimeline(status, startMs, endMs, carrySeconds * 1000, loadThreshold, (state, from, to) => {
+    buckets[state] += seconds(to - from);
+  });
+
+  return assemble(
+    windowStart, windowEnd, totalSeconds, buckets, carrySeconds,
+    status.length, presentSignals(samples), runtime,
+  );
+}
+
+/**
+ * When, inside the window, the engine was on — the intervals `computeDutyCycle` sums
+ * into `engineOnSeconds`, from the same walk (task QFIX-BASELINE). Availability's
+ * uptime and the baseline's operating gate both come from here, so the two can never
+ * disagree about which minutes a machine was running.
+ */
+export function engineOnIntervals(
+  readings: WindowReading[],
+  windowStart: Date,
+  windowEnd: Date,
+  options: DutyCycleOptions = {},
+): { start: number; end: number }[] {
+  const startMs = windowStart.getTime();
+  const endMs = windowEnd.getTime();
+  const status = samplesIn(readings, startMs, endMs).filter((s) => s.signal !== SIGNALS.engineRuntime);
+  if (endMs <= startMs || status.length === 0) return [];
+
+  const carryMs = carryFor(status.map((s) => s.at), options) * 1000;
+  const out: { start: number; end: number }[] = [];
+  walkTimeline(status, startMs, endMs, carryMs, options.loadThreshold ?? DEFAULT_LOAD_THRESHOLD, (state, from, to) => {
+    if (!ENGINE_ON.has(state) || to <= from) return;
+    const last = out[out.length - 1];
+    if (last && last.end === from) last.end = to;
+    else out.push({ start: from, end: to });
+  });
+  return out;
+}
+
+/**
+ * The one timeline: every stretch of the window, in order, with the state it was in.
+ * `visit` sees each stretch once; the stretches tile the window exactly.
+ */
+function walkTimeline(
+  status: Sample[], startMs: number, endMs: number, carryMs: number, loadThreshold: number,
+  visit: (state: DutyState, from: number, to: number) => void,
+): void {
   // One breakpoint per distinct sample time, plus the far end of the window. Between
   // two breakpoints nothing the machine said can change, so the state is constant and
   // the interval can be attributed whole.
@@ -246,7 +297,7 @@ export function computeDutyCycle(
   // backfilled: a reading describes the moment it was taken and the moments shortly
   // after, and extrapolating it backwards would be a second assumption dressed as
   // symmetry with the first.
-  buckets.unknown += seconds(breakpoints[0] - startMs);
+  visit('unknown', startMs, breakpoints[0]);
 
   const latest = new Map<string, Sample>();
   let cursor = 0;
@@ -282,14 +333,9 @@ export function computeDutyCycle(
     const authorityEnds = state === 'unknown' ? at : contributingExpiry(latest, snapshot, carryMs);
     const describedUntil = Math.min(until, Math.max(at, authorityEnds));
 
-    buckets[state] += seconds(describedUntil - at);
-    if (describedUntil < until) buckets.unknown += seconds(until - describedUntil);
+    visit(state, at, describedUntil);
+    if (describedUntil < until) visit('unknown', describedUntil, until);
   }
-
-  return assemble(
-    windowStart, windowEnd, totalSeconds, buckets, carrySeconds,
-    status.length, presentSignals(samples), runtime,
-  );
 }
 
 /** The moment the last of the samples behind this classification stops speaking. */

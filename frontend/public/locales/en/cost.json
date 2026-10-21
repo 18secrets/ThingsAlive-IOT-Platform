@@ -1,0 +1,50 @@
+{
+  "page": {
+    "title": "Cost Administration",
+    "subtitle": "Operational Parameters",
+    "intro": "Client-owned operational parameters. No platform default is ever assumed.",
+    "loadFailed": "Could not load parameters.",
+    "loadEffectiveFailed": "Could not load effective values.",
+    "loading": "Loading…"
+  },
+  "currency": {
+    "label": "Account currency",
+    "notSet": "Not set",
+    "change": "Change currency",
+    "prompt": "New 3-letter currency code (e.g. INR, USD):",
+    "unchanged": "Currency unchanged.",
+    "failed": "Could not change the currency."
+  },
+  "scope": {
+    "label": "Scope",
+    "appliesTo": "Applies to",
+    "select": "Select…",
+    "pick": "Pick what this applies to.",
+    "client": "Whole account",
+    "site": "One site",
+    "equipment_class": "One equipment class",
+    "equipment": "One machine"
+  },
+  "param": {
+    "cost": "cost",
+    "formulaRequired": "formula-required",
+    "neededBy": "Needed by:",
+    "setHere": "set here",
+    "inherited": "inherited: {{scope}}",
+    "notConfigured": "not configured",
+    "set": "Set",
+    "history": "History"
+  },
+  "value": {
+    "number": "number",
+    "notANumber": "Enter a number, or leave blank to clear.",
+    "saveFailed": "Could not save this value."
+  },
+  "history": {
+    "loadFailed": "Could not load history.",
+    "title": "History: {{name}}",
+    "subtitle": "Effective-dated, newest first",
+    "empty": "No recorded values at this scope.",
+    "cleared": "cleared"
+  }
+}

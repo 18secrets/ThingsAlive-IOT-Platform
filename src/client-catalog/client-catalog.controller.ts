@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min,
+  ArrayNotEmpty, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min,
 } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
@@ -16,6 +16,16 @@ export class EditClassDto {
   @IsOptional() @IsArray() expectedSignals?: any[];
   @IsOptional() @IsArray() failureModes?: any[];
   @IsOptional() defaultThresholds?: Record<string, unknown>;
+}
+
+/** The tenant's two layout changes (task QREC0b) — classes, never interfaces, so the
+ * global pipe has something to refuse a malformed body against (QFIX-SENSORS). */
+export class WidgetVisibilityDto {
+  @IsBoolean() hidden: boolean;
+}
+
+export class LayoutOrderDto {
+  @IsArray() @ArrayNotEmpty() @IsString({ each: true }) widgetKeys: string[];
 }
 
 export class EditScenarioDto {
@@ -67,6 +77,36 @@ export class ClientCatalogController {
     @Body() dto: EditClassDto,
   ) {
     return this.clientCatalog.editClass(scope, slug, dto);
+  }
+
+  @Get('equipment-classes/:slug/layout')
+  @Requires('client-catalog.read')
+  @ApiOperation({ summary: "This account's machine page layout; the computed fallback when the class has none" })
+  layout(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.clientCatalog.layout(scope, slug);
+  }
+
+  @Patch('equipment-classes/:slug/layout/:widgetKey')
+  @Requires('client-catalog.write')
+  @ApiOperation({ summary: 'Hide or show one widget. Super admin only' })
+  setWidgetHidden(
+    @CurrentScope() scope: RequestScope,
+    @Param('slug') slug: string,
+    @Param('widgetKey') widgetKey: string,
+    @Body() dto: WidgetVisibilityDto,
+  ) {
+    return this.clientCatalog.setWidgetHidden(scope, slug, widgetKey, dto.hidden);
+  }
+
+  @Put('equipment-classes/:slug/layout/order')
+  @Requires('client-catalog.write')
+  @ApiOperation({ summary: 'Reorder the page: every widget key, in the order wanted. Super admin only' })
+  reorderLayout(
+    @CurrentScope() scope: RequestScope,
+    @Param('slug') slug: string,
+    @Body() dto: LayoutOrderDto,
+  ) {
+    return this.clientCatalog.reorderLayout(scope, slug, dto.widgetKeys);
   }
 
   @Get('scenarios')

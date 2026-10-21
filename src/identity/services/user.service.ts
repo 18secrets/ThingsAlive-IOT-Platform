@@ -1,11 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
-import { AppUser } from '../entities/app-user.entity';
+import { AppUser, UserStatus } from '../entities/app-user.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { UserEquipmentAccess, UserPlantAccess } from '../entities/user-access.entity';
 import { UserSession } from '../entities/user-session.entity';
+import { loginEmailTaken, rethrowLoginEmailClash } from '../login-email';
+import { isPhoneClash, normalisePhone, phoneTaken, phoneTakenError } from '../phone';
+import { rethrowDeleteRefusal } from '../delete-refusal';
 
 export interface InviteInput {
   email: string;
@@ -16,7 +19,33 @@ export interface InviteInput {
   equipment?: { sourceSystem: string; equipmentExternalId: string }[];
 }
 
-export interface UserView extends AppUser {
+/**
+ * What GET /identity/users and every write here are allowed to return.
+ *
+ * Deliberately not `extends AppUser`: a type that mirrors the entity invites
+ * building the view by spreading it, which is exactly how `passwordHash` (and
+ * `failedAttempts`/`lockedUntil`, internal lockout bookkeeping nobody outside
+ * `CredentialService` needs) ended up on every response from this controller.
+ * `view()` below selects each field by name instead, so a new entity column
+ * needs a deliberate decision to appear here — never an accident of `{...user}`.
+ */
+export interface UserView {
+  id: string;
+  tenantId: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  roleSlug: string;
+  status: UserStatus;
+  externalUserId: string | null;
+  externalSourceSystem: string | null;
+  invitedBy: string | null;
+  invitedAt: Date | null;
+  activatedAt: Date | null;
+  suspendedAt: Date | null;
+  suspendedReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   plants: { plantId: string }[];
   equipment: { sourceSystem: string; equipmentExternalId: string }[];
 }
@@ -42,14 +71,18 @@ export class UserService {
   async invite(scope: RequestScope, input: InviteInput, now = new Date()): Promise<UserView> {
     const email = normaliseEmail(input.email);
     if (!email.includes('@')) throw new BadRequestException('That is not an email address.');
+    const phone = normalisePhone(input.phone);
 
     // Email identifies a person across the platform, so the uniqueness check has to
     // look past this account. It is the one read here that cannot be tenant-scoped,
     // and it deliberately reports nothing about where the clash is: "already in use"
     // is all a stranger's account owes anybody.
-    const taken = await runTenantSpanning(this.ds, `invite uniqueness check by ${scope.userId}`, (m) =>
-      m.getRepository(AppUser).findOne({ where: { email }, select: { id: true } }));
+    // Staff count too: a client user and a staff member on one address leave sign-in
+    // choosing between them, and the client loses.
+    const [taken, phoneInUse] = await runTenantSpanning(this.ds, `invite uniqueness check by ${scope.userId}`, async (m) =>
+      [await loginEmailTaken(m, email), await phoneTaken(m, phone)]);
     if (taken) throw new ConflictException(`${email} already has a login.`);
+    if (phoneInUse && phone) throw phoneTakenError(phone);
 
     return withTenantSession(this.ds, scope, async (m) => {
       const role = await m.getRepository(TenantRole).findOne({
@@ -62,7 +95,7 @@ export class UserService {
         tenantId: scope.tenantId,
         email,
         fullName: input.fullName.trim(),
-        phone: input.phone ?? null,
+        phone,
         roleSlug: role.slug,
         status: 'invited',
         passwordHash: null,
@@ -73,7 +106,10 @@ export class UserService {
         activatedAt: null,
         suspendedAt: null,
         suspendedReason: null,
-      }));
+      })).catch((err) => {
+        if (isPhoneClash(err) && phone) throw phoneTakenError(phone);
+        return rethrowLoginEmailClash(err, email);
+      });
 
       await this.writeAccess(m, scope, user.id, input);
       return this.view(m, scope.tenantId, user);
@@ -110,8 +146,25 @@ export class UserService {
       });
       if (!role) throw new NotFoundException(`No role "${roleSlug}" in this account.`);
 
+      // The friendly, no-race-involved refusal. `ck_app_user_ceo_manager_retained`
+      // (SuperAdminRetention migration) is the actual backstop — this is only here
+      // so the common case gets a clean 400 instead of the trigger's raw message.
+      if (user.roleSlug === 'ceo-manager' && role.slug !== 'ceo-manager') {
+        const remaining = await repo.count({ where: { tenantId: scope.tenantId, roleSlug: 'ceo-manager' } });
+        if (remaining <= 1) {
+          throw new BadRequestException(`${user.fullName} is this account's only ceo-manager — leave at least one in place.`);
+        }
+      }
+
       user.roleSlug = role.slug;
-      return this.view(m, scope.tenantId, await repo.save(user));
+      try {
+        return this.view(m, scope.tenantId, await repo.save(user));
+      } catch (err) {
+        if (err instanceof QueryFailedError && /\(ck_app_user_ceo_manager_retained\)/.test(err.message)) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
+      }
     });
   }
 
@@ -131,6 +184,21 @@ export class UserService {
 
   async reinstate(scope: RequestScope, userId: string, now = new Date()): Promise<UserView> {
     return this.setStatus(scope, userId, 'active', null, now);
+  }
+
+  /**
+   * Remove somebody who never signed in (dashboard testing, issue 6), so an abandoned
+   * invitation stops holding their email. Refused once they have set a password, and
+   * for the account's only super admin. Both rules are `delete_unused_app_user`'s,
+   * which finds the person through this session's own tenant.
+   */
+  async remove(scope: RequestScope, userId: string): Promise<void> {
+    const [row] = await withTenantSession(this.ds, scope, (m) =>
+      m.query('SELECT delete_unused_app_user($1::uuid) AS deleted', [userId]))
+      .catch((err) => rethrowDeleteRefusal(
+        err, 'Other records still name this person, so they cannot be deleted. Suspend them instead.',
+      ));
+    if (!row.deleted) throw new NotFoundException('No such person in this account.');
   }
 
   private async setStatus(
@@ -233,7 +301,12 @@ export class UserService {
       where: { tenantId, userId: user.id }, order: { equipmentExternalId: 'ASC' },
     });
     return {
-      ...user,
+      id: user.id, tenantId: user.tenantId, email: user.email, fullName: user.fullName, phone: user.phone,
+      roleSlug: user.roleSlug, status: user.status,
+      externalUserId: user.externalUserId, externalSourceSystem: user.externalSourceSystem,
+      invitedBy: user.invitedBy, invitedAt: user.invitedAt, activatedAt: user.activatedAt,
+      suspendedAt: user.suspendedAt, suspendedReason: user.suspendedReason,
+      createdAt: user.createdAt, updatedAt: user.updatedAt,
       plants: plants.map((p) => ({ plantId: p.plantId })),
       equipment: equipment.map((e) => ({ sourceSystem: e.sourceSystem, equipmentExternalId: e.equipmentExternalId })),
     };
