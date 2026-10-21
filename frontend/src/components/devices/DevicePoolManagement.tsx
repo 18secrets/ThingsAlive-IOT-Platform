@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, DeviceInventoryEvent, InventoryAction, PooledDevice, RegisterDeviceInput, ToolMapping, apiGetDeviceHistory,
 } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { ClientAccount } from '../../types';
 import { Modal } from '../common/Modal';
 import { AssignDeviceModal } from './AssignDeviceModal';
@@ -74,6 +75,8 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
     });
   }, [pool, searchTerm, selectedState, clientName]);
 
+  const { pageItems: pagedRows, ...pager } = usePagination(filtered);
+
   return (
     <div id="device-pool-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -131,7 +134,7 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
               {filtered.length > 0 ? (
-                filtered.map((d) => (
+                pagedRows.map((d) => (
                   <tr key={d.imei} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4 font-mono text-[11px]">{d.imei}</td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{d.model || '—'}</td>
@@ -225,9 +228,7 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
           </table>
         </div>
 
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-600 dark:text-slate-400">
-          {t('pool.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{filtered.length}</span>
-        </div>
+        <TablePagination {...pager} />
       </div>
 
       <AssignDeviceModal

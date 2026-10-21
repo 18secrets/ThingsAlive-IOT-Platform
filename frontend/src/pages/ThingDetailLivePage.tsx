@@ -24,8 +24,7 @@ const SEVERITY_TONE: Record<string, 'rose' | 'amber' | 'sky' | 'emerald' | 'slat
  * One machine at a glance, from live data (the live dashboard's drill-down): status,
  * this week's OEE and availability, predictions, open alerts and jobs, its compliance
  * status and the cost parameters that apply to it. Each block comes from the page that
- * owns it and links there; the mock Thing Detail stays at /dashboard/:thingId for the
- * classic dashboard until one of the two dashboards is removed.
+ * owns it and links there.
  */
 export const ThingDetailLivePage: React.FC = () => {
   const { sourceSystem = '', externalId = '' } = useParams<{ sourceSystem: string; externalId: string }>();
@@ -52,7 +51,7 @@ export const ThingDetailLivePage: React.FC = () => {
   );
 
   const name = profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
-  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: () => navigate('/dashboard-live') });
+  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: () => navigate('/dashboard') });
 
   if (profile.state === 'ok' && !profile.data) {
     return <p className="text-sm text-slate-500">{t('thingLive.notInRegister')}</p>;

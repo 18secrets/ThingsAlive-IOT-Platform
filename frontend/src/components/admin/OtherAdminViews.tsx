@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, GeoJsonPolygon, IndustryType, IndustryTypeInput, Plant, PlantInput, UnmatchedIndustry,
 } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
 import { AddPlantModal } from './AddPlantModal';
 import { EditPlantBoundaryModal } from './EditPlantBoundaryModal';
@@ -91,6 +92,8 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   };
 
   const unmatchedMappings = unmatched.reduce((sum, u) => sum + u.mappings, 0);
+
+  const { pageItems: pagedItems, ...pager } = usePagination(filteredItems);
 
   return (
     <div id="industry-type-management-view" className="space-y-3">
@@ -174,7 +177,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
 
       {/* Industry Type Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredItems.map((item) => (
+        {pagedItems.map((item) => (
           <div
             key={item.id}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
@@ -233,6 +236,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
           </div>
         )}
       </div>
+      {filteredItems.length > 0 && <TablePagination bare {...pager} />}
 
       <AddIndustryTypeModal
         key={modalKey}
@@ -279,6 +283,8 @@ export const PlantView: React.FC<PlantViewProps> = ({
     );
   }, [plants, searchTerm]);
 
+  const { pageItems: pagedItems, ...pager } = usePagination(filteredItems);
+
   return (
     <div id="plant-management-view" className="space-y-3">
 
@@ -317,7 +323,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
 
       {/* Plant Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredItems.map((plant) => (
+        {pagedItems.map((plant) => (
           <div
             key={plant.id}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
@@ -404,6 +410,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
           </div>
         )}
       </div>
+      {filteredItems.length > 0 && <TablePagination bare {...pager} />}
 
       {/* No delete here — the API only ever retires a site, since anything
           that once stood there (work orders, alerts) still needs it to exist. */}

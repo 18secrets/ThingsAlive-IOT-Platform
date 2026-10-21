@@ -23,7 +23,7 @@ export interface SelectableEquipment {
   label: string;
 }
 
-/** Same "Filters" pill + popover design as fleet/FleetFilters.tsx (search, site,
+/** The "Filters" pill + popover design the classic mock dashboard used (search, site,
  *  equipment class, connection status on the left; a single-equipment picker on
  *  the right) over real fields: plant/equipment-class from EquipmentProfile,
  *  connection from the device-health module's link state (dark = offline,

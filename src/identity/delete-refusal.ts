@@ -18,7 +18,9 @@ export function rethrowDeleteRefusal(err: unknown, referenced = 'Other records s
   if (err instanceof QueryFailedError) {
     const { code, constraint } = err as QueryFailedError & { code?: string; constraint?: string };
     if (code === '23514' && constraint && GUARDS.has(constraint)) throw new BadRequestException(err.message);
-    if (code === '23503') throw new ConflictException(referenced);
+    // A row still pointed at by an ON DELETE RESTRICT key is 23503 up to Postgres 16 but
+    // 23001 (restrict_violation) on 18, where it otherwise reached the person as a 500.
+    if (code === '23503' || code === '23001') throw new ConflictException(referenced);
   }
   throw err;
 }

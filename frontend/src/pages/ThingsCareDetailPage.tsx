@@ -14,6 +14,7 @@ import {
   apiRefreshPredictionBaselines, apiScorePredictionsNow,
 } from '../lib/api';
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
+import { RecommendationPanel } from '../components/care/RecommendationPanel';
 
 const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   none: 'emerald', low: 'emerald', medium: 'amber', high: 'rose', critical: 'rose',
@@ -230,6 +231,7 @@ export const ThingsCareDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {sourceSystem && externalId && <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} />}
       {sourceSystem && externalId && <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />}
       {sourceSystem && externalId && (
         <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />

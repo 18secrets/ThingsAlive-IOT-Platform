@@ -119,7 +119,16 @@
     "parameters": "ପାରାମିଟର",
     "notSet": "ସେଟ୍ ହୋଇନାହିଁ",
     "noParameters": "ଏହି ଖାତାର କାଟାଲଗରେ କୌଣସି ପାରାମିଟର ନାହିଁ।",
-    "forecast": "ପୂର୍ବାନୁମାନ"
+    "forecast": "ପୂର୍ବାନୁମାନ",
+    "forecastIn": "{{hours}} ଘଣ୍ଟାରେ {{signal}}",
+    "anomaly": {
+      "normal": "ସାଧାରଣ",
+      "anomalous": "ଅସାଧାରଣ",
+      "baseline_not_established": "ବେସଲାଇନ୍ ଶିଖୁଛି"
+    },
+    "anomalyDetail": "ସର୍ବଶେଷ {{actual}} {{unit}}, ଅନୁମାନ {{predicted}} (ଆଶା {{lo}} – {{hi}})",
+    "noShiftSchedule": "ଏପର୍ଯ୍ୟନ୍ତ ବ୍ୟାଣ୍ଡ ନାହିଁ: ଏହି ମେସିନର କୌଣସି ସିଫ୍ଟ ସୂଚୀ ନାହିଁ।",
+    "forecastAt": "ପୂର୍ବାନୁମାନ {{at}} · {{model}}"
   },
   "kpiExplorer": {
     "title": "KPI ଏକ୍ସପ୍ଲୋରର୍",

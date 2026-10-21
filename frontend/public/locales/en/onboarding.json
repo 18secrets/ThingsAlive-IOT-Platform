@@ -103,7 +103,6 @@
     "heading": "Let's set up your assets.",
     "intro": "Tell us what you run. We'll take care of the rest - you can change anything after.",
     "assistantName": "Things Alive Assistant",
-    "underDevelopment": "This AI setup assistant is still under development — I can't act on that yet, but your message is recorded here so we can review how the conversation looks.",
     "placeholder": "Add more details or ask a question...",
     "send": "Send",
     "manualSetup": "I will set it up myself",
@@ -130,21 +129,37 @@
         "prompt": "Give me a summary report for this month."
       }
     },
-    "step": {
-      "device": "Selecting Device",
-      "equipment": "Selecting Equipment",
-      "equipmentSub": "Tractors (2) • Gensets (4)",
-      "mapping": "Mapping Device & Equipment",
-      "onboarding": "Onboarding",
-      "validation": "Data Validation (Communication)",
-      "alerts": "Configure Alerts",
-      "access": "Assign User Access",
-      "done": "Done"
+    "error": {
+      "notConfigured": "The setup assistant isn't set up on this server yet. Ask your administrator to configure it, or set things up yourself below.",
+      "forbidden": "Your role cannot use the setup assistant. It needs permission to add equipment.",
+      "allowanceUsed": "This account has used today's assistant allowance. It resets at 05:30 IST (00:00 UTC).",
+      "generic": "The assistant couldn't answer just now. Try again in a moment."
     },
-    "state": {
-      "done": "done",
-      "active": "active",
-      "pending": "pending"
+    "proposal": {
+      "pendingIntro": "These changes I proposed earlier are still waiting for you:",
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "working": "Working…",
+      "kind": {
+        "create_site": "New site",
+        "create_equipment": "New machine",
+        "fit_logger": "Fit logger"
+      },
+      "status": {
+        "proposed": "Waiting for you",
+        "applied": "Done",
+        "failed": "Failed",
+        "rejected": "Rejected",
+        "expired": "Expired"
+      }
+    },
+    "status": {
+      "subtitleAll": "All machines · {{done}} of {{total}} fully onboarded",
+      "subtitleMachine": "Machine {{name}}",
+      "machinesDone": "{{done}} of {{total}} machines",
+      "noMachines": "No machines yet",
+      "allMachines": "Show all machines",
+      "done": "Fully onboarded"
     }
   },
   "details": {

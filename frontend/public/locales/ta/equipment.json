@@ -119,7 +119,16 @@
     "parameters": "அளவுருக்கள்",
     "notSet": "அமைக்கப்படவில்லை",
     "noParameters": "இந்தக் கணக்கின் பட்டியலில் அளவுருக்கள் இல்லை.",
-    "forecast": "முன்கணிப்பு"
+    "forecast": "முன்கணிப்பு",
+    "forecastIn": "{{hours}} மணி நேரத்தில் {{signal}}",
+    "anomaly": {
+      "normal": "இயல்பு",
+      "anomalous": "அசாதாரணம்",
+      "baseline_not_established": "அடிப்படை கற்கிறது"
+    },
+    "anomalyDetail": "சமீபத்தியது {{actual}} {{unit}}, கணிப்பு {{predicted}} (எதிர்பார்ப்பு {{lo}} – {{hi}})",
+    "noShiftSchedule": "இன்னும் வரம்பு இல்லை: இந்த இயந்திரத்துக்கு ஷிப்ட் அட்டவணை இல்லை.",
+    "forecastAt": "முன்கணிப்பு {{at}} · {{model}}"
   },
   "kpiExplorer": {
     "title": "KPI ஆய்வி",

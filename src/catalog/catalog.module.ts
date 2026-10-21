@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { SensorRoleCapability } from '../device-catalog/entities/sensor-role-capability.entity';
 import { CatalogController } from './catalog.controller';
-import { NamedFormulaController } from './named-formula.controller';
+import { NamedFormulaController, PublishedNamedFormulaController } from './named-formula.controller';
 import { ClassModelController } from './class-model.controller';
 import { ClassVisualController } from './class-visual.controller';
 import { ClassModelService } from './services/class-model.service';
@@ -39,7 +39,7 @@ import { RecommendationService } from './services/recommendation.service';
     ]),
     ClientCatalogModule,
   ],
-  controllers: [CatalogController, NamedFormulaController, ClassVisualController, ClassModelController],
+  controllers: [CatalogController, NamedFormulaController, PublishedNamedFormulaController, ClassVisualController, ClassModelController],
   providers: [
     CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService,
     ClassVisualService,

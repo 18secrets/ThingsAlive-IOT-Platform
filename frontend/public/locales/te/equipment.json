@@ -119,7 +119,16 @@
     "parameters": "పారామీటర్లు",
     "notSet": "సెట్ చేయలేదు",
     "noParameters": "ఈ ఖాతా కేటలాగ్‌లో పారామీటర్లు లేవు.",
-    "forecast": "అంచనా"
+    "forecast": "అంచనా",
+    "forecastIn": "{{hours}} గంటల్లో {{signal}}",
+    "anomaly": {
+      "normal": "సాధారణం",
+      "anomalous": "అసాధారణం",
+      "baseline_not_established": "బేస్‌లైన్ నేర్చుకుంటోంది"
+    },
+    "anomalyDetail": "తాజా {{actual}} {{unit}}, అంచనా {{predicted}} (ఆశించినది {{lo}} – {{hi}})",
+    "noShiftSchedule": "ఇంకా బ్యాండ్ లేదు: ఈ మెషిన్‌కు షిఫ్ట్ షెడ్యూల్ లేదు.",
+    "forecastAt": "అంచనా {{at}} · {{model}}"
   },
   "kpiExplorer": {
     "title": "KPI ఎక్స్‌ప్లోరర్",

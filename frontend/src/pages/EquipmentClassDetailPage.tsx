@@ -10,6 +10,7 @@ import { ClassScenariosPanel } from '../components/admin/class-detail/ClassScena
 import { ClassAlertTemplatesPanel } from '../components/admin/class-detail/ClassAlertTemplatesPanel';
 import { ClassCausalChainsPanel } from '../components/admin/class-detail/ClassCausalChainsPanel';
 import { ClassVisualPanel } from '../components/admin/class-detail/ClassVisualPanel';
+import { ClassModelPanel } from '../components/admin/class-detail/ClassModelPanel';
 
 type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual';
 
@@ -157,7 +158,10 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
         />
       )}
       {tab === 'visual' && (
-        <ClassVisualPanel key={`${cls.slug}-${cls.version}`} slug={cls.slug} version={cls.version} isDraft={cls.status === 'draft'} />
+        <div className="space-y-4">
+          <ClassVisualPanel key={`${cls.slug}-${cls.version}`} slug={cls.slug} version={cls.version} isDraft={cls.status === 'draft'} />
+          <ClassModelPanel key={`model-${cls.slug}-${cls.version}`} slug={cls.slug} version={cls.version} isDraft={cls.status === 'draft'} />
+        </div>
       )}
     </div>
   );

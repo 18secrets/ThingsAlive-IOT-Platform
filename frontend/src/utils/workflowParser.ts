@@ -1,34 +1,24 @@
-// Turns a plain-English alert description into the small node-graph the
-// Work Flow editor renders (trigger -> read/condition per sensor -> optional
-// guard -> logic gate -> actions). It's a light heuristic, not an NLP
-// pipeline — good enough to make the AI Assistant demo feel responsive to
-// what someone actually typed, not just replay a canned example.
+// Turns a plain-English alert description into a draft workflow (QWF1's WorkflowSpec):
+// a ReadSignal → Threshold pair per condition found, joined by All of / Any of when
+// there is more than one, ending in a Notify. It's a light heuristic, not an NLP
+// pipeline — the editor shows exactly what it made, and the server validates it.
+import type { WorkflowScope, WorkflowSpec, WorkflowSpecNode, WorkflowVersionStatus } from '../lib/api';
 
-export type WorkflowOperator = '>' | '<' | '>=' | '<=' | '=';
-export type WorkflowActionType = 'Webhook' | 'Email' | 'SMS';
-
-export interface WorkflowCondition {
-  sensor: string; // snake_case, e.g. "converter_oil_temperature"
-  operator: WorkflowOperator;
-  value: string;
-}
-
-export interface WorkflowGuard {
-  field: string;
-  value: string;
-}
-
-export interface WorkflowSpec {
+/** What the editor opens: a spec, plus where it is stored once it has been saved. */
+export interface WorkflowDraft {
   name: string;
-  scheduleLabel: string;
-  conditions: WorkflowCondition[];
-  guard?: WorkflowGuard;
-  logic: 'AND' | 'OR';
-  actions: WorkflowActionType[];
-  sourcePrompt?: string;
-  /** FleetThing.id (see data/fleetMockData.ts) this alert applies to. */
-  equipmentId?: string;
+  /** Kept with the workflow on its first save; the prompt it was generated from, say. */
+  description?: string;
+  spec: WorkflowSpec;
+  workflowId?: string;
+  version?: number;
+  status?: WorkflowVersionStatus;
+  layout?: Record<string, { x: number; y: number }>;
+  /** Shown above the canvas when it opens: what an assembly left for the person to finish. */
+  notes?: string[];
 }
+
+type Operator = '>' | '<' | 'delta';
 
 // Filler and imperative words that are never a sensor name themselves —
 // stripped out of whatever the regex window captures, rather than trying
@@ -46,44 +36,38 @@ const STOPWORDS = new Set([
 ]);
 
 function cleanSubject(raw: string): string {
-  const words = raw
+  return raw
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
     .split(/\s+/)
-    .filter((w) => w && !STOPWORDS.has(w));
-  return words.join('_');
+    .filter((w) => w && !STOPWORDS.has(w))
+    .join('_');
 }
 
 interface RawMatch {
   sensor: string;
-  operator: WorkflowOperator;
-  value: string;
+  operator: Operator;
+  value: number;
   pos: number;
 }
 
 // Subject is a generous, bounded window (up to 6 words) anchored on a word
-// boundary — generous enough that a real multi-word sensor name always
-// fits inside it alongside whatever preamble precedes it, since cleanup
-// happens afterward in cleanSubject rather than here.
+// boundary; cleanup happens afterward in cleanSubject rather than here.
 const SUBJECT = '\\b((?:[a-z]+\\s+){0,5}?[a-z]+)';
 
 // Matched in priority order; each hit blanks out its span in a scratch copy
-// of the text so later patterns can't re-match the same words.
-const CONDITION_PATTERNS: { regex: RegExp; operator: WorkflowOperator }[] = [
+// of the text so later patterns can't re-match the same words. "Rises by" is
+// recognised only so it can be reported: a threshold on a change has no node.
+const CONDITION_PATTERNS: { regex: RegExp; operator: Operator }[] = [
   { regex: new RegExp(`${SUBJECT}\\s+(?:is\\s+|stays\\s+|remains\\s+|spikes\\s+|rises\\s+|climbs\\s+|goes\\s+up\\s+)?(?:above|exceeds|more than|greater than)\\s+(-?\\d+(?:\\.\\d+)?)`, 'gi'), operator: '>' },
   { regex: new RegExp(`${SUBJECT}\\s+(?:is\\s+|stays\\s+|remains\\s+|drops\\s+|falls\\s+)?(?:below|less than|under)\\s+(-?\\d+(?:\\.\\d+)?)`, 'gi'), operator: '<' },
-  { regex: new RegExp(`${SUBJECT}\\s+(?:increases?|spikes?|goes up)\\s+by\\s+(-?\\d+(?:\\.\\d+)?)`, 'gi'), operator: '=' },
-  { regex: new RegExp(`${SUBJECT}\\s+(?:drops?|decreases?|falls?)\\s+by\\s+(-?\\d+(?:\\.\\d+)?)`, 'gi'), operator: '=' },
+  { regex: new RegExp(`${SUBJECT}\\s+(?:increases?|spikes?|goes up|drops?|decreases?|falls?)\\s+by\\s+(-?\\d+(?:\\.\\d+)?)`, 'gi'), operator: 'delta' },
 ];
-
-const GUARD_PATTERN = /ignore\s+(?:it\s+|this\s+)?when\s+(?:the\s+)?([a-z][a-z\s]*?)\s+(?:is|=)\s*(on|off|true|false|active|inactive)\b/i;
-const SCHEDULE_PATTERN = /every\s+(\d+)\s*(minutes|minute|hours|hour|days|day)/i;
 
 function extractConditions(text: string): RawMatch[] {
   let working = text;
   const found: RawMatch[] = [];
-
   for (const { regex, operator } of CONDITION_PATTERNS) {
     const re = new RegExp(regex.source, regex.flags);
     let m: RegExpExecArray | null;
@@ -92,79 +76,108 @@ function extractConditions(text: string): RawMatch[] {
       // A window that was pure filler (e.g. "for" in "...for more than 3
       // minutes", a duration clause, not a sensor threshold) cleans down
       // to nothing — that's a signal to drop the match, not a sensor.
-      if (sensor) {
-        found.push({ sensor, operator, value: m[2], pos: m.index });
-      }
+      if (sensor) found.push({ sensor, operator, value: Number(m[2]), pos: m.index });
       working = working.slice(0, m.index) + ' '.repeat(m[0].length) + working.slice(m.index + m[0].length);
     }
   }
-
   found.sort((a, b) => a.pos - b.pos);
+  return found;
+}
+
+/**
+ * The declared signal a phrase most likely means: exact, then one name containing the
+ * other, then the most shared words. Unmatched phrases are kept as typed, and the server
+ * names them as undeclared rather than this guessing further.
+ */
+export function matchSignal(phrase: string, declared: string[]): { signal: string; matched: boolean } {
+  if (!declared.length) return { signal: phrase, matched: false };
+  const exact = declared.find((s) => s === phrase);
+  if (exact) return { signal: exact, matched: true };
+  const containing = declared.find((s) => s.includes(phrase) || phrase.includes(s));
+  if (containing) return { signal: containing, matched: true };
+  const words = phrase.split('_');
+  let best: { signal: string; score: number } | null = null;
+  for (const s of declared) {
+    const score = s.split('_').filter((w) => words.includes(w)).length;
+    if (score > 0 && (!best || score > best.score)) best = { signal: s, score };
+  }
+  return best ? { signal: best.signal, matched: true } : { signal: phrase, matched: false };
+}
+
+function extractSeverity(text: string): string {
+  const m = text.toLowerCase().match(/\b(critical|high|medium|low)\b/);
+  return m ? m[1] : 'high';
+}
+
+export interface ParsedPrompt {
+  draft: WorkflowDraft;
+  /** Threshold conditions turned into nodes. */
+  conditions: number;
+  /** Phrases that named no declared signal; kept as typed. */
+  unmatched: string[];
+  /** "Rises by N" style conditions, which have no node and were left out. */
+  unsupported: string[];
+}
+
+export function parsePromptToWorkflow(prompt: string, scope: WorkflowScope, declared: string[], name?: string): ParsedPrompt {
+  const text = prompt.trim();
+  const raw = extractConditions(text);
+  const unsupported = raw.filter((c) => c.operator === 'delta').map((c) => c.sensor.replace(/_/g, ' '));
+  const unmatched: string[] = [];
 
   const seen = new Set<string>();
-  return found.filter((f) => {
-    if (seen.has(f.sensor)) return false;
-    seen.add(f.sensor);
-    return true;
+  const usable = raw.filter((c) => c.operator !== 'delta').map((c) => {
+    const { signal, matched } = matchSignal(c.sensor, declared);
+    if (!matched) unmatched.push(c.sensor.replace(/_/g, ' '));
+    return { ...c, signal };
+  }).filter((c) => !seen.has(`${c.signal}${c.operator}`) && seen.add(`${c.signal}${c.operator}`));
+
+  const nodes: WorkflowSpecNode[] = [];
+  const edges: { from: string; to: string }[] = [];
+  const conditionIds = usable.map((c, i) => {
+    const n = i + 1;
+    nodes.push(
+      { id: `signal-${n}`, type: 'ReadSignal', params: { signal: c.signal } },
+      { id: `threshold-${n}`, type: 'Threshold', params: c.operator === '>' ? { max: c.value } : { min: c.value } },
+    );
+    edges.push({ from: `signal-${n}`, to: `threshold-${n}` });
+    return `threshold-${n}`;
   });
-}
 
-function extractGuard(text: string): WorkflowGuard | undefined {
-  const m = text.match(GUARD_PATTERN);
-  if (!m) return undefined;
-  return { field: cleanSubject(m[1]), value: m[2].toUpperCase() };
-}
-
-function extractActions(text: string, hasConditions: boolean): WorkflowActionType[] {
-  const actions: WorkflowActionType[] = [];
-  if (/webhook/i.test(text)) actions.push('Webhook');
-  if (/\bemail\b/i.test(text)) actions.push('Email');
-  if (/\bsms\b|text message/i.test(text)) actions.push('SMS');
-  if (actions.length === 0 && hasConditions) actions.push('Webhook', 'Email');
-  return actions;
-}
-
-function extractLogic(text: string, conditionCount: number): 'AND' | 'OR' {
-  if (conditionCount <= 1) return 'AND';
-  const lower = text.toLowerCase();
-  const orIdx = lower.indexOf(' or ');
-  const andIdx = lower.indexOf(' and ');
-  if (orIdx !== -1 && (andIdx === -1 || orIdx < andIdx)) return 'OR';
-  return 'AND';
-}
-
-export function parsePromptToWorkflow(prompt: string, name?: string): WorkflowSpec {
-  const text = prompt.trim();
-  const conditions = extractConditions(text);
-  const schedMatch = text.match(SCHEDULE_PATTERN);
+  const lower = ` ${text.toLowerCase()} `;
+  const orFirst = lower.indexOf(' or ') !== -1 && (lower.indexOf(' and ') === -1 || lower.indexOf(' or ') < lower.indexOf(' and '));
+  const title = name || text.slice(0, 80) || 'New alert';
+  let last = conditionIds[0];
+  if (conditionIds.length > 1) {
+    nodes.push({ id: 'combine', type: orFirst ? 'AnyOf' : 'AllOf' });
+    conditionIds.forEach((id) => edges.push({ from: id, to: 'combine' }));
+    last = 'combine';
+  }
+  if (last) {
+    nodes.push({ id: 'notify', type: 'Notify', params: { name: title.slice(0, 120), severity: extractSeverity(text), ...(text ? { description: text.slice(0, 500) } : {}) } });
+    edges.push({ from: last, to: 'notify' });
+  }
 
   return {
-    name: name || `Workflow_draft-${Date.now()}`,
-    scheduleLabel: schedMatch ? `Every ${schedMatch[1]} ${schedMatch[2]}` : 'Every 5 minutes',
-    conditions: conditions.map(({ sensor, operator, value }) => ({ sensor, operator, value })),
-    guard: extractGuard(text),
-    logic: extractLogic(text, conditions.length),
-    actions: extractActions(text, conditions.length > 0),
-    sourcePrompt: text,
+    draft: { name: title, ...(text ? { description: text } : {}), spec: { kind: 'alert', scope, nodes, edges } },
+    conditions: usable.length, unmatched, unsupported,
   };
-}
-
-// A prompt is "ready to build" once at least one concrete sensor/threshold
-// pair was found — that's the signal the AI Assistant uses to decide the
-// conversation is about a specific alert (navigate to Work Flow) rather
-// than still being clarified (stay put, show the build checklist).
-export function hasConcreteConditions(spec: WorkflowSpec): boolean {
-  return spec.conditions.length > 0;
 }
 
 // Loose keyword check used only to decide whether the "Identifying Sensors"
 // checklist step can be marked active while still in the clarifying phase.
 const SENSOR_KEYWORDS = [
   'temperature', 'pressure', 'vibration', 'fuel', 'battery', 'voltage', 'engine',
-  'speed', 'energy', 'level', 'humidity', 'oil', 'flow', 'current', 'torque',
+  'speed', 'energy', 'level', 'humidity', 'oil', 'flow', 'current', 'torque', 'frequency',
 ];
 
 export function mentionsSensorKeyword(text: string): boolean {
   const lower = text.toLowerCase();
   return SENSOR_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+/** A slug the server accepts (`^[a-z0-9][a-z0-9-]{1,63}$`), unique enough to not collide. */
+export function slugFor(name: string): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'workflow';
+  return `${base}-${Date.now().toString(36).slice(-6)}`;
 }

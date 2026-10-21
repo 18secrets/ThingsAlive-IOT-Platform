@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Sparkles,
   Mic,
@@ -8,19 +8,17 @@ import {
   ListChecks,
   Check,
   Thermometer,
-  Activity,
-  Droplet,
-  Zap,
-  Settings,
-  Wind,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { WorkflowSpec, parsePromptToWorkflow, hasConcreteConditions, mentionsSensorKeyword } from '../../utils/workflowParser';
-import { FLEET } from '../../data/fleetMockData';
+import { WorkflowDraft, parsePromptToWorkflow, mentionsSensorKeyword } from '../../utils/workflowParser';
+import { ApiError, Workflow, WorkflowScope, apiAssembleWorkflow, apiListWorkflows, apiProposeWorkflow, needsInput } from '../../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { completeAssembled, starterSpec } from './workflow/workflowGraph';
+import { machineKey, useWorkflowScope } from './workflow/useWorkflowScope';
 
 interface AlertAIAssistantProps {
-  onGenerate: (spec: WorkflowSpec) => void;
+  onGenerate: (draft: WorkflowDraft) => void;
 }
 
 type StatusState = 'done' | 'active' | 'pending';
@@ -49,93 +47,6 @@ const QUICK_EXAMPLES: { text: string; tags: string[] }[] = [
   {
     text: 'Warn me when battery voltage drops below 11.5V for more than 3 minutes',
     tags: ['battery', 'voltage', 'warning'],
-  },
-];
-
-interface DraftItem extends CardItem {
-  workflowName: string;
-}
-
-const DRAFTS: DraftItem[] = [
-  {
-    id: 'd1',
-    workflowName: 'Workflow_draft-1788949878654-vu4uoa7kc',
-    title: 'Workflow_draft-1788949878654-vu4uoa7kc',
-    description: 'Generated from: Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.',
-    prompt: 'Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.',
-    icon: Thermometer,
-    iconBg: 'bg-rose-50 dark:bg-rose-950/40',
-    iconColor: 'text-rose-600 dark:text-rose-400',
-  },
-  {
-    id: 'd2',
-    workflowName: 'Workflow_draft-1788869196985-cfh22e6gl',
-    title: 'Workflow_draft-1788869196985-cfh22e6gl',
-    description: 'Generated from: Raise a critical alarm if the average temperature is above 75C for 10 minutes and Converter Oil Temperature increases more than 50 deg in the last 1 hour.',
-    prompt: 'Raise a critical alarm if the average temperature is above 75C for 10 minutes and converter oil temperature increases by 50 in the last 1 hour.',
-    icon: Activity,
-    iconBg: 'bg-violet-50 dark:bg-violet-950/40',
-    iconColor: 'text-violet-600 dark:text-violet-400',
-  },
-  {
-    id: 'd3',
-    workflowName: 'Workflow_draft-1788863511069-dprppl1lp',
-    title: 'Workflow_draft-1788863511069-dprppl1lp',
-    description: 'Generated from: Alert team if pressure drop exceeds 15% across all valves and it should be generated every 24 hours once',
-    prompt: 'Alert team if pressure drop exceeds 15% across all valves in the system every 24 hours.',
-    icon: Droplet,
-    iconBg: 'bg-blue-50 dark:bg-blue-950/40',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-  },
-  {
-    id: 'd4',
-    workflowName: 'Workflow_draft-1788152697933-rc27t5ip6',
-    title: 'Workflow_draft-1788152697933-rc27t5ip6',
-    description: 'Generated from: Notify me if pump energy consumption spikes above 55kWh in a 1 hour window',
-    prompt: 'Notify me if pump energy consumption spikes above 55 in a 1 hour window.',
-    icon: Wind,
-    iconBg: 'bg-slate-100 dark:bg-slate-800',
-    iconColor: 'text-slate-500 dark:text-slate-400',
-  },
-  {
-    id: 'd5',
-    workflowName: 'Workflow_draft-1787807926676-htp0goxdd',
-    title: 'Workflow_draft-1787807926676-htp0goxdd',
-    description: 'Generated from: Raise a critical alarm if fuel level drops by more than 20L in under 2 minutes',
-    prompt: 'Raise a critical alarm if fuel level drops by 20 in under 2 minutes.',
-    icon: Zap,
-    iconBg: 'bg-amber-50 dark:bg-amber-950/40',
-    iconColor: 'text-amber-600 dark:text-amber-400',
-  },
-  {
-    id: 'd6',
-    workflowName: 'Workflow_draft-1787806589702-n7r8mthig',
-    title: 'Workflow_draft-1787806589702-n7r8mthig',
-    description: 'Generated from: Raise a high alarm if the hydraulic oil temperature stays above 92C for 15 minutes',
-    prompt: 'Raise a high alarm if hydraulic oil temperature is above 92 for 15 minutes.',
-    icon: Thermometer,
-    iconBg: 'bg-rose-50 dark:bg-rose-950/40',
-    iconColor: 'text-rose-600 dark:text-rose-400',
-  },
-  {
-    id: 'd7',
-    workflowName: 'Workflow_draft-1787748083155-z82ow3k3c',
-    title: 'Workflow_draft-1787748083155-z82ow3k3c',
-    description: 'Generated from: Warn me when battery voltage drops below 11.5V for more than 3 minutes',
-    prompt: 'Warn me when battery voltage drops below 11.5 for more than 3 minutes.',
-    icon: Settings,
-    iconBg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
-  },
-  {
-    id: 'd8',
-    workflowName: 'Workflow_draft-1787740080587-2n492wra6',
-    title: 'Workflow_draft-1787740080587-2n492wra6',
-    description: 'Generated from: Raise a critical alarm if DPF pressure exceeds 2.8 kPa for 5 minutes',
-    prompt: 'Raise a critical alarm if DPF pressure is above 2.8 for 5 minutes.',
-    icon: Droplet,
-    iconBg: 'bg-blue-50 dark:bg-blue-950/40',
-    iconColor: 'text-blue-600 dark:text-blue-400',
   },
 ];
 
@@ -184,21 +95,50 @@ const ItemCard: React.FC<{ item: CardItem; tag: string; tagClass: string; button
 
 export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }) => {
   const { t } = useTranslation('alerts');
+  const scopeData = useWorkflowScope();
   const [prompt, setPrompt] = useState('');
   const [equipmentId, setEquipmentId] = useState('');
   const [phase, setPhase] = useState<'suggest' | 'clarifying'>('suggest');
   const [searchTerm, setSearchTerm] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const canAct = !!equipmentId;
+  const [modeCode, setModeCode] = useState<string | null>(null);
+  const [combine, setCombine] = useState<'allOf' | 'anyOf'>('allOf');
+  const [assembling, setAssembling] = useState(false);
+  const [assembleError, setAssembleError] = useState<string | null>(null);
+  const [proposing, setProposing] = useState(false);
+  const [proposeMissing, setProposeMissing] = useState<string[]>([]);
+  const navigate = useNavigate();
 
-  const runPrompt = (text: string, name?: string) => {
+  // The chosen machine's failure modes, from its class in this account's catalog.
+  const failureModes = useMemo(() => {
+    const [sourceSystem, externalId] = equipmentId.split('|');
+    const machine = scopeData.machines.find((m) => m.sourceSystem === sourceSystem && m.externalId === externalId);
+    return scopeData.classes.find((c) => c.slug === machine?.equipmentClassSlug)?.failureModes ?? [];
+  }, [equipmentId, scopeData.machines, scopeData.classes]);
+  const chosenMode = failureModes.find((f) => f.code === modeCode) ?? null;
+
+  useEffect(() => {
+    apiListWorkflows().then(setWorkflows).catch(() => setWorkflows([]));
+  }, []);
+
+  const scope = (): WorkflowScope => {
+    const [sourceSystem, externalId] = equipmentId.split('|');
+    return { appliesTo: 'equipment', sourceSystem, externalId };
+  };
+
+  const runPrompt = (text: string) => {
     if (!canAct) return;
-    const spec = { ...parsePromptToWorkflow(text, name), equipmentId };
-    if (hasConcreteConditions(spec)) {
-      onGenerate(spec);
-    } else {
-      setPrompt(text);
-      setPhase('clarifying');
+    const parsed = parsePromptToWorkflow(text, scope(), scopeData.signalsFor(scope()));
+    if (parsed.conditions > 0) {
+      onGenerate(parsed.draft);
+      return;
     }
+    setPrompt(text);
+    setPhase('clarifying');
+    // Say why nothing was built, rather than only showing the checklist again.
+    setNotice(parsed.unsupported.length ? t('assistant.unsupportedChange', { what: parsed.unsupported.join(', ') }) : null);
   };
 
   const handleGenerate = () => {
@@ -207,9 +147,60 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     runPrompt(text);
   };
 
+  /**
+   * The library's own answer for a failure mode (POST /workflows/assemble): a condition
+   * per signal a copied template watches, with that template's threshold. A signal no
+   * template watches comes back unresolved and goes into the editor with its threshold
+   * blank, named in a note, for the person to set.
+   */
+  const handleAssemble = async () => {
+    if (!canAct || !chosenMode) return;
+    setAssembling(true);
+    setAssembleError(null);
+    try {
+      const result = await apiAssembleWorkflow({ target: scope(), failureModeCode: chosenMode.code, combine });
+      const unresolvedSignals = result.unresolved.map((u) => u.signal).filter((x): x is string => !!x);
+      const spec = completeAssembled(result.spec, unresolvedSignals, { name: chosenMode.name, combine });
+      const notes = [
+        ...(unresolvedSignals.length ? [t('assistant.assembleNoTemplate', { signals: unresolvedSignals.join(', ') })] : []),
+        ...result.unresolved.filter((u) => !u.signal).map((u) => u.detail),
+      ];
+      onGenerate({ name: chosenMode.name, description: chosenMode.symptom, spec, notes });
+    } catch (err) {
+      setAssembleError(err instanceof ApiError ? err.message : t('assistant.assembleFailed'));
+    } finally {
+      setAssembling(false);
+    }
+  };
+
+  /**
+   * The same selection as a generated draft (QGEN3): replayed over 90 days on the machine
+   * and held for the super admin's approval, instead of opened straight in the editor.
+   * The key makes a double click return the one draft rather than two.
+   */
+  const handlePropose = async () => {
+    if (!canAct || !chosenMode) return;
+    setProposing(true);
+    setAssembleError(null);
+    setProposeMissing([]);
+    try {
+      const result = await apiProposeWorkflow({
+        intent: 'watch-failure-mode', target: scope(), failureModeCode: chosenMode.code, combine, name: chosenMode.name,
+        idempotencyKey: `wf-${equipmentId}-${chosenMode.code}-${combine}-${Date.now()}`,
+      });
+      if (needsInput(result)) setProposeMissing(result.missing.map((m) => m.detail));
+      else navigate(`/drafts?id=${result.id}`);
+    } catch (err) {
+      setAssembleError(err instanceof ApiError ? err.message : t('assistant.proposeFailed'));
+    } finally {
+      setProposing(false);
+    }
+  };
+
   const handleCreateCustom = () => {
     if (!canAct) return;
-    onGenerate({ ...parsePromptToWorkflow('', `Workflow_draft-${Date.now()}`), equipmentId });
+    const name = t('assistant.customName');
+    onGenerate({ name, spec: starterSpec(scope(), scopeData.signalsFor(scope())[0] ?? '', name) });
   };
 
   const steps = useMemo(() => {
@@ -222,11 +213,17 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     });
   }, [prompt]);
 
+  // Workflows whose newest version is still a draft: started here or in the editor, never published.
+  const drafts = useMemo(() => workflows
+    .map((wf) => ({ wf, v: wf.versions[wf.versions.length - 1] }))
+    .filter(({ v }) => v?.status === 'draft'), [workflows]);
+
   const filteredDrafts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return DRAFTS;
-    return DRAFTS.filter((d) => d.title.toLowerCase().includes(term) || d.description.toLowerCase().includes(term));
-  }, [searchTerm]);
+    if (!term) return drafts;
+    return drafts.filter(({ wf, v }) => wf.name.toLowerCase().includes(term)
+      || (wf.description ?? '').toLowerCase().includes(term) || v.rendering.some((r) => r.toLowerCase().includes(term)));
+  }, [drafts, searchTerm]);
 
   return (
     <div id="alert-ai-assistant-view" className="space-y-3">
@@ -245,12 +242,11 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         <div className="flex items-center gap-3 flex-1 max-w-sm">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">{t('translation:sidebar.equipment')}</span>
           <SelectPicker
-            data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
-            value={equipmentId}
+            data={scopeData.machines.map((m) => ({ label: scopeData.machineLabel(m), value: machineKey(m) }))}
+            value={equipmentId || null}
             onChange={(value) => setEquipmentId(value ?? '')}
             placeholder={t('assistant.selectEquipment')}
             block
-            searchable={false}
             cleanable={false}
             size="sm"
           />
@@ -266,6 +262,72 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         </button>
       </div>
       {!canAct && <p className="text-xs text-amber-600 dark:text-amber-400">{t('assistant.selectThingFirst')}</p>}
+
+      {/* From the library: a failure mode of the machine's class, assembled from copied templates */}
+      {canAct && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 space-y-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t('assistant.fromFailureMode')}</div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{t('assistant.fromFailureModeHint')}</p>
+          </div>
+          {failureModes.length === 0 ? (
+            <p className="text-xs text-slate-400">{t('assistant.noFailureModes')}</p>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-[220px]">
+                <SelectPicker
+                  data={failureModes.map((f) => ({ label: f.name, value: f.code }))}
+                  value={modeCode}
+                  onChange={(v) => setModeCode(v)}
+                  placeholder={t('assistant.chooseFailureMode')}
+                  block
+                  size="sm"
+                />
+              </div>
+              {chosenMode && chosenMode.signals.length > 1 && (
+                <SelectPicker
+                  data={[{ label: t('assistant.combineAll'), value: 'allOf' }, { label: t('assistant.combineAny'), value: 'anyOf' }]}
+                  value={combine}
+                  onChange={(v) => setCombine((v ?? 'allOf') as 'allOf' | 'anyOf')}
+                  searchable={false}
+                  cleanable={false}
+                  size="sm"
+                  className="w-44"
+                />
+              )}
+              <button
+                type="button"
+                onClick={handleAssemble}
+                disabled={!chosenMode || assembling}
+                className="px-4 py-2 bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
+              >
+                {assembling ? t('assistant.assembling') : t('assistant.assemble')}
+              </button>
+              <button
+                type="button"
+                onClick={handlePropose}
+                disabled={!chosenMode || proposing}
+                title={t('assistant.proposeHint')}
+                className="px-4 py-2 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
+              >
+                {proposing ? t('assistant.proposing') : t('assistant.propose')}
+              </button>
+            </div>
+          )}
+          {chosenMode && (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {chosenMode.symptom} · {t('assistant.watches', { signals: chosenMode.signals.join(', ') })}
+            </p>
+          )}
+          {assembleError && <p className="text-xs text-rose-600 dark:text-rose-400">{assembleError}</p>}
+          {proposeMissing.length > 0 && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+              <p className="font-semibold">{t('assistant.proposeNeedsInput')}</p>
+              {proposeMissing.map((m, i) => <p key={i}>{m}</p>)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AI Prompt + Right Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
@@ -371,6 +433,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                 </div>
               ))}
             </div>
+            {notice && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 leading-relaxed">{notice}</p>}
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
               {t('assistant.clarifyHint', { example: 'temperature above 80°C for 5 minutes' })}
             </p>
@@ -403,15 +466,18 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       {filteredDrafts.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('assistant.drafts')}</h3>
-          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
-            {filteredDrafts.map((d) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredDrafts.map(({ wf, v }) => (
               <ItemCard
-                key={d.id}
-                item={d}
+                key={wf.id}
+                item={{
+                  id: wf.id, title: wf.name, description: v.rendering.join(' ') || wf.description || '', prompt: '',
+                  icon: Thermometer, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-600 dark:text-amber-400',
+                }}
                 tag={t('assistant.draftTag')}
                 tagClass="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                 buttonLabel={t('assistant.resumeDraft')}
-                onUse={() => runPrompt(d.prompt, d.workflowName)}
+                onUse={() => onGenerate({ name: wf.name, spec: v.spec, workflowId: wf.id, version: v.version, status: v.status, layout: v.layout })}
               />
             ))}
           </div>

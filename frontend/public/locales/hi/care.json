@@ -161,5 +161,43 @@
       "diagnose": "इस मशीन का निदान नहीं हो सका।",
       "project": "इस श्रृंखला का अनुमान नहीं लगाया जा सका।"
     }
+  },
+  "rec": {
+    "title": "सुझाव",
+    "loading": "लोड हो रहा है…",
+    "notYet": "अभी विश्लेषण नहीं हुआ।",
+    "asOf": "विश्लेषण {{at}}",
+    "coverage": "{{expected}} में से {{observed}} अपेक्षित सिग्नल मिले",
+    "explain": "समझाएँ",
+    "explaining": "समझाया जा रहा है…",
+    "analyse": "अभी विश्लेषण करें",
+    "analyseAgain": "फिर विश्लेषण करें",
+    "analysing": "विश्लेषण हो रहा है…",
+    "observations": "क्या देखा गया",
+    "hypotheses": "संभावित कारण",
+    "nextSteps": "सुझाए गए अगले कदम",
+    "missing": "पक्का होने के लिए क्या कमी है",
+    "limitations": "सीमाएँ",
+    "byTemplate": "साक्ष्य से एक तय टेम्पलेट ने लिखा ({{version}})।",
+    "byModel": "साक्ष्य से {{model}} ने लिखा, दिखाने से पहले जाँचा गया।",
+    "outcome": {
+      "attributed": "संभावित कारण मिला",
+      "unattributed": "असामान्यता, कारण अज्ञात",
+      "inconclusive": "अनिर्णायक",
+      "nothing_detected": "कुछ नहीं मिला"
+    },
+    "reason": {
+      "unclassified": "मशीन की कोई क्लास नहीं",
+      "class_not_in_account": "क्लास इस खाते में नहीं",
+      "no_library_content": "क्लास में कोई फ़ेल्योर मोड नहीं",
+      "insufficient_coverage": "पर्याप्त डेटा नहीं"
+    },
+    "errors": {
+      "load": "सुझाव लोड नहीं हो सका।",
+      "explain": "विवरण नहीं लिखा जा सका।",
+      "analyse": "इस मशीन का विश्लेषण नहीं हो सका।"
+    },
+    "missingBinding": "{{signal}}: इस मशीन पर कोई सेंसर नहीं जुड़ा",
+    "missingParameter": "लागत पैरामीटर तय नहीं: {{name}}"
   }
 }

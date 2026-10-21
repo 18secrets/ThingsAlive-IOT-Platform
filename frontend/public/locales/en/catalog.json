@@ -536,5 +536,27 @@
     "capabilitiesSummaryWithParams_other": "Sensor capabilities: {{created}} created, {{skipped}} skipped, {{count}} sensor parameters added.",
     "approve": "Approve",
     "dismiss": "Dismiss"
+  },
+  "model": {
+    "title": "3-D model",
+    "loadFailed": "Could not load the 3-D model.",
+    "wrongType": "Upload a binary glTF file (.glb).",
+    "unreadable": "This file could not be read as a 3-D model.",
+    "uploadFailed": "Could not upload the model.",
+    "confirmRemove": "Remove the 3-D model and its markers from this draft?",
+    "removeFailed": "Could not remove the model.",
+    "upload": "Upload model (.glb)",
+    "replace": "Replace model",
+    "sameGeometry": "Same geometry (keep everyone's markers)",
+    "geometryVersion": "geometry v{{version}}",
+    "noModel": "No 3-D model yet.",
+    "inheritNote": "Accounts that use this class inherit these markers; one they moved stays where they put it.",
+    "recheckHint": "The model's geometry changed under this marker: check it and confirm.",
+    "loadingModel": "Loading the model…",
+    "howTo": "Pick a signal, then click the model where it lives. Drag to turn, scroll to zoom.",
+    "viewOnly": "Drag to turn, scroll to zoom.",
+    "confirmStill": "Still right",
+    "remove": "Remove model",
+    "storageUnavailable": "File storage is not configured on this server (ASSET_S3_*), so no 3-D model can be uploaded or shown."
   }
 }
