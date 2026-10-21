@@ -13,6 +13,16 @@ export interface RequestScope {
   readonly roles: readonly string[];
   /** Platform roles act across tenants and are audited when they do. */
   readonly isPlatformRole: boolean;
+  /**
+   * What this caller may do, resolved from their account's own role row.
+   *
+   * Present for a client user, absent for a platform role — platform roles are
+   * Things Alive's and stay in the static table. When present it is the whole
+   * answer: it is not merged with the table, because a merge would mean a client
+   * could never take a capability away from one of their own roles.
+   */
+  readonly capabilities?: readonly string[];
+
   /** Empty array means "no assets of this kind"; undefined means "unrestricted within the tenant". */
   readonly plantIds?: readonly string[];
   readonly equipmentIds?: readonly string[];

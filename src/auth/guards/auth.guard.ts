@@ -1,10 +1,11 @@
 import {
-  CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException,
+  CanActivate, ExecutionContext, Inject, Injectable, Logger, Optional, UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { SCOPE_RESOLVER, ScopeResolver } from '../scope-resolver';
 import { REQUEST_SCOPE_KEY, RequestScope } from '../types/request-scope';
 
 /**
@@ -23,6 +24,10 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    // Optional so the guard stands alone. Absent, the token is the whole story —
+    // which is what the contract and isolation suites rely on, and what a platform
+    // caller gets, since Things Alive staff hold no row in any customer's account.
+    @Optional() @Inject(SCOPE_RESOLVER) private readonly resolver?: ScopeResolver,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -53,15 +58,33 @@ export class AuthGuard implements CanActivate {
     }
 
     const roles: string[] = normaliseRoles(payload.roles ?? payload.role);
-    const scope: RequestScope = {
+    const userId = String(payload.sub ?? payload.user_id ?? '');
+    let scope: RequestScope = {
       tenantId: String(tenantId),
-      userId: String(payload.sub ?? payload.user_id ?? ''),
+      userId,
       roles,
       isPlatformRole: roles.some((r) => PLATFORM_ROLES.has(r)),
       plantIds: asIdList(payload.plant_ids),
       equipmentIds: asIdList(payload.equipment_ids),
       deviceIds: asIdList(payload.device_ids),
     };
+
+    // What the account says now beats what the token said when it was issued. This is
+    // the whole reason scope is resolved per request: a suspension, a role change or
+    // a withdrawn assignment applies to the next request rather than whenever the
+    // token happens to expire.
+    if (this.resolver && userId && !scope.isPlatformRole) {
+      const resolved = await this.resolver.resolve(scope.tenantId, userId);
+      if (resolved) {
+        scope = {
+          ...scope,
+          roles: resolved.roles,
+          capabilities: resolved.capabilities,
+          plantIds: resolved.plantIds,
+          equipmentIds: resolved.equipmentIds,
+        };
+      }
+    }
 
     req[REQUEST_SCOPE_KEY] = scope;
     return true;
