@@ -1,5 +1,6 @@
 import React from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { RegisterDeviceInput, ToolMapping } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -13,10 +14,11 @@ interface DeviceSetupPageProps {
 export const DeviceSetupPage: React.FC<DeviceSetupPageProps> = ({ realToolMappings, onRegisterDevices }) => {
   const { authUser } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation('devices');
   usePageHeader({
-    title: 'Register Devices',
-    subtitle: 'Device pool',
-    breadcrumb: 'Device Management',
+    title: t('register.title'),
+    subtitle: t('setupPage.subtitle'),
+    breadcrumb: t('setupPage.breadcrumb'),
     onBack: () => navigate('/admin/devices'),
   });
   if (!authUser) return null;

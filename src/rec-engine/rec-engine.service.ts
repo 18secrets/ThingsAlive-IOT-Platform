@@ -107,21 +107,50 @@ export class RecEngineService {
 
   // ------------------------------------------------------------------------ steps
 
-  private async compute(m: EntityManager, tenantId: string, profile: EquipmentProfile, at: Date) {
+  /**
+   * The five steps as of a past moment, held in memory and never written (QEVAL1c's
+   * replay). The same `compute` the live path runs, with the machine's history cut to
+   * what had happened by `at` and each alert and work order put back in the state it was
+   * in then — otherwise a replay of last month would see this morning's resolutions and
+   * call last month's alerts closed. What cannot be put back is listed on the class,
+   * not hidden: the library, the alert rules and the bindings are read as they are now.
+   *
+   * The bundle it returns has an id derived from what it holds, as `persist` derives
+   * cost ids, so replaying the same moment twice gives the same bundle.
+   */
+  async computeAsOf(m: EntityManager, tenantId: string, profile: EquipmentProfile, at: Date): Promise<RecEvidenceBundle> {
+    const d = await this.compute(m, tenantId, profile, at, true);
+    const row = assemble(tenantId, profile, at, d);
+    return Object.assign(new RecEvidenceBundle(), {
+      ...row, id: deterministicUuid(`replay|${row.inputsHash}|${at.toISOString()}`), createdAt: at,
+    });
+  }
+
+  private async compute(m: EntityManager, tenantId: string, profile: EquipmentProfile, at: Date, asOf = false) {
     const machine = { tenantId, sourceSystem: profile.sourceSystem, externalId: profile.externalId };
 
     // History is read whatever the class says: "no history to search" is true or false
     // of the machine, not of its library.
-    const events = await m.getRepository(AlertEvent).find({ where: machine, order: { firedAt: 'ASC', id: 'ASC' } });
+    let events = await m.getRepository(AlertEvent).find({ where: machine, order: { firedAt: 'ASC', id: 'ASC' } });
     const rules = events.length
       ? await m.getRepository(AlertRule).find({ where: { tenantId, id: In([...new Set(events.map((e) => e.ruleId))]) } })
       : [];
     const ruleById = new Map(rules.map((r) => [r.id, r]));
     const signalOf = (e: AlertEvent) => { const r = ruleById.get(e.ruleId); return r ? ruleSignal(r) : null; };
     const triggerOf = (e: AlertEvent) => ruleById.get(e.ruleId)?.trigger ?? 'unknown';
-    const workOrders = await m.getRepository(WorkOrder).find({ where: machine, order: { createdAt: 'ASC', id: 'ASC' } });
-    const services = await m.getRepository(EquipmentServiceRecord).find({ where: machine, order: { performedAt: 'ASC', id: 'ASC' } });
-    const live = await m.getRepository(Incident).findOne({ where: { ...machine, status: Not('resolved') } });
+    let workOrders = await m.getRepository(WorkOrder).find({ where: machine, order: { createdAt: 'ASC', id: 'ASC' } });
+    let services = await m.getRepository(EquipmentServiceRecord).find({ where: machine, order: { performedAt: 'ASC', id: 'ASC' } });
+    let live: Incident | null;
+    if (asOf) {
+      events = events.filter((e) => e.firedAt <= at).map((e) => Object.assign(new AlertEvent(), e, { state: alertStateAt(e, at) }));
+      workOrders = workOrders.filter((w) => w.createdAt <= at).map((w) => Object.assign(new WorkOrder(), w, { status: workOrderStatusAt(w, at) }));
+      // Known by then, not merely performed by then: a record entered later was not evidence at `at`.
+      services = services.filter((r) => r.performedAt <= at && r.recordedAt <= at);
+      live = (await m.getRepository(Incident).find({ where: machine, order: { openedAt: 'DESC' } }))
+        .find((i) => i.openedAt <= at && (i.resolvedAt === null || i.resolvedAt > at)) ?? null;
+    } else {
+      live = await m.getRepository(Incident).findOne({ where: { ...machine, status: Not('resolved') } });
+    }
 
     const base = {
       incidentId: live?.id ?? null, classSlug: profile.equipmentClassSlug, classTemplateVersion: null as number | null,
@@ -284,22 +313,7 @@ export class RecEngineService {
     m: EntityManager, tenantId: string, profile: EquipmentProfile, at: Date,
     d: Awaited<ReturnType<RecEngineService['compute']>>,
   ): Promise<Evaluation> {
-    const { history } = d;
-    const inputsHash = sha256(canonical({
-      engine: ENGINE_VERSION,
-      class: [d.classSlug, d.classTemplateVersion],
-      incident: d.incidentId,
-      alerts: history.events.map((e) => [e.id, e.state]),
-      workOrders: history.workOrders.map((w) => [w.id, w.updatedAt.toISOString()]),
-      services: history.services.map((s) => [s.id, s.recordedAt.toISOString()]),
-      ...d.hashParts,
-    }));
-
-    let cost: { lines: unknown[]; missingParameters: string[] } = d.cost;
-    if ('costInput' in d && d.costInput) {
-      cost = costLines(d.candidates as Candidate[], d.costInput as CostInput, inputsHash);
-    }
-
+    const { inputsHash, cost } = assemble(tenantId, profile, at, d);
     const rows: { id: string }[] = await m.query(
       `INSERT INTO "rec_evidence_bundle" ("tenant_id", "source_system", "external_id", "incident_id", "as_of",
          "engine_version", "class_slug", "class_template_version", "inputs_hash", "status", "reason", "outcome",
@@ -320,6 +334,54 @@ export class RecEngineService {
 }
 
 // ------------------------------------------------------------------------- helpers
+
+type Computed = Awaited<ReturnType<RecEngineService['compute']>>;
+
+/** The bundle's columns from the steps' output: what `persist` inserts and `computeAsOf` holds in memory. */
+function assemble(tenantId: string, profile: EquipmentProfile, at: Date, d: Computed) {
+  const { history } = d;
+  const inputsHash = sha256(canonical({
+    engine: ENGINE_VERSION,
+    class: [d.classSlug, d.classTemplateVersion],
+    incident: d.incidentId,
+    alerts: history.events.map((e) => [e.id, e.state]),
+    workOrders: history.workOrders.map((w) => [w.id, w.updatedAt.toISOString()]),
+    services: history.services.map((s) => [s.id, s.recordedAt.toISOString()]),
+    ...d.hashParts,
+  }));
+
+  let cost: { lines: unknown[]; missingParameters: string[] } = d.cost;
+  if ('costInput' in d && d.costInput) {
+    cost = costLines(d.candidates as Candidate[], d.costInput as CostInput, inputsHash);
+  }
+  return {
+    tenantId, sourceSystem: profile.sourceSystem, externalId: profile.externalId, incidentId: d.incidentId, asOf: at,
+    engineVersion: ENGINE_VERSION, classSlug: d.classSlug, classTemplateVersion: d.classTemplateVersion, inputsHash,
+    status: d.status, reason: d.reason, outcome: d.outcome,
+    detect: d.detect as Record<string, unknown>, attribute: d.attribute as Record<string, unknown>,
+    precedent: d.precedent as Record<string, unknown>, gap: d.gap as Record<string, unknown>,
+    cost: cost as Record<string, unknown>, candidates: d.candidates as unknown[],
+  };
+}
+
+/** An alert's state at `at`, from the times it was acknowledged and resolved. */
+function alertStateAt(e: AlertEvent, at: Date): string {
+  if (e.resolvedAt && e.resolvedAt <= at) return 'resolved';
+  if (e.acknowledgedAt && e.acknowledgedAt <= at) return 'acknowledged';
+  return 'open';
+}
+
+/**
+ * A work order's status at `at`, from its start and end times. A cancellation records no
+ * time of its own, so a cancelled order counts as cancelled from its last update — the
+ * one approximation in the replay's history, named in QEVAL1's report.
+ */
+function workOrderStatusAt(w: WorkOrder, at: Date): string {
+  if (w.status === 'cancelled') return w.updatedAt <= at ? 'cancelled' : w.startedAt && w.startedAt <= at ? 'in-progress' : 'created';
+  if (w.endedAt && w.endedAt <= at) return w.status;
+  if (w.startedAt && w.startedAt <= at) return 'in-progress';
+  return 'created';
+}
 
 const ORDER_NOTE = 'Sorted by status (active, unknown, clear), then matched signals (most first), then declared '
   + 'severity (worst first, undeclared last), then code. A sort, not a likelihood: no probability is stated.';

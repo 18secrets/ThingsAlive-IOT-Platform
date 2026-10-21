@@ -1,0 +1,94 @@
+{
+  "sensor": {
+    "fuel_level": "எரிபொருள் அளவு",
+    "coolant_temperature": "குளிரூட்டி வெப்பநிலை",
+    "oil_temperature": "எண்ணெய் வெப்பநிலை",
+    "oil_pressure": "எண்ணெய் அழுத்தம்",
+    "throttle": "த்ராட்டில்",
+    "engine_load": "எஞ்சின் சுமை",
+    "engine_runtime": "எஞ்சின் இயக்க நேரம்"
+  },
+  "crossLinks": {
+    "thingDetails": "இயந்திர விவரங்கள்",
+    "production": "உற்பத்தி"
+  },
+  "filters": {
+    "button": "வடிப்பான்கள்",
+    "selectedThing": "தேர்ந்தெடுத்த இயந்திரம்",
+    "allMatching": "பொருந்தும் அனைத்து இயந்திரங்களும்",
+    "title": "இயந்திரங்களை வடிகட்டு",
+    "intro": "வரம்பைத் தேர்ந்தெடுத்து, பின் பயன்படுத்தவும்.",
+    "site": "தளம் / ஆலை",
+    "allSites": "அனைத்து தளங்கள் / ஆலைகள்",
+    "type": "இயந்திர வகை",
+    "allTypes": "அனைத்து இயந்திர வகைகள்",
+    "connection": "இணைப்பு நிலை",
+    "allConnections": "அனைத்து இணைப்புகள்",
+    "online": "ஆன்லைன்",
+    "offline": "ஆஃப்லைன்",
+    "find": "இயந்திரத்தைத் தேடு",
+    "findPlaceholder": "பெயர் அல்லது இயந்திர ID",
+    "clear": "தேர்வுகளை அழி",
+    "apply": "வடிப்பான்களைப் பயன்படுத்து"
+  },
+  "rule": {
+    "createTitle": "எச்சரிக்கை விதியை உருவாக்கு",
+    "editTitle": "எச்சரிக்கை விதியைத் திருத்து",
+    "reviewSubtitle": "உருவகப்படுத்தி உறுதிசெய்",
+    "formSubtitle": "விதி விவரங்கள்",
+    "defaultName": "புதிய சூழ்நிலை",
+    "selectMachines": "இயந்திரங்களைத் தேர்ந்தெடுக்கவும். சோதனை மதிப்புகள் இந்த முன்னோட்டத்தை மட்டுமே பாதிக்கும்.",
+    "enabled": "இயக்கத்தில்",
+    "disabled": "முடக்கப்பட்டது",
+    "previewReading": "முன்னோட்ட அளவீடு ({{unit}})",
+    "before": "முன்பு: {{before}} → முன்மொழிவு: {{proposed}}",
+    "beforeValue": "{{operator}} {{threshold}} {{unit}} · திருத்தம் {{revision}}",
+    "notAssigned": "ஒதுக்கப்படவில்லை",
+    "simResult": "KPI {{value}} {{unit}} · எச்சரிக்கை {{alert}} · கணிப்பு {{predicted}} {{unit}}",
+    "triggers": "தூண்டப்படும்",
+    "noTrigger": "தூண்டப்படாது",
+    "back": "பின்செல்",
+    "cancel": "ரத்துசெய்",
+    "runSimulation": "உருவகப்படுத்தலை இயக்கு",
+    "confirmSave": "உறுதிசெய்து சேமி",
+    "name": "பெயர்",
+    "sensor": "சென்சார்",
+    "condition": "நிபந்தனை",
+    "greaterThan": "இதைவிட அதிகம்",
+    "lessThan": "இதைவிடக் குறைவு",
+    "threshold": "வரம்பு மதிப்பு",
+    "severity": "தீவிரம்",
+    "severityValue": {
+      "Warning": "எச்சரிக்கை",
+      "Critical": "மிக முக்கியம்"
+    },
+    "outcomes": "விளைவுகள்",
+    "outcome": {
+      "kpi": "KPI",
+      "alert": "எச்சரிக்கை",
+      "prediction": "கணிப்பு"
+    },
+    "horizon": "கணிப்புக் காலம் (மணி)",
+    "choosePreview": "இயந்திரங்களைத் தேர்ந்தெடுத்து முன்னோட்டம் பார்",
+    "predictionText": "{{hours}} மணி நேரத்தில் {{value}} {{unit}}. நேரியல் திட்டமிடல் கணிப்பு, தோல்வி மாதிரி அல்ல."
+  },
+  "ruleCard": {
+    "revision": "திருத்தம் {{revision}} · {{status}}",
+    "kpi": "KPI: {{value}} {{unit}}",
+    "alert": "எச்சரிக்கை: {{value}}",
+    "alertOutcome": {
+      "Breach": "மீறல்",
+      "No breach": "மீறல் இல்லை"
+    },
+    "prediction": "கணிப்பு: {{text}}",
+    "editAssign": "திருத்து / ஒதுக்கு",
+    "createWorkOrder": "பணி ஆணை உருவாக்கு"
+  },
+  "graph": {
+    "aria": "சமீபத்திய சென்சார் அளவீடுகள்",
+    "outsideLimit": "எச்சரிக்கை: செயல்விளக்க வரம்புக்கு (0–{{max}} {{unit}}) வெளியே",
+    "noLimit": "மதிப்பாய்வு: சரிபார்க்கப்பட்ட இயக்க வரம்பு இல்லை",
+    "higher": "முதல் மாதிரியை விட {{delta}} {{unit}} அதிகம் · வரம்பு {{min}}–{{max}} {{unit}} · {{count}} பதிவான மாதிரிகள்.",
+    "lower": "முதல் மாதிரியை விட {{delta}} {{unit}} குறைவு · வரம்பு {{min}}–{{max}} {{unit}} · {{count}} பதிவான மாதிரிகள்."
+  }
+}

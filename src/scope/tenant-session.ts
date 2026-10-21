@@ -86,3 +86,31 @@ export async function runTenantSpanning<R>(
     return fn(manager);
   });
 }
+
+/**
+ * The role an evaluation runs as (task QEVAL1a, G10). Created by the Evaluation
+ * migration, NOLOGIN, and granted only what an evaluation reads plus its own two
+ * tables — so an eval that reused shared code which writes a forecast, an alert or a
+ * work order is refused by the database rather than trusted not to.
+ */
+export const EVAL_ROLE = 'ta_eval';
+
+/**
+ * An evaluation session: one account's (under its policy), every account's (through
+ * `runTenantSpanning`, with its reason), or none — the platform-owned run ledger, which
+ * has no tenant column. In every case the transaction then drops to `ta_eval`, which is
+ * why this lives here: CI allows SET ROLE in this file and the migrations, nowhere else.
+ */
+export async function withEvalSession<R>(
+  ds: DataSource,
+  scope: { tenantId: string } | { spanning: string } | 'platform',
+  fn: (manager: EntityManager) => Promise<R>,
+): Promise<R> {
+  const asEval = async (manager: EntityManager) => {
+    await manager.query(`SET LOCAL ROLE "${EVAL_ROLE}"`);
+    return fn(manager);
+  };
+  if (scope === 'platform') return ds.transaction(asEval);
+  if ('tenantId' in scope) return withTenantId(ds, scope.tenantId, asEval);
+  return runTenantSpanning(ds, `evaluation: ${scope.spanning}`, asEval);
+}

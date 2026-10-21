@@ -33,13 +33,16 @@ const EXTENSION: Record<string, string> = {
 
 // ------------------------------------------------------------ shared helpers
 
+// The schematic tier only, everywhere in this file: the model tier (QTWIN1) shares the
+// tables and has its own helpers in class-model.service.ts.
+
 export function loadVisual(m: EntityManager, classSlug: string, classVersion: number) {
-  return m.getRepository(EquipmentClassVisual).findOne({ where: { classSlug, classVersion } });
+  return m.getRepository(EquipmentClassVisual).findOne({ where: { classSlug, classVersion, tier: 'schematic' } });
 }
 
 export async function loadAnchors(m: EntityManager, classSlug: string, classVersion: number): Promise<Anchor[]> {
   const rows = await m.getRepository(EquipmentClassVisualAnchor).find({
-    where: { classSlug, classVersion }, order: { signal: 'ASC' },
+    where: { classSlug, classVersion, tier: 'schematic' }, order: { signal: 'ASC' },
   });
   return rows.map((r) => ({ signal: r.signal, hotspotX: r.hotspotX, hotspotY: r.hotspotY, label: r.label }));
 }
@@ -166,7 +169,7 @@ export class ClassVisualService {
       : !visual.assetKey ? 'upload_pending'
         : !this.storage.configured ? 'assets_unavailable' : 'ready';
     return {
-      classSlug: slug, classVersion: version, state, tier: visual?.tier ?? null,
+      classSlug: slug, classVersion: version, state, tier: visual ? 'schematic' : null,
       imageUrl: state === 'ready' ? await this.storage.readUrl(visual!.assetKey!) : null,
       contentType: visual?.contentType ?? null, width: visual?.widthPx ?? null, height: visual?.heightPx ?? null,
       anchors, unplacedSignals: unplacedSignals(profile.expectedSignals.map((s) => s.signal), anchors),
@@ -179,8 +182,8 @@ export class ClassVisualService {
     await this.ds.transaction(async (m) => {
       await this.requireDraft(m, slug, version);
       if (!(await this.lockVisual(m, slug, version))) throw new NotFoundException(`"${slug}" v${version} has no visual.`);
-      await m.getRepository(EquipmentClassVisualAnchor).delete({ classSlug: slug, classVersion: version });
-      await m.getRepository(EquipmentClassVisual).delete({ classSlug: slug, classVersion: version });
+      await m.getRepository(EquipmentClassVisualAnchor).delete({ classSlug: slug, classVersion: version, tier: 'schematic' });
+      await m.getRepository(EquipmentClassVisual).delete({ classSlug: slug, classVersion: version, tier: 'schematic' });
     });
     this.logger.log(`${scope.userId} removed the visual from "${slug}" v${version}.`);
   }
@@ -197,7 +200,7 @@ export class ClassVisualService {
       const problems = anchorProblems(anchors, profile.expectedSignals.map((s) => s.signal));
       if (problems.length) throw new BadRequestException(problems.join(' '));
       const repo = m.getRepository(EquipmentClassVisualAnchor);
-      await repo.delete({ classSlug: slug, classVersion: version });
+      await repo.delete({ classSlug: slug, classVersion: version, tier: 'schematic' });
       if (anchors.length) await repo.save(anchors.map((a) => repo.create({ classSlug: slug, classVersion: version, ...a })));
     });
     this.logger.log(`${scope.userId} set ${anchors.length} anchor(s) on "${slug}" v${version}.`);
@@ -224,7 +227,7 @@ export class ClassVisualService {
   private lockVisual(m: EntityManager, slug: string, version: number) {
     return m.getRepository(EquipmentClassVisual).createQueryBuilder('v')
       .setLock('pessimistic_write')
-      .where('v.class_slug = :slug AND v.class_version = :version', { slug, version })
+      .where(`v.class_slug = :slug AND v.class_version = :version AND v.tier = 'schematic'`, { slug, version })
       .getOne();
   }
 }

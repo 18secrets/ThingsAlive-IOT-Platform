@@ -1,0 +1,122 @@
+{
+  "page": {
+    "subtitle": "Availability & Utilization",
+    "detailSubtitle": "Production Monitoring Detail",
+    "machineNotFound": "Machine not found"
+  },
+  "hero": {
+    "lastDays_one": "Last {{count}} day",
+    "lastDays_other": "Last {{count}} days",
+    "tooltip": "Availability is uptime against scheduled shift hours. OEE multiplies it by Performance (time lost to breakdowns) and Quality (fuel burned against nominal), per calendar week.",
+    "title": "Production Monitoring & Availability"
+  },
+  "common": {
+    "loading": "Loading…",
+    "prev": "Prev",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{total}}",
+    "details": "Details",
+    "createWorkOrder": "Create work order",
+    "viewEquipmentPage": "View equipment page",
+    "notAvailable": "Not available",
+    "oeeNotAvailable": "OEE not available",
+    "uptimeTitle": "Uptime hours",
+    "downtimeTitle": "Downtime hours",
+    "hoursUp": "{{hours}}h up",
+    "hoursDown": "{{hours}}h down"
+  },
+  "kpi": {
+    "machinesMeasured": "Machines measured",
+    "fleetAvailability": "Fleet availability",
+    "uptime": "Uptime",
+    "downtime": "Downtime",
+    "siteOee_one": "Site OEE · this week ({{count}} machine)",
+    "siteOee_other": "Site OEE · this week ({{count}} machines)"
+  },
+  "list": {
+    "heading": "Machines",
+    "count_one": "{{count}} machine",
+    "count_other": "{{count}} machines",
+    "empty": "No machines to show.",
+    "excluded": "Excluded from the totals above: {{noShift}} with no shift schedule, {{noReadings}} with no readings."
+  },
+  "card": {
+    "oeeTitle": "OEE this calendar week",
+    "oeeWeek": "OEE {{value}}% · this week"
+  },
+  "reason": {
+    "no_shift_schedule": "No shift schedule configured",
+    "no_readings": "No readings in this period"
+  },
+  "detailReason": {
+    "no_shift_schedule": "No shift schedule configured for this machine",
+    "no_readings": "No readings in this period"
+  },
+  "oeeReason": {
+    "no_shift_schedule": "No shift schedule for this machine",
+    "no_readings": "No readings in this window",
+    "parameter_not_set": "A required parameter is not set",
+    "insufficient_coverage": "Not enough readings to judge",
+    "unbound": "The signal it needs is not bound",
+    "unit_mismatch": "Fuel units do not match the nominal figure",
+    "stale": "Readings are stale",
+    "undefined_result": "No available time to measure against",
+    "not_available": "Not available"
+  },
+  "source": {
+    "equipment": "this machine",
+    "class": "its class",
+    "site": "its site",
+    "client": "the account",
+    "oem": "the OEM figure"
+  },
+  "oee": {
+    "title": "Overall Equipment Effectiveness",
+    "formula": "Availability × Performance × Quality · UTC {{window}}",
+    "windowUnit": {
+      "day": "day",
+      "week": "week",
+      "month": "month"
+    },
+    "window": {
+      "day": "Today",
+      "week": "This week",
+      "month": "This month"
+    },
+    "availability": "Availability",
+    "performance": "Performance",
+    "quality": "Quality",
+    "availableOfScheduled": "{{available}} of {{scheduled}} scheduled min",
+    "scheduled": "{{scheduled}} scheduled min",
+    "breakdowns_one": "{{count}} breakdown · {{minutes}} min",
+    "breakdowns_other": "{{count}} breakdowns · {{minutes}} min",
+    "oneOngoing": "one ongoing",
+    "idleThreshold": "Idle over {{minutes}} min counts",
+    "idleThresholdSetBy": "Idle over {{minutes}} min counts, set by {{source}}",
+    "burnedVsNominal": "{{actual}} {{unit}} burned vs {{nominal}} nominal",
+    "overNominal": "{{litres}} L over nominal",
+    "nominalSetBy": "Nominal set by {{source}}",
+    "breakdownsInWindow": "Breakdowns in this window",
+    "noneRecorded": "None recorded.",
+    "ongoing": "ongoing"
+  },
+  "detail": {
+    "availabilityNotAvailable": "Availability not available"
+  },
+  "shifts": {
+    "title": "Shift history",
+    "empty": "No recorded shifts in this period.",
+    "col": {
+      "date": "Date",
+      "shift": "Shift",
+      "productive": "Productive",
+      "idle": "Idle",
+      "utilization": "Utilization"
+    }
+  },
+  "errors": {
+    "loadAvailability": "Could not load availability.",
+    "loadOee": "Could not load OEE.",
+    "loadMachine": "Could not load this machine."
+  }
+}

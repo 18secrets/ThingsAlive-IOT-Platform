@@ -1,0 +1,222 @@
+{
+  "loading": "लोड हो रहा है…",
+  "hero": {
+    "title": "Things अलर्ट",
+    "subtitle": "मशीन के सिग्नल से आपके अगले सबसे सही कदम तक।"
+  },
+  "errors": {
+    "loadRules": "अलर्ट नियम लोड नहीं हो सके।",
+    "loadAlerts": "अलर्ट लोड नहीं हो सके।",
+    "acknowledge": "इस अलर्ट को स्वीकार नहीं किया जा सका।",
+    "resolve": "इस अलर्ट का समाधान दर्ज नहीं हो सका।",
+    "toggle": "यह नियम बदला नहीं जा सका।",
+    "save": "यह नियम सहेजा नहीं जा सका।"
+  },
+  "prompts": {
+    "resolve": "क्या पाया गया / क्या किया गया?"
+  },
+  "severity": {
+    "none": "कोई नहीं",
+    "low": "कम",
+    "medium": "मध्यम",
+    "high": "उच्च",
+    "critical": "गंभीर"
+  },
+  "state": {
+    "open": "खुला",
+    "acknowledged": "स्वीकार किया गया",
+    "resolved": "हल किया गया"
+  },
+  "trigger": {
+    "prediction-severity": "पूर्वानुमान गंभीरता",
+    "signal-threshold": "सिग्नल सीमा",
+    "no-telemetry": "कोई टेलीमेट्री नहीं",
+    "fuel-loss": "ईंधन हानि",
+    "chain-origin": "श्रृंखला का स्रोत"
+  },
+  "scope": {
+    "unknownPlant": "अज्ञात प्लांट",
+    "equipmentClass": "उपकरण श्रेणी",
+    "account": "पूरा खाता",
+    "oneSite": "एक साइट",
+    "oneMachine": "एक मशीन"
+  },
+  "rules": {
+    "heading": "कॉन्फ़िगर किए गए अलर्ट नियम",
+    "create": "अलर्ट बनाएँ",
+    "createWithAi": "AI से अलर्ट बनाएँ",
+    "empty": "अभी तक कोई अलर्ट नियम कॉन्फ़िगर नहीं है।",
+    "enable": "चालू करें",
+    "disable": "बंद करें",
+    "fromTemplate": "टेम्पलेट से",
+    "edit": "संपादित करें"
+  },
+  "events": {
+    "heading": "खुले अलर्ट",
+    "counts": "{{open}} खुले · {{acknowledged}} स्वीकार किए गए",
+    "empty": "कोई खुला अलर्ट नहीं।",
+    "acknowledge": "स्वीकार करें",
+    "resolve": "हल करें",
+    "viewMachine": "मशीन देखें"
+  },
+  "form": {
+    "editTitle": "अलर्ट नियम संपादित करें",
+    "createTitle": "अलर्ट नियम बनाएँ",
+    "subtitle": "अलर्ट नियम",
+    "name": "नाम",
+    "namePlaceholder": "जैसे कूलेंट तापमान सुरक्षा",
+    "watches": "किस पर नज़र रखता है",
+    "signal": "सिग्नल",
+    "min": "न्यूनतम",
+    "max": "अधिकतम",
+    "optional": "वैकल्पिक",
+    "firesAtLeast": "कम से कम इस स्तर पर ट्रिगर हो",
+    "scenario": "परिदृश्य (वैकल्पिक)",
+    "anyScenario": "कोई भी परिदृश्य",
+    "noTelemetryHint": "तब ट्रिगर होता है जब किसी शिफ़्ट में एक भी रीडिंग न आई हो। और कुछ कॉन्फ़िगर नहीं करना है।",
+    "severity": "गंभीरता",
+    "appliesTo": "किस पर लागू",
+    "site": "साइट",
+    "description": "विवरण (वैकल्पिक)",
+    "cancel": "रद्द करें",
+    "save": "बदलाव सहेजें"
+  },
+  "agent": {
+    "assistantTitle": "AI सहायक",
+    "workflowTitle": "वर्कफ़्लो"
+  },
+  "agentList": {
+    "searchPlaceholder": "अलर्ट नियम खोजें...",
+    "allStatuses": "स्थिति चुनें (सभी)",
+    "status": {
+      "Deployed": "लागू",
+      "Draft": "ड्राफ़्ट",
+      "Disabled": "बंद"
+    },
+    "addAlert": "अलर्ट जोड़ें",
+    "columns": {
+      "id": "ID",
+      "workflowName": "वर्कफ़्लो नाम",
+      "description": "विवरण",
+      "status": "स्थिति",
+      "sensors": "सेंसर",
+      "conditions": "शर्तें"
+    },
+    "empty": "मानदंड से मेल खाता कोई अलर्ट नियम नहीं मिला।",
+    "totalRows": "कुल पंक्तियाँ:",
+    "rowsPerPage": "प्रति पेज पंक्तियाँ:",
+    "previousPage": "पिछला पेज",
+    "nextPage": "अगला पेज"
+  },
+  "assistant": {
+    "heroTitle": "अपना अलार्म सामान्य भाषा में बताएँ",
+    "heroBody": "ThingsAlive AI उन्नत सिमेंटिक प्रोसेसिंग से आपकी व्यावसायिक ज़रूरतों को मज़बूत, औद्योगिक स्तर के निगरानी वर्कफ़्लो में बदलता है।",
+    "selectEquipment": "उपकरण चुनें…",
+    "createCustom": "कस्टम बनाएँ",
+    "selectThingFirst": "अलर्ट बताने या बनाने से पहले एक Thing चुनें।",
+    "aiPrompt": "AI प्रॉम्प्ट",
+    "promptPlaceholder": "जैसे \"{{example}}\"",
+    "voiceTitle": "अपना अलर्ट बोलकर लिखवाएँ (केवल डेमो)",
+    "voice": "आवाज़",
+    "generate": "वर्कफ़्लो बनाएँ",
+    "quickExamples": "आज़माने के लिए उदाहरण",
+    "tags": {
+      "energy": "ऊर्जा",
+      "efficiency": "दक्षता",
+      "alert": "अलर्ट",
+      "pressure": "दबाव",
+      "cluster": "समूह",
+      "safety": "सुरक्षा",
+      "battery": "बैटरी",
+      "voltage": "वोल्टेज",
+      "warning": "चेतावनी"
+    },
+    "building": "आपका अलर्ट तैयार हो रहा है",
+    "steps": {
+      "understand": "ज़रूरत समझी जा रही है",
+      "sensors": "सेंसर पहचाने जा रहे हैं",
+      "conditions": "शर्तें तय की जा रही हैं",
+      "actions": "कार्रवाइयाँ चुनी जा रही हैं",
+      "ready": "बनाने के लिए तैयार"
+    },
+    "stepStatus": {
+      "done": "पूर्ण",
+      "active": "जारी",
+      "pending": "बाकी"
+    },
+    "clarifyHint": "मुझे सेंसर और सटीक सीमा बताएँ — जैसे \"{{example}}\" — और मैं वर्कफ़्लो बना दूँगा।",
+    "searchDrafts": "ड्राफ़्ट खोजें...",
+    "exploreMore": "और देखें",
+    "drafts": "ड्राफ़्ट",
+    "draftTag": "ड्राफ़्ट",
+    "resumeDraft": "ड्राफ़्ट जारी रखें",
+    "noDrafts": "आपकी खोज से कोई ड्राफ़्ट मेल नहीं खाता।"
+  },
+  "workflow": {
+    "name": "वर्कफ़्लो नाम",
+    "selectEquipmentFirst": "वह उपकरण चुनें जिस पर यह अलर्ट लागू होगा",
+    "validate": "जाँचें",
+    "testRule": "नियम का परीक्षण करें",
+    "testPassed": "परीक्षण सफल रहा",
+    "update": "अपडेट करें",
+    "searchNodes": "नोड खोजें...",
+    "dragHint": "यह नोड जोड़ने के लिए कैनवास पर खींचें",
+    "section": {
+      "triggers": "ट्रिगर",
+      "data": "डेटा",
+      "logic": "लॉजिक और प्रोसेसिंग",
+      "actions": "कार्रवाइयाँ"
+    },
+    "palette": {
+      "schedule": "शेड्यूल",
+      "readSensor": "सेंसर पढ़ें",
+      "databaseQuery": "डेटाबेस क्वेरी",
+      "aggregate": "एग्रीगेट",
+      "calculation": "गणना",
+      "condition": "शर्त",
+      "groupJoin": "ग्रुप जॉइन",
+      "guard": "गार्ड",
+      "logicGate": "लॉजिक गेट",
+      "webhook": "Webhook",
+      "email": "ईमेल",
+      "sms": "SMS"
+    },
+    "actionType": {
+      "Webhook": "Webhook",
+      "Email": "ईमेल",
+      "SMS": "SMS"
+    },
+    "node": {
+      "expression": "एक्सप्रेशन",
+      "step": "चरण"
+    },
+    "inspector": {
+      "kind": {
+        "trigger": "ट्रिगर नोड",
+        "readSensor": "सेंसर पढ़ने का नोड",
+        "condition": "शर्त नोड",
+        "guard": "गार्ड नोड",
+        "gate": "गेट नोड",
+        "action": "कार्रवाई नोड",
+        "processing": "प्रोसेसिंग नोड"
+      },
+      "schedule": "शेड्यूल",
+      "schedulePlaceholder": "हर 5 मिनट",
+      "sensor": "सेंसर",
+      "operator": "ऑपरेटर",
+      "threshold": "सीमा",
+      "field": "फ़ील्ड",
+      "value": "मान",
+      "logic": "लॉजिक",
+      "type": "प्रकार",
+      "label": "लेबल",
+      "visualOnly": "केवल दृश्य चरण — अभी सहेजे गए अलर्ट लॉजिक का हिस्सा नहीं।"
+    },
+    "validation": {
+      "oneTrigger": "ठीक एक ट्रिगर चाहिए ({{count}} मिले)",
+      "incompleteCondition": "किसी शर्त में सेंसर या सीमा मान नहीं है",
+      "noAction": "कम से कम एक कार्रवाई चाहिए",
+      "ok": "वर्कफ़्लो सही है"
+    }
+  }
+}

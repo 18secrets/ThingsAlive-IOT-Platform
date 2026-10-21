@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, Sensor, SensorCategory, SensorInput, SensorParameterSpec,
 } from '../../lib/api';
@@ -24,6 +25,7 @@ const NEW_CATEGORY = '__new__';
 export const AddSensorModal: React.FC<AddSensorModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, categories, onCreateCategory, existingSensor,
 }) => {
+  const { t } = useTranslation('catalog');
   const [categoryId, setCategoryId] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [sensorName, setSensorName] = useState('');
@@ -86,7 +88,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the sensor.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('sensorModal.saveFailed') : t('sensorModal.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -100,7 +102,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh]">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 shrink-0">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">
-            {isEditing ? 'Edit Telematics Sensor' : 'Add New Telematics Sensor'}
+            {isEditing ? t('sensorModal.editTitle') : t('sensorModal.newTitle')}
           </h3>
           <button
             onClick={onClose}
@@ -113,17 +115,17 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto">
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Sensor Category <span className="text-red-500">*</span>
+              {t('sensorModal.sensorCategory')} <span className="text-red-500">*</span>
             </label>
             <SelectPicker
               size="sm"
               data={[
                 ...categories.map((c) => ({ label: c.name, value: c.id })),
-                { label: '+ Add new category…', value: NEW_CATEGORY },
+                { label: t('sensorModal.addNewCategory'), value: NEW_CATEGORY },
               ]}
               value={categoryId}
               onChange={(value) => setCategoryId(value ?? '')}
-              placeholder="— Select Category —"
+              placeholder={t('sensorModal.selectCategory')}
               block
               searchable={false}
               cleanable={false}
@@ -135,7 +137,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                 required
                 value={newCategoryName}
                 onChange={(value) => setNewCategoryName(value)}
-                placeholder="e.g. Engine, Hydraulics"
+                placeholder={t('sensorModal.newCategoryPlaceholder')}
                 className="mt-2"
               />
             )}
@@ -143,21 +145,21 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
 
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Sensor Name <span className="text-red-500">*</span>
+              {t('sensors.sensorName')} <span className="text-red-500">*</span>
             </label>
             <Input
               size="sm"
               required
               value={sensorName}
               onChange={(value) => setSensorName(value)}
-              placeholder="e.g. Hydraulic_Oil_Pressure_Sensor"
+              placeholder={t('sensorModal.sensorNamePlaceholder')}
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Telemetry Parameters
+                {t('sensorModal.telemetryParameters')}
               </label>
               <button
                 type="button"
@@ -165,7 +167,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                 className="text-sky-600 dark:text-sky-400 font-medium flex items-center gap-1 hover:text-sky-700 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add Parameter
+                {t('sensorModal.addParameter')}
               </button>
             </div>
 
@@ -179,42 +181,42 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                     size="sm"
                     value={spec.parameter}
                     onChange={(value) => updateSpec(index, 'parameter', value)}
-                    placeholder="Parameter (e.g. Engine RPM)"
+                    placeholder={t('sensorModal.parameterPlaceholder')}
                     className="col-span-4"
                   />
                   <Input
                     size="sm"
                     value={spec.unit}
                     onChange={(value) => updateSpec(index, 'unit', value)}
-                    placeholder="Unit"
+                    placeholder={t('sensorModal.unit')}
                     className="col-span-1"
                   />
                   <InputNumber
                     size="sm"
                     value={spec.min}
                     onChange={(value) => updateSpec(index, 'min', String(value))}
-                    placeholder="Min"
+                    placeholder={t('sensorModal.min')}
                     className="col-span-1"
                   />
                   <InputNumber
                     size="sm"
                     value={spec.max}
                     onChange={(value) => updateSpec(index, 'max', String(value))}
-                    placeholder="Max"
+                    placeholder={t('sensorModal.max')}
                     className="col-span-1"
                   />
                   <Input
                     size="sm"
                     value={spec.normalRange}
                     onChange={(value) => updateSpec(index, 'normalRange', value)}
-                    placeholder="Normal Range"
+                    placeholder={t('sensorModal.normalRange')}
                     className="col-span-3"
                   />
                   <Input
                     size="sm"
                     value={spec.notes}
                     onChange={(value) => updateSpec(index, 'notes', value)}
-                    placeholder="Notes"
+                    placeholder={t('sensorModal.notes')}
                     className="col-span-1"
                   />
                   <button
@@ -222,7 +224,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                     onClick={() => removeSpecRow(index)}
                     disabled={specs.length === 1}
                     className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Remove parameter"
+                    title={t('sensorModal.removeParameter')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -233,7 +235,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
 
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Description
+              {t('classModal.description')}
             </label>
             <Input
               as="textarea"
@@ -241,7 +243,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
               rows={2}
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="Operational sensor characteristics and telemetry frequency..."
+              placeholder={t('sensorModal.descriptionPlaceholder')}
             />
           </div>
 
@@ -258,7 +260,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -266,7 +268,7 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
               className="px-5 py-2 rounded-lg bg-[#0077b6] hover:bg-[#023e8a] text-white font-medium shadow-xs flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />
-              {busy ? 'Saving…' : 'Save Sensor'}
+              {busy ? t('common.saving') : t('sensorModal.save')}
             </button>
           </div>
         </form>

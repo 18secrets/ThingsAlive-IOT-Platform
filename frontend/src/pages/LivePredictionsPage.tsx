@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
@@ -22,7 +23,8 @@ const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'r
  * real prediction severity instead.
  */
 export const LivePredictionsPage: React.FC = () => {
-  usePageHeader({ title: 'Live Predictions', subtitle: 'Automated Dispatch' });
+  const { t } = useTranslation('predictions');
+  usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -37,7 +39,7 @@ export const LivePredictionsPage: React.FC = () => {
     let live = true;
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiListMyCatalogScenarios().then((s) => { if (live) setScenarios(s); })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.'); });
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadScenarios')); });
     apiListEquipment().then((list) => {
       if (!live) return;
       setEquipment(list);
@@ -48,7 +50,7 @@ export const LivePredictionsPage: React.FC = () => {
           .then((p) => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, p)); })
           .catch(() => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, 'unavailable')); });
       }
-    }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load machines.'); });
+    }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadMachines')); });
     return () => { live = false; };
   }, []);
 
@@ -75,7 +77,7 @@ export const LivePredictionsPage: React.FC = () => {
       await apiEditMyCatalogScenario(s.slug, { enabled: !s.enabled });
       setScenarios(await apiListMyCatalogScenarios());
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change this scenario.');
+      window.alert(err instanceof ApiError ? err.message : t('errors.toggle'));
     } finally {
       setBusySlug(null);
     }
@@ -84,8 +86,8 @@ export const LivePredictionsPage: React.FC = () => {
   return (
     <div id="live-predictions-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Things Predictions</h2>
-        <p className="text-sm text-sky-100">From machine signals to your next best action.</p>
+        <h2 className="text-xl font-bold">{t('hero.title')}</h2>
+        <p className="text-sm text-sky-100">{t('hero.tagline')}</p>
       </div>
 
       {error && (
@@ -106,18 +108,18 @@ export const LivePredictionsPage: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Prediction scenarios</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('scenarios.title')}</h3>
           <button onClick={() => navigate('/scenarios')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-            Manage in Scenarios <ChevronRight className="w-3.5 h-3.5" />
+            {t('scenarios.manage')} <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
         <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-          <Info className="w-3.5 h-3.5" />New scenarios come from the Things Alive library with your equipment classes; here you switch them on or off.
+          <Info className="w-3.5 h-3.5" />{t('scenarios.info')}
         </p>
         {scenarios === null ? (
-          <p className="text-sm text-slate-400">{error ? '—' : 'Loading…'}</p>
+          <p className="text-sm text-slate-400">{error ? '—' : t('common.loading')}</p>
         ) : visibleScenarios.length === 0 ? (
-          <p className="text-sm text-slate-400">No prediction scenarios for this selection.</p>
+          <p className="text-sm text-slate-400">{t('scenarios.empty')}</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {visibleScenarios.map((s) => (
@@ -128,17 +130,19 @@ export const LivePredictionsPage: React.FC = () => {
                     disabled={busySlug === s.slug}
                     onClick={() => toggle(s)}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${s.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                    title={s.enabled ? 'Disable' : 'Enable'}
+                    title={s.enabled ? t('scenarios.disable') : t('scenarios.enable')}
                   >
                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[s.severity]}>{s.severity}</Chip>
-                  <Chip tone="slate">Tier {s.tier}</Chip>
+                  <Chip tone={SEVERITY_TONE[s.severity]}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone="slate">{t('scenarios.tier', { tier: s.tier })}</Chip>
                   <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
                 </div>
-                <p className="text-[11px] text-slate-400">Needs {s.requiredSignals.join(', ') || 'no signals'} · {s.minimumHistoryDays}d history</p>
+                <p className="text-[11px] text-slate-400">
+                  {t('scenarios.needs', { signals: s.requiredSignals.join(', ') || t('scenarios.noSignals') })} · {t('scenarios.history', { count: s.minimumHistoryDays })}
+                </p>
               </div>
             ))}
           </div>
@@ -146,10 +150,10 @@ export const LivePredictionsPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base">Prediction KPIs</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Each machine's latest scored predictions — the worst one leads.</p>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('kpis.subtitle')}</p>
         {visible.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">No machines match this filter.</div>
+          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">{t('kpis.noMatch')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visible.map((m) => {
@@ -162,23 +166,23 @@ export const LivePredictionsPage: React.FC = () => {
                 <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{m.name ?? m.externalId}</h4>
-                    {worst && <Chip tone={SEVERITY_TONE[worst.severity]}>{worst.severity}</Chip>}
+                    {worst && <Chip tone={SEVERITY_TONE[worst.severity]}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip>}
                   </div>
                   {p === undefined ? (
-                    <p className="text-xs text-slate-400">Loading…</p>
+                    <p className="text-xs text-slate-400">{t('common.loading')}</p>
                   ) : p === 'unavailable' ? (
-                    <p className="text-xs text-slate-400">Predictions not available for your role.</p>
+                    <p className="text-xs text-slate-400">{t('kpis.unavailable')}</p>
                   ) : !worst ? (
-                    <p className="text-xs text-slate-400">No active scenario has scored this machine yet.</p>
+                    <p className="text-xs text-slate-400">{t('kpis.notScored')}</p>
                   ) : (
                     <>
                       <div className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">
-                        {worst.riskScore}<span className="text-sm font-normal text-slate-400"> / 100 risk</span>
+                        {worst.riskScore}<span className="text-sm font-normal text-slate-400"> {t('kpis.outOf100')}</span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {worst.clientScenarioSlug} · confidence {worst.confidence} · {(p as Prediction[]).length} scenario(s) scored
+                        {worst.clientScenarioSlug} · {t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · {t('kpis.scenariosScored', { count: (p as Prediction[]).length })}
                       </p>
-                      <p className="text-[11px] text-slate-400">Scored {new Date(worst.computedAt).toLocaleString()} over {worst.windowDays} day(s)</p>
+                      <p className="text-[11px] text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(), count: worst.windowDays })}</p>
                     </>
                   )}
                   <div className="flex items-center gap-3 pt-1">
@@ -186,10 +190,10 @@ export const LivePredictionsPage: React.FC = () => {
                       onClick={() => navigate(`/things-care/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
                       className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"
                     >
-                      Details <ChevronRight className="w-3.5 h-3.5" />
+                      {t('common.details')} <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                      <Sparkles className="w-3.5 h-3.5" /> Create work order
+                      <Sparkles className="w-3.5 h-3.5" /> {t('common.createWorkOrder')}
                     </button>
                   </div>
                 </div>

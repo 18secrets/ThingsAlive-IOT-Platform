@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
@@ -29,12 +30,7 @@ interface ClientManagementProps {
 }
 
 type StatusFilter = 'all' | 'active' | 'suspended' | 'awaiting';
-const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
-  { label: 'All statuses', value: 'all' },
-  { label: 'Active', value: 'active' },
-  { label: 'Suspended', value: 'suspended' },
-  { label: 'Awaiting first login', value: 'awaiting' },
-];
+const STATUS_VALUES: StatusFilter[] = ['all', 'active', 'suspended', 'awaiting'];
 // The same two facts each card shows: the account's status, and whether its super
 // admin has ever set a password.
 const matchesStatus = (c: ClientAccount, f: StatusFilter) => (
@@ -58,6 +54,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   onGrantEntitlement,
   onRevokeEntitlement,
 }) => {
+  const { t } = useTranslation(['accounts', 'shared']);
+  const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`clients.statusFilter.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,7 +72,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
       const result = await onResendInvitation(client.id);
       setReissued(result);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not resend the invitation.');
+      window.alert(err instanceof ApiError ? err.message : t('clients.resendFailed'));
     } finally {
       setResendingId(null);
     }
@@ -82,12 +80,12 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
   const handleDeleteClick = async (client: ClientAccount) => {
     if (!window.confirm(
-      `Delete ${client.clientName}? Only an account nobody ever signed in to, holding no data, can be deleted.`,
+      t('clients.confirmDelete', { name: client.clientName }),
     )) return;
     try {
       await onDeleteAccount(client.id);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not delete this account.');
+      window.alert(err instanceof ApiError ? err.message : t('clients.deleteFailed'));
     }
   };
 
@@ -125,7 +123,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search name, account ID, email or phone..."
+            placeholder={t('clients.searchPlaceholder')}
             className="pl-9!"
             size="sm"
           />
@@ -149,7 +147,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Client</span>
+          <span>{t('clients.add')}</span>
         </button>
       </div>
 
@@ -190,7 +188,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                       setIsModalOpen(true);
                     }}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Edit Client"
+                    title={t('clients.edit')}
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -199,7 +197,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     <button
                       onClick={() => handleResetPasswordClick(c)}
                       className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                      title="Resend invitation"
+                      title={t('clients.resendInvitation')}
                     >
                       <RotateCw className={`w-3.5 h-3.5 ${resendingId === c.id ? 'animate-spin' : ''}`} />
                     </button>
@@ -208,7 +206,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   <button
                     onClick={() => setEntitlementsClient(c)}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Granted classes"
+                    title={t('clients.grantedClasses')}
                   >
                     <Layers className="w-3.5 h-3.5" />
                   </button>
@@ -216,7 +214,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   <button
                     onClick={() => setOnboardingClient(c)}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Onboard 1.0 fleet: bring this client's existing machines and loggers into 2.0"
+                    title={t('clients.onboardFleetHint')}
                   >
                     <DownloadCloud className="w-3.5 h-3.5" />
                   </button>
@@ -225,7 +223,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     <button
                       onClick={() => handleDeleteClick(c)}
                       className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
-                      title="Delete account (only if never used)"
+                      title={t('clients.deleteHint')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -236,7 +234,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
                       c.status === 'Active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
-                    title={c.status === 'Active' ? 'Suspend account' : 'Reinstate account'}
+                    title={c.status === 'Active' ? t('clients.suspend') : t('clients.reinstate')}
                   >
                     <span
                       className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -251,7 +249,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                 {c.clientName}
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Created: {c.createdAt}
+                {t('clients.created', { date: c.createdAt })}
               </p>
             </div>
 
@@ -278,15 +276,15 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   has ever been set — see ProvisioningService.superAdminsFor. */}
               {c.mustChangePassword ? (
                 <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
-                  Awaiting First Login
+                  {t('clients.awaitingFirstLogin')}
                 </span>
               ) : (
                 <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
-                  Password Set
+                  {t('clients.passwordSet')}
                 </span>
               )}
               <span className={`font-semibold text-xs ${c.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                {c.status === 'Active' ? '• Active' : '• Suspended'}
+                {c.status === 'Active' ? `• ${t('clients.active')}` : `• ${t('clients.suspended')}`}
               </span>
             </div>
           </div>
@@ -295,7 +293,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         {filteredClients.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No clients found.</span>
+            <span>{t('clients.empty')}</span>
           </div>
         )}
       </div>
@@ -327,9 +325,10 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
-              <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">New Invitation Token</h3>
+              <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('shared:token.title')}</h3>
               <button
                 onClick={() => setReissued(null)}
+                aria-label={t('shared:close')}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -337,12 +336,11 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
             </div>
             <div className="p-6 space-y-4 text-sm">
               <p className="text-slate-600 dark:text-slate-300">
-                The old token stopped working the moment this one was issued for{' '}
-                <strong className="font-mono">{reissued.email}</strong>.
+                <Trans t={t} i18nKey="shared:token.intro" values={{ email: reissued.email }} components={{ 1: <strong className="font-mono" /> }} />
               </p>
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Invitation Token
+                  {t('shared:token.label')}
                 </label>
                 <div className="relative">
                   <Input
@@ -354,13 +352,13 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     type="button"
                     onClick={handleCopyReissued}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                    title="Copy token"
+                    title={t('shared:token.copy')}
                   >
                     {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Expires {new Date(reissued.invitationExpiresAt).toLocaleString()}.
+                  {t('shared:token.expires', { when: new Date(reissued.invitationExpiresAt).toLocaleString() })}
                 </p>
               </div>
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
@@ -368,7 +366,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   onClick={() => setReissued(null)}
                   className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer"
                 >
-                  Done
+                  {t('shared:done')}
                 </button>
               </div>
             </div>

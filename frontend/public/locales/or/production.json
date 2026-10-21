@@ -1,0 +1,122 @@
+{
+  "page": {
+    "subtitle": "ଉପଲବ୍ଧତା ଓ ଉପଯୋଗ",
+    "detailSubtitle": "ଉତ୍ପାଦନ ତଦାରଖ ବିବରଣୀ",
+    "machineNotFound": "ମେସିନ୍ ମିଳିଲା ନାହିଁ"
+  },
+  "hero": {
+    "lastDays_one": "ଗତ {{count}} ଦିନ",
+    "lastDays_other": "ଗତ {{count}} ଦିନ",
+    "tooltip": "ଉପଲବ୍ଧତା ହେଉଛି ନିର୍ଧାରିତ ସିଫ୍ଟ ଘଣ୍ଟା ତୁଳନାରେ ଚାଲୁ ସମୟ। OEE ଏହାକୁ କାର୍ଯ୍ୟଦକ୍ଷତା (ବ୍ରେକଡାଉନ୍‌ରେ ହଜିଥିବା ସମୟ) ଓ ଗୁଣବତ୍ତା (ମାନକ ତୁଳନାରେ ଜଳିଥିବା ଇନ୍ଧନ) ସହ ଗୁଣନ କରେ, ପ୍ରତି କ୍ୟାଲେଣ୍ଡର ସପ୍ତାହ ପାଇଁ।",
+    "title": "ଉତ୍ପାଦନ ତଦାରଖ ଓ ଉପଲବ୍ଧତା"
+  },
+  "common": {
+    "loading": "ଲୋଡ୍ ହେଉଛି…",
+    "prev": "ପୂର୍ବ",
+    "next": "ପରବର୍ତ୍ତୀ",
+    "pageOf": "ପୃଷ୍ଠା {{page}} / {{total}}",
+    "details": "ବିବରଣୀ",
+    "createWorkOrder": "କାର୍ଯ୍ୟ ଆଦେଶ ସୃଷ୍ଟି କରନ୍ତୁ",
+    "viewEquipmentPage": "ଉପକରଣ ପୃଷ୍ଠା ଦେଖନ୍ତୁ",
+    "notAvailable": "ଉପଲବ୍ଧ ନାହିଁ",
+    "oeeNotAvailable": "OEE ଉପଲବ୍ଧ ନାହିଁ",
+    "uptimeTitle": "ଚାଲୁ ଘଣ୍ଟା",
+    "downtimeTitle": "ବନ୍ଦ ଘଣ୍ଟା",
+    "hoursUp": "{{hours}} ଘଣ୍ଟା ଚାଲୁ",
+    "hoursDown": "{{hours}} ଘଣ୍ଟା ବନ୍ଦ"
+  },
+  "kpi": {
+    "machinesMeasured": "ମପାଯାଇଥିବା ମେସିନ୍",
+    "fleetAvailability": "ଫ୍ଲିଟ୍ ଉପଲବ୍ଧତା",
+    "uptime": "ଚାଲୁ ସମୟ",
+    "downtime": "ବନ୍ଦ ସମୟ",
+    "siteOee_one": "ସାଇଟ୍ OEE · ଏହି ସପ୍ତାହ ({{count}}ଟି ମେସିନ୍)",
+    "siteOee_other": "ସାଇଟ୍ OEE · ଏହି ସପ୍ତାହ ({{count}}ଟି ମେସିନ୍)"
+  },
+  "list": {
+    "heading": "ମେସିନ୍",
+    "count_one": "{{count}}ଟି ମେସିନ୍",
+    "count_other": "{{count}}ଟି ମେସିନ୍",
+    "empty": "ଦେଖାଇବାକୁ କୌଣସି ମେସିନ୍ ନାହିଁ।",
+    "excluded": "ଉପର ମୋଟରୁ ବାଦ୍: ସିଫ୍ଟ ସୂଚୀ ନଥିବା {{noShift}}ଟି, ରିଡିଂ ନଥିବା {{noReadings}}ଟି।"
+  },
+  "card": {
+    "oeeTitle": "ଏହି କ୍ୟାଲେଣ୍ଡର ସପ୍ତାହର OEE",
+    "oeeWeek": "OEE {{value}}% · ଏହି ସପ୍ତାହ"
+  },
+  "reason": {
+    "no_shift_schedule": "କୌଣସି ସିଫ୍ଟ ସୂଚୀ ସେଟ୍ ହୋଇନାହିଁ",
+    "no_readings": "ଏହି ଅବଧିରେ କୌଣସି ରିଡିଂ ନାହିଁ"
+  },
+  "detailReason": {
+    "no_shift_schedule": "ଏହି ମେସିନ୍ ପାଇଁ କୌଣସି ସିଫ୍ଟ ସୂଚୀ ସେଟ୍ ହୋଇନାହିଁ",
+    "no_readings": "ଏହି ଅବଧିରେ କୌଣସି ରିଡିଂ ନାହିଁ"
+  },
+  "oeeReason": {
+    "no_shift_schedule": "ଏହି ମେସିନ୍‌ର କୌଣସି ସିଫ୍ଟ ସୂଚୀ ନାହିଁ",
+    "no_readings": "ଏହି ଅବଧିରେ କୌଣସି ରିଡିଂ ନାହିଁ",
+    "parameter_not_set": "ଏକ ଆବଶ୍ୟକ ପାରାମିଟର ସେଟ୍ ହୋଇନାହିଁ",
+    "insufficient_coverage": "ବିଚାର କରିବାକୁ ଯଥେଷ୍ଟ ରିଡିଂ ନାହିଁ",
+    "unbound": "ଆବଶ୍ୟକ ସିଗନାଲ୍ ଯୋଡ଼ାଯାଇନାହିଁ",
+    "unit_mismatch": "ଇନ୍ଧନ ଏକକ ମାନକ ସଂଖ୍ୟା ସହ ମେଳ ଖାଉନାହିଁ",
+    "stale": "ରିଡିଂ ପୁରୁଣା",
+    "undefined_result": "ମାପିବା ପାଇଁ କୌଣସି ଉପଲବ୍ଧ ସମୟ ନାହିଁ",
+    "not_available": "ଉପଲବ୍ଧ ନାହିଁ"
+  },
+  "source": {
+    "equipment": "ଏହି ମେସିନ୍",
+    "class": "ଏହାର ଶ୍ରେଣୀ",
+    "site": "ଏହାର ସାଇଟ୍",
+    "client": "ଆକାଉଣ୍ଟ",
+    "oem": "OEM ସଂଖ୍ୟା"
+  },
+  "oee": {
+    "title": "ସାମଗ୍ରିକ ଉପକରଣ ପ୍ରଭାବଶୀଳତା",
+    "formula": "ଉପଲବ୍ଧତା × କାର୍ଯ୍ୟଦକ୍ଷତା × ଗୁଣବତ୍ତା · UTC {{window}}",
+    "windowUnit": {
+      "day": "ଦିନ",
+      "week": "ସପ୍ତାହ",
+      "month": "ମାସ"
+    },
+    "window": {
+      "day": "ଆଜି",
+      "week": "ଏହି ସପ୍ତାହ",
+      "month": "ଏହି ମାସ"
+    },
+    "availability": "ଉପଲବ୍ଧତା",
+    "performance": "କାର୍ଯ୍ୟଦକ୍ଷତା",
+    "quality": "ଗୁଣବତ୍ତା",
+    "availableOfScheduled": "ନିର୍ଧାରିତ {{scheduled}} ମିନିଟ୍‌ରୁ {{available}}",
+    "scheduled": "ନିର୍ଧାରିତ {{scheduled}} ମିନିଟ୍",
+    "breakdowns_one": "{{count}}ଟି ବ୍ରେକଡାଉନ୍ · {{minutes}} ମିନିଟ୍",
+    "breakdowns_other": "{{count}}ଟି ବ୍ରେକଡାଉନ୍ · {{minutes}} ମିନିଟ୍",
+    "oneOngoing": "ଗୋଟିଏ ଚାଲିଛି",
+    "idleThreshold": "{{minutes}} ମିନିଟ୍‌ରୁ ଅଧିକ ନିଷ୍କ୍ରିୟ ରହିଲେ ଗଣାଯାଏ",
+    "idleThresholdSetBy": "{{minutes}} ମିନିଟ୍‌ରୁ ଅଧିକ ନିଷ୍କ୍ରିୟ ରହିଲେ ଗଣାଯାଏ, {{source}} ଦ୍ୱାରା ସ୍ଥିର",
+    "burnedVsNominal": "{{actual}} {{unit}} ଜଳିଲା, ମାନକ {{nominal}}",
+    "overNominal": "ମାନକଠାରୁ {{litres}} L ଅଧିକ",
+    "nominalSetBy": "ମାନକ {{source}} ଦ୍ୱାରା ସ୍ଥିର",
+    "breakdownsInWindow": "ଏହି ଅବଧିର ବ୍ରେକଡାଉନ୍",
+    "noneRecorded": "କିଛି ରେକର୍ଡ ହୋଇନାହିଁ।",
+    "ongoing": "ଚାଲିଛି"
+  },
+  "detail": {
+    "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ"
+  },
+  "shifts": {
+    "title": "ସିଫ୍ଟ ଇତିହାସ",
+    "empty": "ଏହି ଅବଧିରେ କୌଣସି ସିଫ୍ଟ ରେକର୍ଡ ହୋଇନାହିଁ।",
+    "col": {
+      "date": "ତାରିଖ",
+      "shift": "ସିଫ୍ଟ",
+      "productive": "ଉତ୍ପାଦନଶୀଳ",
+      "idle": "ନିଷ୍କ୍ରିୟ",
+      "utilization": "ଉପଯୋଗ"
+    }
+  },
+  "errors": {
+    "loadAvailability": "ଉପଲବ୍ଧତା ଲୋଡ୍ କରିହେଲା ନାହିଁ।",
+    "loadOee": "OEE ଲୋଡ୍ କରିହେଲା ନାହିଁ।",
+    "loadMachine": "ଏହି ମେସିନ୍ ଲୋଡ୍ କରିହେଲା ନାହିଁ।"
+  }
+}

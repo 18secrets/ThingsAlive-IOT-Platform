@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Building2, Cpu, Info, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { apiListAllEquipment, apiListDevicePool } from '../../lib/api';
 import { useSlot } from '../../lib/useSlot';
@@ -17,6 +18,7 @@ interface MasterAdminDashboardProps {
  * missing rather than shown with numbers nobody measured.
  */
 export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clients }) => {
+  const { t } = useTranslation('dashboard');
   const pool = useSlot(() => apiListDevicePool(), []);
   const equipment = useSlot(() => apiListAllEquipment(), []);
 
@@ -54,51 +56,51 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
   return (
     <div id="master-admin-dashboard-view" className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Tile label="Total Clients" value={clients.length} note={`${activeClientsCount} active`} tone="sky" icon={<Building2 className="w-5 h-5" />} />
+        <Tile label={t('master.totalClients')} value={clients.length} note={t('master.activeCount', { count: activeClientsCount })} tone="sky" icon={<Building2 className="w-5 h-5" />} />
         <Tile
-          label="Devices in pool"
+          label={t('master.devicesInPool')}
           value={count(pool, devices.length)}
-          note={pool.state === 'unavailable' ? 'Could not read the device pool' : `${poolCounts.assigned} assigned · ${poolCounts.inStock} in stock`}
+          note={pool.state === 'unavailable' ? t('master.poolUnreadable') : t('master.poolNote', { assigned: poolCounts.assigned, inStock: poolCounts.inStock })}
           tone="emerald"
           icon={<Cpu className="w-5 h-5" />}
         />
         <Tile
-          label="Total Equipment"
+          label={t('master.totalEquipment')}
           value={count(equipment, machines.length)}
           note={equipment.state === 'unavailable'
-            ? 'Could not read the equipment register'
-            : `${machines.filter((e) => e.equipmentClassSlug).length} with an equipment class`
-              + (outsideAccounts ? ` · ${outsideAccounts} more outside client accounts` : '')}
+            ? t('master.registerUnreadable')
+            : t('master.withClass', { count: machines.filter((e) => e.equipmentClassSlug).length })
+              + (outsideAccounts ? ` · ${t('master.outsideAccounts', { count: outsideAccounts })}` : '')}
           tone="amber"
           icon={<Wrench className="w-5 h-5" />}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Panel title="By client" subtitle="Assigned devices and active equipment per account">
+        <Panel title={t('master.byClient')} subtitle={t('master.byClientHint')}>
           {byClient.length === 0 ? (
-            <p className="text-sm text-slate-400 py-6 text-center">No client accounts yet.</p>
+            <p className="text-sm text-slate-400 py-6 text-center">{t('master.noClients')}</p>
           ) : (
             <div className="space-y-3">
               {byClient.map((c) => (
                 <div key={c.id} className="space-y-1">
                   <div className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{c.name}</div>
-                  <Bar label="Devices" value={c.devices} max={widest} color="bg-emerald-500" />
-                  <Bar label="Equipment" value={c.equipment} max={widest} color="bg-amber-500" />
+                  <Bar label={t('master.devices')} value={c.devices} max={widest} color="bg-emerald-500" />
+                  <Bar label={t('master.equipment')} value={c.equipment} max={widest} color="bg-amber-500" />
                 </div>
               ))}
             </div>
           )}
         </Panel>
 
-        <Panel title="Device pool" subtitle="Every logger Things Alive holds, by where it is in its life">
+        <Panel title={t('master.devicePool')} subtitle={t('master.devicePoolHint')}>
           {pool.state !== 'ok' ? (
-            <p className="text-sm text-slate-400 py-6 text-center">{pool.state === 'loading' ? 'Loading…' : 'Could not read the device pool.'}</p>
+            <p className="text-sm text-slate-400 py-6 text-center">{pool.state === 'loading' ? t('common.loading') : t('master.poolUnreadableDot')}</p>
           ) : (
             <div className="space-y-2.5">
-              <Bar label="Assigned" value={poolCounts.assigned} max={poolTotal} color="bg-emerald-500" />
-              <Bar label="In stock" value={poolCounts.inStock} max={poolTotal} color="bg-sky-500" />
-              <Bar label="Retired" value={poolCounts.retired} max={poolTotal} color="bg-slate-400" />
+              <Bar label={t('master.assigned')} value={poolCounts.assigned} max={poolTotal} color="bg-emerald-500" />
+              <Bar label={t('master.inStock')} value={poolCounts.inStock} max={poolTotal} color="bg-sky-500" />
+              <Bar label={t('master.retired')} value={poolCounts.retired} max={poolTotal} color="bg-slate-400" />
             </div>
           )}
         </Panel>
@@ -106,7 +108,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
 
       <div className="flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-        <span>Device connectivity and onboarding activity across clients are not shown: the backend answers both per account only, with no cross-tenant read for Master Admin yet.</span>
+        <span>{t('master.notShown')}</span>
       </div>
     </div>
   );

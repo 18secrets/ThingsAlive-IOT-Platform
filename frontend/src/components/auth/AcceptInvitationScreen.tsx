@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { Input } from 'rsuite';
 import { ApiError } from '../../lib/api';
@@ -10,6 +11,7 @@ import logoFull from '../../../assets/logo-icon.png';
 export const AcceptInvitationScreen: React.FC = () => {
   const { acceptInvitation } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const initialToken = searchParams.get('invite') ?? undefined;
   // A reset link from the forgot-password email opens this same screen.
@@ -26,11 +28,11 @@ export const AcceptInvitationScreen: React.FC = () => {
     const trimmedToken = token.trim();
     const trimmedNew = password.trim();
     if (!/[A-Z]/.test(trimmedNew) || !/[a-z]/.test(trimmedNew) || !/[0-9]/.test(trimmedNew) || !/[^A-Za-z0-9]/.test(trimmedNew)) {
-      setError('Password needs an uppercase letter, a lowercase letter, a number and a special character.');
+      setError(t('invite.weak'));
       return;
     }
     if (trimmedNew !== confirmPassword.trim()) {
-      setError('Passwords do not match.');
+      setError(t('invite.mismatch'));
       return;
     }
     setBusy(true);
@@ -39,7 +41,7 @@ export const AcceptInvitationScreen: React.FC = () => {
       await acceptInvitation(trimmedToken, trimmedNew);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : isReset ? 'Could not reset the password.' : 'Could not accept the invitation.');
+      setError(err instanceof ApiError ? err.message : isReset ? t('invite.failedReset') : t('invite.failedAccept'));
     } finally {
       setBusy(false);
     }
@@ -58,44 +60,41 @@ export const AcceptInvitationScreen: React.FC = () => {
             <KeyRound className="w-4.5 h-4.5" />
           </div>
           <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-            {isReset ? 'Choose a new password' : 'Accept your invitation'}
+            {isReset ? t('invite.titleReset') : t('invite.titleAccept')}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5">
-            {isReset
-              ? 'Your reset link filled in the token below. Choose a new password; the link works once.'
-              : <>Paste the invitation token Things Alive gave you, then choose a password. This is the only time
-                you'll need the token — after this you sign in with just your email.</>}
+            {isReset ? t('invite.introReset') : t('invite.introAccept')}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Invitation Token
+                {t('invite.token')}
               </label>
               <Input
                 required
                 autoFocus={!initialToken}
                 value={token}
                 onChange={(value) => setToken(value)}
-                placeholder="Paste the token here"
+                placeholder={t('invite.tokenPlaceholder')}
                 className="font-mono"
               />
             </div>
 
             <PasswordField
-              label="New Password"
+              label={t('invite.newPassword')}
               value={password}
               onChange={setPassword}
-              placeholder="Aa1! and at least 8 characters"
+              placeholder={t('invite.newPasswordPlaceholder')}
               required
               autoFocus={!!initialToken}
             />
 
             <PasswordField
-              label="Confirm Password"
+              label={t('invite.confirmPassword')}
               value={confirmPassword}
               onChange={setConfirmPassword}
-              placeholder="Re-enter new password"
+              placeholder={t('invite.confirmPlaceholder')}
               required
             />
 
@@ -112,7 +111,7 @@ export const AcceptInvitationScreen: React.FC = () => {
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{busy ? 'Setting password…' : 'Set Password & Sign In'}</span>
+              <span>{busy ? t('invite.submitting') : t('invite.submit')}</span>
             </button>
           </form>
         </div>
@@ -123,7 +122,7 @@ export const AcceptInvitationScreen: React.FC = () => {
           className="mt-4 w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to sign in</span>
+          <span>{t('common.backToSignIn')}</span>
         </button>
       </div>
     </div>
