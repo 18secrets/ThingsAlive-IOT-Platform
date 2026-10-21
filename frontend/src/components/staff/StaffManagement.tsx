@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Plus, ShieldCheck, AlertCircle, Mail, RotateCw, Trash2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole, ResendInvitationResult,
   apiResendPlatformStaffInvitation,
@@ -20,11 +21,8 @@ interface StaffManagementProps {
   onDelete: (id: string) => Promise<void>;
 }
 
-const ROLE_LABEL: Record<PlatformStaffRole, string> = {
-  'master-admin': 'Master Admin',
-  'platform-support': 'Platform Support',
-  'catalog-author': 'Catalog Author',
-};
+// Labels are staff.role.<value> in the accounts namespace.
+const ROLES: PlatformStaffRole[] = ['master-admin', 'platform-support', 'catalog-author'];
 
 const STATUS_STYLE: Record<PlatformStaffMember['status'], string> = {
   invited: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
@@ -35,6 +33,8 @@ const STATUS_STYLE: Record<PlatformStaffMember['status'], string> = {
 export const StaffManagement: React.FC<StaffManagementProps> = ({
   staff, error, onInvite, onSetRole, onSuspend, onReinstate, onDelete,
 }) => {
+  const { t } = useTranslation('accounts');
+  const roleLabel = (r: PlatformStaffRole) => t(`staff.role.${r}`, { defaultValue: r });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | PlatformStaffMember['status']>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | PlatformStaffRole>('all');
@@ -55,7 +55,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
     try {
       await onSetRole(id, role);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change this role.');
+      window.alert(err instanceof ApiError ? err.message : t('staff.roleFailed'));
     } finally {
       setBusyId(null);
     }
@@ -68,19 +68,19 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
     try {
       setReissued(await apiResendPlatformStaffInvitation(member.id));
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not resend the invitation.');
+      window.alert(err instanceof ApiError ? err.message : t('staff.resendFailed'));
     } finally {
       setBusyId(null);
     }
   };
 
   const handleDelete = async (member: PlatformStaffMember) => {
-    if (!window.confirm(`Delete ${member.fullName}? Their email becomes free to invite again.`)) return;
+    if (!window.confirm(t('staff.confirmDelete', { name: member.fullName }))) return;
     setBusyId(member.id);
     try {
       await onDelete(member.id);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not delete this person.');
+      window.alert(err instanceof ApiError ? err.message : t('staff.deleteFailed'));
     } finally {
       setBusyId(null);
     }
@@ -92,19 +92,19 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
       try {
         await onReinstate(member.id);
       } catch (err) {
-        window.alert(err instanceof ApiError ? err.message : 'Could not reinstate this person.');
+        window.alert(err instanceof ApiError ? err.message : t('staff.reinstateFailed'));
       } finally {
         setBusyId(null);
       }
       return;
     }
-    const reason = window.prompt(`Why is ${member.fullName} being suspended?`);
+    const reason = window.prompt(t('staff.suspendPrompt', { name: member.fullName }));
     if (!reason?.trim()) return;
     setBusyId(member.id);
     try {
       await onSuspend(member.id, reason.trim());
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not suspend this person.');
+      window.alert(err instanceof ApiError ? err.message : t('staff.suspendFailed'));
     } finally {
       setBusyId(null);
     }
@@ -119,15 +119,15 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Name or Email..."
+            placeholder={t('staff.searchPlaceholder')}
             className="pl-9!"
             size="sm"
           />
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <SelectPicker
-            data={[{ label: 'All statuses', value: 'all' }, { label: 'Invited', value: 'invited' },
-              { label: 'Active', value: 'active' }, { label: 'Suspended', value: 'suspended' }]}
+            data={[{ label: t('staff.allStatuses'), value: 'all' }, { label: t('staff.status.invited'), value: 'invited' },
+              { label: t('staff.status.active'), value: 'active' }, { label: t('staff.status.suspended'), value: 'suspended' }]}
             value={statusFilter}
             onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
             searchable={false}
@@ -136,8 +136,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
             className="w-full sm:w-40"
           />
           <SelectPicker
-            data={[{ label: 'All roles', value: 'all' },
-              ...(Object.keys(ROLE_LABEL) as PlatformStaffRole[]).map((r) => ({ label: ROLE_LABEL[r], value: r }))]}
+            data={[{ label: t('staff.allRoles'), value: 'all' },
+              ...ROLES.map((r) => ({ label: roleLabel(r), value: r }))]}
             value={roleFilter}
             onChange={(v) => setRoleFilter((v ?? 'all') as typeof roleFilter)}
             searchable={false}
@@ -152,7 +152,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Invite Staff</span>
+          <span>{t('staff.invite')}</span>
         </button>
       </div>
 
@@ -180,7 +180,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${
                     s.status !== 'suspended' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
                   }`}
-                  title={s.status === 'suspended' ? 'Reinstate' : 'Suspend'}
+                  title={s.status === 'suspended' ? t('staff.reinstate') : t('staff.suspend')}
                 >
                   <span
                     className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -199,9 +199,9 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Role</label>
+              <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">{t('translation:settings.role')}</label>
               <SelectPicker
-                data={(Object.keys(ROLE_LABEL) as PlatformStaffRole[]).map((r) => ({ label: ROLE_LABEL[r], value: r }))}
+                data={ROLES.map((r) => ({ label: roleLabel(r), value: r }))}
                 value={s.role}
                 onChange={(value) => handleRoleChange(s.id, (value ?? s.role) as PlatformStaffRole)}
                 disabled={busyId === s.id}
@@ -214,17 +214,17 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
-                {s.status}
+                {t(`staff.status.${s.status}`, { defaultValue: s.status })}
               </span>
               {s.status === 'invited' && (
                 <button
                   onClick={() => handleResend(s)}
                   disabled={busyId === s.id}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
-                  title="Issue a new invitation token. The old one stops working."
+                  title={t('staff.resendHint')}
                 >
                   <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
-                  <span>Resend invitation</span>
+                  <span>{t('staff.resendInvitation')}</span>
                 </button>
               )}
               {!s.activatedAt && (
@@ -232,7 +232,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                   onClick={() => handleDelete(s)}
                   disabled={busyId === s.id}
                   className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
-                  title="Delete (never signed in)"
+                  title={t('staff.deleteHint')}
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -249,7 +249,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
         {filtered.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No staff found.</span>
+            <span>{t('staff.empty')}</span>
           </div>
         )}
       </div>

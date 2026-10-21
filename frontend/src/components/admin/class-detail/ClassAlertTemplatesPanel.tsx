@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, Archive, Bell, ShieldAlert, UploadCloud } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { AlertRuleTemplate, AlertRuleTemplateInput } from '../../../lib/api';
 import { AddAlertTemplateModal } from './AddAlertTemplateModal';
 
@@ -28,14 +29,6 @@ const SEVERITY_STYLE: Record<AlertRuleTemplate['severity'], string> = {
   critical: 'text-rose-600 dark:text-rose-400',
 };
 
-const TRIGGER_LABEL: Record<AlertRuleTemplate['trigger'], string> = {
-  'signal-threshold': 'Signal Threshold',
-  'prediction-severity': 'Prediction Severity',
-  'no-telemetry': 'No Telemetry',
-  'fuel-loss': 'Fuel Loss',
-  'chain-origin': 'Chain Origin',
-};
-
 /** One card per slug: the draft in progress if any, else the latest published version. */
 function representativePerSlug(rows: AlertRuleTemplate[]): AlertRuleTemplate[] {
   const bySlug = new Map<string, AlertRuleTemplate[]>();
@@ -53,6 +46,7 @@ function representativePerSlug(rows: AlertRuleTemplate[]): AlertRuleTemplate[] {
 export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> = ({
   equipmentClassSlug, availableSignals, templates, error, onCreate, onUpdate, onPublish, onRetire,
 }) => {
+  const { t } = useTranslation('catalog');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<AlertRuleTemplate | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -75,16 +69,14 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg">
-          What Things Alive knows is worth alerting on for this class. Publishing one
-          means every account granted this class from now on gets a copy — accounts
-          already granted keep running the version they already have.
+          {t('alertTemplates.intro')}
         </p>
         <button
           onClick={() => { setEditingTemplate(null); setIsModalOpen(true); }}
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Bell className="w-4 h-4" />
-          <span>New Alert Rule</span>
+          <span>{t('alertTemplates.new')}</span>
         </button>
       </div>
 
@@ -110,10 +102,10 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                   onClick={() => { setEditingTemplate(tpl); setIsModalOpen(true); }}
                   className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
                   title={tpl.status === 'published'
-                    ? `Saving creates v${tpl.version + 1} as a draft. v${tpl.version} stays published until the new one is.`
+                    ? t('scenarios.newVersionHint', { next: tpl.version + 1, current: tpl.version })
                     : undefined}
                 >
-                  {tpl.status === 'published' ? 'Edit as new version' : 'Edit draft'}
+                  {tpl.status === 'published' ? t('scenarios.editAsNewVersion') : t('common.editDraft')}
                 </button>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{tpl.name}</h4>
@@ -127,22 +119,22 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
             <div className="flex flex-wrap gap-2">
               <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 ${SEVERITY_STYLE[tpl.severity]}`}>
                 <ShieldAlert className="w-3 h-3" />
-                <span className="capitalize">{tpl.severity}</span>
+                <span className="capitalize">{t(`common.severity.${tpl.severity}`, { defaultValue: tpl.severity })}</span>
               </div>
               <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
                 <Bell className="w-3 h-3 text-sky-600" />
-                <span>{TRIGGER_LABEL[tpl.trigger]}</span>
+                <span>{t(`alertTemplates.trigger.${tpl.trigger}`, { defaultValue: tpl.trigger })}</span>
               </div>
               {!tpl.enabledOnCopy && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
-                  <span>Off by default</span>
+                  <span>{t('alertTemplates.offByDefault')}</span>
                 </div>
               )}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[tpl.status]}`}>
-                {tpl.status}
+                {t(`common.status.${tpl.status}`, { defaultValue: tpl.status })}
               </span>
               {tpl.status === 'draft' && (
                 <button
@@ -151,7 +143,7 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>Publish</span>
+                  <span>{t('common.publish')}</span>
                 </button>
               )}
               {tpl.status === 'published' && (
@@ -161,7 +153,7 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                   className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer disabled:opacity-50"
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  <span>Retire</span>
+                  <span>{t('common.retire')}</span>
                 </button>
               )}
             </div>
@@ -171,7 +163,7 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
         {representatives.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No alert rule templates yet for this class.</span>
+            <span>{t('alertTemplates.none')}</span>
           </div>
         )}
       </div>

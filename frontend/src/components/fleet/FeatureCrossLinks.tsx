@@ -1,12 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 export type CareFeatureKey = 'things-care' | 'things-shield' | 'production-monitoring';
 
-const FEATURES: { key: CareFeatureKey; label: string }[] = [
+// Labels: the two product names stay as they are; 'Production' is a fleet-namespace key.
+const FEATURES: { key: CareFeatureKey; label: string; i18nKey?: string }[] = [
   { key: 'things-care', label: 'ThingsCare' },
   { key: 'things-shield', label: 'ThingsShield' },
-  { key: 'production-monitoring', label: 'Production' },
+  { key: 'production-monitoring', label: 'Production', i18nKey: 'crossLinks.production' },
 ];
 
 const pillClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border';
@@ -20,15 +22,17 @@ const activeClass = `${pillClass} bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark
 // of a link.
 export const FeatureCrossLinks: React.FC<{ thingId: string; current: CareFeatureKey }> = ({ thingId, current }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('fleet');
+  const label = (f: (typeof FEATURES)[number]) => (f.i18nKey ? t(f.i18nKey) : f.label);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={() => navigate(`/dashboard/${thingId}`)} className={linkClass}>
-        Things Details
+        {t('crossLinks.thingDetails')}
       </button>
       {FEATURES.map((f) => (
         f.key === current
-          ? <span key={f.key} className={activeClass}>{f.label}</span>
-          : <button key={f.key} onClick={() => navigate(`/${f.key}/${thingId}`)} className={linkClass}>{f.label}</button>
+          ? <span key={f.key} className={activeClass}>{label(f)}</span>
+          : <button key={f.key} onClick={() => navigate(`/${f.key}/${thingId}`)} className={linkClass}>{label(f)}</button>
       ))}
     </div>
   );

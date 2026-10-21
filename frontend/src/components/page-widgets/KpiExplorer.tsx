@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { AlertCircle } from 'lucide-react';
 import { DateRangePicker, SelectPicker } from 'rsuite';
 import { ApiError, KpiEnvelope, KpiSeriesPoint, apiGetEquipmentKpi, apiListEquipmentKpis } from '../../lib/api';
@@ -8,19 +10,16 @@ import { reasonText } from './PageWidgets';
 
 type Preset = 'declared' | '24h' | '7d' | '30d' | 'custom';
 
-const PRESET_LABEL: Record<Preset, string> = {
-  declared: "Formula's own window", '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days', custom: 'Custom range',
-};
+/** Labels live under `kpiExplorer.preset.*`. */
+const PRESETS: Preset[] = ['declared', '24h', '7d', '30d', 'custom'];
 const HOURS: Partial<Record<Preset, number>> = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
 const fmt = (v: number | null) => (v == null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: 3 }));
 
-const READINESS_LABEL: Record<string, string> = { not_configured: 'Not configured', not_available: 'Not available', blocked: 'Blocked' };
-
 /** An un-windowed request for a formula whose own window can't be resolved comes back
  *  with no window at all; that is "pick a range", not "Invalid Date". */
-const windowText = (w: { from: string; to: string } | null) =>
-  w?.from && w.to ? `${new Date(w.from).toLocaleString()} – ${new Date(w.to).toLocaleString()}` : 'no window';
+const windowText = (w: { from: string; to: string } | null, t: TFunction) =>
+  w?.from && w.to ? `${new Date(w.from).toLocaleString()} – ${new Date(w.to).toLocaleString()}` : t('kpiExplorer.noWindow');
 
 /**
  * One KPI for one machine over a chosen window (GET …/kpis/:formulaKey). The page's
@@ -31,6 +30,7 @@ const windowText = (w: { from: string; to: string } | null) =>
 export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; initialFormulaKey?: string }> = ({
   sourceSystem, externalId, initialFormulaKey,
 }) => {
+  const { t } = useTranslation('equipment');
   const [formulas, setFormulas] = useState<string[]>(initialFormulaKey ? [initialFormulaKey] : []);
   const [formulaKey, setFormulaKey] = useState<string | null>(initialFormulaKey ?? null);
   // Seven days rather than the formula's own window: not every formula declares one.
@@ -69,7 +69,7 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
     setError(undefined);
     apiGetEquipmentKpi(sourceSystem, externalId, formulaKey, window)
       .then((r) => { if (live) setResult(r); })
-      .catch((err) => { if (live) { setResult(null); setError(err instanceof ApiError ? err.message : 'Could not evaluate this KPI.'); } })
+      .catch((err) => { if (live) { setResult(null); setError(err instanceof ApiError ? err.message : t('kpiExplorer.evaluateFailed')); } })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [sourceSystem, externalId, formulaKey, preset, range]);
@@ -87,12 +87,12 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
           onChange={(v) => setFormulaKey(v ?? null)}
           searchable={formulas.length > 8}
           cleanable={false}
-          placeholder="Choose a KPI"
+          placeholder={t('kpiExplorer.chooseKpi')}
           className="min-w-[220px]"
         />
         <SelectPicker
           size="sm"
-          data={(Object.keys(PRESET_LABEL) as Preset[]).map((p) => ({ label: PRESET_LABEL[p], value: p }))}
+          data={PRESETS.map((p) => ({ label: t(`kpiExplorer.preset.${p}`), value: p }))}
           value={preset}
           onChange={(v) => setPreset((v ?? 'declared') as Preset)}
           searchable={false}
@@ -106,7 +106,7 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
             value={range}
             onChange={(v) => setRange(v as [Date, Date] | null)}
             shouldDisableDate={(date) => date.getTime() > Date.now()}
-            placeholder="From – to"
+            placeholder={t('kpiExplorer.fromTo')}
           />
         )}
       </div>
@@ -116,23 +116,23 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span>{error}</span>
         </div>
       )}
-      {!formulaKey && <p className="text-slate-400">This machine's class declares no KPIs.</p>}
-      {preset === 'custom' && !range && <p className="text-slate-400">Pick a range to evaluate.</p>}
-      {loading && <p className="text-slate-500">Evaluating…</p>}
+      {!formulaKey && <p className="text-slate-400">{t('kpiExplorer.noKpis')}</p>}
+      {preset === 'custom' && !range && <p className="text-slate-400">{t('kpiExplorer.pickRange')}</p>}
+      {loading && <p className="text-slate-500">{t('kpiExplorer.evaluating')}</p>}
 
       {result && !loading && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Chip tone={result.readiness === 'ready' ? 'emerald' : result.readiness === 'blocked' ? 'rose' : 'amber'}>
-              {result.readiness === 'ready' ? 'Ready' : result.reason ? reasonText(result.reason) : READINESS_LABEL[result.readiness] ?? result.readiness}
+              {result.readiness === 'ready' ? t('readiness.ready') : result.reason ? reasonText(result.reason, t) : t(`readiness.${result.readiness}`, { defaultValue: result.readiness })}
             </Chip>
-            <span className="text-slate-400">{windowText(result.window)}</span>
+            <span className="text-slate-400">{windowText(result.window, t)}</span>
             <span className="text-slate-400">
-              · coverage {result.coverage.actual}/{result.coverage.expected} ({(result.coverage.ratio * 100).toFixed(0)}%)
+              · {t('kpiExplorer.coverage', { actual: result.coverage.actual, expected: result.coverage.expected, percent: (result.coverage.ratio * 100).toFixed(0) })}
             </span>
           </div>
           {result.missingParameters?.length ? (
-            <p className="text-amber-600 dark:text-amber-400">Parameters not set: {result.missingParameters.join(', ')}</p>
+            <p className="text-amber-600 dark:text-amber-400">{t('kpiExplorer.parametersNotSet', { list: result.missingParameters.join(', ') })}</p>
           ) : null}
 
           {result.readiness === 'ready' && result.resultKind === 'scalar' && (
@@ -145,12 +145,12 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
             <div className="space-y-2">
               <div className="flex items-end gap-6 flex-wrap">
                 <div>
-                  <p className="text-[11px] text-slate-400">Latest</p>
+                  <p className="text-[11px] text-slate-400">{t('kpiExplorer.latest')}</p>
                   <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{fmt(values[values.length - 1] ?? null)} <span className="text-sm font-normal text-slate-400">{result.unit}</span></p>
                 </div>
-                <div><p className="text-[11px] text-slate-400">Min</p><p className="font-mono">{fmt(values.length ? Math.min(...values) : null)}</p></div>
-                <div><p className="text-[11px] text-slate-400">Max</p><p className="font-mono">{fmt(values.length ? Math.max(...values) : null)}</p></div>
-                <div><p className="text-[11px] text-slate-400">Points</p><p className="font-mono">{series.length}</p></div>
+                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.min')}</p><p className="font-mono">{fmt(values.length ? Math.min(...values) : null)}</p></div>
+                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.max')}</p><p className="font-mono">{fmt(values.length ? Math.max(...values) : null)}</p></div>
+                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.points')}</p><p className="font-mono">{series.length}</p></div>
               </div>
               {values.length >= 2 && <Sparkline values={values} width={560} height={80} colorClass="text-sky-600 dark:text-sky-400" />}
             </div>

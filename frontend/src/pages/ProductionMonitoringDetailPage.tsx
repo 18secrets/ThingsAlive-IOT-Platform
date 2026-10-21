@@ -1,56 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, Clock3, ExternalLink, Plus } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import {
-  ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor, OeeParameterSource,
+  ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
   OeeWindow, UtilizationShiftRow, apiGetBreakdowns, apiGetEquipmentAvailability, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
 
 const DAYS = 7;
-const REASON_TEXT: Record<string, string> = {
-  no_shift_schedule: 'No shift schedule configured for this machine',
-  no_readings: 'No readings in this period',
-};
-
-const OEE_REASON_TEXT: Record<string, string> = {
-  no_shift_schedule: 'No shift schedule for this machine',
-  no_readings: 'No readings in this window',
-  parameter_not_set: 'A required parameter is not set',
-  insufficient_coverage: 'Not enough readings to judge',
-  unbound: 'The signal it needs is not bound',
-  unit_mismatch: 'Fuel units do not match the nominal figure',
-  stale: 'Readings are stale',
-  undefined_result: 'No available time to measure against',
-  not_available: 'Not available',
-};
-
-const SOURCE_TEXT: Record<OeeParameterSource, string> = {
-  equipment: 'this machine', class: 'its class', site: 'its site', client: 'the account', oem: 'the OEM figure',
-};
-
-const WINDOW_LABEL: Record<OeeWindow, string> = { day: 'Today', week: 'This week', month: 'This month' };
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
 
-const FactorTile: React.FC<{ label: string; factor: OeeFactor; children?: React.ReactNode }> = ({ label, factor, children }) => (
-  <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-1">
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-    {factor.readiness === 'ready' ? (
-      <p className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{pct(factor.value)}</p>
-    ) : (
-      <p className="text-xs text-slate-400">{OEE_REASON_TEXT[factor.reason ?? ''] ?? factor.reason ?? 'Not available'}</p>
-    )}
-    {children}
-  </div>
-);
+const FactorTile: React.FC<{ label: string; factor: OeeFactor; children?: React.ReactNode }> = ({ label, factor, children }) => {
+  const { t } = useTranslation('production');
+  return (
+    <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      {factor.readiness === 'ready' ? (
+        <p className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{pct(factor.value)}</p>
+      ) : (
+        <p className="text-xs text-slate-400">{factor.reason ? t(`oeeReason.${factor.reason}`, { defaultValue: factor.reason }) : t('common.notAvailable')}</p>
+      )}
+      {children}
+    </div>
+  );
+};
 
 /** OEE for one machine (QOEE1): the three factors it multiplies, each standing or
  *  falling on its own, and the breakdowns that took Performance down. */
 function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const { t } = useTranslation('production');
   const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
   const [oee, setOee] = useState<EquipmentOee | null>(null);
   const [breakdowns, setBreakdowns] = useState<BreakdownEvent[]>([]);
@@ -67,7 +50,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
         return apiGetBreakdowns(sourceSystem, externalId, result.from, result.to)
           .then((rows) => { if (live) setBreakdowns(rows); });
       })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load OEE.'); });
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadOee')); });
     return () => { live = false; };
   }, [sourceSystem, externalId, oeeWindow]);
 
@@ -75,8 +58,8 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Overall Equipment Effectiveness</h3>
-          <p className="text-xs text-slate-400">Availability × Performance × Quality · UTC {oeeWindow}</p>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('oee.title')}</h3>
+          <p className="text-xs text-slate-400">{t('oee.formula', { window: t(`oee.windowUnit.${oeeWindow}`) })}</p>
         </div>
         <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
           {(['day', 'week', 'month'] as OeeWindow[]).map((w) => (
@@ -85,7 +68,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               onClick={() => setOeeWindow(w)}
               className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${oeeWindow === w ? 'bg-sky-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
-              {WINDOW_LABEL[w]}
+              {t(`oee.window.${w}`)}
             </button>
           ))}
         </div>
@@ -102,55 +85,59 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               <p className="text-xs text-slate-400">
                 {oee.oee.readiness === 'ready'
                   ? `${new Date(oee.from).toLocaleString()} – ${new Date(oee.to).toLocaleString()}`
-                  : OEE_REASON_TEXT[oee.oee.reason ?? ''] ?? 'OEE not available'}
+                  : oee.oee.reason ? t(`oeeReason.${oee.oee.reason}`, { defaultValue: oee.oee.reason }) : t('common.oeeNotAvailable')}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FactorTile label="Availability" factor={oee.availability}>
+            <FactorTile label={t('oee.availability')} factor={oee.availability}>
               <p className="text-[11px] text-slate-400">
-                {oee.availability.availableMinutes != null ? `${Math.round(oee.availability.availableMinutes)} of ` : ''}{Math.round(oee.availability.scheduledMinutes)} scheduled min
+                {oee.availability.availableMinutes != null
+                  ? t('oee.availableOfScheduled', { available: Math.round(oee.availability.availableMinutes), scheduled: Math.round(oee.availability.scheduledMinutes) })
+                  : t('oee.scheduled', { scheduled: Math.round(oee.availability.scheduledMinutes) })}
               </p>
             </FactorTile>
-            <FactorTile label="Performance" factor={oee.performance}>
+            <FactorTile label={t('oee.performance')} factor={oee.performance}>
               <p className="text-[11px] text-slate-400">
-                {oee.performance.breakdownCount} breakdown{oee.performance.breakdownCount === 1 ? '' : 's'} · {Math.round(oee.performance.breakdownMinutes)} min
-                {oee.performance.openBreakdown ? ' · one ongoing' : ''}
+                {t('oee.breakdowns', { count: oee.performance.breakdownCount, minutes: Math.round(oee.performance.breakdownMinutes) })}
+                {oee.performance.openBreakdown ? ` · ${t('oee.oneOngoing')}` : ''}
               </p>
               {oee.performance.thresholdMinutes != null && (
                 <p className="text-[11px] text-slate-400">
-                  Idle over {oee.performance.thresholdMinutes} min counts{oee.performance.parameterSource ? `, set by ${SOURCE_TEXT[oee.performance.parameterSource]}` : ''}
+                  {oee.performance.parameterSource
+                    ? t('oee.idleThresholdSetBy', { minutes: oee.performance.thresholdMinutes, source: t(`source.${oee.performance.parameterSource}`) })
+                    : t('oee.idleThreshold', { minutes: oee.performance.thresholdMinutes })}
                 </p>
               )}
               {oee.performance.warning && <p className="text-[11px] text-amber-600 dark:text-amber-400">{oee.performance.warning}</p>}
             </FactorTile>
-            <FactorTile label="Quality" factor={oee.quality}>
+            <FactorTile label={t('oee.quality')} factor={oee.quality}>
               {oee.quality.nominalFuel != null && oee.quality.actualFuel != null && (
                 <p className="text-[11px] text-slate-400">
-                  {oee.quality.actualFuel.toFixed(1)} {oee.quality.unit} burned vs {oee.quality.nominalFuel.toFixed(1)} nominal
+                  {t('oee.burnedVsNominal', { actual: oee.quality.actualFuel.toFixed(1), unit: oee.quality.unit, nominal: oee.quality.nominalFuel.toFixed(1) })}
                 </p>
               )}
               {oee.quality.wasteLitres != null && oee.quality.wasteLitres > 0 && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">{oee.quality.wasteLitres.toFixed(1)} L over nominal</p>
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">{t('oee.overNominal', { litres: oee.quality.wasteLitres.toFixed(1) })}</p>
               )}
               {oee.quality.parameterSource && (
-                <p className="text-[11px] text-slate-400">Nominal set by {SOURCE_TEXT[oee.quality.parameterSource]}</p>
+                <p className="text-[11px] text-slate-400">{t('oee.nominalSetBy', { source: t(`source.${oee.quality.parameterSource}`) })}</p>
               )}
             </FactorTile>
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Breakdowns in this window</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('oee.breakdownsInWindow')}</p>
             {breakdowns.length === 0 ? (
-              <p className="text-xs text-slate-400">None recorded.</p>
+              <p className="text-xs text-slate-400">{t('oee.noneRecorded')}</p>
             ) : (
               breakdowns.map((b) => (
                 <div key={b.id} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
                   <span className="text-slate-600 dark:text-slate-300">
-                    {new Date(b.startedAt).toLocaleString()} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString() : 'ongoing'}
+                    {new Date(b.startedAt).toLocaleString()} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString() : t('oee.ongoing')}
                   </span>
-                  <Chip tone={b.endedAt ? 'amber' : 'rose'}>{b.durationMinutes != null ? `${b.durationMinutes} min` : 'ongoing'}</Chip>
+                  <Chip tone={b.endedAt ? 'amber' : 'rose'}>{b.durationMinutes != null ? `${b.durationMinutes} min` : t('oee.ongoing')}</Chip>
                 </div>
               ))
             )}
@@ -170,6 +157,7 @@ function periodLastNDays(days: number): { from: string; to: string } {
 export const ProductionMonitoringDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('production');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [availability, setAvailability] = useState<EquipmentAvailability | null>(null);
   const [shifts, setShifts] = useState<UtilizationShiftRow[]>([]);
@@ -177,8 +165,8 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   usePageHeader({
-    title: profile?.name ?? externalId ?? 'Machine not found',
-    subtitle: 'Production Monitoring Detail',
+    title: profile?.name ?? externalId ?? t('page.machineNotFound'),
+    subtitle: t('page.detailSubtitle'),
     onBack: () => navigate('/production-monitoring'),
   });
 
@@ -192,18 +180,18 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
     apiGetEquipmentUtilization(sourceSystem, externalId, { from, to }).then((rows) => { if (live) setShifts(rows); }).catch(() => {});
     apiGetEquipmentAvailability(sourceSystem, externalId, from, to)
       .then((a) => { if (live) { setAvailability(a); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load this machine.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadMachine')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
 
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Last {DAYS} days</span>
-        <h2 className="text-xl font-bold">Production Monitoring &amp; Availability</h2>
+        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('hero.lastDays', { count: DAYS })}</span>
+        <h2 className="text-xl font-bold">{t('hero.title')}</h2>
       </div>
 
       {error && (
@@ -221,25 +209,25 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
             <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{sourceSystem}/{externalId}</p>
             {availability?.readiness === 'ready' ? (
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <Chip icon={Clock3} title="Uptime hours" size="md">{(availability.uptimeHours ?? 0).toFixed(0)}h up</Chip>
-                <Chip tone={(availability.downtimeHours ?? 0) > 0 ? 'amber' : 'slate'} title="Downtime hours" size="md">{(availability.downtimeHours ?? 0).toFixed(0)}h down</Chip>
+                <Chip icon={Clock3} title={t('common.uptimeTitle')} size="md">{t('common.hoursUp', { hours: (availability.uptimeHours ?? 0).toFixed(0) })}</Chip>
+                <Chip tone={(availability.downtimeHours ?? 0) > 0 ? 'amber' : 'slate'} title={t('common.downtimeTitle')} size="md">{t('common.hoursDown', { hours: (availability.downtimeHours ?? 0).toFixed(0) })}</Chip>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 mt-2">{availability?.reason ? REASON_TEXT[availability.reason] : 'Availability not available'}</p>
+              <p className="text-xs text-slate-400 mt-2">{availability?.reason ? t(`detailReason.${availability.reason}`, { defaultValue: availability.reason }) : t('detail.availabilityNotAvailable')}</p>
             )}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
-            <Plus className="w-4 h-4" /> Create work order
+            <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
           </button>
           {sourceSystem && externalId && (
             <button
               onClick={() => navigate(`/admin/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`)}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300 cursor-pointer"
             >
-              <ExternalLink className="w-4 h-4" /> View equipment page
+              <ExternalLink className="w-4 h-4" /> {t('common.viewEquipmentPage')}
             </button>
           )}
         </div>
@@ -248,19 +236,19 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
       {sourceSystem && externalId && <OeeSection sourceSystem={sourceSystem} externalId={externalId} />}
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-2">Shift history</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-2">{t('shifts.title')}</h3>
         {shifts.length === 0 ? (
-          <p className="text-sm text-slate-400">No recorded shifts in this period.</p>
+          <p className="text-sm text-slate-400">{t('shifts.empty')}</p>
         ) : (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
-                  <th className="px-4 py-2.5 text-left font-semibold">Date</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Shift</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Productive</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Idle</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Utilization</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.date')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.shift')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.productive')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.idle')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.utilization')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

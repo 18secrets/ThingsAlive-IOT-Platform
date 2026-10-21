@@ -1,0 +1,95 @@
+{
+  "page": {
+    "subtitle": "Safety, Compliance & Risk",
+    "heading": "ThingsShield: Safety, Compliance & Risk",
+    "eyebrow": "People · Machines · Evidence",
+    "info": "Each machine has a compliance, a safety and a security status, read from its latest check record. A check nobody has recorded counts as not recorded.",
+    "loadFailed": "Could not load ThingsShield.",
+    "countNote": "Counted per machine and category: each machine has three checks.",
+    "machines": "Machines",
+    "machineCount_one": "{{count}} machine",
+    "machineCount_other": "{{count}} machines",
+    "loading": "Loading…",
+    "noMatch": "No machines match this filter.",
+    "pageOf": "Page {{page}} of {{count}}",
+    "prev": "Prev",
+    "next": "Next",
+    "incidentsLink": "Incidents are tracked in Incident Management"
+  },
+  "card": {
+    "needsAttention": "Needs attention — a failed or overdue check",
+    "allClear": "No failed or overdue checks",
+    "details": "Details"
+  },
+  "category": {
+    "compliance": "Compliance",
+    "safety": "Safety",
+    "security": "Security"
+  },
+  "status": {
+    "action_required": "Action required",
+    "overdue": "Overdue",
+    "due_soon": "Due soon",
+    "current": "Current",
+    "not_recorded": "Not recorded"
+  },
+  "result": {
+    "passed": "Passed",
+    "attention": "Attention",
+    "failed": "Failed"
+  },
+  "detail": {
+    "notFoundTitle": "Machine not found",
+    "subtitle": "ThingsShield Detail",
+    "loadFailed": "Could not load this machine.",
+    "notFound": "This machine could not be found in your account.",
+    "dueSoonWindow_one": "Due soon = within {{count}} day ({{source}})",
+    "dueSoonWindow_other": "Due soon = within {{count}} days ({{source}})",
+    "windowDefault": "default",
+    "windowParameter": "set by parameter",
+    "noRecord": {
+      "compliance": "No compliance check recorded for this machine yet.",
+      "safety": "No safety check recorded for this machine yet.",
+      "security": "No security check recorded for this machine yet."
+    },
+    "addRecord": {
+      "compliance": "Add compliance record",
+      "safety": "Add safety record",
+      "security": "Add security record"
+    },
+    "history": "History",
+    "correctRecord": "Correct record"
+  },
+  "record": {
+    "corrected": "Corrected",
+    "performedTitle": "When the check was performed",
+    "dueTitle": "Next check due",
+    "due": "due {{date}}",
+    "oneOff": "one-off",
+    "accountUser": "Account user",
+    "correct": "Correct",
+    "recordedTitle": "Recorded in the platform; corrections are added, never overwritten",
+    "recorded": "Recorded {{date}}",
+    "aCorrection": "a correction"
+  },
+  "form": {
+    "saveFailed": "Could not save this record.",
+    "correctionNote": "A correction is saved as a new record that replaces this one. The original stays in the history, and a record can be corrected once.",
+    "whatChecked": "What was checked",
+    "whatCheckedPlaceholder": "e.g. Guard / isolation inspection",
+    "result": "Result",
+    "performedOn": "Performed on",
+    "nextDue": "Next check due (optional)",
+    "oneOff": "One-off",
+    "owner": "Owner",
+    "ownerKept": "Kept: the account user who owns it",
+    "ownerPlaceholder": "e.g. R. Kulkarni (contractor)",
+    "reference": "Requirement / document reference",
+    "referencePlaceholder": "e.g. CHK-2026-0412",
+    "findings": "Findings",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveCorrection": "Save correction",
+    "saveRecord": "Save record"
+  }
+}

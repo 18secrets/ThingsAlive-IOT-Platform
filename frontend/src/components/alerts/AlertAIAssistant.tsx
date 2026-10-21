@@ -15,6 +15,7 @@ import {
   Wind,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { WorkflowSpec, parsePromptToWorkflow, hasConcreteConditions, mentionsSensorKeyword } from '../../utils/workflowParser';
 import { FLEET } from '../../data/fleetMockData';
 
@@ -34,6 +35,8 @@ interface CardItem {
   iconColor: string;
 }
 
+// Kept in English on purpose: the text is fed straight to parsePromptToWorkflow,
+// which only understands English. The tags are display-only and are translated.
 const QUICK_EXAMPLES: { text: string; tags: string[] }[] = [
   {
     text: 'Notify me if pump energy consumption spikes above 55kWh in a 1 hour window',
@@ -136,13 +139,8 @@ const DRAFTS: DraftItem[] = [
   },
 ];
 
-const CREATION_STEPS = [
-  { id: 'understand', label: 'Understanding Requirement' },
-  { id: 'sensors', label: 'Identifying Sensors' },
-  { id: 'conditions', label: 'Defining Conditions' },
-  { id: 'actions', label: 'Selecting Actions' },
-  { id: 'ready', label: 'Ready to Generate' },
-];
+// Labels live in the alerts namespace under assistant.steps.<id>.
+const CREATION_STEPS = ['understand', 'sensors', 'conditions', 'actions', 'ready'] as const;
 
 const STATUS_BADGE_STYLES: Record<StatusState, string> = {
   done: 'text-emerald-600 dark:text-emerald-400',
@@ -185,6 +183,7 @@ const ItemCard: React.FC<{ item: CardItem; tag: string; tagClass: string; button
 };
 
 export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }) => {
+  const { t } = useTranslation('alerts');
   const [prompt, setPrompt] = useState('');
   const [equipmentId, setEquipmentId] = useState('');
   const [phase, setPhase] = useState<'suggest' | 'clarifying'>('suggest');
@@ -215,11 +214,11 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
 
   const steps = useMemo(() => {
     const sensorsFound = mentionsSensorKeyword(prompt);
-    return CREATION_STEPS.map((step) => {
+    return CREATION_STEPS.map((id) => {
       let status: StatusState = 'pending';
-      if (step.id === 'understand') status = sensorsFound ? 'done' : 'active';
-      if (step.id === 'sensors') status = sensorsFound ? 'active' : 'pending';
-      return { ...step, status };
+      if (id === 'understand') status = sensorsFound ? 'done' : 'active';
+      if (id === 'sensors') status = sensorsFound ? 'active' : 'pending';
+      return { id, status };
     });
   }, [prompt]);
 
@@ -233,10 +232,9 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     <div id="alert-ai-assistant-view" className="space-y-3">
       {/* Hero — matches the Alerts page's own header styling */}
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Describe your alarm in natural language</h2>
+        <h2 className="text-xl font-bold">{t('assistant.heroTitle')}</h2>
         <p className="text-sm text-sky-100 max-w-2xl">
-          ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust,
-          industrial-grade monitoring workflows.
+          {t('assistant.heroBody')}
         </p>
       </div>
 
@@ -245,12 +243,12 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
           under the hero, rather than buried further down the page. */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1 max-w-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">Equipment</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">{t('translation:sidebar.equipment')}</span>
           <SelectPicker
             data={FLEET.map((t) => ({ label: `${t.id} · ${t.name}`, value: t.id }))}
             value={equipmentId}
             onChange={(value) => setEquipmentId(value ?? '')}
-            placeholder="Select equipment…"
+            placeholder={t('assistant.selectEquipment')}
             block
             searchable={false}
             cleanable={false}
@@ -264,10 +262,10 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
           className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          Create Custom
+          {t('assistant.createCustom')}
         </button>
       </div>
-      {!canAct && <p className="text-xs text-amber-600 dark:text-amber-400">Select a Thing before describing or generating an alert.</p>}
+      {!canAct && <p className="text-xs text-amber-600 dark:text-amber-400">{t('assistant.selectThingFirst')}</p>}
 
       {/* AI Prompt + Right Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
@@ -275,7 +273,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
             <Sparkles className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-            AI PROMPT
+            {t('assistant.aiPrompt')}
           </div>
           <Input
             as="textarea"
@@ -285,17 +283,17 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
               if (phase === 'clarifying' && !value.trim()) setPhase('suggest');
             }}
             rows={6}
-            placeholder={"e.g. \"Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.\""}
+            placeholder={t('assistant.promptPlaceholder', { example: 'Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.' })}
             className="flex-1 min-h-[140px] resize-none bg-transparent"
           />
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               className="px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
-              title="Dictate your alert (demo only)"
+              title={t('assistant.voiceTitle')}
             >
               <Mic className="w-3.5 h-3.5" />
-              Voice
+              {t('assistant.voice')}
             </button>
             <button
               type="button"
@@ -304,7 +302,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
               className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Generate Workflow
+              {t('assistant.generate')}
             </button>
           </div>
         </div>
@@ -313,7 +311,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         {phase === 'suggest' ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-              Quick Try Examples
+              {t('assistant.quickExamples')}
             </div>
             <div className={`space-y-3 overflow-y-auto max-h-72 pr-1 -mr-1 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
               {QUICK_EXAMPLES.map((ex) => (
@@ -331,7 +329,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                         key={tag}
                         className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-[10px] text-slate-500 dark:text-slate-400"
                       >
-                        {tag}
+                        {t(`assistant.tags.${tag}`, { defaultValue: tag })}
                       </span>
                     ))}
                   </div>
@@ -342,7 +340,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         ) : (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5">
             <div className="flex items-center justify-between pb-3 mb-1 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Building Your Alert</h3>
+              <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('assistant.building')}</h3>
               <ListChecks className="w-4 h-4 text-slate-400" />
             </div>
             <div className="space-y-2.5 pt-2">
@@ -364,17 +362,17 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                       />
                     )}
                     <span className={`text-xs font-medium ${step.status === 'pending' ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                      {step.label}
+                      {t(`assistant.steps.${step.id}`)}
                     </span>
                   </div>
                   <span className={`text-[9px] font-bold uppercase tracking-wider shrink-0 ${STATUS_BADGE_STYLES[step.status]}`}>
-                    {step.status}
+                    {t(`assistant.stepStatus.${step.status}`)}
                   </span>
                 </div>
               ))}
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
-              Tell me the sensor and the exact threshold — e.g. "temperature above 80°C for 5 minutes" — and I'll generate the workflow.
+              {t('assistant.clarifyHint', { example: 'temperature above 80°C for 5 minutes' })}
             </p>
           </div>
         )}
@@ -387,7 +385,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search drafts..."
+            placeholder={t('assistant.searchDrafts')}
             size="sm"
             className="pl-9!"
           />
@@ -397,22 +395,22 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
           onClick={() => setSearchTerm('')}
           className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:text-sky-700 flex items-center gap-1 shrink-0 cursor-pointer"
         >
-          Explore more <ChevronRight className="w-3.5 h-3.5" />
+          {t('assistant.exploreMore')} <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Drafts */}
       {filteredDrafts.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Drafts</h3>
+          <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('assistant.drafts')}</h3>
           <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
             {filteredDrafts.map((d) => (
               <ItemCard
                 key={d.id}
                 item={d}
-                tag="Draft"
+                tag={t('assistant.draftTag')}
                 tagClass="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                buttonLabel="Resume Draft"
+                buttonLabel={t('assistant.resumeDraft')}
                 onUse={() => runPrompt(d.prompt, d.workflowName)}
               />
             ))}
@@ -421,7 +419,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       )}
 
       {filteredDrafts.length === 0 && (
-        <div className="text-center text-sm text-slate-400 py-8">No drafts match your search.</div>
+        <div className="text-center text-sm text-slate-400 py-8">{t('assistant.noDrafts')}</div>
       )}
     </div>
   );

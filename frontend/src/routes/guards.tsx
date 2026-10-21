@@ -1,11 +1,13 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/AuthProvider';
 
 function RestoringSession() {
+  const { t } = useTranslation();
   return (
     <div className="grid min-h-screen w-full place-items-center bg-[#F4F7FB] text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-      Restoring your session…
+      {t('common.restoringSession')}
     </div>
   );
 }

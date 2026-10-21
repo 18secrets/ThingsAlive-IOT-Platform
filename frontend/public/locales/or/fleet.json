@@ -1,0 +1,94 @@
+{
+  "sensor": {
+    "fuel_level": "ଇନ୍ଧନ ସ୍ତର",
+    "coolant_temperature": "କୁଲାଣ୍ଟ ତାପମାତ୍ରା",
+    "oil_temperature": "ତେଲ ତାପମାତ୍ରା",
+    "oil_pressure": "ତେଲ ଚାପ",
+    "throttle": "ଥ୍ରଟଲ୍",
+    "engine_load": "ଇଞ୍ଜିନ୍ ଲୋଡ୍",
+    "engine_runtime": "ଇଞ୍ଜିନ୍ ରନଟାଇମ୍"
+  },
+  "crossLinks": {
+    "thingDetails": "ମେସିନ୍ ବିବରଣୀ",
+    "production": "ଉତ୍ପାଦନ"
+  },
+  "filters": {
+    "button": "ଫିଲ୍ଟର",
+    "selectedThing": "ଚୟନିତ ମେସିନ୍",
+    "allMatching": "ସମସ୍ତ ମେଳ ଖାଉଥିବା ମେସିନ୍",
+    "title": "ମେସିନ୍ ଫିଲ୍ଟର କରନ୍ତୁ",
+    "intro": "ପରିସର ବାଛନ୍ତୁ, ତାପରେ ପ୍ରୟୋଗ କରନ୍ତୁ।",
+    "site": "ସାଇଟ୍ / ପ୍ଲାଣ୍ଟ",
+    "allSites": "ସମସ୍ତ ସାଇଟ୍ / ପ୍ଲାଣ୍ଟ",
+    "type": "ମେସିନ୍ ପ୍ରକାର",
+    "allTypes": "ସମସ୍ତ ମେସିନ୍ ପ୍ରକାର",
+    "connection": "ସଂଯୋଗ ସ୍ଥିତି",
+    "allConnections": "ସମସ୍ତ ସଂଯୋଗ",
+    "online": "ଅନଲାଇନ୍",
+    "offline": "ଅଫଲାଇନ୍",
+    "find": "ମେସିନ୍ ଖୋଜନ୍ତୁ",
+    "findPlaceholder": "ନାମ କିମ୍ବା ମେସିନ୍ ID",
+    "clear": "ଚୟନ ସଫା କରନ୍ତୁ",
+    "apply": "ଫିଲ୍ଟର ପ୍ରୟୋଗ କରନ୍ତୁ"
+  },
+  "rule": {
+    "createTitle": "ସତର୍କତା ନିୟମ ସୃଷ୍ଟି କରନ୍ତୁ",
+    "editTitle": "ସତର୍କତା ନିୟମ ସମ୍ପାଦନ କରନ୍ତୁ",
+    "reviewSubtitle": "ସିମୁଲେଟ୍ କରି ନିଶ୍ଚିତ କରନ୍ତୁ",
+    "formSubtitle": "ନିୟମ ବିବରଣୀ",
+    "defaultName": "ନୂଆ ପରିସ୍ଥିତି",
+    "selectMachines": "ମେସିନ୍ ବାଛନ୍ତୁ। ପରୀକ୍ଷା ମୂଲ୍ୟ କେବଳ ଏହି ପ୍ରିଭ୍ୟୁକୁ ପ୍ରଭାବିତ କରେ।",
+    "enabled": "ସକ୍ଷମ",
+    "disabled": "ଅକ୍ଷମ",
+    "previewReading": "ପ୍ରିଭ୍ୟୁ ରିଡିଂ ({{unit}})",
+    "before": "ପୂର୍ବରୁ: {{before}} → ପ୍ରସ୍ତାବିତ: {{proposed}}",
+    "beforeValue": "{{operator}} {{threshold}} {{unit}} · ସଂଶୋଧନ {{revision}}",
+    "notAssigned": "ନ୍ୟସ୍ତ ହୋଇନାହିଁ",
+    "simResult": "KPI {{value}} {{unit}} · ସତର୍କତା {{alert}} · ଅନୁମାନିତ {{predicted}} {{unit}}",
+    "triggers": "ଟ୍ରିଗର ହେବ",
+    "noTrigger": "ଟ୍ରିଗର ନାହିଁ",
+    "back": "ପଛକୁ",
+    "cancel": "ବାତିଲ୍ କରନ୍ତୁ",
+    "runSimulation": "ସିମୁଲେସନ୍ ଚଲାନ୍ତୁ",
+    "confirmSave": "ନିଶ୍ଚିତ କରି ସେଭ୍ କରନ୍ତୁ",
+    "name": "ନାମ",
+    "sensor": "ସେନ୍ସର",
+    "condition": "ସର୍ତ୍ତ",
+    "greaterThan": "ଠାରୁ ଅଧିକ",
+    "lessThan": "ଠାରୁ କମ୍",
+    "threshold": "ସୀମା ମୂଲ୍ୟ",
+    "severity": "ଗୁରୁତ୍ୱ",
+    "severityValue": {
+      "Warning": "ଚେତାବନୀ",
+      "Critical": "ଗୁରୁତର"
+    },
+    "outcomes": "ଫଳାଫଳ",
+    "outcome": {
+      "kpi": "KPI",
+      "alert": "ସତର୍କତା",
+      "prediction": "ପୂର୍ବାନୁମାନ"
+    },
+    "horizon": "ପୂର୍ବାନୁମାନ ଅବଧି (ଘଣ୍ଟା)",
+    "choosePreview": "ମେସିନ୍ ବାଛି ପ୍ରିଭ୍ୟୁ ଦେଖନ୍ତୁ",
+    "predictionText": "{{hours}} ଘଣ୍ଟାରେ {{value}} {{unit}}। ରେଖୀୟ ଯୋଜନା ଅନୁମାନ, ବିଫଳତା ମଡେଲ୍ ନୁହେଁ।"
+  },
+  "ruleCard": {
+    "revision": "ସଂଶୋଧନ {{revision}} · {{status}}",
+    "kpi": "KPI: {{value}} {{unit}}",
+    "alert": "ସତର୍କତା: {{value}}",
+    "alertOutcome": {
+      "Breach": "ଉଲ୍ଲଂଘନ",
+      "No breach": "ଉଲ୍ଲଂଘନ ନାହିଁ"
+    },
+    "prediction": "ପୂର୍ବାନୁମାନ: {{text}}",
+    "editAssign": "ସମ୍ପାଦନ / ନ୍ୟସ୍ତ କରନ୍ତୁ",
+    "createWorkOrder": "କାର୍ଯ୍ୟ ଆଦେଶ ସୃଷ୍ଟି କରନ୍ତୁ"
+  },
+  "graph": {
+    "aria": "ସାମ୍ପ୍ରତିକ ସେନ୍ସର ରିଡିଂ",
+    "outsideLimit": "ସତର୍କତା: ପ୍ରଦର୍ଶନ ସୀମା (0–{{max}} {{unit}}) ବାହାରେ",
+    "noLimit": "ସମୀକ୍ଷା: କୌଣସି ପ୍ରମାଣିତ ପରିଚାଳନା ସୀମା ନାହିଁ",
+    "higher": "ପ୍ରଥମ ନମୁନାଠାରୁ {{delta}} {{unit}} ଅଧିକ · ପରିସର {{min}}–{{max}} {{unit}} · {{count}} ରେକର୍ଡ ହୋଇଥିବା ନମୁନା।",
+    "lower": "ପ୍ରଥମ ନମୁନାଠାରୁ {{delta}} {{unit}} କମ୍ · ପରିସର {{min}}–{{max}} {{unit}} · {{count}} ରେକର୍ଡ ହୋଇଥିବା ନମୁନା।"
+  }
+}
