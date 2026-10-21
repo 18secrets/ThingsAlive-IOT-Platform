@@ -214,13 +214,21 @@ export function dataSourceOptions(
   choices: DataSourceChoices = {},
 ): DataSourceOptions {
   const appRole = choices.appRole === undefined ? (env.DB_APP_ROLE ?? 'ta_app') : choices.appRole;
+  const url = env.DATABASE_URL ? new URL(env.DATABASE_URL) : null;
+  const host = url ? url.hostname : (env.DB_HOST ?? 'localhost');
+  const port = url ? Number(url.port || 5432) : Number(env.DB_PORT ?? 5432);
+  const username = url ? decodeURIComponent(url.username) : (env.DB_USERNAME ?? 'postgres');
+  const password = url ? decodeURIComponent(url.password) : (env.DB_PASSWORD ?? '');
+  const database = url ? url.pathname.replace(/^\//, '') : (env.DB_DATABASE ?? 'ta2');
+  const useSsl = env.DB_SSL === 'true' || Boolean(url && url.hostname !== 'localhost' && !url.hostname.endsWith('.internal'));
+
   return {
     type: 'postgres',
-    host: env.DB_HOST ?? 'localhost',
-    port: Number(env.DB_PORT ?? 5432),
-    username: env.DB_USERNAME ?? 'postgres',
-    password: env.DB_PASSWORD ?? '',
-    database: env.DB_DATABASE ?? 'ta2',
+    host,
+    port,
+    username,
+    password,
+    database,
     // Migrations only. The existing platform sets this too; the difference is that
     // here there is no history of it ever having been true.
     synchronize: false,
@@ -228,7 +236,7 @@ export function dataSourceOptions(
     entities: ENTITIES,
     migrations: [__dirname + '/migrations/*.{ts,js}'],
     // TLS is required anywhere the database is not on the same private network.
-    ssl: env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    ssl: useSsl ? { rejectUnauthorized: false } : false,
     // A startup parameter, so it applies from the first statement on every pooled
     // connection. If the role does not exist the service refuses to connect, which is
     // the right failure: migrations create it, and a silent fall back to the login
