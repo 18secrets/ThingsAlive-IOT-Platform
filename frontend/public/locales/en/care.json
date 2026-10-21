@@ -161,5 +161,43 @@
       "diagnose": "Could not diagnose this machine.",
       "project": "Could not project this chain."
     }
+  },
+  "rec": {
+    "title": "Recommendations",
+    "loading": "Loading…",
+    "notYet": "Not analysed yet.",
+    "asOf": "Analysed {{at}}",
+    "coverage": "{{observed}} of {{expected}} expected signals seen",
+    "explain": "Explain",
+    "explaining": "Explaining…",
+    "analyse": "Analyse now",
+    "analyseAgain": "Analyse again",
+    "analysing": "Analysing…",
+    "observations": "What was observed",
+    "hypotheses": "Possible causes",
+    "nextSteps": "Suggested next steps",
+    "missing": "Missing to be sure",
+    "limitations": "Limitations",
+    "byTemplate": "Written from the evidence by a fixed template ({{version}}).",
+    "byModel": "Written from the evidence by {{model}}, checked before it was shown.",
+    "outcome": {
+      "attributed": "Likely cause found",
+      "unattributed": "Anomaly, no known cause",
+      "inconclusive": "Inconclusive",
+      "nothing_detected": "Nothing detected"
+    },
+    "reason": {
+      "unclassified": "Machine has no class",
+      "class_not_in_account": "Class not in this account",
+      "no_library_content": "Class has no failure modes",
+      "insufficient_coverage": "Not enough data"
+    },
+    "errors": {
+      "load": "Could not load the recommendation.",
+      "explain": "Could not write the explanation.",
+      "analyse": "Could not analyse this machine."
+    },
+    "missingBinding": "{{signal}}: no sensor bound on this machine",
+    "missingParameter": "Cost parameter not set: {{name}}"
   }
 }

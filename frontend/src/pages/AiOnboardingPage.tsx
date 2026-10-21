@@ -9,8 +9,9 @@ type View = 'list' | 'chat';
 
 /**
  * The list is real onboarding progress per site (GET /onboarding/status), a site being
- * the "session" (QONBOARD-STATUS §2). The chat is still a front-end assistant: nothing in
- * the backend answers it, and the task that built the progress endpoint ruled one out.
+ * the "session" (QONBOARD-STATUS §2). The chat is POST /assistant/onboarding/chat
+ * (QCHAT1): it reads and proposes, and a proposal changes nothing until the person
+ * confirms it.
  */
 export const AiOnboardingPage: React.FC = () => {
   const navigate = useNavigate();

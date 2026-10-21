@@ -119,7 +119,16 @@
     "parameters": "पैरामीटर",
     "notSet": "सेट नहीं",
     "noParameters": "इस खाते के कैटलॉग में कोई पैरामीटर नहीं।",
-    "forecast": "पूर्वानुमान"
+    "forecast": "पूर्वानुमान",
+    "forecastIn": "{{hours}} घंटे में {{signal}}",
+    "anomaly": {
+      "normal": "सामान्य",
+      "anomalous": "असामान्य",
+      "baseline_not_established": "बेसलाइन सीख रहा है"
+    },
+    "anomalyDetail": "नवीनतम {{actual}} {{unit}}, अनुमान {{predicted}} (अपेक्षित {{lo}} – {{hi}})",
+    "noShiftSchedule": "अभी कोई बैंड नहीं: इस मशीन का कोई शिफ़्ट शेड्यूल नहीं है।",
+    "forecastAt": "पूर्वानुमान {{at}} · {{model}}"
   },
   "kpiExplorer": {
     "title": "KPI एक्सप्लोरर",

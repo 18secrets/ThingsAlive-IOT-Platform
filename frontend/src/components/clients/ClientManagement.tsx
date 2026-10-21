@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud } from 'lucide-react';
+import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud, FileSpreadsheet } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
 import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
 import { FleetOnboardingModal } from './FleetOnboardingModal';
+import { FleetImportModal } from './FleetImportModal';
 
 interface ClientManagementProps {
   clients: ClientAccount[];
@@ -60,6 +62,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [onboardingClient, setOnboardingClient] = useState<ClientAccount | null>(null);
+  const [importClient, setImportClient] = useState<ClientAccount | null>(null);
   const [editingClient, setEditingClient] = useState<ClientAccount | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
@@ -112,6 +115,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
       (!!digits && (c.phone ?? '').replace(/\D/g, '').includes(digits))
     ) && matchesStatus(c, statusFilter));
   }, [clients, searchTerm, statusFilter]);
+
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredClients);
 
   return (
     <div id="client-management-view" className="space-y-3">
@@ -167,7 +172,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
       {/* Client Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClients.map((c) => (
+        {pagedRows.map((c) => (
           <div
             key={c.id}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
@@ -217,6 +222,14 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     title={t('clients.onboardFleetHint')}
                   >
                     <DownloadCloud className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setImportClient(c)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title={t('clients.bulkUploadHint')}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
                   </button>
 
                   {c.status !== 'Active' && (
@@ -297,6 +310,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           </div>
         )}
       </div>
+      {filteredClients.length > 0 && <TablePagination bare {...pager} />}
 
       <AddClientModal
         isOpen={isModalOpen}
@@ -310,6 +324,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
       />
 
       <FleetOnboardingModal client={onboardingClient} onClose={() => setOnboardingClient(null)} />
+      <FleetImportModal client={importClient} onClose={() => setImportClient(null)} />
 
       <ClientEntitlementsModal
         isOpen={!!entitlementsClient}

@@ -9,85 +9,39 @@
     "engine_runtime": "इंजन रनटाइम"
   },
   "crossLinks": {
-    "thingDetails": "मशीन विवरण",
     "production": "उत्पादन"
   },
   "filters": {
     "button": "फ़िल्टर",
-    "selectedThing": "चुनी गई मशीन",
     "allMatching": "सभी मेल खाती मशीनें",
     "title": "मशीनें फ़िल्टर करें",
     "intro": "दायरा चुनें, फिर लागू करें।",
     "site": "साइट / प्लांट",
     "allSites": "सभी साइटें / प्लांट",
-    "type": "मशीन प्रकार",
-    "allTypes": "सभी मशीन प्रकार",
     "connection": "कनेक्शन स्थिति",
     "allConnections": "सभी कनेक्शन",
-    "online": "ऑनलाइन",
-    "offline": "ऑफ़लाइन",
     "find": "मशीन खोजें",
     "findPlaceholder": "नाम या मशीन ID",
     "clear": "चयन साफ़ करें",
     "apply": "फ़िल्टर लागू करें"
   },
   "rule": {
-    "createTitle": "अलर्ट नियम बनाएँ",
-    "editTitle": "अलर्ट नियम संपादित करें",
-    "reviewSubtitle": "सिम्युलेट करें और पुष्टि करें",
-    "formSubtitle": "नियम विवरण",
-    "defaultName": "नया परिदृश्य",
-    "selectMachines": "मशीनें चुनें। परीक्षण मान केवल इस पूर्वावलोकन को प्रभावित करते हैं।",
     "enabled": "सक्षम",
-    "disabled": "अक्षम",
-    "previewReading": "पूर्वावलोकन रीडिंग ({{unit}})",
-    "before": "पहले: {{before}} → प्रस्तावित: {{proposed}}",
-    "beforeValue": "{{operator}} {{threshold}} {{unit}} · संशोधन {{revision}}",
-    "notAssigned": "असाइन नहीं",
-    "simResult": "KPI {{value}} {{unit}} · अलर्ट {{alert}} · अनुमानित {{predicted}} {{unit}}",
-    "triggers": "ट्रिगर होगा",
-    "noTrigger": "ट्रिगर नहीं",
-    "back": "वापस",
-    "cancel": "रद्द करें",
-    "runSimulation": "सिम्युलेशन चलाएँ",
-    "confirmSave": "पुष्टि करें और सहेजें",
-    "name": "नाम",
     "sensor": "सेंसर",
     "condition": "शर्त",
-    "greaterThan": "इससे अधिक",
-    "lessThan": "इससे कम",
-    "threshold": "सीमा मान",
-    "severity": "गंभीरता",
-    "severityValue": {
-      "Warning": "चेतावनी",
-      "Critical": "गंभीर"
-    },
-    "outcomes": "परिणाम",
     "outcome": {
       "kpi": "KPI",
       "alert": "अलर्ट",
       "prediction": "पूर्वानुमान"
-    },
-    "horizon": "पूर्वानुमान अवधि (घंटे)",
-    "choosePreview": "मशीनें चुनें और पूर्वावलोकन करें",
-    "predictionText": "{{hours}} घंटे में {{value}} {{unit}}। रैखिक योजना अनुमान, विफलता मॉडल नहीं।"
+    }
   },
   "ruleCard": {
-    "revision": "संशोधन {{revision}} · {{status}}",
-    "kpi": "KPI: {{value}} {{unit}}",
-    "alert": "अलर्ट: {{value}}",
     "alertOutcome": {
       "Breach": "उल्लंघन",
       "No breach": "कोई उल्लंघन नहीं"
-    },
-    "prediction": "पूर्वानुमान: {{text}}",
-    "editAssign": "संपादित / असाइन करें",
-    "createWorkOrder": "कार्य आदेश बनाएँ"
+    }
   },
   "graph": {
-    "aria": "हाल की सेंसर रीडिंग",
-    "outsideLimit": "अलर्ट: प्रदर्शन सीमा (0–{{max}} {{unit}}) से बाहर",
-    "noLimit": "समीक्षा: कोई प्रमाणित परिचालन सीमा नहीं",
     "higher": "पहले नमूने से {{delta}} {{unit}} अधिक · सीमा {{min}}–{{max}} {{unit}} · {{count}} दर्ज नमूने।",
     "lower": "पहले नमूने से {{delta}} {{unit}} कम · सीमा {{min}}–{{max}} {{unit}} · {{count}} दर्ज नमूने।"
   }

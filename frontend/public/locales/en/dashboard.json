@@ -80,11 +80,6 @@
     "equipment_class": "equipment class",
     "equipment": "equipment"
   },
-  "switch": {
-    "label": "Dashboard:",
-    "classic": "Classic (sample data)",
-    "live": "Live (new)"
-  },
   "live": {
     "subtitle": "Operations overview — live data",
     "banner": "Live · last 7 days where a period applies",
@@ -154,9 +149,6 @@
     "illustrativeOee": "Illustrative OEE"
   },
   "trend": {
-    "title": "Performance trends",
-    "tabHours": "Uptime & downtime",
-    "tabFuel": "Fuel & idling",
     "uptime": "Uptime",
     "downtime": "Downtime",
     "fuelUsed": "Fuel used",

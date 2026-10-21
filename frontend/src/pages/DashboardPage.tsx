@@ -2,8 +2,7 @@ import React from 'react';
 import { ClientAccount } from '../types';
 import { useAuth } from '../lib/AuthProvider';
 import { MasterAdminDashboard } from '../components/dashboard/MasterAdminDashboard';
-import { EnterpriseCommandCenter } from '../components/dashboard/EnterpriseCommandCenter';
-import { DashboardSwitch } from '../components/dashboard/DashboardSwitch';
+import { LiveDashboardPage } from './LiveDashboardPage';
 
 interface DashboardPageProps {
   clients: ClientAccount[];
@@ -17,12 +16,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ clients }) => {
     return <MasterAdminDashboard clients={clients} />;
   }
 
-  // UI-only mock fleet view (see src/data/fleetMockData.ts). Shown beside the live
-  // dashboard (/dashboard-live) until one of the two is chosen.
-  return (
-    <div className="space-y-3">
-      <DashboardSwitch current="classic" />
-      <EnterpriseCommandCenter />
-    </div>
-  );
+  // The live dashboard is the client dashboard; the classic mock one was removed 2026-10-21.
+  return <LiveDashboardPage />;
 };

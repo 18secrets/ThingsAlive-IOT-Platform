@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentInput, EquipmentPlacementEvent, EquipmentProfile, Plant,
 } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { ClientAccount } from '../../types';
 import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
 
@@ -124,6 +125,8 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
     }
   };
 
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredList);
+
   return (
     <div id="master-equipment-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -189,7 +192,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
               {filteredList.length > 0 ? (
-                filteredList.map((item) => {
+                pagedRows.map((item) => {
                   const k = key(item);
                   const busy = retiringKey === k;
                   return (
@@ -273,9 +276,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
           </table>
         </div>
 
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-600 dark:text-slate-400">
-          {t('pool.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredList.length}</span>
-        </div>
+        <TablePagination {...pager} />
       </div>
 
       <MasterAddEquipmentModal

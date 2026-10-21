@@ -6,6 +6,7 @@ import {
   ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole, ResendInvitationResult,
   apiResendPlatformStaffInvitation,
 } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { InviteStaffModal } from './InviteStaffModal';
 
@@ -110,6 +111,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
     }
   };
 
+  const { pageItems: pagedRows, ...pager } = usePagination(filtered);
+
   return (
     <div id="staff-management-view" className="space-y-3">
 
@@ -164,7 +167,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((s) => (
+        {pagedRows.map((s) => (
           <div
             key={s.id}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-3"
@@ -253,6 +256,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           </div>
         )}
       </div>
+      {filtered.length > 0 && <TablePagination bare {...pager} />}
 
       <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
 

@@ -7,6 +7,7 @@ import { compareByCategoryOrder, sortByCategory } from '../../lib/sensorCategory
 import { AddSensorModal } from './AddSensorModal';
 import { SensorDetailModal } from './SensorDetailModal';
 import { ManageSensorCategoriesModal } from './ManageSensorCategoriesModal';
+import { TablePagination, usePagination } from '../common/TablePagination';
 
 interface SensorTableProps {
   sensors: Sensor[];
@@ -57,6 +58,8 @@ export const SensorTable: React.FC<SensorTableProps> = ({
     });
     return sortByCategory(filtered, (s) => categoryName(s.categoryId), (s) => s.sensorName);
   }, [sensors, searchTerm, selectedCategory, categoryName]);
+
+  const { pageItems: pagedSensors, ...pager } = usePagination(filteredSensors);
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => compareByCategoryOrder(a.name, b.name)),
@@ -165,7 +168,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-sm">
               {filteredSensors.length > 0 ? (
-                filteredSensors.map((sensor) => {
+                pagedSensors.map((sensor) => {
                   const retired = !!sensor.retiredAt;
                   return (
                   <tr key={sensor.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
@@ -236,9 +239,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
           </table>
         </div>
 
-        <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
-          {t('common.totalRows')} <span className="font-medium text-slate-700 dark:text-slate-300">{filteredSensors.length}</span>
-        </div>
+        <TablePagination {...pager} />
       </div>
 
       <AddSensorModal

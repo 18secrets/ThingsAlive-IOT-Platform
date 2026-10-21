@@ -9,6 +9,7 @@ import {
   ApiError, CatalogImportApplySummary, CatalogImportBatch, CatalogImportDiff, SensorReviewSelection,
 } from '../lib/api';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { TablePagination, usePagination } from '../components/common/TablePagination';
 
 interface CatalogImportPageProps {
   batches: CatalogImportBatch[];
@@ -177,6 +178,8 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     }
   };
 
+  const { pageItems: pagedBatches, ...batchPager } = usePagination(batches);
+
   return (
     <div className="space-y-3" data-purpose="catalog-import">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -231,7 +234,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
             <p className="text-[11px] text-slate-400 italic">{t('import.noUploads')}</p>
           )}
           <div className="space-y-1.5">
-            {batches.map((b) => (
+            {pagedBatches.map((b) => (
               <button
                 key={b.id}
                 onClick={() => openDiff(b.id)}
@@ -254,6 +257,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
               </button>
             ))}
           </div>
+          {batches.length > 0 && <TablePagination compact {...batchPager} />}
         </div>
 
         {/* Diff / result panel */}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
-import { WorkflowSpec } from '../utils/workflowParser';
+import { WorkflowDraft } from '../utils/workflowParser';
 import { AlertAgentView } from '../components/views/AlertAgentView';
 import { AlertAIAssistant } from '../components/alerts/AlertAIAssistant';
 import { WorkflowEditor } from '../components/alerts/WorkflowEditor';
@@ -11,8 +11,7 @@ type View = 'list' | 'assistant' | 'workflow';
 
 interface AlertAgentNavState {
   /** Set by Alerts' "Create alert with AI" button. */
-  view?: 'assistant' | 'workflow';
-  workflowSpec?: WorkflowSpec;
+  view?: 'assistant';
   /** Where this flow actually started — e.g. "/alerts", "/predictions", or a
    *  Thing detail page — and so where its back arrow should return, since
    *  neither flow passes through Alert Agent's own list. */
@@ -26,7 +25,7 @@ export const AlertAgentPage: React.FC = () => {
   const navState = location.state as AlertAgentNavState | null;
   const backTo = navState?.backTo;
   const [view, setView] = useState<View>(navState?.view ?? 'list');
-  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSpec | null>(navState?.workflowSpec ?? null);
+  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowDraft | null>(null);
 
   usePageHeader(
     view === 'assistant'
@@ -37,15 +36,20 @@ export const AlertAgentPage: React.FC = () => {
   );
 
   if (view === 'assistant') {
-    return <AlertAIAssistant onGenerate={(spec) => { setActiveWorkflow(spec); setView('workflow'); }} />;
+    return <AlertAIAssistant onGenerate={(draft) => { setActiveWorkflow(draft); setView('workflow'); }} />;
   }
   if (view === 'workflow' && activeWorkflow) {
     return (
       <WorkflowEditor
-        spec={activeWorkflow}
-        onDeploy={() => (backTo ? navigate(backTo) : setView('list'))}
+        draft={activeWorkflow}
+        onDone={() => (backTo ? navigate(backTo) : setView('list'))}
       />
     );
   }
-  return <AlertAgentView onAddAlert={() => setView('assistant')} />;
+  return (
+    <AlertAgentView
+      onAddAlert={() => setView('assistant')}
+      onOpen={(draft) => { setActiveWorkflow(draft); setView('workflow'); }}
+    />
+  );
 };

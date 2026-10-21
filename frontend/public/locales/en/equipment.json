@@ -119,7 +119,16 @@
     "parameters": "Parameters",
     "notSet": "Not set",
     "noParameters": "No parameters in this account's catalog.",
-    "forecast": "Forecast"
+    "forecast": "Forecast",
+    "forecastIn": "{{signal}} in {{hours}} h",
+    "anomaly": {
+      "normal": "Normal",
+      "anomalous": "Anomalous",
+      "baseline_not_established": "Learning baseline"
+    },
+    "anomalyDetail": "Latest {{actual}} {{unit}} vs predicted {{predicted}} (expected {{lo}} – {{hi}})",
+    "noShiftSchedule": "No band yet: this machine has no shift schedule.",
+    "forecastAt": "Forecast {{at}} · {{model}}"
   },
   "kpiExplorer": {
     "title": "KPI explorer",

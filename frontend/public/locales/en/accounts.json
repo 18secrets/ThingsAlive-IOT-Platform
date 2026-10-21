@@ -23,7 +23,8 @@
     "passwordSet": "Password Set",
     "active": "Active",
     "suspended": "Suspended",
-    "empty": "No clients found."
+    "empty": "No clients found.",
+    "bulkUploadHint": "Bulk upload machines and logger fittings (Excel)"
   },
   "addClient": {
     "saveFailed": "Could not save the account.",
@@ -165,5 +166,49 @@
     "devices": "Devices",
     "yes": "Yes",
     "no": "No"
+  },
+  "fleetImport": {
+    "title": "Bulk upload",
+    "intro": "Add this client's machines, and fit their loggers, from an Excel workbook. Download the template, fill the Equipment sheet (and the Devices sheet to fit loggers), then choose the file to see what would change. Nothing is written until you apply, existing machines are never changed, and loggers must already be assigned to this client.",
+    "downloadTemplate": "Download template",
+    "chooseFile": "Choose workbook",
+    "chooseAnother": "Choose another file",
+    "recheck": "Check again",
+    "reading": "Reading the workbook…",
+    "templateFailed": "Could not download the template.",
+    "readFailed": "Could not read this workbook.",
+    "applyFailed": "Could not import this workbook.",
+    "confirm": "Add {{machines}} and {{fittings}} to this client? Nothing existing is changed.",
+    "machineCount_one": "{{count}} machine",
+    "machineCount_other": "{{count}} machines",
+    "fittingCount_one": "{{count}} logger fitting",
+    "fittingCount_other": "{{count}} logger fittings",
+    "applied": "Added {{machines}} and {{fittings}}. Signals still need binding per machine.",
+    "stat": {
+      "machinesToAdd": "Machines to add",
+      "loggersToFit": "Loggers to fit",
+      "unchanged": "Already in place",
+      "errors": "Row errors"
+    },
+    "errorsSection": "Row errors ({{count}}) — fix these in the workbook and choose it again",
+    "rowRef": "{{sheet}} sheet, row {{row}}",
+    "machinesSection": "Machines to add",
+    "atSite": "site {{site}}",
+    "unclassified": "unclassified",
+    "loggersSection": "Loggers to fit",
+    "fitTo": "fit to {{machine}}",
+    "conflictsSection": "Conflicts ({{count}}) — left as they are; resolve by hand",
+    "differs": "already exists with a different {{fields}}",
+    "conflict": {
+      "not_in_this_account": "Logger is not this client's",
+      "not_assigned": "Logger is not assigned to this client yet",
+      "claimed_to_another_machine": "Logger is fitted to a different machine"
+    },
+    "fixErrors": "Fix the row errors first; nothing is imported while any row has one.",
+    "nothingToAdd": "Nothing to add — everything in this workbook is already in place.",
+    "changesToAdd_one": "{{count}} change will be applied.",
+    "changesToAdd_other": "{{count}} changes will be applied.",
+    "apply": "Apply",
+    "applying": "Applying…"
   }
 }

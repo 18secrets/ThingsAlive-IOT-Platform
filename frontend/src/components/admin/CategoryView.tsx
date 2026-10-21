@@ -14,6 +14,7 @@ import {
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { AddCategoryModal } from './AddCategoryModal';
 
 interface CategoryViewProps {
@@ -97,6 +98,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
     setBusySlug(null);
   };
 
+  const { pageItems: pagedClasses, ...pager } = usePagination(filtered);
+
   return (
     <div id="category-management-view" className="space-y-3">
 
@@ -154,7 +157,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
 
       {/* Class Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((cls) => (
+        {pagedClasses.map((cls) => (
           <div
             key={cls.slug}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
@@ -256,6 +259,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
           </div>
         )}
       </div>
+      {filtered.length > 0 && <TablePagination bare {...pager} />}
 
       {/* No delete — retiring is the API's only way to stop offering a class;
           accounts that already copied it keep running theirs. */}

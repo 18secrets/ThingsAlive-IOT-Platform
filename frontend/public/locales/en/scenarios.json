@@ -104,5 +104,12 @@
     "upgrading": "Upgrading…",
     "upgradeTo": "Upgrade to v{{version}}",
     "noChanges": "No formula, failure-mode, recommendation or page-widget changes in this version."
+  },
+  "model": {
+    "title": "3-D model markers",
+    "loadFailed": "Could not load the 3-D model.",
+    "noModel": "The library has no 3-D model for this class yet.",
+    "recheckWaiting_one": "{{count}} marker waits for a recheck: the model's geometry changed under it.",
+    "recheckWaiting_other": "{{count}} markers wait for a recheck: the model's geometry changed under them."
   }
 }

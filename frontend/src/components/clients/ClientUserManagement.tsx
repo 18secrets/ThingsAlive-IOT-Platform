@@ -8,6 +8,7 @@ import {
   ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, ResendInvitationResult, SetUserAccessInput,
   TenantRole, TenantUser, apiResendUserInvitation,
 } from '../../lib/api';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { copyToClipboard } from '../../lib/clipboard';
 import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { EditUserAccessModal } from './EditUserAccessModal';
@@ -81,6 +82,8 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
     }
   };
 
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredUsers);
+
   return (
     <div id="client-user-management-view" className="space-y-3">
       <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
@@ -124,7 +127,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredUsers.map((u) => {
+              {pagedRows.map((u) => {
                 const superAdmin = isSuperAdminUser(u);
                 const lastCeoManager = isLastCeoManager(u);
                 const busy = busyId === u.id;
@@ -232,6 +235,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
             </tbody>
           </table>
         </div>
+        {filteredUsers.length > 0 && <TablePagination {...pager} />}
       </div>
 
       <InviteUserModal

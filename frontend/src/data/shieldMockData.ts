@@ -1,5 +1,5 @@
 // UI-only mock data for the client-facing ThingsShield page — no backend yet.
-// Mirrors clientOpsMockData.ts's shape: a handful of curated incident rows
+// A handful of curated incident rows
 // against real fleetMockData.ts ids, plus a deterministic per-machine evidence
 // record set so the page doesn't need a live inspection/incident system to
 // demonstrate the workflow.

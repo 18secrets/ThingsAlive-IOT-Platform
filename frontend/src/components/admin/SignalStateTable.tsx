@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, AlertCircle } from 'lucide-react';
 import { Input } from 'rsuite';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { SignalStateVocabEntry, SignalStateCode } from '../../lib/api';
 import { AddSignalStateModal } from './AddSignalStateModal';
+import { TablePagination, usePagination } from '../common/TablePagination';
 
 interface SignalStateTableProps {
   states: SignalStateVocabEntry[];
@@ -46,6 +47,8 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
       g.role.toLowerCase().includes(term) ||
       g.states.some((s) => s.state.toLowerCase().includes(term)));
   }, [groups, searchTerm]);
+
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredGroups);
 
   return (
     <div id="signal-state-view" className="space-y-4">
@@ -91,7 +94,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {filteredGroups.map((g) => (
+              {pagedRows.map((g) => (
                 <tr key={g.role} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                   <td className="py-3.5 px-4 font-mono text-sm text-slate-900 dark:text-white align-top">
                     {g.role}
@@ -133,12 +136,10 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
           </table>
         </div>
 
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div><Trans t={t} i18nKey="states.showing" count={filteredGroups.length} components={{ b: <span className="font-semibold text-slate-800 dark:text-slate-200" /> }} /></div>
-          <div className="text-[11px] text-slate-400 font-sans">
-            {t('states.footer')}
-          </div>
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+          {t('states.footer')}
         </div>
+        <TablePagination {...pager} />
       </div>
 
       <AddSignalStateModal

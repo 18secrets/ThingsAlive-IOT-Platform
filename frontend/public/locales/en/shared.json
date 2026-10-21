@@ -73,12 +73,33 @@
         "body": "Register hardware modems by IMEI and auto-bind sensor parameter channels via preconfigured Tool Profiles."
       }
     },
-    "reply": {
-      "offline": "Device #131 (PowerCommand Cloud) on Generator Unit is currently OFFLINE. Last ping was 4 hours ago via Eicher Motors gateway. Diagnostic code: CAN-BUS TIMEOUT (Error 0x4B).",
-      "dust": "Dust_Collector_Monitoring (SN-CBM-001) is active on the Kiln Drive Monitoring Kit. Current differential pressure is nominal at 1.4 kPa with opacity index at 3.2%.",
-      "volvo": "Volvo EC210 Crawler Excavator (ID #14, License UP32CE9136) at Lucknow Infrastructure Plant is active. Next scheduled hydraulic service is in 38 operational hours.",
-      "fuel": "Category CAT-HEE-001 has normalized fuel capacity set to 400 Liters with automated telemetry percentage bounds enabled.",
-      "summary": "Telemetry summary for \"{{query}}\": 18 equipment items logged, 20 telematics units provisioned (9 online, 1 offline, 10 pending data cycle). All MODBUS and J1939 protocols are operating within expected latencies."
+    "sources": "From: {{sources}}",
+    "error": {
+      "notConfigured": "The assistant isn't set up on this server yet. Ask your administrator to configure it.",
+      "notInAccount": "Ask AI answers inside a client account. Sign in as a user of that account to use it.",
+      "allowanceUsed": "This account has used today's assistant allowance. It resets at 05:30 IST (00:00 UTC).",
+      "generic": "The assistant couldn't answer just now. Try again in a moment."
+    },
+    "tools": {
+      "onboarding_status": "onboarding progress",
+      "machine_onboarding": "machine onboarding",
+      "list_sites": "sites",
+      "my_loggers": "loggers",
+      "list_equipment": "equipment",
+      "list_alerts": "alerts",
+      "logger_health": "logger health",
+      "list_incidents": "incidents",
+      "list_work_orders": "work orders",
+      "machine_page": "machine page",
+      "propose_create_site": "site proposal",
+      "propose_create_equipment": "machine proposal",
+      "propose_fit_logger": "logger proposal"
     }
+  },
+  "pagination": {
+    "totalRows": "Total Rows:",
+    "rowsPerPage": "Rows per page:",
+    "previous": "Previous page",
+    "next": "Next page"
   }
 }

@@ -2,18 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2 } from 'lucide-react';
 import { Input } from 'rsuite';
 import { useTranslation } from 'react-i18next';
+import { ApiError, AssistantMessage, apiAssistantChat } from '../lib/api';
+import { ChatMarkdown } from './common/ChatMarkdown';
 
 interface AskAIWidgetProps {
   onOpenHelpModal?: () => void;
 }
 
-// The canned replies below match on the English wording, so a chip carries its
-// English text as `match` and shows the translation.
-const QUICK_PROMPTS = [
-  { key: 'offline', match: 'Which devices are offline?' },
-  { key: 'dust', match: 'Show Dust Collector status' },
-  { key: 'volvo', match: 'Volvo EC210 service status' },
-];
+// A chip sends its text in the reader's language; the model answers in it.
+const QUICK_PROMPTS = ['offline', 'dust', 'volvo'];
 
 const HELP_TOPICS = [
   { icon: LayoutGrid, key: 'admin' },
@@ -22,7 +19,30 @@ const HELP_TOPICS = [
 ];
 
 // A message is stored as a key (plus values) so it re-renders in the new language.
-type ChatMessage = { role: 'user' | 'assistant'; text: string; key?: string; values?: Record<string, string> };
+// Only the welcome and error notes carry a key; they are never sent back to the server,
+// which would read them as something the assistant said.
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  text: string;
+  key?: string;
+  values?: Record<string, string>;
+  /** The lookups an answer rests on, shown under it. */
+  toolsUsed?: string[];
+  error?: boolean;
+};
+
+// The server takes at most 20 messages of up to 2,000 characters each.
+const MAX_SENT = 20;
+const MAX_CHARS = 2000;
+
+function errorKey(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 503) return 'askAI.error.notConfigured';
+    if (err.status === 403) return 'askAI.error.notInAccount';
+    if (err.status === 429) return 'askAI.error.allowanceUsed';
+  }
+  return 'askAI.error.generic';
+}
 
 export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
   const { t } = useTranslation('shared');
@@ -40,34 +60,29 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = (e?: React.FormEvent, prompt?: string, match?: string) => {
+  const handleSend = async (e?: React.FormEvent, prompt?: string) => {
     if (e) e.preventDefault();
-    const userText = (prompt ?? inputQuery).trim();
-    if (!userText) return;
+    const userText = (prompt ?? inputQuery).trim().slice(0, MAX_CHARS);
+    if (!userText || isTyping) return;
+
+    // A question whose answer failed is left out too, or the next request would carry
+    // two questions in a row with nothing between them.
+    const history: AssistantMessage[] = [...messages, { role: 'user' as const, text: userText }]
+      .filter((m, i, all) => !m.key && m.text && !all[i + 1]?.error)
+      .map((m) => ({ role: m.role, text: m.text.slice(0, MAX_CHARS) }))
+      .slice(-MAX_SENT);
 
     setMessages((prev) => [...prev, { role: 'user', text: userText }]);
     setInputQuery('');
     setIsTyping(true);
-
-    setTimeout(() => {
-      let reply: Pick<ChatMessage, 'key' | 'values'>;
-      const queryLower = (match ?? userText).toLowerCase();
-
-      if (queryLower.includes('offline') || queryLower.includes('device') || queryLower.includes('131')) {
-        reply = { key: 'askAI.reply.offline' };
-      } else if (queryLower.includes('dust') || queryLower.includes('sensor') || queryLower.includes('cement')) {
-        reply = { key: 'askAI.reply.dust' };
-      } else if (queryLower.includes('excavator') || queryLower.includes('equipment') || queryLower.includes('volvo')) {
-        reply = { key: 'askAI.reply.volvo' };
-      } else if (queryLower.includes('fuel') || queryLower.includes('capacity')) {
-        reply = { key: 'askAI.reply.fuel' };
-      } else {
-        reply = { key: 'askAI.reply.summary', values: { query: userText } };
-      }
-
+    try {
+      const answer = await apiAssistantChat(history);
+      setMessages((prev) => [...prev, { role: 'assistant', text: answer.reply, toolsUsed: answer.toolsUsed }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: '', key: errorKey(err), error: true }]);
+    } finally {
       setIsTyping(false);
-      setMessages((prev) => [...prev, { role: 'assistant', text: '', ...reply }]);
-    }, 900);
+    }
   };
 
   return (
@@ -190,11 +205,12 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
           <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto">
             {QUICK_PROMPTS.map((prompt) => (
               <button
-                key={prompt.key}
-                onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt.key}`), prompt.match)}
+                key={prompt}
+                onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
+                disabled={isTyping}
                 className="shrink-0 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-[11px] font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer whitespace-nowrap"
               >
-                {t(`askAI.prompts.${prompt.key}`)}
+                {t(`askAI.prompts.${prompt}`)}
               </button>
             ))}
           </div>
@@ -210,14 +226,23 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                 )}
                 <div className={`max-w-[78%] flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`px-3.5 py-2.5 text-xs leading-relaxed shadow-xs ${
+                    className={`px-3.5 py-2.5 text-xs leading-relaxed shadow-xs ${m.role === 'user' ? 'whitespace-pre-wrap' : ''} ${
                       m.role === 'user'
                         ? 'bg-sky-600 text-white rounded-2xl rounded-br-md'
-                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-md'
+                        : m.error
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900/50 rounded-2xl rounded-bl-md'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-md'
                     }`}
                   >
-                    {m.key ? t(m.key, m.values) : m.text}
+                    {m.key ? t(m.key, m.values) : m.role === 'assistant' ? <ChatMarkdown text={m.text} /> : m.text}
                   </div>
+                  {m.toolsUsed && m.toolsUsed.length > 0 && (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">
+                      {t('askAI.sources', {
+                        sources: m.toolsUsed.map((tool) => t(`askAI.tools.${tool}`, { defaultValue: tool.replace(/_/g, ' ') })).join(', '),
+                      })}
+                    </span>
+                  )}
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">{t('askAI.justNow')}</span>
                 </div>
               </div>
@@ -246,6 +271,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
               value={inputQuery}
               onChange={(value) => setInputQuery(value)}
               placeholder={t('askAI.placeholder')}
+              maxLength={MAX_CHARS}
               size="sm"
               className="flex-1"
             />
@@ -253,7 +279,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
               type="submit"
               aria-label={t('askAI.send')}
               className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 transition-colors cursor-pointer"
-              disabled={!inputQuery.trim()}
+              disabled={!inputQuery.trim() || isTyping}
             >
               <Send className="w-4 h-4" />
             </button>

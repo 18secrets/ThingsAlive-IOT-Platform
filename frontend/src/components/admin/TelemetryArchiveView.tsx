@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, Archive, Info, RotateCw } from 'lucide-react';
 import { ApiError, TelemetryArchiveRow, TelemetryPartitionDrop, apiListTelemetryArchives } from '../../lib/api';
 import { Chip } from '../common/Chip';
+import { TablePagination, usePagination } from '../common/TablePagination';
 
 const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' });
 const bytes = (n: string) => {
@@ -33,6 +34,8 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
   };
 
   useEffect(load, []);
+  const { pageItems: pagedArchives, ...archivePager } = usePagination(archives ?? []);
+  const { pageItems: pagedDrops, ...dropPager } = usePagination(drops);
 
   return (
     <div className="space-y-3">
@@ -77,7 +80,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
                 <tr><td colSpan={7} className="py-6 text-center text-slate-400">{error ? '—' : t('archive.loading')}</td></tr>
               ) : archives.length === 0 ? (
                 <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t('archive.noArchives')}</td></tr>
-              ) : archives.map((a) => (
+              ) : pagedArchives.map((a) => (
                 <tr key={a.id}>
                   <td className="py-2.5 px-4">{monthLabel(a.month)}</td>
                   <td className="py-2.5 px-4">{clientName(a.tenantId)}</td>
@@ -95,6 +98,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
             </tbody>
           </table>
         </div>
+        {!!archives?.length && <TablePagination {...archivePager} />}
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
@@ -105,13 +109,14 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
         <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
           {drops.length === 0 ? (
             <p className="py-6 text-center text-slate-400">{t('archive.noDrops')}</p>
-          ) : drops.map((d) => (
+          ) : pagedDrops.map((d) => (
             <div key={d.partition_name} className="flex items-center justify-between gap-3 px-4 py-2.5">
               <span className="font-mono text-slate-700 dark:text-slate-200">{d.partition_name}</span>
               <span className="text-slate-500">{monthLabel(d.month)} · {t('archive.rowsDropped', { count: Number(d.rows_dropped), formatted: Number(d.rows_dropped).toLocaleString() })} · {new Date(d.dropped_at).toLocaleString()}</span>
             </div>
           ))}
         </div>
+        {drops.length > 0 && <TablePagination {...dropPager} />}
       </div>
     </div>
   );

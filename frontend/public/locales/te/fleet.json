@@ -9,85 +9,39 @@
     "engine_runtime": "ఇంజిన్ రన్‌టైమ్"
   },
   "crossLinks": {
-    "thingDetails": "యంత్ర వివరాలు",
     "production": "ఉత్పత్తి"
   },
   "filters": {
     "button": "ఫిల్టర్‌లు",
-    "selectedThing": "ఎంచుకున్న యంత్రం",
     "allMatching": "సరిపోయే అన్ని యంత్రాలు",
     "title": "యంత్రాలను ఫిల్టర్ చేయండి",
     "intro": "పరిధిని ఎంచుకుని, ఆపై వర్తింపజేయండి.",
     "site": "సైట్ / ప్లాంట్",
     "allSites": "అన్ని సైట్‌లు / ప్లాంట్‌లు",
-    "type": "యంత్ర రకం",
-    "allTypes": "అన్ని యంత్ర రకాలు",
     "connection": "కనెక్షన్ స్థితి",
     "allConnections": "అన్ని కనెక్షన్‌లు",
-    "online": "ఆన్‌లైన్",
-    "offline": "ఆఫ్‌లైన్",
     "find": "యంత్రాన్ని వెతకండి",
     "findPlaceholder": "పేరు లేదా యంత్రం ID",
     "clear": "ఎంపికలు తొలగించండి",
     "apply": "ఫిల్టర్‌లు వర్తింపజేయండి"
   },
   "rule": {
-    "createTitle": "హెచ్చరిక నియమం సృష్టించండి",
-    "editTitle": "హెచ్చరిక నియమం సవరించండి",
-    "reviewSubtitle": "సిమ్యులేట్ చేసి నిర్ధారించండి",
-    "formSubtitle": "నియమ వివరాలు",
-    "defaultName": "కొత్త సందర్భం",
-    "selectMachines": "యంత్రాలను ఎంచుకోండి. పరీక్ష విలువలు ఈ ప్రివ్యూను మాత్రమే ప్రభావితం చేస్తాయి.",
     "enabled": "ప్రారంభించబడింది",
-    "disabled": "నిలిపివేయబడింది",
-    "previewReading": "ప్రివ్యూ రీడింగ్ ({{unit}})",
-    "before": "ముందు: {{before}} → ప్రతిపాదిత: {{proposed}}",
-    "beforeValue": "{{operator}} {{threshold}} {{unit}} · సవరణ {{revision}}",
-    "notAssigned": "కేటాయించలేదు",
-    "simResult": "KPI {{value}} {{unit}} · హెచ్చరిక {{alert}} · అంచనా {{predicted}} {{unit}}",
-    "triggers": "ట్రిగ్గర్ అవుతుంది",
-    "noTrigger": "ట్రిగ్గర్ కాదు",
-    "back": "వెనుకకు",
-    "cancel": "రద్దు చేయండి",
-    "runSimulation": "సిమ్యులేషన్ నడపండి",
-    "confirmSave": "నిర్ధారించి సేవ్ చేయండి",
-    "name": "పేరు",
     "sensor": "సెన్సార్",
     "condition": "షరతు",
-    "greaterThan": "కంటే ఎక్కువ",
-    "lessThan": "కంటే తక్కువ",
-    "threshold": "పరిమితి విలువ",
-    "severity": "తీవ్రత",
-    "severityValue": {
-      "Warning": "హెచ్చరిక",
-      "Critical": "క్లిష్టం"
-    },
-    "outcomes": "ఫలితాలు",
     "outcome": {
       "kpi": "KPI",
       "alert": "హెచ్చరిక",
       "prediction": "అంచనా"
-    },
-    "horizon": "అంచనా వ్యవధి (గంటలు)",
-    "choosePreview": "యంత్రాలను ఎంచుకుని ప్రివ్యూ చూడండి",
-    "predictionText": "{{hours}} గంటల్లో {{value}} {{unit}}. రేఖీయ ప్రణాళిక అంచనా, వైఫల్య నమూనా కాదు."
+    }
   },
   "ruleCard": {
-    "revision": "సవరణ {{revision}} · {{status}}",
-    "kpi": "KPI: {{value}} {{unit}}",
-    "alert": "హెచ్చరిక: {{value}}",
     "alertOutcome": {
       "Breach": "ఉల్లంఘన",
       "No breach": "ఉల్లంఘన లేదు"
-    },
-    "prediction": "అంచనా: {{text}}",
-    "editAssign": "సవరించు / కేటాయించు",
-    "createWorkOrder": "పని ఆర్డర్ సృష్టించండి"
+    }
   },
   "graph": {
-    "aria": "ఇటీవలి సెన్సార్ రీడింగ్‌లు",
-    "outsideLimit": "హెచ్చరిక: ప్రదర్శన పరిమితి (0–{{max}} {{unit}})కి వెలుపల",
-    "noLimit": "సమీక్ష: ధృవీకరించిన ఆపరేటింగ్ పరిమితి లేదు",
     "higher": "మొదటి నమూనా కంటే {{delta}} {{unit}} ఎక్కువ · పరిధి {{min}}–{{max}} {{unit}} · {{count}} నమోదైన నమూనాలు.",
     "lower": "మొదటి నమూనా కంటే {{delta}} {{unit}} తక్కువ · పరిధి {{min}}–{{max}} {{unit}} · {{count}} నమోదైన నమూనాలు."
   }

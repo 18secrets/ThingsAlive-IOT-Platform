@@ -7,10 +7,12 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { AnchorEditor } from '../components/visual/AnchorEditor';
+import { ModelAnchorEditor } from '../components/visual/ModelAnchorEditor';
 import {
   ApiError, ClassUpgradePreview, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
   MyEquipmentClass, ScenarioProvenance, UpgradeAction, UpgradeChange,
   TenantVisual, apiGetMyClassVisual, apiSetMyClassAnchors,
+  TenantModel, apiConfirmMyModelAnchor, apiGetMyClassModel, apiSetMyClassModelAnchors,
   apiAdoptLatestScenarioTemplate, apiApplyClassUpgrade, apiPreviewClassUpgrade, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
   apiGetMyCatalogClassLayout, apiGetMyCatalogEquipmentClass, apiGetMyCatalogScenario, apiListMyCatalogScenarios,
   apiReorderMyCatalogLayout, apiSetMyCatalogWidgetHidden,
@@ -316,6 +318,53 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       </div>
 
       <MyClassMarkers slug={slug} />
+      <MyClassModelMarkers slug={slug} />
+    </div>
+  );
+};
+
+/** The account's copy of the class's 3-D model markers (QTWIN1 §3): the model is the
+ *  library's; markers can be moved or added here, and a marker the library's geometry
+ *  changed under waits in amber until someone confirms it is still right. */
+const MyClassModelMarkers: React.FC<{ slug: string }> = ({ slug }) => {
+  const { t } = useTranslation('scenarios');
+  const [model, setModel] = useState<TenantModel | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetMyClassModel(slug)
+      .then((m) => { if (live) setModel(m); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('model.loadFailed')); });
+    return () => { live = false; };
+  }, [slug]);
+
+  const recheck = model?.tray.filter((x) => x.needsRecheck).length ?? 0;
+  return (
+    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('model.title')}</h4>
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!model ? (
+        !error && <p className="text-xs text-slate-400">{t('page.loading')}</p>
+      ) : model.state === 'assets_unavailable' ? (
+        <p className="text-xs text-slate-400">{t('markers.noStorage')}</p>
+      ) : model.state !== 'ready' || !model.modelUrl ? (
+        <p className="text-xs text-slate-400">{t('model.noModel')}</p>
+      ) : (
+        <>
+          {recheck > 0 && <p className="text-xs text-amber-600 dark:text-amber-400">{t('model.recheckWaiting', { count: recheck })}</p>}
+          <ModelAnchorEditor
+            key={`${model.geometryVersion}-${model.anchors.length}-${recheck}`}
+            modelUrl={model.modelUrl}
+            bounds={model.bounds}
+            anchors={model.anchors}
+            unplacedSignals={model.tray.filter((x) => !x.needsRecheck).map((x) => x.signal)}
+            onSave={async (anchors) => { setModel(await apiSetMyClassModelAnchors(slug, anchors)); }}
+            onConfirm={async (signal) => { setModel(await apiConfirmMyModelAnchor(slug, signal)); }}
+            note={t('markers.note')}
+          />
+        </>
+      )}
     </div>
   );
 };

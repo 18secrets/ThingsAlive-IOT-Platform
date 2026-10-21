@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import i18n from '../../i18n';
 import { AlertTriangle, Bell, CheckCircle2, Wrench } from 'lucide-react';
 import {
-  PageWidget, PageKpiWidgetData, PageSignalChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
+  PageWidget, PageKpiWidgetData, PageSignalChartData, PageForecastChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
   PageServiceDueData, PageFailureModeRow, PageRecommendationRow, PageMachineRow, PageSchematicData,
   PageParameterRow, ParameterScope,
 } from '../../lib/api';
@@ -113,6 +113,57 @@ function SignalChartWidget({ widget }: { widget: PageWidget }) {
         {values.length >= 2 && <Sparkline values={values} colorClass="text-sky-600 dark:text-sky-400" />}
       </div>
       <p className="text-[11px] text-slate-400">{t('widgets.last24h')}</p>
+    </WidgetShell>
+  );
+}
+
+const ANOMALY_TONE: Record<PageForecastChartData['anomaly']['state'], 'emerald' | 'rose' | 'slate'> = {
+  normal: 'emerald', anomalous: 'rose', baseline_not_established: 'slate',
+};
+
+const fmt = (v: number | null | undefined) => (v != null ? v.toFixed(2) : '—');
+
+/** The forecast pass's horizon for one signal, and whether the latest reading sits inside
+ *  the band learned from past residuals. The band is never drawn before it exists. */
+function ForecastChartWidget({ widget }: { widget: PageWidget }) {
+  const { t } = useTranslation('equipment');
+  if (widget.readiness !== 'ready' || !widget.data) {
+    return <WidgetShell title={widget.title ?? t('widgets.forecast')}><Unfilled reason={widget.reason} /></WidgetShell>;
+  }
+  const data = widget.data as PageForecastChartData;
+  const values = data.horizon.map((p) => p.v);
+  const hours = Math.round((data.horizon.length * data.stepSeconds) / 3600);
+  const { anomaly } = data;
+  return (
+    <WidgetShell title={widget.title ?? t('widgets.forecast')}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
+            {fmt(values[values.length - 1])} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
+          </div>
+          <p className="text-[11px] text-slate-400">{t('widgets.forecastIn', { signal: data.signal, hours })}</p>
+        </div>
+        {values.length >= 2 && <Sparkline values={values} colorClass="text-violet-600 dark:text-violet-400" />}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Chip tone={ANOMALY_TONE[anomaly.state]}>{t(`widgets.anomaly.${anomaly.state}`)}</Chip>
+        {anomaly.band && anomaly.actual != null && anomaly.predicted != null && (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {/* The band bounds the residual (actual − predicted), so the expected reading is
+                the prediction plus the band, not the band itself. */}
+            {t('widgets.anomalyDetail', {
+              actual: fmt(anomaly.actual), predicted: fmt(anomaly.predicted),
+              lo: fmt(anomaly.predicted + anomaly.band.lo), hi: fmt(anomaly.predicted + anomaly.band.hi), unit: data.unit ?? '',
+            })}
+          </span>
+        )}
+        {!anomaly.band && anomaly.baselineReason === 'no_shift_schedule' && (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('widgets.noShiftSchedule')}</span>
+        )}
+      </div>
+      <p className="text-[11px] text-slate-400">
+        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(), model: data.model.key })}
+      </p>
     </WidgetShell>
   );
 }
@@ -372,7 +423,7 @@ export function Widget({ widget, onExploreKpi }: { widget: PageWidget; onExplore
     case 'schematic': return <SchematicWidget widget={widget} />;
     case 'parameter_list': return <ParameterListWidget widget={widget} />;
     // Never filled until a forecast model exists (QML1); the backend says which absence it is.
-    case 'forecast_chart': return <WidgetShell title={widget.title ?? t('widgets.forecast')}><Unfilled reason={widget.reason} /></WidgetShell>;
+    case 'forecast_chart': return <ForecastChartWidget widget={widget} />;
     default: return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
 }

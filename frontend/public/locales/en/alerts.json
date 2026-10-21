@@ -106,7 +106,13 @@
     "totalRows": "Total Rows:",
     "rowsPerPage": "Rows per page:",
     "previousPage": "Previous page",
-    "nextPage": "Next page"
+    "nextPage": "Next page",
+    "retire": "Retire",
+    "retireConfirm": "Retire \"{{name}}\"? Its alert rules are switched off and stop firing.",
+    "pendingDraft": "Draft v{{version}} not yet published",
+    "rulesOff_one": "{{count}} rule switched off",
+    "rulesOff_other": "{{count}} rules switched off",
+    "loading": "Loading alert workflows…"
   },
   "assistant": {
     "heroTitle": "Describe your alarm in natural language",
@@ -150,73 +156,131 @@
     "drafts": "Drafts",
     "draftTag": "Draft",
     "resumeDraft": "Resume Draft",
-    "noDrafts": "No drafts match your search."
+    "noDrafts": "No drafts match your search.",
+    "unsupportedChange": "A change over time (\"{{what}}\") can't be watched yet. Describe a level instead, e.g. above or below a value.",
+    "customName": "New alert",
+    "fromFailureMode": "Build from a failure mode",
+    "fromFailureModeHint": "Start from one of this machine's known failure modes; thresholds come from the alert templates copied into your account.",
+    "noFailureModes": "This machine's class declares no failure modes.",
+    "chooseFailureMode": "Choose a failure mode…",
+    "combineAll": "All signals together",
+    "combineAny": "Any one signal",
+    "assemble": "Assemble",
+    "assembling": "Assembling…",
+    "assembleFailed": "Could not assemble this failure mode.",
+    "watches": "watches {{signals}}",
+    "assembleNoTemplate": "No copied alert template watches {{signals}}, so its threshold is left blank. Set it on the canvas before saving — none is assumed."
   },
   "workflow": {
     "name": "Workflow name",
-    "selectEquipmentFirst": "Select the equipment this alert applies to",
-    "validate": "Validate",
-    "testRule": "Test Rule",
-    "testPassed": "Test run passed",
-    "update": "Update",
-    "searchNodes": "Search Nodes...",
-    "dragHint": "Drag onto the canvas to add this node",
+    "scope": {
+      "label": "Applies to",
+      "equipment": "One machine",
+      "plant": "A site",
+      "equipment-class": "A kind of machine",
+      "account": "Whole account",
+      "pick": {
+        "equipment": "Machine",
+        "plant": "Site",
+        "equipment-class": "Equipment class"
+      }
+    },
+    "versionStatus": {
+      "draft": "Draft v{{version}}",
+      "published": "Published v{{version}}",
+      "superseded": "Superseded v{{version}}",
+      "retired": "Retired v{{version}}"
+    },
+    "notSaved": "Not saved yet",
+    "saveDraft": "Save draft",
+    "validate": "Check",
+    "publish": "Publish",
+    "saved": "Saved as draft v{{version}}",
+    "wouldBeRefused": "Publishing would be refused — see below",
+    "checkPassed_one": "Ready to publish: {{count}} rule",
+    "checkPassed_other": "Ready to publish: {{count}} rules",
+    "searchNodes": "Search nodes...",
+    "dragHint": "Drag a node onto the canvas, then join them left to right: signal → condition → (all of / any of) → notify.",
     "section": {
-      "triggers": "TRIGGERS",
       "data": "DATA",
-      "logic": "LOGIC & PROCESSING",
+      "conditions": "CONDITIONS",
+      "logic": "LOGIC",
       "actions": "ACTIONS"
     },
     "palette": {
-      "schedule": "Schedule",
-      "readSensor": "Read Sensor",
-      "databaseQuery": "Database Query",
-      "aggregate": "Aggregate",
-      "calculation": "Calculation",
-      "condition": "Condition",
-      "groupJoin": "Group Join",
-      "guard": "Guard",
-      "logicGate": "Logic Gate",
-      "webhook": "Webhook",
-      "email": "Email",
-      "sms": "SMS"
+      "ReadSignal": "Read signal",
+      "Threshold": "Threshold",
+      "FreshnessGate": "No data",
+      "PredictionSeverity": "Prediction severity",
+      "FuelLoss": "Fuel loss",
+      "ChainOrigin": "Chain origin",
+      "AllOf": "All of",
+      "AnyOf": "Any of",
+      "Notify": "Notify"
     },
-    "actionType": {
-      "Webhook": "Webhook",
-      "Email": "Email",
-      "SMS": "SMS"
+    "paletteHint": {
+      "ReadSignal": "A signal the machine's class declares. Feeds one or more thresholds.",
+      "Threshold": "True when the signal goes above or below a value, for most of its recent readings.",
+      "FreshnessGate": "True when a shift produced no readings at all.",
+      "PredictionSeverity": "True when a prediction for the machine reaches this severity.",
+      "FuelLoss": "True when fuel drops by this much within a few minutes while the machine stands still.",
+      "ChainOrigin": "True when a causal chain points at a fault entering at a stage.",
+      "AllOf": "True when every condition feeding it is true.",
+      "AnyOf": "True when any condition feeding it is true.",
+      "Notify": "Raises an alert with this name and severity. Every path ends in one."
     },
     "node": {
-      "expression": "Expression",
-      "step": "Step"
+      "unset": "not set",
+      "atLeast": "at least {{severity}}",
+      "fuelDrop": "−{{drop}} in {{minutes}} min"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "chainLevel": {
+      "warning": "Warning",
+      "critical": "Critical"
     },
     "inspector": {
-      "kind": {
-        "trigger": "Trigger node",
-        "readSensor": "Read sensor node",
-        "condition": "Condition node",
-        "guard": "Guard node",
-        "gate": "Gate node",
-        "action": "Action node",
-        "processing": "Processing node"
-      },
-      "schedule": "Schedule",
-      "schedulePlaceholder": "Every 5 minutes",
-      "sensor": "Sensor",
-      "operator": "Operator",
-      "threshold": "Threshold",
-      "field": "Field",
-      "value": "Value",
-      "logic": "Logic",
-      "type": "Type",
-      "label": "Label",
-      "visualOnly": "Visual step only — not yet part of the saved alert logic."
+      "signal": "Signal",
+      "noSignals": "No class covered by this scope declares any signals. Pick a machine, site or class first.",
+      "above": "Above (max)",
+      "below": "Below (min)",
+      "lookback": "Readings considered",
+      "lookbackHint": "Leave empty for the default (10).",
+      "required": "Readings that must breach",
+      "requiredHint": "Leave empty for the default (6 of 10).",
+      "atLeast": "At least",
+      "scenario": "Scenario",
+      "optional": "Optional",
+      "dropAtLeast": "Drop of at least",
+      "withinMinutes": "Within (minutes)",
+      "movementTolerance": "Movement tolerance",
+      "chain": "Chain",
+      "stage": "Stage signal",
+      "logic": "Combine",
+      "alertName": "Alert name",
+      "severity": "Severity",
+      "description": "Description"
     },
-    "validation": {
-      "oneTrigger": "Needs exactly one trigger (found {{count}})",
-      "incompleteCondition": "A condition is missing its sensor or threshold value",
-      "noAction": "Needs at least one action",
-      "ok": "Workflow validated"
+    "result": {
+      "rules": "What publishing would write",
+      "machines": "Machines it covers",
+      "noMachines": "This scope covers no machine.",
+      "signalReason": "{{signal}}: {{reason}}",
+      "reason": {
+        "unbound": "no sensor bound",
+        "stale": "readings stale",
+        "no_readings": "no readings yet"
+      },
+      "state": {
+        "ready": "Can fire",
+        "not_configured": "Not configured",
+        "blocked": "Blocked"
+      }
     }
   }
 }

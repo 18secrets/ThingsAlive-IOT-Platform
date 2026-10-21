@@ -8,7 +8,6 @@
     "eg": "e.g. {{example}}",
     "notAvailableYet": "Not available yet",
     "superAdmin": "Super Admin",
-    "awaitingLogin": "Awaiting Login",
     "reinstate": "Reinstate",
     "suspend": "Suspend"
   },
@@ -24,7 +23,6 @@
   "col": {
     "name": "Name",
     "username": "Username",
-    "client": "Client",
     "role": "Role",
     "status": "Status",
     "actions": "Actions",
@@ -33,19 +31,6 @@
   "notAvailable": {
     "users": "Managing another account's users is the account's own super admin's call — there is no Master Admin route for it today.",
     "roles": "Managing another account's roles is the account's own super admin's call — there is no Master Admin route for it today."
-  },
-  "hub": {
-    "platformUsers": "Platform Users"
-  },
-  "allClientUsers": {
-    "searchPlaceholder": "Search Name, Username, or Client...",
-    "allClients": "All Clients",
-    "unknownClient": "Unknown client",
-    "unknownRole": "Unknown role",
-    "manageTitle": "Manage users & roles for {{client}}",
-    "thisClient": "this client",
-    "manage": "Manage",
-    "empty": "No client users found."
   },
   "clientUsers": {
     "actionFailed": "That action failed.",

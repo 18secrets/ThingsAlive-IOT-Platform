@@ -2087,7 +2087,31 @@ export interface PageParameterRow {
 export type PageWidgetData =
   | PageKpiWidgetData | PageSignalChartData | PageReadinessRow[] | PageAlertRow[] | PageWorkOrderRow[]
   | PageServiceDueData | PageFailureModeRow[] | PageRecommendationRow[] | PageMachineRow[] | PageSchematicData
-  | PageParameterRow[];
+  | PageParameterRow[] | PageForecastChartData;
+
+/**
+ * A `forecast_chart` widget (QML1): the latest forecast pass for one signal, and how the
+ * latest reading sits against what was predicted for it. No band until enough residuals
+ * have been learned (`baseline_not_established`) or the class has no shift schedule.
+ */
+export interface PageForecastChartData {
+  signal: string;
+  unit: string | null;
+  stepSeconds: number;
+  generatedAt: string;
+  model: { key: string; revision: string };
+  runId: string;
+  horizon: { t: string; v: number; lo: number | null; hi: number | null }[];
+  anomaly: {
+    state: "normal" | "anomalous" | "baseline_not_established";
+    baselineReason: "baseline_not_established" | "no_shift_schedule" | null;
+    at: string | null;
+    actual: number | null;
+    predicted: number | null;
+    residual: number | null;
+    band: { lo: number; hi: number; n: number; learnedFrom: string; learnedTo: string } | null;
+  };
+}
 
 export interface PageWidget {
   widgetKey: string;
@@ -4005,4 +4029,432 @@ export interface TelemetryPartitionDrop {
 
 export function apiListTelemetryArchives(): Promise<{ archives: TelemetryArchiveRow[]; drops: TelemetryPartitionDrop[] }> {
   return authFetch("/platform/telemetry-archives");
+}
+
+// ---------------------------------------------------------------- assistant
+
+/**
+ * The Ask AI widget and the onboarding chat (QCHAT1). The browser holds the
+ * conversation and sends it back each turn; the server keeps nothing but the day's
+ * spend. Up to 20 messages of up to 2,000 characters each. Answers inside one
+ * account only: a platform user gets 403, and a server with no model configured 503.
+ */
+export interface AssistantMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface AssistantReply {
+  reply: string;
+  /** The lookups the answer rests on, e.g. "list_alerts". */
+  toolsUsed: string[];
+  /** False when the step limit was reached before the model finished. */
+  complete: boolean;
+  tokens: number;
+  budget: { usedToday: number; dailyLimit: number };
+}
+
+export type AssistantProposalKind = "create_site" | "create_equipment" | "fit_logger";
+export type AssistantProposalStatus = "proposed" | "applied" | "failed" | "rejected" | "expired";
+
+export interface AssistantProposal {
+  id: string;
+  kind: AssistantProposalKind;
+  payload: Record<string, unknown>;
+  /** The sentence the person approves, written from the payload, not by the model. */
+  summary: string;
+  status: AssistantProposalStatus;
+  proposedAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export function apiAssistantChat(messages: AssistantMessage[]): Promise<AssistantReply> {
+  return authFetch("/assistant/chat", { method: "POST", body: JSON.stringify({ messages }) });
+}
+
+export function apiAssistantOnboardingChat(
+  messages: AssistantMessage[],
+): Promise<AssistantReply & { proposals: AssistantProposal[] }> {
+  return authFetch("/assistant/onboarding/chat", { method: "POST", body: JSON.stringify({ messages }) });
+}
+
+export function apiListAssistantProposals(status?: AssistantProposalStatus): Promise<AssistantProposal[]> {
+  return authFetch(`/assistant/proposals${status ? `?status=${status}` : ""}`);
+}
+
+/** Does what was proposed, as the signed-in user. Idempotent: returns the decided proposal. */
+export function apiConfirmAssistantProposal(id: string): Promise<AssistantProposal> {
+  return authFetch(`/assistant/proposals/${id}/confirm`, { method: "POST" });
+}
+
+export function apiRejectAssistantProposal(id: string): Promise<AssistantProposal> {
+  return authFetch(`/assistant/proposals/${id}/reject`, { method: "POST" });
+}
+
+// ---------------------------------------------------------------- workflows
+
+/**
+ * Alert workflows (QWF1). A workflow is a graph of the alert runtime's own conditions;
+ * publishing compiles it into ordinary alert rules, so nothing here is a second engine.
+ * Reads need `prediction.read`, writes `alert.author`. Only a draft version can change;
+ * editing a published workflow starts a new draft from it.
+ */
+export type WorkflowNodeType =
+  | "ReadSignal" | "Threshold" | "FreshnessGate" | "PredictionSeverity" | "FuelLoss" | "ChainOrigin"
+  | "AllOf" | "AnyOf" | "Notify";
+
+export interface WorkflowSpecNode {
+  id: string;
+  type: WorkflowNodeType;
+  params?: Record<string, string | number | boolean | null>;
+}
+
+export interface WorkflowScope {
+  appliesTo: "account" | "plant" | "equipment" | "equipment-class";
+  plantId?: string | null;
+  sourceSystem?: string | null;
+  externalId?: string | null;
+  equipmentClassSlug?: string | null;
+}
+
+export interface WorkflowSpec {
+  kind: "alert";
+  scope: WorkflowScope;
+  nodes: WorkflowSpecNode[];
+  edges: { from: string; to: string }[];
+}
+
+export type WorkflowVersionStatus = "draft" | "published" | "superseded" | "retired";
+
+export interface WorkflowVersion {
+  id: string;
+  version: number;
+  status: WorkflowVersionStatus;
+  source: string;
+  graphHash: string;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  spec: WorkflowSpec;
+  /** Node id → canvas position. Never part of the graph's meaning. */
+  layout: Record<string, { x: number; y: number }>;
+  /** The compiled rules read back in plain English; empty when the spec does not compile. */
+  rendering: string[];
+  /** The alert rules this version wrote, and which are switched off. */
+  rules: { id: string; slug: string; name: string; enabled: boolean }[];
+}
+
+export interface Workflow {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  kind: "alert";
+  createdAt: string;
+  updatedAt: string;
+  versions: WorkflowVersion[];
+}
+
+export interface WorkflowMachineReadiness {
+  machine: { sourceSystem: string; externalId: string; name: string | null };
+  state: "ready" | "not_configured" | "blocked";
+  signals: { signal: string; state: "ready" | "not_configured" | "blocked"; reason: "unbound" | "stale" | "no_readings" | null }[];
+}
+
+export interface WorkflowCompileResult {
+  graphHash: string;
+  rules: { slug: string; name: string; severity: string; rendering: string }[];
+  rendering: string[];
+  readiness: WorkflowMachineReadiness[];
+  /** Null when publish would go ahead; otherwise the sentence saying why it would not. */
+  publishRefusal: string | null;
+}
+
+export function apiListWorkflows(): Promise<Workflow[]> {
+  return authFetch("/workflows");
+}
+
+export function apiGetWorkflow(id: string): Promise<Workflow> {
+  return authFetch(`/workflows/${id}`);
+}
+
+/** The workflow and its draft version 1. The spec must already compile. */
+export function apiCreateWorkflow(input: { slug: string; name: string; description?: string; spec: WorkflowSpec }): Promise<Workflow> {
+  return authFetch("/workflows", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiReplaceWorkflowSpec(id: string, version: number, spec: WorkflowSpec): Promise<Workflow> {
+  return authFetch(`/workflows/${id}/versions/${version}/spec`, { method: "PUT", body: JSON.stringify({ spec }) });
+}
+
+export function apiSetWorkflowLayout(id: string, version: number, positions: Record<string, { x: number; y: number }>): Promise<unknown> {
+  return authFetch(`/workflows/${id}/versions/${version}/layout`, { method: "PUT", body: JSON.stringify({ positions }) });
+}
+
+/** Dry run: the rules publish would write, read back, and whether each machine could fire. Writes nothing. */
+export function apiCompileWorkflow(id: string, version: number): Promise<WorkflowCompileResult> {
+  return authFetch(`/workflows/${id}/versions/${version}/compile`, { method: "POST" });
+}
+
+/** Compile and write the rules. Idempotent; 409 with the reason when nothing it covers could fire. */
+export function apiPublishWorkflow(id: string, version: number): Promise<{ version: number; status: string; alreadyPublished: boolean }> {
+  return authFetch(`/workflows/${id}/versions/${version}/publish`, { method: "POST" });
+}
+
+/** Switches every compiled rule off and retires the published version. The rules stay, off. */
+export function apiRetireWorkflow(id: string): Promise<Workflow> {
+  return authFetch(`/workflows/${id}/retire`, { method: "POST" });
+}
+
+/** A new draft copied from the published version; 409 when a draft already exists. */
+export function apiNewWorkflowVersion(id: string): Promise<Workflow> {
+  return authFetch(`/workflows/${id}/versions`, { method: "POST" });
+}
+
+// ---------------------------------------------------------------- fleet import (bulk upload)
+
+/**
+ * Bulk upload of a client's machines and logger fittings from an Excel workbook
+ * (`/fleet-import`, `equipment.write`; a Devices sheet also needs `device.claim`).
+ * Plan writes nothing; apply rebuilds the plan itself, only adds, and is refused whole
+ * while any row has an error. No batch is stored: the same file goes to both, and
+ * uploading it again is how a retry works. Things Alive staff name the account.
+ */
+export type FleetImportConflictReason = "not_in_this_account" | "not_assigned" | "claimed_to_another_machine";
+
+export interface FleetImportPlan {
+  tenantId: string;
+  /** False while any row has an error; apply refuses the whole workbook until it is true. */
+  canApply: boolean;
+  equipment: {
+    create: { row: number; code: string; name: string; siteCode: string | null; equipmentClassSlug: string | null }[];
+    /** Already in the register with exactly these values. */
+    unchanged: number;
+    /** Already in the register with different values: listed, never overwritten. */
+    conflicts: { row: number; code: string; fields: string[]; detail: string }[];
+    errors: { row: number; message: string }[];
+  };
+  devices: {
+    claim: { row: number; imei: string; sourceSystem: string; equipmentCode: string }[];
+    alreadyClaimed: number;
+    conflicts: { row: number; imei: string; reason: FleetImportConflictReason; detail: string }[];
+    errors: { row: number; message: string }[];
+  };
+}
+
+export async function apiDownloadFleetImportTemplate(): Promise<Blob> {
+  const res = await authFetchRaw("/fleet-import/template");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.error?.message ?? "Could not download the template.", res.status);
+  }
+  return res.blob();
+}
+
+async function postFleetWorkbook(step: "plan" | "apply", file: File, tenantId?: string): Promise<FleetImportPlan> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw(`/fleet-import/${step}${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ""}`, {
+    method: "POST",
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body?.error?.message ?? "Could not read the workbook.", res.status);
+  return body;
+}
+
+/** What the workbook would add, row by row, with every error and conflict. Writes nothing. */
+export function apiPlanFleetImport(file: File, tenantId?: string): Promise<FleetImportPlan> {
+  return postFleetWorkbook("plan", file, tenantId);
+}
+
+/** Adds the machines and fits the loggers. Idempotent; refused whole on any row error. */
+export function apiApplyFleetImport(file: File, tenantId?: string): Promise<FleetImportPlan & { applied: true }> {
+  return postFleetWorkbook("apply", file, tenantId) as Promise<FleetImportPlan & { applied: true }>;
+}
+
+// ---------------------------------------------------------------- recommendations
+
+/**
+ * The recommendation evidence for one machine (QREC1) and its framing in sentences
+ * (QREC2), `prediction.read`. Running the evidence writes only a derived, immutable
+ * record, and returns the existing one when nothing it read has changed. A frame is
+ * rendered by a POST and only read by a GET: the page never renders on read.
+ */
+export type RecBundleStatus = "ready" | "not_configured" | "blocked";
+export type RecBundleOutcome = "attributed" | "unattributed" | "inconclusive" | "nothing_detected";
+
+export interface RecEvidenceBundle {
+  id: string;
+  sourceSystem: string;
+  externalId: string;
+  asOf: string;
+  engineVersion: string;
+  classSlug: string | null;
+  status: RecBundleStatus;
+  /** Why a bundle is not ready: unclassified, class_not_in_account, no_library_content, insufficient_coverage. */
+  reason: string | null;
+  outcome: RecBundleOutcome | null;
+  /** Typed only as far as the panel reads it: which expected signals were seen. */
+  detect: { coverage?: { expected?: string[]; observed?: string[] } } & Record<string, unknown>;
+  createdAt: string;
+}
+
+/** GroundedAnswerV1 (docs/ai/contracts/grounded-answer.v1.schema.json). */
+export interface GroundedAnswer {
+  answer_id: string;
+  context_id: string;
+  status: "answered" | "partial" | "needs_input" | "insufficient_evidence" | "unavailable";
+  summary: string;
+  observations: { claim: string; evidence_refs: string[] }[];
+  hypotheses: { claim: string; evidence_refs: string[]; limitations: string[] }[];
+  next_steps: { aim: string; expected_outcome: string; required_capability: string; simulation_available: boolean }[];
+  citations: unknown[];
+  missing_inputs: string[];
+  as_of: string;
+  limitations: string[];
+}
+
+export interface RecFrame {
+  answer: GroundedAnswer;
+  provenance: { renderer: "template" | "model"; rendererVersion: string; modelId: string | null; modelVersion: string | null; bundleId: string };
+}
+
+const recPath = (sourceSystem: string, externalId: string) =>
+  `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/rec-evidence`;
+
+/** Run the five steps now. Idempotent: unchanged evidence returns the existing bundle. */
+export function apiRunRecEvidence(sourceSystem: string, externalId: string): Promise<RecEvidenceBundle> {
+  return authFetch(recPath(sourceSystem, externalId), { method: "POST" });
+}
+
+/** The latest bundle; 404 when this machine has never been evaluated. */
+export function apiGetLatestRecEvidence(sourceSystem: string, externalId: string): Promise<RecEvidenceBundle> {
+  return authFetch(recPath(sourceSystem, externalId));
+}
+
+/** Frame a bundle in sentences. Idempotent: one stored frame per bundle per template version. */
+export function apiRenderRecFrame(bundleId: string): Promise<RecFrame> {
+  return authFetch(`/rec-evidence/${bundleId}/frame`, { method: "POST" });
+}
+
+/** The served frame; 404 when none has been rendered for this bundle. */
+export function apiGetRecFrame(bundleId: string): Promise<RecFrame> {
+  return authFetch(`/rec-evidence/${bundleId}/frame`);
+}
+
+export interface WorkflowAssembleResult {
+  spec: WorkflowSpec;
+  /** The assembled rules in plain English; empty when nothing could be assembled. */
+  rendering: string[];
+  /** What the library could not supply: a signal no copied template watches, never given an invented threshold. */
+  unresolved: { signal?: string; templateSlug?: string; reason: "no_copied_template" | "template_not_copied" | "class_unknown"; detail: string }[];
+}
+
+/**
+ * A spec from a failure mode and/or chosen alert templates, out of this account's own
+ * copied templates (QWF1 §5). Writes nothing; the result opens in the editor like any draft.
+ */
+export function apiAssembleWorkflow(input: {
+  target: WorkflowScope;
+  failureModeCode?: string;
+  alertTemplateSlugs?: string[];
+  combine?: "allOf" | "anyOf";
+}): Promise<WorkflowAssembleResult> {
+  return authFetch("/workflows/assemble", { method: "POST", body: JSON.stringify(input) });
+}
+
+// ---------------------------------------------------------------- class 3-D model
+
+/**
+ * The class's 3-D model and its signal markers (QTWIN1), beside the schematic and on the
+ * same rules: a draft version takes a new model and markers, a published one is read
+ * only. The bytes go straight to storage with a presigned PUT; confirm sends the bounding
+ * box the browser measured, and a marker outside that box is refused. Each account can
+ * move or add markers on its own copy, and confirms a marker the geometry changed under.
+ */
+export type ModelState = "ready" | "no_model" | "upload_pending" | "assets_unavailable";
+export const MODEL_CONTENT_TYPES = ["model/gltf-binary"];
+
+export interface ModelBounds {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+export interface ModelAnchor {
+  signal: string;
+  x: number;
+  y: number;
+  z: number;
+  label: string | null;
+}
+
+export interface ClassModel {
+  classSlug: string;
+  classVersion: number;
+  state: ModelState;
+  modelUrl: string | null;
+  contentType: string | null;
+  geometryVersion: number | null;
+  bounds: ModelBounds | null;
+  anchors: ModelAnchor[];
+  unplacedSignals: string[];
+}
+
+export interface TenantModel {
+  classSlug: string;
+  state: ModelState;
+  modelUrl: string | null;
+  contentType: string | null;
+  geometryVersion: number | null;
+  bounds: ModelBounds | null;
+  /** placementCustom: the account moved or added it. needsRecheck: the geometry changed under it. */
+  anchors: (ModelAnchor & { placementCustom: boolean; needsRecheck: boolean })[];
+  /** What is not drawn: signals with no marker, and markers waiting for a recheck. */
+  tray: { signal: string; needsRecheck: boolean }[];
+}
+
+const classModelPath = (slug: string, version: number) =>
+  `/platform/catalog/equipment-classes/${encodeURIComponent(slug)}/${version}/model`;
+
+export function apiGetClassModel(slug: string, version: number): Promise<ClassModel> {
+  return authFetch(classModelPath(slug, version));
+}
+
+export function apiRequestClassModelUpload(
+  slug: string, version: number, contentType: string,
+): Promise<{ uploadUrl: string; key: string; method: "PUT"; headers: Record<string, string>; expiresInSeconds: number }> {
+  return authFetch(`${classModelPath(slug, version)}/upload-url`, { method: "POST", body: JSON.stringify({ contentType }) });
+}
+
+/** geometryChanged false keeps the geometry version (and every account's markers) only if the box is unchanged too. */
+export function apiConfirmClassModel(slug: string, version: number, bounds: ModelBounds, geometryChanged: boolean): Promise<ClassModel> {
+  return authFetch(`${classModelPath(slug, version)}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ boundsMin: bounds.min, boundsMax: bounds.max, geometryChanged }),
+  });
+}
+
+export function apiDeleteClassModel(slug: string, version: number): Promise<void> {
+  return authFetch(classModelPath(slug, version), { method: "DELETE" });
+}
+
+export function apiSetClassModelAnchors(slug: string, version: number, anchors: ModelAnchor[]): Promise<ClassModel> {
+  return authFetch(`${classModelPath(slug, version)}/anchors`, { method: "PUT", body: JSON.stringify({ anchors }) });
+}
+
+const myModelPath = (slug: string) => `/my-catalog/equipment-classes/${encodeURIComponent(slug)}/model`;
+
+export function apiGetMyClassModel(slug: string): Promise<TenantModel> {
+  return authFetch(myModelPath(slug));
+}
+
+export function apiSetMyClassModelAnchors(slug: string, anchors: ModelAnchor[]): Promise<TenantModel> {
+  return authFetch(`${myModelPath(slug)}/anchors`, { method: "PUT", body: JSON.stringify({ anchors }) });
+}
+
+export function apiConfirmMyModelAnchor(slug: string, signal: string): Promise<TenantModel> {
+  return authFetch(`${myModelPath(slug)}/anchors/${encodeURIComponent(signal)}/confirm`, { method: "POST" });
 }

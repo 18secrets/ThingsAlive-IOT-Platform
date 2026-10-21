@@ -11,16 +11,12 @@ import {
   CategoryItem,
   PlantItem,
   ClientAccount,
-  ClientUserItem,
-  RoleDefinition,
 } from './types';
 import {
   INITIAL_SENSORS,
   INITIAL_TOOL_MAPPINGS,
   INITIAL_CATEGORIES,
   INITIAL_PLANTS,
-  INITIAL_CLIENT_USERS,
-  INITIAL_ROLES,
 } from './data/mockData';
 import i18n from './i18n';
 import { AuthProvider, useAuth } from './lib/AuthProvider';
@@ -40,7 +36,6 @@ import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
 import { AlertsPage } from './pages/AlertsPage';
-import { ThingDetailPage } from './pages/ThingDetailPage';
 import { ThingsCarePage } from './pages/ThingsCarePage';
 import { ThingsCareDetailPage } from './pages/ThingsCareDetailPage';
 import { ThingsShieldPage } from './pages/ThingsShieldPage';
@@ -49,12 +44,10 @@ import { IncidentManagementPage } from './pages/IncidentManagementPage';
 import { ProductionMonitoringPage } from './pages/ProductionMonitoringPage';
 import { ProductionMonitoringDetailPage } from './pages/ProductionMonitoringDetailPage';
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
-import { LiveDashboardPage } from './pages/LiveDashboardPage';
 import { ThingDetailLivePage } from './pages/ThingDetailLivePage';
 import { ScenariosPage } from './pages/ScenariosPage';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
 import { CostAdministrationPage } from './pages/CostAdministrationPage';
-import { UsersPage } from './pages/UsersPage';
 import { ClientUsersPage } from './pages/ClientUsersPage';
 import { RolesPage } from './pages/RolesPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -105,26 +98,6 @@ import {
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput, SetUserAccessInput,
 } from './lib/api';
 
-const CLIENT_USERS_KEY = 'ta_client_users';
-const ROLES_KEY = 'ta_roles';
-
-function loadClientUsers(): ClientUserItem[] {
-  try {
-    const raw = localStorage.getItem(CLIENT_USERS_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_CLIENT_USERS;
-  } catch {
-    return INITIAL_CLIENT_USERS;
-  }
-}
-
-function loadRoles(): RoleDefinition[] {
-  try {
-    const raw = localStorage.getItem(ROLES_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_ROLES;
-  } catch {
-    return INITIAL_ROLES;
-  }
-}
 
 // A real account, as the existing ClientAccount-shaped UI displays it.
 // Contact info is the account's ceo-manager, not a separate "contact person" —
@@ -234,16 +207,13 @@ function AppData() {
   const [signalStatesError, setSignalStatesError] = useState<string | undefined>(undefined);
   const [devicePool, setDevicePool] = useState<PooledDevice[]>([]);
   const [devicePoolError, setDevicePoolError] = useState<string | undefined>(undefined);
-  // The signed-in client's own real roles/users (/identity/roles, /identity/users)
-  // — separate from the mock `roles`/`clientUsers` below, which still feed the
-  // Master-Admin-only cross-client view (AllClientUsersView), out of scope this
-  // round: there is no real cross-tenant read for another account's people.
+  // The signed-in client's own real roles/users (/identity/roles, /identity/users).
+  // Master Admin has no cross-client view of them: the mock one was removed 2026-10-21,
+  // because only a client's own super admin may list its people.
   const [tenantRoles, setTenantRoles] = useState<TenantRole[]>([]);
   const [rolesError, setRolesError] = useState<string | undefined>(undefined);
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
   const [usersError, setUsersError] = useState<string | undefined>(undefined);
-  const [clientUsers, setClientUsers] = useState<ClientUserItem[]>(loadClientUsers);
-  const [roles, setRoles] = useState<RoleDefinition[]>(loadRoles);
   // Master Admin's optional drill-down into one client's Users/Roles screens.
   const [manageAccessClientId, setManageAccessClientId] = useState<string | null>(null);
 
@@ -767,13 +737,6 @@ function AppData() {
     return () => { live = false; };
   }, [authUser, restoringSession]);
 
-  useEffect(() => {
-    localStorage.setItem(CLIENT_USERS_KEY, JSON.stringify(clientUsers));
-  }, [clientUsers]);
-
-  useEffect(() => {
-    localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-  }, [roles]);
 
 
   // Self-service password change from Settings, for either role — POST
@@ -899,11 +862,6 @@ function AppData() {
   const backToClients = () => {
     setManageAccessClientId(null);
     navigate('/admin/clients');
-  };
-
-  const manageClientAccess = (clientId: string) => {
-    setManageAccessClientId(clientId);
-    navigate('/client-users');
   };
 
   // POST /identity/roles, for real — composed from an existing role's own
@@ -1438,8 +1396,7 @@ function AppData() {
               <DashboardPage clients={clients} />
             }
           />
-          <Route path="dashboard/:thingId" element={<ThingDetailPage />} />
-          <Route path="dashboard-live" element={<LiveDashboardPage />} />
+          <Route path="dashboard-live" element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard/:sourceSystem/:externalId" element={<ThingDetailLivePage />} />
 
           <Route path="admin">
@@ -1631,24 +1588,9 @@ function AppData() {
           <Route path="work-orders" element={<WorkOrdersPage />} />
           <Route path="cost-administration" element={<CostAdministrationPage />} />
 
-          <Route
-            path="users"
-            element={
-              <UsersPage
-                staff={platformStaff}
-                staffError={platformStaffError}
-                onInviteStaff={handleInviteStaff}
-                onSetStaffRole={handleSetStaffRole}
-                onSuspendStaff={handleSuspendStaff}
-                onReinstateStaff={handleReinstateStaff}
-                onDeleteStaff={handleDeleteStaff}
-                clients={clients}
-                clientUsers={clientUsers}
-                roles={roles}
-                onManageClientAccess={manageClientAccess}
-              />
-            }
-          />
+          {/* The Users hub held Platform Users (the Staff page again) and a mock view of every
+              client's users; the mock was removed 2026-10-21, so the address goes to Staff. */}
+          <Route path="users" element={<Navigate to="/admin/staff" replace />} />
 
           <Route
             path="client-users"

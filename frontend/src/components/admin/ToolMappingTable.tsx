@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, AlertCircle, Trash2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
+import { TablePagination, usePagination } from '../common/TablePagination';
 
 interface ToolMappingTableProps {
   mappings: ToolMapping[];
@@ -50,6 +51,8 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
       || (industryFilter === 'none' ? !item.industryTypeId : item.industryTypeId === industryFilter)
     ));
   }, [mappings, searchTerm, industryFilter]);
+
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredMappings);
 
   return (
     <div id="tool-mapping-view" className="space-y-4">
@@ -110,7 +113,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {filteredMappings.map((item) => {
+              {pagedRows.map((item) => {
                 const activeParametersCount = item.mappedSensors.reduce((acc, s) => acc + s.parameters.length, 0);
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -171,12 +174,10 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
           </table>
         </div>
 
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div><Trans t={t} i18nKey="toolMappings.showing" count={filteredMappings.length} components={{ b: <span className="font-semibold text-slate-800 dark:text-slate-200" /> }} /></div>
-          <div className="text-[11px] text-slate-400 font-sans">
-            {t('toolMappings.autoBind')}
-          </div>
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+          {t('toolMappings.autoBind')}
         </div>
+        <TablePagination {...pager} />
       </div>
 
       <MapSensorsModal

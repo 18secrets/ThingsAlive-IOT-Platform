@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, X, Check, Shield, Info } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { NavigationTab, CLIENT_ASSIGNABLE_TABS } from '../../types';
 import { ApiError, RoleInput, RolePatchInput, TenantRole, TenantUser } from '../../lib/api';
 
@@ -59,6 +60,8 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
     setBusySlug(null);
   };
 
+  const { pageItems: pagedRows, ...pager } = usePagination(roles);
+
   return (
     <div id="role-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
@@ -82,7 +85,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {roles.map((role) => {
+        {pagedRows.map((role) => {
           const holders = usersInRole(role.slug);
           return (
             <div key={role.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
@@ -141,6 +144,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
           </div>
         )}
       </div>
+      {roles.length > 0 && <TablePagination bare {...pager} />}
 
       <AddRoleModal
         isOpen={isModalOpen}

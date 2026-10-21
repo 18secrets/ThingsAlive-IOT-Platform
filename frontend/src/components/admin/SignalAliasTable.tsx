@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, Trash2, AlertCircle } from 'lucide-react';
 import { Input } from 'rsuite';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { SignalAlias, SignalAliasInput } from '../../lib/api';
 import { AddSignalAliasModal } from './AddSignalAliasModal';
+import { TablePagination, usePagination } from '../common/TablePagination';
 
 interface SignalAliasTableProps {
   aliases: SignalAlias[];
@@ -41,6 +42,8 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
       setBusyKey(null);
     }
   }
+
+  const { pageItems: pagedRows, ...pager } = usePagination(filteredAliases);
 
   return (
     <div id="signal-alias-view" className="space-y-4">
@@ -89,7 +92,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {filteredAliases.map((a) => {
+              {pagedRows.map((a) => {
                 const key = `${a.sourceSystem}|${a.alias}`;
                 return (
                   <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -142,12 +145,10 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
           </table>
         </div>
 
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div><Trans t={t} i18nKey="aliases.showing" count={filteredAliases.length} components={{ b: <span className="font-semibold text-slate-800 dark:text-slate-200" /> }} /></div>
-          <div className="text-[11px] text-slate-400 font-sans">
-            {t('aliases.footer')}
-          </div>
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+          {t('aliases.footer')}
         </div>
+        <TablePagination {...pager} />
       </div>
 
       <AddSignalAliasModal

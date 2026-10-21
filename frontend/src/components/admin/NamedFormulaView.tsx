@@ -4,6 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
 import { Modal } from '../common/Modal';
+import { TablePagination, usePagination } from '../common/TablePagination';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
 
 interface NamedFormulaViewProps {
@@ -68,6 +69,8 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
     }
   };
 
+  const { pageItems: pagedFormulas, ...pager } = usePagination(filtered);
+
   return (
     <div id="named-formula-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -101,7 +104,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((f) => (
+        {pagedFormulas.map((f) => (
           <div key={f.slug} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -168,6 +171,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           </div>
         )}
       </div>
+      {filtered.length > 0 && <TablePagination bare {...pager} />}
 
       <AddNamedFormulaModal
         isOpen={isModalOpen}

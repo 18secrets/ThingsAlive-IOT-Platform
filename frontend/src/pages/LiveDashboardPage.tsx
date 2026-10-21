@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
-import { DashboardSwitch } from '../components/dashboard/DashboardSwitch';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import {
@@ -20,8 +19,8 @@ const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
 
 /**
- * The client dashboard built only on live data, beside the original mock one so the two
- * can be compared and one removed. Every number links to the page that owns it.
+ * The client dashboard, built only on live data; it replaced the original mock one on
+ * 2026-10-21. Every number links to the page that owns it.
  */
 export const LiveDashboardPage: React.FC = () => {
   const { t } = useTranslation('dashboard');
@@ -57,7 +56,6 @@ export const LiveDashboardPage: React.FC = () => {
 
   return (
     <div id="live-dashboard-view" className="space-y-3">
-      <DashboardSwitch current="live" />
 
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('live.banner')}</span>
