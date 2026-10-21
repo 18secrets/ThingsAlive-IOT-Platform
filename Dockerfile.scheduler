@@ -12,7 +12,7 @@
 # ---- build ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* .npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig*.json ./
 COPY src ./src
@@ -48,8 +48,12 @@ ENV HF_HUB_OFFLINE=1 \
     TTM_MODEL_DIR=/opt/models/ttm-r2 \
     FORECAST_PYTHON=/opt/venv/bin/python
 
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY package.json package-lock.json* .npmrc ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force \
+ && rm -rf node_modules/onnxruntime-web \
+           node_modules/onnxruntime-node/bin/napi-v6/darwin node_modules/onnxruntime-node/bin/napi-v6/win32
+# The same prune as the api's Dockerfile: the scheduler never embeds (QEMB1), and these
+# are runtimes for other operating systems and for browsers. The model is not copied here.
 COPY --from=build /app/dist ./dist
 COPY python/forecast/infer.py ./python/forecast/infer.py
 

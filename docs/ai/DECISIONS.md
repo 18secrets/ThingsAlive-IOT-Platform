@@ -62,6 +62,9 @@ database for vectors: one visibility predicate must cover the semantic branch, t
 branch and citation downloads, and splitting the store moves retrieval authorization out of
 RLS and into application code.
 
+Amended 2026-10-20 by D47: vectors stay in this database, but as `real[]` without pgvector
+until the corpus needs an index. The image change is deferred, not done.
+
 ## D10 — MCP is internal for now
 The adapter is consumed in-process. Remote transport, token audience validation and
 client-token forwarding are deliberately out of v1 and are required before any external
@@ -329,6 +332,33 @@ Questions section; the code that holds each answer is named.
     recorded approval of 19 Oct 2026. Any later activation is a platform-staff action with
     an audit row, after QEVAL1 has reported on the candidate.
 
+## D47 — Vectors without pgvector, for now (QEMB1)
+
+Decided 2026-10-20 by Tapas. **Amends D09**, which put pgvector in the existing Postgres
+"migrated to a pgvector-capable image". The first half stands; the second is deferred.
+
+Embeddings are stored as `real[]` in the same Postgres, under the same row-level security,
+and compared exhaustively by dot product (the vectors are unit length, so that is the
+cosine). No extension, no index structure, no change to the image of the database every
+Development service uses. D09's reason — one visibility predicate over everything retrieval
+reads — is kept whole, because nothing moves out of the database.
+
+Why: Railway's standard Postgres image (`ghcr.io/railwayapp-templates/postgres-ssl:18`)
+does not carry pgvector, so getting it means swapping the image of the live database, and a
+tenant's library today is hundreds of entries. Brute force is linear in the vectors one
+account holds: measured at 71 ms median for 1,000 and 576 ms for 10,000, on a loaded laptop
+(`docs/ai/measurements/QEMB1.md`). At today's size that is tens of milliseconds; an index
+now would be bought with the riskiest infrastructure change available, for no gain yet.
+
+Approved at the same time, by name: **`@huggingface/transformers`** as a runtime dependency,
+pinned to an exact version, for running `bge-small-en-v1.5` as ONNX in the api (D19). The
+model files are baked into the image at build time; nothing is downloaded at runtime.
+
+Revisited on measurement, not on a date. QEMB1's recommendation for the trigger: one tenant
+past ~3,000 vectors, or search p95 past 250 ms on Development. The measured curve puts the
+first at roughly the second. Moving is one migration that
+adds a `vector` column and an HNSW index; the embedding profile and the stored values do not
+change, so it is not a reindex.
 
 ## Open, and blocking something
 
