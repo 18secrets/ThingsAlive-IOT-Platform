@@ -44,7 +44,7 @@ export class ClientVisualService {
       const found = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug } });
       if (!found) throw new NotFoundException(`No equipment class "${slug}" in this account.`);
       const anchors = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
-        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug }, order: { signal: 'ASC' },
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, tier: 'schematic' }, order: { signal: 'ASC' },
       });
       return { cls: found, rows: anchors };
     });
@@ -77,9 +77,10 @@ export class ClientVisualService {
       if (problems.length) throw new BadRequestException(problems.join(' '));
 
       const repo = m.getRepository(ClientEquipmentClassVisualAnchor);
-      const prior = new Map((await repo.find({ where: { tenantId: scope.tenantId, clientEquipmentClassSlug: slug } }))
-        .map((r) => [r.signal, r]));
-      await repo.delete({ tenantId: scope.tenantId, clientEquipmentClassSlug: slug });
+      // The schematic's markers only: the model's (QTWIN1) share the table.
+      const where = { tenantId: scope.tenantId, clientEquipmentClassSlug: slug, tier: 'schematic' as const };
+      const prior = new Map((await repo.find({ where })).map((r) => [r.signal, r]));
+      await repo.delete(where);
       await repo.save(anchors.map((a) => {
         const before = prior.get(a.signal);
         const unchanged = before && before.hotspotX === a.hotspotX && before.hotspotY === a.hotspotY;
@@ -98,7 +99,7 @@ export class ClientVisualService {
   private platformVisual(cls: ClientEquipmentClass) {
     if (!cls.templateSlug || cls.templateVersion == null) return Promise.resolve(null);
     return this.ds.getRepository(EquipmentClassVisual).findOne({
-      where: { classSlug: cls.templateSlug, classVersion: cls.templateVersion },
+      where: { classSlug: cls.templateSlug, classVersion: cls.templateVersion, tier: 'schematic' },
     });
   }
 }

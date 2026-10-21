@@ -25,6 +25,7 @@ import {
   loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
 } from './class-failure-modes';
 import { copyLayout, loadLayout, presentationOf } from './class-layout';
+import { copyModel, modelPublishProblems } from './class-model.service';
 import { copyVisual, visualPublishProblems } from './class-visual.service';
 import { layoutProblems } from '../layout/layout-rules';
 
@@ -116,6 +117,7 @@ export class CatalogAuthoringService {
         await copyClassContent(m, slug, working.version - 1, working.version);
         await copyLayout(m, slug, working.version - 1, working.version);
         await copyVisual(m, slug, working.version - 1, working.version);
+        await copyModel(m, slug, working.version - 1, working.version);
       }
       if (draft.failureModes) {
         try {
@@ -176,6 +178,8 @@ export class CatalogAuthoringService {
       // The visual (task QREC0c): an anchor on an undeclared signal, or an upload never
       // confirmed. No visual at all publishes normally.
       ...await visualPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
+      // The 3-D model (task QTWIN1): the same two, plus an anchor outside the model's box.
+      ...await modelPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
       // OEM figures (task QCLASS-OEM). The constraints already refuse a bad row at write;
       // this is the net that names the field for any path that reached a draft anyway.
       ...oemFigureProblems(draft, draft.expectedSignals.map((s) => s.signal)),

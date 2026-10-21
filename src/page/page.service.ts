@@ -4,6 +4,9 @@ import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual
 import { unplacedSignals } from '../catalog/visual/anchor-rules';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 import { toTenantAnchor } from '../client-catalog/services/client-visual.service';
+import { boundsOf } from '../catalog/services/class-model.service';
+import { modelTray } from '../catalog/visual/model-anchor-rules';
+import { platformModel, toTenantModelAnchor } from '../client-catalog/services/client-model.service';
 import { DataSource, In } from 'typeorm';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
@@ -79,6 +82,25 @@ export interface SitePage {
  * One call per producer, not one per widget: every KPI widget shares one
  * `evaluateAll`, every signal chart one bucketed read, and so on.
  */
+/**
+ * Each marker's readiness, for the schematic and the 3-D twin alike: the worst across a
+ * signal's components — a composite machine's marker is only as ready as its least-ready
+ * probe. A signal the class does not require has no coverage row, so nothing can say it
+ * is ready.
+ */
+function markerReadiness(
+  coverage: Awaited<ReturnType<SignalBindingService['coverage']>> | null, at: Date,
+): (signal: string) => { readiness: PageReadiness; reason: string | null } {
+  const bySignal = new Map<string, { readiness: PageReadiness; reason: string | null }>();
+  for (const row of coverage ? readinessRows(coverage, at) : []) {
+    const seen = bySignal.get(row.signal);
+    if (!seen || READINESS_SEVERITY[row.readiness] > READINESS_SEVERITY[seen.readiness]) {
+      bySignal.set(row.signal, { readiness: row.readiness, reason: row.reason });
+    }
+  }
+  return (signal) => bySignal.get(signal) ?? { readiness: 'not_configured' as const, reason: 'not_required' };
+}
+
 @Injectable()
 export class PageService {
   private readonly reader = new TelemetryWindowReader();
@@ -115,9 +137,12 @@ export class PageService {
     // The schematic's picture and this account's markers, first: its anchors decide
     // which signals the one bucketed read below has to cover.
     const schematic = has('schematic') && classSlug ? await this.schematicSource(scope, classSlug) : null;
+    // The 3-D twin's the same way (QTWIN1): one bucketed read serves both pictures.
+    const twin = has('twin_model') && classSlug ? await this.modelSource(scope, classSlug) : null;
     const chartSignals = [...new Set([
       ...visible.filter((w) => w.widgetType === 'signal_chart' && w.boundTo).map((w) => w.boundTo!),
       ...(schematic?.anchors.map((a) => a.signal) ?? []),
+      ...(twin?.anchors.filter((a) => !a.needsRecheck).map((a) => a.signal) ?? []),
     ])];
 
     // One call per producer, each only if some widget needs it.
@@ -127,7 +152,7 @@ export class PageService {
         has('kpi_number', 'kpi_gauge', 'kpi_chart') ? this.kpis.evaluateAll(scope, ref, at) : Promise.resolve(null),
         has('kpi_number', 'kpi_gauge', 'kpi_chart') && classSlug ? this.clientFormulas(scope, classSlug) : Promise.resolve([]),
         chartSignals.length ? this.signalCharts(scope, ref, classSlug, chartSignals, at) : Promise.resolve(null),
-        has('readiness_list', 'schematic') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
+        has('readiness_list', 'schematic', 'twin_model') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
         has('alert_list', 'failure_modes') ? this.openAlerts(scope, [ref]) : Promise.resolve(null),
         has('work_order_list') ? this.openWorkOrders(scope, [ref]) : Promise.resolve(null),
         has('service_due') ? this.service.fleetForecast(scope, at) : Promise.resolve(null),
@@ -200,6 +225,9 @@ export class PageService {
         case 'schematic':
           return this.schematicWidget(h, schematic, coverage, chartData, at);
 
+        case 'twin_model':
+          return this.twinModelWidget(h, twin, coverage, chartData, at);
+
         case 'parameter_list':
           return filled(h, toParameterRows(parameterRows!));
 
@@ -268,14 +296,14 @@ export class PageService {
       const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
       if (!cls) return null;
       const rows = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
-        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug }, order: { signal: 'ASC' },
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug, tier: 'schematic' }, order: { signal: 'ASC' },
       });
       return { cls, anchors: rows.map(toTenantAnchor) };
     });
     if (!found) return null;
     const visual = found.cls.templateSlug && found.cls.templateVersion != null
       ? await this.ds.getRepository(EquipmentClassVisual).findOne({
-        where: { classSlug: found.cls.templateSlug, classVersion: found.cls.templateVersion },
+        where: { classSlug: found.cls.templateSlug, classVersion: found.cls.templateVersion, tier: 'schematic' },
       })
       : null;
     return {
@@ -307,17 +335,7 @@ export class PageService {
     if (!source.visual.assetKey) return unfilled(h, 'not_available', 'upload_pending');
     if (!this.storage.configured) return unfilled(h, 'not_available', 'assets_unavailable');
 
-    // Worst readiness per signal across its components — a composite machine's
-    // marker is only as ready as its least-ready probe.
-    const bySignal = new Map<string, { readiness: PageReadiness; reason: string | null }>();
-    for (const row of coverage ? readinessRows(coverage, at) : []) {
-      const seen = bySignal.get(row.signal);
-      if (!seen || READINESS_SEVERITY[row.readiness] > READINESS_SEVERITY[seen.readiness]) {
-        bySignal.set(row.signal, { readiness: row.readiness, reason: row.reason });
-      }
-    }
-    // A signal the class does not require has no coverage row, so nothing can say it is ready.
-    const readinessOf = (signal: string) => bySignal.get(signal) ?? { readiness: 'not_configured' as const, reason: 'not_required' };
+    const readinessOf = markerReadiness(coverage, at);
 
     const anchors = source.anchors.map((a) => {
       const r = readinessOf(a.signal);
@@ -335,6 +353,59 @@ export class PageService {
       imageUrl: await this.storage.readUrl(source.visual.assetKey),
       width: source.visual.widthPx, height: source.visual.heightPx,
       anchors, unplacedSignals: unplaced,
+    });
+  }
+
+  /** The platform model for the version this account's copy tracks, and this account's
+   * own model anchors (task QTWIN1). Null when the account does not hold the class. */
+  private async modelSource(scope: RequestScope, classSlug: string) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
+      if (!cls) return null;
+      const rows = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug, tier: 'model' }, order: { signal: 'ASC' },
+      });
+      return {
+        model: await platformModel(m, cls), anchors: rows.map(toTenantModelAnchor),
+        declared: cls.expectedSignals.map((s) => s.signal),
+        units: new Map(cls.expectedSignals.map((s) => [s.signal, s.unit])),
+      };
+    });
+  }
+
+  /**
+   * The 3-D twin (task QTWIN1 §4): the schematic's rules with a third coordinate. Each
+   * marker carries the page's readiness and the newest value; a marker the geometry
+   * changed under goes to the tray with `needsRecheck`, not onto the model. The unfilled
+   * states are the schematic's, with `no_model` — the one that tells the reader to fall
+   * back to the schematic or the list.
+   */
+  private async twinModelWidget(
+    h: Header,
+    source: Awaited<ReturnType<PageService['modelSource']>>,
+    coverage: Awaited<ReturnType<SignalBindingService['coverage']>> | null,
+    charts: Awaited<ReturnType<PageService['signalCharts']>> | null,
+    at: Date,
+  ): Promise<PageWidget> {
+    if (!source?.model) return unfilled(h, 'not_available', 'no_model');
+    if (!source.model.assetKey) return unfilled(h, 'not_available', 'upload_pending');
+    if (!this.storage.configured) return unfilled(h, 'not_available', 'assets_unavailable');
+
+    const readinessOf = markerReadiness(coverage, at);
+    const anchors = source.anchors.filter((a) => !a.needsRecheck).map((a) => {
+      const r = readinessOf(a.signal);
+      const chart = charts?.get(a.signal);
+      return {
+        signal: a.signal, x: a.x, y: a.y, z: a.z, label: a.label, readiness: r.readiness, reason: r.reason,
+        value: r.readiness === 'ready' && chart?.ok ? chart.latest : null,
+        unit: source.units.get(a.signal) ?? null,
+      };
+    });
+    const unplaced = modelTray(source.declared, source.anchors).map((t) => ({ ...t, ...readinessOf(t.signal) }));
+    return filled(h, {
+      modelUrl: await this.storage.readUrl(source.model.assetKey),
+      contentType: source.model.contentType, geometryVersion: source.model.geometryVersion,
+      bounds: boundsOf(source.model), anchors, unplacedSignals: unplaced,
     });
   }
 
