@@ -123,6 +123,12 @@ export class ClientFormula {
   @Column({ type: 'text', default: 'active' })
   status: ClientCatalogStatus;
 
+  @Column({ type: 'text', default: 'copied' })
+  source: 'copied' | 'manual' | 'generated';
+
+  @Column({ name: 'proposal_id', type: 'uuid', nullable: true })
+  proposalId: string | null;
+
   @Column({ name: 'updated_by', type: 'text', nullable: true })
   updatedBy: string | null;
 
