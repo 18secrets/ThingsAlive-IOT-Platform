@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { PlatformUserItem, PlatformUserRole } from '../../types';
 
 interface AddUserModalProps {
@@ -24,6 +25,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   nextId,
   existingUser,
 }) => {
+  const { t } = useTranslation('users');
   const [employeeId, setEmployeeId] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -67,15 +69,15 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
     if (!finalEmployeeId || !finalUsername || !finalEmail || !finalPhone) return;
     if (existingUsernames.includes(finalUsername.toLowerCase())) {
-      setError('That username is already taken by another user.');
+      setError(t('platformUsers.usernameTaken'));
       return;
     }
     if (existingEmployeeIds.includes(finalEmployeeId.toLowerCase())) {
-      setError('That Employee ID is already in use.');
+      setError(t('platformUsers.employeeIdTaken'));
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(finalEmail)) {
-      setError('Please enter a valid email address.');
+      setError(t('platformUsers.invalidEmail'));
       return;
     }
 
@@ -101,7 +103,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {isEditing ? 'Edit User' : 'Add New User'}
+            {isEditing ? t('platformUsers.edit') : t('platformUsers.add')}
           </h3>
           <button
             onClick={onClose}
@@ -115,50 +117,50 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Employee ID <span className="text-rose-500">*</span>
+                {t('platformUsers.employeeId')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 value={employeeId}
                 onChange={(value) => { setEmployeeId(value); setError(undefined); }}
-                placeholder="e.g. EMP0009"
+                placeholder={t('common.eg', { example: 'EMP0009' })}
                 className="font-mono"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Username <span className="text-rose-500">*</span>
+                {t('col.username')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 required
                 value={username}
                 onChange={(value) => { setUsername(value); setError(undefined); }}
-                placeholder="e.g. jsmith"
+                placeholder={t('common.eg', { example: 'jsmith' })}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Email ID <span className="text-rose-500">*</span>
+              {t('platformUsers.emailId')} <span className="text-rose-500">*</span>
             </label>
             <Input
               type="email"
               required
               value={email}
               onChange={(value) => { setEmail(value); setError(undefined); }}
-              placeholder="e.g. jsmith@thingsalive.io"
+              placeholder={t('common.eg', { example: 'jsmith@thingsalive.io' })}
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Role <span className="text-rose-500">*</span>
+                {t('col.role')} <span className="text-rose-500">*</span>
               </label>
               <SelectPicker
-                data={ROLES.map((r) => ({ label: r, value: r }))}
+                data={ROLES.map((r) => ({ label: t(`platformRole.${r}`, { defaultValue: r }), value: r }))}
                 value={role}
                 onChange={(value) => setRole((value ?? 'Operational') as PlatformUserRole)}
                 block
@@ -169,14 +171,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Phone No <span className="text-rose-500">*</span>
+                {t('platformUsers.phoneNo')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 type="tel"
                 required
                 value={phone}
                 onChange={(value) => setPhone(value)}
-                placeholder="e.g. 9898989898"
+                placeholder={t('common.eg', { example: '9898989898' })}
                 className="font-mono"
               />
             </div>
@@ -189,7 +191,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               onChange={(e) => setActive(e.target.checked)}
               className="accent-sky-600 w-4 h-4 cursor-pointer"
             />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Active</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{t('status.active')}</span>
           </label>
 
           {error && (
@@ -204,14 +206,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              <span>{isEditing ? 'Save Changes' : 'Create User'}</span>
+              <span>{isEditing ? t('common.saveChanges') : t('platformUsers.create')}</span>
             </button>
           </div>
         </form>

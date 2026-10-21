@@ -1,0 +1,151 @@
+{
+  "page": {
+    "title": "Incident Management",
+    "subtitle": "People, Machine Wellbeing & Security",
+    "eyebrow": "People · Machines · Security",
+    "info": "One live incident per machine, opened by the first alert on it. Response-time clocks come from the account's per-severity policy; with none set there is no clock.",
+    "loadFailed": "Could not load incidents.",
+    "aUser": "a user",
+    "loading": "Loading…",
+    "empty": "No incidents for this selection.",
+    "unassigned": "Unassigned",
+    "escalated": "escalated (level {{level}})",
+    "openedAt": "Opened {{date}}"
+  },
+  "filter": {
+    "live": "Live (open + acknowledged)"
+  },
+  "tiles": {
+    "open": "Open (not acknowledged)",
+    "critical": "Critical, unresolved",
+    "breached": "Response time breached"
+  },
+  "status": {
+    "open": "Open",
+    "acknowledged": "Acknowledged",
+    "resolved": "Resolved"
+  },
+  "severity": {
+    "critical": "critical",
+    "high": "high",
+    "medium": "medium",
+    "low": "low",
+    "none": "none"
+  },
+  "priority": {
+    "low": "low",
+    "normal": "normal",
+    "high": "high",
+    "urgent": "urgent"
+  },
+  "alertState": {
+    "open": "open",
+    "acknowledged": "acknowledged",
+    "resolved": "resolved"
+  },
+  "workOrderStatus": {
+    "created": "created",
+    "in-progress": "in progress",
+    "completed": "completed",
+    "cancelled": "cancelled"
+  },
+  "event": {
+    "opened": "Opened",
+    "alert_linked": "Alert linked",
+    "severity_raised": "Severity raised",
+    "acknowledged": "Acknowledged",
+    "assigned": "Assigned",
+    "work_raised": "Work order raised",
+    "escalated": "Escalated",
+    "resolved": "Resolved"
+  },
+  "unrecorded": {
+    "title": "Open alerts with no incident",
+    "note": "Alerts raised outside the evaluator are not gathered into an incident; they are listed so they are not missed.",
+    "openAlerts_one": "{{count}} open alert",
+    "openAlerts_other": "{{count}} open alerts"
+  },
+  "sla": {
+    "title": "Response times",
+    "subtitle": "Per severity · applies to incidents opened from now",
+    "ackBy": "Acknowledge by {{date}}",
+    "resolveBy": "Resolve by {{date}}",
+    "noPolicy": "No response-time policy for this severity",
+    "ackChip": "ack {{state}}",
+    "resolveChip": "resolve {{state}}",
+    "state": {
+      "no_policy": "no clock",
+      "on_track": "on track",
+      "met": "met",
+      "breached": "breached"
+    },
+    "loadFailed": "Could not load response times.",
+    "saveFailed": "Could not save this response time.",
+    "severity": "Severity",
+    "ackWithin": "Acknowledge within (min)",
+    "resolveWithin": "Resolve within (min)",
+    "save": "Save",
+    "clear": "Clear",
+    "clearTitle": "Remove: incidents of this severity get no clock",
+    "note": "A severity with no response time has no clock — incidents of it are never marked breached or escalated."
+  },
+  "panel": {
+    "title": "Incident",
+    "loadFailed": "Could not load this incident.",
+    "actionFailed": "That did not go through.",
+    "owner": "Owner: {{name}}",
+    "resolution": "Resolution: “{{note}}”",
+    "acknowledge": "Acknowledge",
+    "ownerPlaceholder": "Owner",
+    "raiseWorkOrder": "Raise work order",
+    "resolve": "Resolve",
+    "whatWasDone": "What was done? (required)",
+    "resolveIncident": "Resolve incident",
+    "workOrderNote": "Work order, raised against the worst unresolved alert",
+    "workOrderPlaceholder": "e.g. Inspect coolant circuit",
+    "raise": "Raise",
+    "alerts": "Alerts ({{count}})",
+    "workOrders": "Work orders ({{count}})",
+    "noneRaised": "None raised.",
+    "timeline": "Timeline"
+  },
+  "mock": {
+    "illustrativeNote": "Illustrative incident for workflow demonstration; no actual event asserted.",
+    "sectionInfo": "People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.",
+    "report": "Report incident",
+    "export": "Export filtered records",
+    "editTitle": "Edit incident",
+    "edit": "Edit",
+    "workOrder": "Work order",
+    "historyNote": "Browser-local demonstration history; not a tamper-proof regulatory audit.",
+    "thing": "Thing",
+    "incidentTitle": "Incident title",
+    "categoryLabel": "Category",
+    "severityLabel": "Severity",
+    "statusLabel": "Status",
+    "actionOwner": "Action owner",
+    "investigation": "Investigation / root cause",
+    "correctiveAction": "Corrective action",
+    "closureEvidence": "Closure evidence",
+    "independentReviewer": "Independent reviewer",
+    "recordedBy": "Recorded by",
+    "closureRule": "Closure needs completed investigation and evidence, an independent reviewer and approval of any linked work order.",
+    "cancel": "Cancel",
+    "save": "Save incident",
+    "category": {
+      "Human safety": "Human safety",
+      "Machine wellbeing": "Machine wellbeing",
+      "Security": "Security"
+    },
+    "severity": {
+      "Critical": "Critical",
+      "Warning": "Warning",
+      "Info": "Info"
+    },
+    "status": {
+      "Open": "Open",
+      "Investigating": "Investigating",
+      "Resolved": "Resolved"
+    }
+  }
+}

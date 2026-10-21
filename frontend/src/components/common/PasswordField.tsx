@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff } from 'lucide-react';
 import { InputGroup, Input } from 'rsuite';
 
@@ -19,6 +20,7 @@ export const PasswordField: React.FC<PasswordFieldProps> = ({
   label, value, onChange, placeholder, required, autoFocus, id,
 }) => {
   const [visible, setVisible] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <div>
@@ -38,7 +40,7 @@ export const PasswordField: React.FC<PasswordFieldProps> = ({
         <InputGroup.Button
           onClick={() => setVisible((v) => !v)}
           tabIndex={-1}
-          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          aria-label={visible ? t('passwordField.hide') : t('passwordField.show')}
         >
           {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </InputGroup.Button>

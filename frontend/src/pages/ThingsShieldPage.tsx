@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronLeft, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
-import { STATUS_LABEL } from '../components/shield/EvidenceRecord';
 import {
-  ApiError, Plant, SHIELD_CATEGORIES, ShieldCategory, ShieldMachine, ShieldStatus, ShieldSummary,
+  ApiError, Plant, SHIELD_CATEGORIES, ShieldMachine, ShieldStatus, ShieldSummary,
   apiGetShieldSummary, apiListPlants,
 } from '../lib/api';
 
 const PAGE_SIZE = 12;
-
-const CATEGORY_LABEL: Record<ShieldCategory, string> = { compliance: 'Compliance', safety: 'Safety', security: 'Security' };
 
 const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate',
@@ -22,7 +20,8 @@ const needsAttention = (m: ShieldMachine) =>
   SHIELD_CATEGORIES.some((c) => ['action_required', 'overdue'].includes(m.categories[c].status));
 
 export const ThingsShieldPage: React.FC = () => {
-  usePageHeader({ title: 'ThingsShield', subtitle: 'Safety, Compliance & Risk' });
+  const { t } = useTranslation('shield');
+  usePageHeader({ title: 'ThingsShield', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [summary, setSummary] = useState<ShieldSummary | null>(null);
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -37,7 +36,7 @@ export const ThingsShieldPage: React.FC = () => {
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiGetShieldSummary()
       .then((s) => { if (live) { setSummary(s); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load ThingsShield.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('page.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, []);
@@ -66,9 +65,9 @@ export const ThingsShieldPage: React.FC = () => {
   // Recounted over the filtered machines so the tiles always describe the cards below
   // them; the backend's own `counts` cover the whole account.
   const totals = useMemo(() => {
-    const t: Record<ShieldStatus, number> = { action_required: 0, overdue: 0, due_soon: 0, current: 0, not_recorded: 0 };
-    for (const m of matching) for (const c of SHIELD_CATEGORIES) t[m.categories[c].status] += 1;
-    return t;
+    const n: Record<ShieldStatus, number> = { action_required: 0, overdue: 0, due_soon: 0, current: 0, not_recorded: 0 };
+    for (const m of matching) for (const c of SHIELD_CATEGORIES) n[m.categories[c].status] += 1;
+    return n;
   }, [matching]);
 
   const pageCount = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
@@ -80,12 +79,12 @@ export const ThingsShieldPage: React.FC = () => {
     <div id="things-shield-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
-          <span title="Each machine has a compliance, a safety and a security status, read from its latest check record. A check nobody has recorded counts as not recorded.">
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('page.eyebrow')}</span>
+          <span title={t('page.info')}>
             <Info className="w-4 h-4 text-sky-200" />
           </span>
         </div>
-        <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
+        <h2 className="text-xl font-bold">{t('page.heading')}</h2>
       </div>
 
       {error && (
@@ -105,25 +104,25 @@ export const ThingsShieldPage: React.FC = () => {
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <KpiTile label="Action required" value={totals.action_required} tone="bad" />
-        <KpiTile label="Overdue" value={totals.overdue} tone="bad" />
-        <KpiTile label="Due soon" value={totals.due_soon} tone="warn" />
-        <KpiTile label="Current" value={totals.current} tone="good" />
-        <KpiTile label="Not recorded" value={totals.not_recorded} />
+        <KpiTile label={t('status.action_required')} value={totals.action_required} tone="bad" />
+        <KpiTile label={t('status.overdue')} value={totals.overdue} tone="bad" />
+        <KpiTile label={t('status.due_soon')} value={totals.due_soon} tone="warn" />
+        <KpiTile label={t('status.current')} value={totals.current} tone="good" />
+        <KpiTile label={t('status.not_recorded')} value={totals.not_recorded} />
       </div>
-      <p className="text-[11px] text-slate-400">Counted per machine and category: each machine has three checks.</p>
+      <p className="text-[11px] text-slate-400">{t('page.countNote')}</p>
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Machines</h3>
-          <span className="text-sm text-slate-400 dark:text-slate-500">{matching.length} machines</span>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.machines')}</h3>
+          <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
         </div>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-slate-500">{t('page.loading')}</p>
         ) : pageItems.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-            No machines match this filter.
+            {t('page.noMatch')}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -134,13 +133,13 @@ export const ThingsShieldPage: React.FC = () => {
         )}
 
         <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-          <span>Page {pageSafe} of {pageCount}</span>
+          <span>{t('page.pageOf', { page: pageSafe, count: pageCount })}</span>
           <div className="flex items-center gap-2">
             <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              <ChevronLeft className="w-4 h-4" /> Prev
+              <ChevronLeft className="w-4 h-4" /> {t('page.prev')}
             </button>
             <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              Next <ChevronRight className="w-4 h-4" />
+              {t('page.next')} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -153,7 +152,7 @@ export const ThingsShieldPage: React.FC = () => {
         className="w-full flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 cursor-pointer text-left"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-          <Siren className="w-4 h-4 text-amber-500" /> Incidents are tracked in Incident Management
+          <Siren className="w-4 h-4 text-amber-500" /> {t('page.incidentsLink')}
         </span>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
@@ -172,6 +171,7 @@ const KpiTile: React.FC<{ label: string; value: number; tone?: 'good' | 'bad' | 
 };
 
 const ShieldCard: React.FC<{ machine: ShieldMachine; onOpen: () => void }> = ({ machine, onOpen }) => {
+  const { t } = useTranslation('shield');
   const alert = needsAttention(machine);
   const style = alert
     ? 'border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/20'
@@ -179,7 +179,7 @@ const ShieldCard: React.FC<{ machine: ShieldMachine; onOpen: () => void }> = ({ 
   return (
     <button onClick={onOpen} className={`text-left w-full border rounded-xl p-4 shadow-xs space-y-2.5 hover:shadow-md transition-shadow cursor-pointer group ${style}`}>
       <div className="flex items-center gap-2">
-        <span title={alert ? 'Needs attention — a failed or overdue check' : 'No failed or overdue checks'}>
+        <span title={alert ? t('card.needsAttention') : t('card.allClear')}>
           {alert ? <ShieldAlert className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0" /> : <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0" />}
         </span>
         <div className="min-w-0 flex-1">
@@ -192,13 +192,13 @@ const ShieldCard: React.FC<{ machine: ShieldMachine; onOpen: () => void }> = ({ 
       <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
         <div className="flex items-center gap-1.5 flex-wrap">
           {SHIELD_CATEGORIES.map((c) => (
-            <Chip key={c} tone={STATUS_TONE[machine.categories[c].status]} title={`${CATEGORY_LABEL[c]}: ${STATUS_LABEL[machine.categories[c].status]}`}>
-              {CATEGORY_LABEL[c]}
+            <Chip key={c} tone={STATUS_TONE[machine.categories[c].status]} title={`${t(`category.${c}`)}: ${t(`status.${machine.categories[c].status}`)}`}>
+              {t(`category.${c}`)}
             </Chip>
           ))}
         </div>
         <span className="inline-flex items-center gap-0.5 text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:gap-1.5 transition-all">
-          Details <ChevronRight className="w-3.5 h-3.5" />
+          {t('card.details')} <ChevronRight className="w-3.5 h-3.5" />
         </span>
       </div>
     </button>

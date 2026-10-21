@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Cpu, Wrench } from 'lucide-react';
 import { ApiError, FleetConflictReason, FleetOnboardingPlan, apiApplyFleetOnboarding, apiGetFleetOnboardingPlan } from '../../lib/api';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../common/Modal';
 
-const CONFLICT_LABEL: Record<FleetConflictReason, string> = {
-  held_by_another_account: 'Logger belongs to another client',
-  retired: 'Logger is retired',
-  claimed_to_another_machine: 'Logger is fitted to a different machine',
-  machine_not_in_projection: 'Machine is not listed in 1.0 or 2.0',
-};
+// Labels live under fleet.conflict.<reason>; the raw reason shows if a new one appears.
+const conflictLabel = (t: (key: string, opts?: { defaultValue: string }) => string, reason: FleetConflictReason) =>
+  t(`fleet.conflict.${reason}`, { defaultValue: reason });
 
 /**
  * Bringing one client's existing 1.0 fleet into 2.0's register (QONBOARD1): the plan
@@ -19,13 +17,17 @@ const CONFLICT_LABEL: Record<FleetConflictReason, string> = {
 export const FleetOnboardingModal: React.FC<{
   client: { id: string; clientName: string } | null;
   onClose: () => void;
-}> = ({ client, onClose }) => (
-  <Modal isOpen={!!client} onClose={onClose} title="Onboard 1.0 fleet" subtitle={client?.clientName} maxWidth="max-w-2xl">
-    {client && <FleetOnboardingBody key={client.id} tenantId={client.id} />}
-  </Modal>
-);
+}> = ({ client, onClose }) => {
+  const { t } = useTranslation('accounts');
+  return (
+    <Modal isOpen={!!client} onClose={onClose} title={t('fleet.title')} subtitle={client?.clientName} maxWidth="max-w-2xl">
+      {client && <FleetOnboardingBody key={client.id} tenantId={client.id} />}
+    </Modal>
+  );
+};
 
 const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
+  const { t } = useTranslation('accounts');
   const [plan, setPlan] = useState<FleetOnboardingPlan | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [applying, setApplying] = useState(false);
@@ -33,25 +35,32 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
 
   const load = () => apiGetFleetOnboardingPlan(tenantId)
     .then((p) => { setPlan(p); setError(undefined); })
-    .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not read the 1.0 fleet for this client.'));
+    .catch((err) => setError(err instanceof ApiError ? err.message : t('fleet.readFailed')));
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tenantId]);
 
   if (error && !plan) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!plan) return <p className="text-sm text-slate-500">Reading the 1.0 fleet…</p>;
+  if (!plan) return <p className="text-sm text-slate-500">{t('fleet.reading')}</p>;
 
   const toDo = plan.createMachines.length + plan.registerDevices.length + plan.claimDevices.length;
 
   async function apply() {
-    if (!window.confirm(`Add ${plan!.createMachines.length} machine(s) and ${plan!.registerDevices.length + plan!.claimDevices.length} logger fitting(s) to this client? Nothing existing is changed.`)) return;
+    if (!window.confirm(t('fleet.confirm', {
+      machines: t('fleet.machineCount', { count: plan!.createMachines.length }),
+      fittings: t('fleet.fittingCount', { count: plan!.registerDevices.length + plan!.claimDevices.length }),
+    }))) return;
     setApplying(true);
     setError(undefined);
     try {
       const r = await apiApplyFleetOnboarding(tenantId);
-      setNotice(`Added ${r.createMachines.length} machine(s), registered ${r.registerDevices.length} logger(s), fitted ${r.claimDevices.length}. Signals still need binding per machine.`);
+      setNotice(t('fleet.applied', {
+        machines: t('fleet.machineCount', { count: r.createMachines.length }),
+        loggers: t('fleet.loggerCount', { count: r.registerDevices.length }),
+        fitted: r.claimDevices.length,
+      }));
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not onboard this fleet.');
+      setError(err instanceof ApiError ? err.message : t('fleet.applyFailed'));
     } finally {
       setApplying(false);
     }
@@ -60,8 +69,7 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   return (
     <div className="space-y-4 text-xs">
       <p className="text-slate-500 dark:text-slate-400">
-        Reads this client's machines and loggers from the 1.0 mirror and adds whatever 2.0's register is missing. It never
-        changes or removes anything already here, and it does not bind signals — that is still done per machine.
+        {t('fleet.intro')}
       </p>
 
       {error && (
@@ -76,14 +84,14 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Machines to add" value={plan.createMachines.length} />
-        <Stat label="Loggers to register" value={plan.registerDevices.length} />
-        <Stat label="Loggers to fit" value={plan.claimDevices.length} />
-        <Stat label="Already onboarded" value={plan.alreadyOnboarded} muted />
+        <Stat label={t('fleet.stat.machinesToAdd')} value={plan.createMachines.length} />
+        <Stat label={t('fleet.stat.loggersToRegister')} value={plan.registerDevices.length} />
+        <Stat label={t('fleet.stat.loggersToFit')} value={plan.claimDevices.length} />
+        <Stat label={t('fleet.stat.alreadyOnboarded')} value={plan.alreadyOnboarded} muted />
       </div>
 
       {plan.createMachines.length > 0 && (
-        <Section icon={<Wrench className="w-3.5 h-3.5" />} title="Machines to add (unclassified until a class is set)">
+        <Section icon={<Wrench className="w-3.5 h-3.5" />} title={t('fleet.machinesSection')}>
           {plan.createMachines.map((m) => (
             <Row key={`${m.sourceSystem}/${m.externalId}`} left={m.name ?? m.externalId} right={`${m.sourceSystem}/${m.externalId}`} />
           ))}
@@ -91,17 +99,17 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       )}
 
       {plan.registerDevices.length + plan.claimDevices.length > 0 && (
-        <Section icon={<Cpu className="w-3.5 h-3.5" />} title="Loggers">
-          {plan.registerDevices.map((d) => <Row key={`r-${d.imei}`} left={d.imei} right={`register, assign and fit to ${d.equipmentExternalId}`} />)}
-          {plan.claimDevices.map((d) => <Row key={`c-${d.imei}`} left={d.imei} right={`already this client's; fit to ${d.equipmentExternalId}`} />)}
+        <Section icon={<Cpu className="w-3.5 h-3.5" />} title={t('fleet.loggersSection')}>
+          {plan.registerDevices.map((d) => <Row key={`r-${d.imei}`} left={d.imei} right={t('fleet.registerAndFit', { machine: d.equipmentExternalId })} />)}
+          {plan.claimDevices.map((d) => <Row key={`c-${d.imei}`} left={d.imei} right={t('fleet.claimAndFit', { machine: d.equipmentExternalId })} />)}
         </Section>
       )}
 
       {plan.conflicts.length > 0 && (
-        <Section icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-500" />} title={`Conflicts (${plan.conflicts.length}) — left as they are; resolve by hand`}>
+        <Section icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-500" />} title={t('fleet.conflictsSection', { count: plan.conflicts.length })}>
           {plan.conflicts.map((c, i) => (
             <div key={`${c.imei}-${i}`} className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
-              <p className="text-slate-700 dark:text-slate-200"><span className="font-mono">{c.imei}</span> · {CONFLICT_LABEL[c.reason] ?? c.reason}</p>
+              <p className="text-slate-700 dark:text-slate-200"><span className="font-mono">{c.imei}</span> · {conflictLabel(t, c.reason)}</p>
               <p className="text-[11px] text-slate-400">{c.detail}</p>
             </div>
           ))}
@@ -110,14 +118,14 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
 
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
         <span className="text-[11px] text-slate-400">
-          {toDo === 0 ? 'Nothing to add — the register already matches 1.0 for this client.' : `${toDo} change(s) will be added.`}
+          {toDo === 0 ? t('fleet.nothingToAdd') : t('fleet.changesToAdd', { count: toDo })}
         </span>
         <button
           onClick={apply}
           disabled={toDo === 0 || applying}
           className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
         >
-          {applying ? 'Onboarding…' : 'Apply'}
+          {applying ? t('fleet.applying') : t('fleet.apply')}
         </button>
       </div>
     </div>

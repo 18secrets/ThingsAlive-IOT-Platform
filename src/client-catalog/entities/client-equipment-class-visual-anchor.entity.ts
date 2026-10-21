@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { numericPercent } from '../../catalog/entities/equipment-class-visual.entity';
+import { numericPercent, VisualTier } from '../../catalog/entities/equipment-class-visual.entity';
 
 /**
  * A tenant's own anchor set for a class visual (task QREC0c). The image stays the
@@ -25,6 +25,19 @@ export class ClientEquipmentClassVisualAnchor {
 
   @Column({ name: 'hotspot_y', type: 'numeric', transformer: numericPercent })
   hotspotY: number;
+
+  /** Which asset the marker sits on: the schematic (hotspots) or the model (pos_*), task QTWIN1. */
+  @Column({ type: 'text', default: 'schematic' })
+  tier: VisualTier;
+
+  @Column({ name: 'pos_x', type: 'numeric', nullable: true, transformer: numericPercent })
+  posX: number | null;
+
+  @Column({ name: 'pos_y', type: 'numeric', nullable: true, transformer: numericPercent })
+  posY: number | null;
+
+  @Column({ name: 'pos_z', type: 'numeric', nullable: true, transformer: numericPercent })
+  posZ: number | null;
 
   @Column({ type: 'text', nullable: true })
   label: string | null;

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
 import { CheckPicker, Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, EquipmentClass, EquipmentClassInput, ExpectedSignal, FailureMode } from '../../lib/api';
 
 interface AddCategoryModalProps {
@@ -24,6 +25,7 @@ const emptyFailureMode = (): FailureMode => ({ code: '', name: '', symptom: '', 
 export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingClass,
 }) => {
+  const { t } = useTranslation('catalog');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [name, setName] = useState('');
@@ -112,7 +114,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the class.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('classModal.saveFailed') : t('classModal.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -130,12 +132,12 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {isEditing ? 'Edit Equipment Class' : 'New Equipment Class'}
+                {isEditing ? t('classModal.editTitle') : t('classModal.newTitle')}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
                 {isEditing
-                  ? 'Editing the working draft — publishing it is a separate step, from the class card.'
-                  : 'Created as a draft. Nothing here reaches a tenant until it is published.'}
+                  ? t('classModal.editSubtitle')
+                  : t('classModal.newSubtitle')}
               </p>
             </div>
           </div>
@@ -153,7 +155,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Class Name <span className="text-rose-500">*</span>
+                {t('classModal.className')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 size="sm"
@@ -161,13 +163,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 autoFocus
                 value={name}
                 onChange={(value) => handleNameChange(value)}
-                placeholder="e.g. Diesel Generator"
+                placeholder={t('classModal.classNamePlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Slug <span className="text-rose-500">*</span>
+                {t('classModal.slug')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 size="sm"
@@ -175,29 +177,29 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 disabled={isEditing}
                 value={slug}
                 onChange={(value) => { setSlug(value); setSlugTouched(true); }}
-                placeholder="e.g. diesel-generator"
+                placeholder={t('classModal.slugPlaceholder')}
               />
               <p className="text-[10px] text-slate-400 mt-1">
-                {isEditing ? "Permanent — every scenario and activation references it." : 'What every scenario and activation will reference. Auto-filled from the name.'}
+                {isEditing ? t('classModal.slugPermanent') : t('classModal.slugHint')}
               </p>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Category Tag <span className="text-slate-400 font-normal">(optional, coarse grouping)</span>
+              {t('classModal.categoryTag')} <span className="text-slate-400 font-normal">{t('classModal.categoryTagHint')}</span>
             </label>
             <Input
               size="sm"
               value={category}
               onChange={(value) => setCategory(value)}
-              placeholder="e.g. power, machining, fluid"
+              placeholder={t('classModal.categoryPlaceholder')}
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Description
+              {t('classModal.description')}
             </label>
             <Input
               as="textarea"
@@ -205,24 +207,24 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               rows={3}
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="What this class of machine is, and where it's used..."
+              placeholder={t('classModal.descriptionPlaceholder')}
             />
           </div>
 
           <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-white">Expected Signals</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">{t('classModal.expectedSignals')}</span>
               <button
                 type="button"
                 onClick={addSignalRow}
                 className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add signal</span>
+                <span>{t('classModal.addSignal')}</span>
               </button>
             </div>
             <p className="text-[10px] text-slate-400 -mt-1">
-              At least one is required to publish — a class with none blocks every scenario on it.
+              {t('classModal.signalsHint')}
             </p>
 
             {signals.map((s, i) => (
@@ -231,13 +233,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   size="sm"
                   value={s.signal}
                   onChange={(value) => updateSignal(i, 'signal', value)}
-                  placeholder="signal, e.g. coolant_temp"
+                  placeholder={t('classModal.signalPlaceholder')}
                 />
                 <Input
                   size="sm"
                   value={s.unit ?? ''}
                   onChange={(value) => updateSignal(i, 'unit', value)}
-                  placeholder="unit, e.g. °C"
+                  placeholder={t('classModal.unitPlaceholder')}
                 />
                 <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
                   <input
@@ -246,13 +248,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                     onChange={(e) => updateSignal(i, 'required', e.target.checked)}
                     className="cursor-pointer"
                   />
-                  Required
+                  {t('classModal.required')}
                 </label>
                 <button
                   type="button"
                   onClick={() => removeSignalRow(i)}
                   className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"
-                  title="Remove signal"
+                  title={t('classModal.removeSignal')}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -262,19 +264,18 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
 
           <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-white">Failure Modes</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">{t('classModal.failureModes')}</span>
               <button
                 type="button"
                 onClick={addFailureModeRow}
                 className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add failure mode</span>
+                <span>{t('classModal.addFailureMode')}</span>
               </button>
             </div>
             <p className="text-[10px] text-slate-400 -mt-1">
-              Optional, and never inferred from data — how a field technician would recognise this
-              failure, and which of the signals above move when it happens.
+              {t('classModal.failureModesHint')}
             </p>
 
             {failureModes.map((f, i) => (
@@ -284,19 +285,19 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                     size="sm"
                     value={f.code}
                     onChange={(value) => updateFailureMode(i, 'code', value)}
-                    placeholder="code, e.g. overheat"
+                    placeholder={t('classModal.codePlaceholder')}
                   />
                   <Input
                     size="sm"
                     value={f.name}
                     onChange={(value) => updateFailureMode(i, 'name', value)}
-                    placeholder="name, e.g. Coolant System Overheat"
+                    placeholder={t('classModal.namePlaceholder')}
                   />
                   <button
                     type="button"
                     onClick={() => removeFailureModeRow(i)}
                     className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"
-                    title="Remove failure mode"
+                    title={t('classModal.removeFailureMode')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -305,19 +306,19 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   size="sm"
                   value={f.symptom}
                   onChange={(value) => updateFailureMode(i, 'symptom', value)}
-                  placeholder="symptom an operator would notice, e.g. Coolant temp climbs steadily under normal load"
+                  placeholder={t('classModal.symptomPlaceholder')}
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="text-[10px] text-slate-400">Signals that move:</span>
+                  <span className="text-[10px] text-slate-400">{t('classModal.signalsThatMove')}</span>
                   {signals.filter((s) => s.signal.trim()).length === 0 ? (
-                    <span className="text-[10px] text-slate-400 italic">Add an expected signal above first</span>
+                    <span className="text-[10px] text-slate-400 italic">{t('classModal.addSignalFirst')}</span>
                   ) : (
                     <CheckPicker
                       size="sm"
                       data={signals.filter((s) => s.signal.trim()).map((s) => ({ label: s.signal.trim(), value: s.signal.trim() }))}
                       value={f.signals}
                       onChange={(values) => setFailureModes((prev) => prev.map((ff, idx) => (idx === i ? { ...ff, signals: values ?? [] } : ff)))}
-                      placeholder="Select signals"
+                      placeholder={t('classModal.selectSignals')}
                       searchable={false}
                       style={{ minWidth: 220 }}
                     />
@@ -336,7 +337,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory
+              <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -344,7 +345,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -352,7 +353,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : (isEditing ? 'Save Draft' : 'Create Draft')}</span>
+                <span>{busy ? t('common.saving') : (isEditing ? t('classModal.saveDraft') : t('classModal.createDraft'))}</span>
               </button>
             </div>
           </div>

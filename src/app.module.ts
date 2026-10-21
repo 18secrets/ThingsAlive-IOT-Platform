@@ -18,6 +18,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { FleetImportModule } from './fleet-import/fleet-import.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
+import { EmbeddingModule } from './embedding/embedding.module';
 import { RecFrameModule } from './rec-frame/rec-frame.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
@@ -127,6 +128,7 @@ export class AppModule {
               ParameterModule,
               AssistantModule,
               RecEngineModule,
+              EmbeddingModule,
               RecFrameModule,
             ]
           : []),

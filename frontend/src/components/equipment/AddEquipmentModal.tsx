@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier } from '../../lib/api';
 
 interface AddEquipmentModalProps {
@@ -20,7 +21,6 @@ interface AddEquipmentModalProps {
 }
 
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
-const TIER_OPTIONS = TIERS.map((t) => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }));
 
 export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   isOpen,
@@ -32,6 +32,8 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   plants,
   existingEquipment,
 }) => {
+  const { t } = useTranslation('equipment');
+  const tierOptions = TIERS.map((tier) => ({ label: t(`tier.${tier}`), value: tier }));
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -127,7 +129,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
       // The person backed out of the move's required reason prompt — not a
       // failure, just nothing to report.
       if (err instanceof Error && err.message === 'cancelled') return;
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'register'} this equipment.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('equipmentForm.saveFailed') : t('equipmentForm.registerFailed')));
     } finally {
       setBusy(false);
     }
@@ -142,7 +144,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
 
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {isEditing ? 'Edit Equipment' : 'Add New Equipment'}
+            {isEditing ? t('equipmentForm.editTitle') : t('equipmentForm.addTitle')}
           </h3>
           <button
             onClick={() => { reset(); onClose(); }}
@@ -156,76 +158,74 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Code <span className="text-rose-500">*</span>
+                {t('equipmentList.col.code')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 autoFocus={!isEditing}
                 disabled={isEditing}
                 value={code}
                 onChange={(value) => setCode(value)}
-                placeholder="e.g. DG-01"
+                placeholder={t('common.eg', { example: 'DG-01' })}
                 className="font-mono text-xs"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                {isEditing
-                  ? "Permanent — this machine's identity, not changed here."
-                  : "This machine's permanent identity. Not changed later."}
+                {isEditing ? t('equipmentForm.codeHintEdit') : t('equipmentForm.codeHintNew')}
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Equipment Name <span className="text-rose-500">*</span>
+                {t('equipmentList.col.name')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 value={name}
                 onChange={(value) => setName(value)}
-                placeholder="e.g. Komatsu PC210LC"
+                placeholder={t('common.eg', { example: 'Komatsu PC210LC' })}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Description
+              {t('equipmentForm.description')}
             </label>
             <Input
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="Equipment role & function"
+              placeholder={t('equipmentForm.descriptionPlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Equipment Class
+                {t('equipmentList.col.class')}
               </label>
               <SelectPicker
                 data={equipmentClassOptions}
                 value={equipmentClassSlug || null}
                 onChange={(value) => setEquipmentClassSlug(value ?? '')}
-                placeholder="Unclassified"
+                placeholder={t('common.unclassified')}
                 block
                 searchable={equipmentClassOptions.length > 6}
                 cleanable
               />
               {equipmentClasses.length === 0 && (
                 <p className="text-[11px] text-slate-400 mt-1">
-                  No equipment class has been granted to this account yet.
+                  {t('equipmentForm.noClasses')}
                 </p>
               )}
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Plant
+                {t('equipmentList.col.plant')}
               </label>
               <SelectPicker
                 data={plantOptions}
                 value={plantId || null}
                 onChange={(value) => setPlantId(value ?? '')}
-                placeholder="Unassigned"
+                placeholder={t('common.unassigned')}
                 block
                 searchable={plantOptions.length > 6}
                 cleanable
@@ -236,36 +236,36 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Manufacturer
+                {t('equipmentList.col.manufacturer')}
               </label>
               <Input
                 value={manufacturer}
                 onChange={(value) => setManufacturer(value)}
-                placeholder="e.g. Komatsu"
+                placeholder={t('common.eg', { example: 'Komatsu' })}
                 size="sm"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Model Number
+                {t('equipmentForm.modelNumber')}
               </label>
               <Input
                 value={modelNumber}
                 onChange={(value) => setModelNumber(value)}
-                placeholder="e.g. EC210"
+                placeholder={t('common.eg', { example: 'EC210' })}
                 size="sm"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Serial Number
+                {t('equipmentForm.serialNumber')}
               </label>
               <Input
                 value={serialNumber}
                 onChange={(value) => setSerialNumber(value)}
-                placeholder="e.g. SER-4920"
+                placeholder={t('common.eg', { example: 'SER-4920' })}
                 className="font-mono"
                 size="sm"
               />
@@ -274,10 +274,10 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Service Tier
+              {t('equipmentForm.serviceTier')}
             </label>
             <SelectPicker
-              data={TIER_OPTIONS}
+              data={tierOptions}
               value={tier}
               onChange={(value) => setTier((value ?? 'basic') as ServiceTier)}
               block
@@ -298,7 +298,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
               onClick={() => { reset(); onClose(); }}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -307,7 +307,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             >
               <Check className="w-4 h-4" />
               <span>
-                {busy ? (isEditing ? 'Saving…' : 'Registering…') : (isEditing ? 'Save Changes' : 'Register Equipment')}
+                {busy ? (isEditing ? t('common.saving') : t('equipmentForm.registering')) : (isEditing ? t('common.saveChanges') : t('equipmentForm.register'))}
               </span>
             </button>
           </div>

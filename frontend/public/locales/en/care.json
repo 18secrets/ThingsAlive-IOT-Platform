@@ -1,0 +1,165 @@
+{
+  "page": {
+    "subtitle": "Deterministic Scenario Risk",
+    "detailSubtitle": "ThingsCare Detail",
+    "machineNotFound": "Machine not found"
+  },
+  "hero": {
+    "eyebrow": "Deterministic scoring",
+    "tooltip": "Risk score is rule-based (Tier 1): 70% worst signal + 30% mean, each vs. baseline. Not a fabricated probability, and there is no remaining-useful-life estimate.",
+    "title": "ThingsCare: Scenario Risk"
+  },
+  "common": {
+    "loading": "Loading…",
+    "prev": "Prev",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{total}}",
+    "details": "Details",
+    "createWorkOrder": "Create work order",
+    "viewEquipmentPage": "View equipment page"
+  },
+  "kpi": {
+    "inScope": "Machines in scope",
+    "meanRisk": "Mean risk score",
+    "highCritical": "High / critical",
+    "noActive": "No active scenario"
+  },
+  "list": {
+    "heading": "Machines",
+    "count_one": "{{count}} machine",
+    "count_other": "{{count}} machines",
+    "noMatch": "No machines match this filter."
+  },
+  "card": {
+    "gaugeTitle": "Risk score: 0–100, rule-based",
+    "noScenario": "no scenario",
+    "riskTitle": "Rule-based composite risk score",
+    "risk": "{{score}} risk",
+    "confidenceTitle": "How much of the picture was available",
+    "abnormalTitle": "Signals outside baseline",
+    "na": "n/a"
+  },
+  "severity": {
+    "none": "none",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "critical": "critical"
+  },
+  "confidence": {
+    "full": "full",
+    "partial": "partial",
+    "none": "none"
+  },
+  "signalState": {
+    "normal": "normal",
+    "warning": "warning",
+    "critical": "critical",
+    "unscored": "unscored"
+  },
+  "workOrderStatus": {
+    "created": "created",
+    "in-progress": "in progress",
+    "completed": "completed",
+    "cancelled": "cancelled"
+  },
+  "errors": {
+    "loadEquipment": "Could not load equipment.",
+    "loadBaselines": "Could not load baselines.",
+    "recomputeBaselines": "Could not recompute baselines.",
+    "loadPredictions": "Could not load predictions.",
+    "scoreNow": "Could not score this machine now."
+  },
+  "baselines": {
+    "title": "Baselines",
+    "subtitle": "What each signal's mean/stddev is measured against",
+    "recompute": "Recompute",
+    "empty": "No baseline computed yet for this machine.",
+    "col": {
+      "signal": "Signal",
+      "mean": "Mean",
+      "stddev": "Stddev",
+      "samples": "Samples",
+      "coverage": "Coverage",
+      "source": "Source",
+      "computed": "Computed"
+    }
+  },
+  "detail": {
+    "scoreNow": "Score now",
+    "scored_one": "Scored {{count}} scenario.",
+    "scored_other": "Scored {{count}} scenarios.",
+    "skipped_one": "{{count}} skipped.",
+    "skipped_other": "{{count}} skipped.",
+    "raised_one": "{{count}} job raised.",
+    "raised_other": "{{count}} jobs raised.",
+    "activeScenarios": "Active scenarios",
+    "noPrediction": "No active scenario has produced a prediction for this machine yet.",
+    "abnormal_one": "{{count}} abnormal",
+    "abnormal_other": "{{count}} abnormal",
+    "window_one": "{{count}}d window",
+    "window_other": "{{count}}d window",
+    "maintenanceHistory": "Maintenance history",
+    "noWorkOrders": "No work orders for this machine yet.",
+    "needsScenario": "Needs an active client scenario with enough baseline history before a prediction can be produced."
+  },
+  "chain": {
+    "title": "Root-cause diagnosis",
+    "origins_one": "{{count}} origin",
+    "origins_other": "{{count}} origins",
+    "noStageOff": "no stage off its curve",
+    "notEnoughReadings": "not enough readings",
+    "diagnosing": "Diagnosing…",
+    "noChain": "No published causal chain covers this machine's class.",
+    "noChainForClass": "No published causal chain covers this machine's class ({{classSlug}}).",
+    "confidence": "confidence {{value}}",
+    "confidenceLevel": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low",
+      "none": "none"
+    },
+    "notEvaluated": "Not evaluated: {{reason}}",
+    "separateFaults_one": "Separate fault further down: {{list}}",
+    "separateFaults_other": "Separate faults further down: {{list}}",
+    "notRun": "Not run: {{list}}",
+    "whatIf": "What if…",
+    "lookAt": "Look at: {{name}}",
+    "reads": "reads {{actual}} where its drivers predict {{expected}}",
+    "exceedance": "{{value}}× its warning threshold",
+    "verdict": {
+      "normal": "on its curve",
+      "origin": "origin",
+      "additional": "separate fault",
+      "unevaluated": "not scored"
+    },
+    "stageReason": {
+      "no-target": "no reading for this signal",
+      "driver-missing": "a driver has no reading",
+      "out-of-range": "drivers outside the range the chain was fitted on"
+    },
+    "chainReason": {
+      "no-nodes": "the chain has no stages",
+      "cycle": "the chain loops on itself",
+      "nothing-evaluable": "no stage had the readings it needs",
+      "no-inputs": "no input values given"
+    },
+    "breach": {
+      "none": "none",
+      "warning": "warning",
+      "critical": "critical"
+    },
+    "noRating": "no rating",
+    "noInputs": "This chain has no external inputs to set.",
+    "project": "Project",
+    "projecting": "Projecting…",
+    "notProjected": "Not projected: {{reason}}",
+    "firstBreach": "{{name}} breaches its rating ({{breach}}) in about {{time}}",
+    "noBreach": "No rated stage breaches at these inputs.",
+    "after": "after {{time}}",
+    "errors": {
+      "diagnose": "Could not diagnose this machine.",
+      "project": "Could not project this chain."
+    }
+  }
+}

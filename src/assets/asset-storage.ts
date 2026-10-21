@@ -8,6 +8,10 @@ export const ASSET_STORAGE = Symbol('ta:asset-storage');
 export const VISUAL_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const;
 export type VisualContentType = (typeof VISUAL_CONTENT_TYPES)[number];
 
+/** What a class's 3-D model may be (task QTWIN1): a binary glTF, one file with its
+ * textures inside, so one object serves the whole model. */
+export const MODEL_CONTENT_TYPES = ['model/gltf-binary'] as const;
+
 /** A sanity bound on what a confirm will accept, not a processing step. */
 export const MAX_VISUAL_BYTES = 50 * 1024 * 1024;
 

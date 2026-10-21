@@ -1,34 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, X, Check, Shield, Info } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { NavigationTab, CLIENT_ASSIGNABLE_TABS } from '../../types';
 import { ApiError, RoleInput, RolePatchInput, TenantRole, TenantUser } from '../../lib/api';
 
-const TAB_LABELS: Record<NavigationTab, string> = {
-  dashboard: 'Dashboard',
-  'things-care': 'ThingsCare',
-  'things-shield': 'ThingsShield',
-  'incident-management': 'Incident Management',
-  'production-monitoring': 'Production Monitoring',
-  'ai-onboarding': 'AI Onboarding',
-  'alert-agent': 'Alert Agent',
-  alerts: 'Alerts',
-  predictions: 'Live Predictions',
-  scenarios: 'Scenarios',
-  'work-orders': 'Work Orders',
-  'cost-administration': 'Cost Administration',
-  admin: 'Administration (Plants, Devices, Equipment)',
-  settings: 'Settings',
-  users: 'Users',
-  'client-users': 'Client Users',
-  roles: 'Roles & Permissions',
+// Translation keys, not labels: the sidebar's own names (translation namespace) so a
+// page is called the same thing here as where it is opened.
+const TAB_LABEL_KEYS: Record<NavigationTab, string> = {
+  dashboard: 'translation:sidebar.dashboard',
+  'things-care': 'translation:sidebar.thingsCare',
+  'things-shield': 'translation:sidebar.thingsShield',
+  'incident-management': 'translation:sidebar.incidentManagement',
+  'production-monitoring': 'translation:sidebar.productionMonitoring',
+  'ai-onboarding': 'translation:sidebar.aiOnboarding',
+  'alert-agent': 'translation:pages.alertAgent.title',
+  alerts: 'translation:sidebar.alerts',
+  predictions: 'translation:sidebar.livePredictions',
+  scenarios: 'translation:sidebar.scenarios',
+  'work-orders': 'translation:sidebar.workOrders',
+  'cost-administration': 'translation:sidebar.costAdministration',
+  admin: 'users:roles.adminTab',
+  settings: 'translation:sidebar.settings',
+  users: 'translation:sidebar.users',
+  'client-users': 'translation:sidebar.clientUsers',
+  roles: 'translation:sidebar.roles',
   // Master Admin's own sidebar pages — never offered here since they're not
   // in CLIENT_ASSIGNABLE_TABS, but Record<NavigationTab, string> is
   // exhaustive over the whole union.
-  clients: 'Clients',
-  staff: 'Staff',
-  devices: 'Devices',
-  equipment: 'Equipment',
+  clients: 'translation:sidebar.clients',
+  staff: 'translation:sidebar.staff',
+  devices: 'translation:sidebar.devices',
+  equipment: 'translation:sidebar.equipment',
 };
 
 interface RoleManagementProps {
@@ -43,6 +46,7 @@ interface RoleManagementProps {
 export const RoleManagement: React.FC<RoleManagementProps> = ({
   roles, users, error, onCreateRole, onUpdateRole, onDeleteRole,
 }) => {
+  const { t } = useTranslation('users');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<TenantRole | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -59,15 +63,14 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
     <div id="role-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          A role decides which pages its users can open, and what its users can do —
-          two different questions, both bundled into every custom role.
+          {t('roles.intro')}
         </p>
         <button
           onClick={() => { setEditingRole(null); setIsModalOpen(true); }}
           className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Role</span>
+          <span>{t('roles.add')}</span>
         </button>
       </div>
 
@@ -86,13 +89,13 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
                   {role.name}
-                  {role.isBuiltIn && <span title="One of the roles every account starts with"><Shield className="w-4 h-4 text-sky-500" /></span>}
+                  {role.isBuiltIn && <span title={t('roles.builtIn')}><Shield className="w-4 h-4 text-sky-500" /></span>}
                 </h4>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => { setEditingRole(role); setIsModalOpen(true); }}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Edit name and pages"
+                    title={t('roles.editTitle')}
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
@@ -100,7 +103,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     onClick={() => !role.isBuiltIn && holders === 0 && handleDelete(role.slug)}
                     disabled={role.isBuiltIn || holders > 0 || busySlug === role.slug}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                    title={role.isBuiltIn ? "One of the roles every account starts with — can't be deleted" : holders > 0 ? 'Move its holders to another role first' : 'Delete Role'}
+                    title={role.isBuiltIn ? t('roles.builtInNoDelete') : holders > 0 ? t('roles.hasHolders') : t('roles.delete')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -113,19 +116,19 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     allowedTabs; this keeps that stale grant from showing as if it
                     still meant something. */}
                 {role.allowedTabs.filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab)).length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">No pages granted</span>
+                  <span className="text-xs text-slate-400 italic">{t('roles.noPages')}</span>
                 ) : (
                   role.allowedTabs
                     .filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab))
                     .map((tab) => (
                       <span key={tab} className="px-2 py-0.5 text-xs bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
-                        {TAB_LABELS[tab as NavigationTab] ?? tab}
+                        {TAB_LABEL_KEYS[tab as NavigationTab] ? t(TAB_LABEL_KEYS[tab as NavigationTab]) : tab}
                       </span>
                     ))
                 )}
               </div>
               <p className="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {holders} {holders === 1 ? 'user' : 'users'} assigned
+                {t('roles.usersAssigned', { count: holders })}
               </p>
             </div>
           );
@@ -134,7 +137,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
         {roles.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No roles found.</span>
+            <span>{t('roles.empty')}</span>
           </div>
         )}
       </div>
@@ -171,6 +174,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
   const [error, setError] = useState<string | undefined>(undefined);
 
   const isEditing = !!existingRole;
+  const { t } = useTranslation('users');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -191,7 +195,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     const finalName = name.trim();
     if (!finalName) return;
     if (allowedTabs.length === 0) {
-      setError('Grant at least one page to this role.');
+      setError(t('roles.needPage'));
       return;
     }
 
@@ -202,7 +206,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
         await onUpdate(existingRole!.slug, { name: finalName, allowedTabs });
       } else {
         const basedOn = roles.find((r) => r.slug === basedOnSlug);
-        if (!basedOn) { setError('Pick a role to base this one on.'); setBusy(false); return; }
+        if (!basedOn) { setError(t('roles.needBase')); setBusy(false); return; }
         await onCreate({
           slug: slugify(finalName) || `role-${Date.now()}`,
           name: finalName,
@@ -213,7 +217,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the role.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('roles.saveFailed') : t('roles.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -223,7 +227,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40 shrink-0">
-          <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{isEditing ? 'Edit Role' : 'Add Role'}</h3>
+          <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{isEditing ? t('roles.edit') : t('roles.add')}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
@@ -232,20 +236,20 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
           <div className="p-6 space-y-4 text-sm overflow-y-auto min-h-0">
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Role Name <span className="text-rose-500">*</span></label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('roles.name')} <span className="text-rose-500">*</span></label>
             <Input
               required
               autoFocus
               value={name}
               onChange={(value) => setName(value)}
-              placeholder="e.g. Plant Manager"
+              placeholder={t('roles.namePlaceholder')}
             />
           </div>
 
           {!isEditing && (
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Based on <span className="text-rose-500">*</span>
+                {t('roles.basedOn')} <span className="text-rose-500">*</span>
               </label>
               <SelectPicker
                 data={roles.map((r) => ({ label: r.name, value: r.slug }))}
@@ -256,15 +260,15 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
                 cleanable={false}
               />
               <p className="text-xs text-slate-400 mt-1">
-                What this role can do (not just which pages) starts as a copy of the role you pick here.
+                {t('roles.basedOnHint')}
               </p>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Pages this role can open <span className="text-rose-500">*</span></label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('roles.pages')} <span className="text-rose-500">*</span></label>
             <CheckPicker
-              data={CLIENT_ASSIGNABLE_TABS.map((tab) => ({ label: TAB_LABELS[tab], value: tab }))}
+              data={CLIENT_ASSIGNABLE_TABS.map((tab) => ({ label: t(TAB_LABEL_KEYS[tab]), value: tab }))}
               value={allowedTabs}
               onChange={(values) => setAllowedTabs(values ?? [])}
               block
@@ -282,11 +286,11 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
 
           <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={busy} className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
               <Check className="w-4 h-4" />
-              <span>{busy ? 'Saving…' : (isEditing ? 'Save Changes' : 'Create Role')}</span>
+              <span>{busy ? t('common.saving') : (isEditing ? t('common.saveChanges') : t('roles.create'))}</span>
             </button>
           </div>
         </form>

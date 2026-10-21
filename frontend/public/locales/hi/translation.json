@@ -1,0 +1,260 @@
+{
+  "common": {
+    "backToSignIn": "साइन इन पर वापस जाएँ",
+    "email": "ईमेल",
+    "password": "पासवर्ड",
+    "active": "सक्रिय",
+    "client": "क्लाइंट",
+    "language": "भाषा",
+    "restoringSession": "आपका सत्र बहाल किया जा रहा है…"
+  },
+  "sidebar": {
+    "dashboard": "डैशबोर्ड",
+    "thingsCare": "ThingsCare",
+    "thingsShield": "ThingsShield",
+    "incidentManagement": "घटना प्रबंधन",
+    "productionMonitoring": "उत्पादन निगरानी",
+    "aiOnboarding": "AI ऑनबोर्डिंग",
+    "alerts": "अलर्ट",
+    "livePredictions": "लाइव पूर्वानुमान",
+    "scenarios": "परिदृश्य",
+    "workOrders": "कार्य आदेश",
+    "costAdministration": "लागत प्रशासन",
+    "administration": "प्रशासन",
+    "clients": "क्लाइंट",
+    "staff": "स्टाफ़",
+    "devices": "डिवाइस",
+    "equipment": "उपकरण",
+    "clientUsers": "क्लाइंट उपयोगकर्ता",
+    "roles": "भूमिकाएँ और अनुमतियाँ",
+    "users": "उपयोगकर्ता",
+    "settings": "सेटिंग्स",
+    "expand": "साइडबार खोलें",
+    "collapse": "साइडबार बंद करें",
+    "version": "संस्करण: {{version}}",
+    "openMenu": "मेनू खोलें",
+    "closeMenu": "मेनू बंद करें"
+  },
+  "header": {
+    "goBack": "वापस जाएँ",
+    "notifications": "सूचनाएँ",
+    "telemetryNotifications": "टेलीमेट्री सूचनाएँ",
+    "newCount": "{{count}} नई",
+    "lightMode": "लाइट मोड",
+    "darkMode": "डार्क मोड",
+    "profile": "प्रोफ़ाइल और सेटिंग्स",
+    "signOut": "साइन आउट"
+  },
+  "login": {
+    "title": "साइन इन",
+    "identifier": "यूज़रनेम या ईमेल",
+    "forgot": "पासवर्ड भूल गए?",
+    "submit": "साइन इन करें",
+    "submitting": "साइन इन हो रहा है…",
+    "failed": "साइन इन विफल रहा।",
+    "haveToken": "आमंत्रण टोकन है? अपना पासवर्ड सेट करें",
+    "identifierPlaceholder": "अपना यूज़रनेम या ईमेल दर्ज करें"
+  },
+  "forgot": {
+    "title": "क्या आप अपना पासवर्ड भूल गए हैं?",
+    "intro": "अपना साइन-इन ईमेल दर्ज करें, हम आपको रीसेट लिंक भेजेंगे।",
+    "submit": "रीसेट लिंक भेजें",
+    "submitting": "भेजा जा रहा है…",
+    "failed": "रीसेट लिंक नहीं भेजा जा सका।",
+    "sentTitle": "अपना ईमेल देखें",
+    "sentBody": "यदि <1>{{email}}</1> के लिए खाता मौजूद है, तो रीसेट लिंक भेजा जा रहा है।",
+    "emailPlaceholder": "अपना ईमेल दर्ज करें"
+  },
+  "invite": {
+    "titleReset": "नया पासवर्ड चुनें",
+    "titleAccept": "अपना आमंत्रण स्वीकार करें",
+    "introReset": "आपके रीसेट लिंक ने नीचे टोकन भर दिया है। नया पासवर्ड चुनें; लिंक केवल एक बार काम करता है।",
+    "introAccept": "Things Alive द्वारा दिया गया आमंत्रण टोकन चिपकाएँ, फिर पासवर्ड चुनें। टोकन की ज़रूरत केवल इसी बार है — इसके बाद आप केवल अपने ईमेल से साइन इन करेंगे।",
+    "token": "आमंत्रण टोकन",
+    "tokenPlaceholder": "टोकन यहाँ चिपकाएँ",
+    "newPassword": "नया पासवर्ड",
+    "newPasswordPlaceholder": "Aa1! और कम से कम 8 अक्षर",
+    "confirmPassword": "पासवर्ड की पुष्टि करें",
+    "confirmPlaceholder": "नया पासवर्ड फिर से दर्ज करें",
+    "submit": "पासवर्ड सेट करें और साइन इन करें",
+    "submitting": "पासवर्ड सेट हो रहा है…",
+    "weak": "पासवर्ड में एक बड़ा अक्षर, एक छोटा अक्षर, एक संख्या और एक विशेष चिह्न होना चाहिए।",
+    "mismatch": "पासवर्ड मेल नहीं खाते।",
+    "failedReset": "पासवर्ड रीसेट नहीं हो सका।",
+    "failedAccept": "आमंत्रण स्वीकार नहीं हो सका।"
+  },
+  "settings": {
+    "title": "खाता सेटिंग्स",
+    "subtitle": "अपनी प्रोफ़ाइल जानकारी और खाते की सुरक्षा प्रबंधित करें।",
+    "masterAdmin": "ThingsAlive मास्टर एडमिन",
+    "role": "भूमिका",
+    "username": "यूज़रनेम",
+    "clientOrganization": "क्लाइंट संगठन",
+    "accountStatus": "खाते की स्थिति",
+    "accessLevel": "पहुँच स्तर",
+    "clientSince": "क्लाइंट कब से",
+    "allPlantsAndClients": "सभी प्लांट और क्लाइंट",
+    "changePassword": "पासवर्ड बदलें",
+    "changePasswordHint": "साइन इन के लिए उपयोग होने वाला पासवर्ड अपडेट करें",
+    "currentPassword": "वर्तमान पासवर्ड",
+    "currentPasswordPlaceholder": "अपना वर्तमान पासवर्ड दर्ज करें",
+    "newPassword": "नया पासवर्ड",
+    "newPasswordPlaceholder": "बड़ा, छोटा अक्षर, संख्या और चिह्न",
+    "confirmNewPassword": "नए पासवर्ड की पुष्टि करें",
+    "confirmPlaceholder": "नया पासवर्ड फिर से दर्ज करें",
+    "update": "पासवर्ड अपडेट करें",
+    "updating": "अपडेट हो रहा है…",
+    "tooShort": "नया पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।",
+    "sameAsCurrent": "नया पासवर्ड वर्तमान पासवर्ड से अलग होना चाहिए।",
+    "mismatch": "नया पासवर्ड और पुष्टि मेल नहीं खाते।",
+    "updated": "आपका पासवर्ड अपडेट हो गया है। नए सिरे से साइन इन के लिए आपको साइन आउट किया जा रहा है…"
+  },
+  "passwordField": {
+    "show": "पासवर्ड दिखाएँ",
+    "hide": "पासवर्ड छिपाएँ"
+  },
+  "pages": {
+    "admin": {
+      "title": "प्रशासन",
+      "subtitle": "मास्टर कॉन्फ़िगरेशन"
+    },
+    "clients": {
+      "title": "क्लाइंट",
+      "subtitle": "खाते और अधिकार"
+    },
+    "staff": {
+      "title": "स्टाफ़",
+      "subtitle": "Things Alive टीम"
+    },
+    "devices": {
+      "title": "डिवाइस",
+      "subtitle": "स्टॉक और आवंटन"
+    },
+    "equipment": {
+      "title": "उपकरण",
+      "subtitle": "फ़्लीट रजिस्टर"
+    },
+    "thingsCare": {
+      "title": "ThingsCare",
+      "subtitle": "स्वास्थ्य और पूर्वानुमान"
+    },
+    "thingsShield": {
+      "title": "ThingsShield",
+      "subtitle": "सुरक्षा, अनुपालन और जोखिम"
+    },
+    "incidentManagement": {
+      "title": "घटना प्रबंधन",
+      "subtitle": "लोग, मशीन की सेहत और सुरक्षा"
+    },
+    "productionMonitoring": {
+      "title": "उत्पादन निगरानी",
+      "subtitle": "उत्पादन और प्रदर्शन"
+    },
+    "aiOnboarding": {
+      "title": "AI ऑनबोर्डिंग",
+      "subtitle": "निर्देशित सेटअप सत्र"
+    },
+    "alertAgent": {
+      "title": "अलर्ट एजेंट",
+      "subtitle": "स्वचालित प्रेषण"
+    },
+    "alerts": {
+      "title": "अलर्ट",
+      "subtitle": "फ़्लीट ध्यान फ़ीड"
+    },
+    "predictions": {
+      "title": "लाइव पूर्वानुमान",
+      "subtitle": "स्वचालित प्रेषण"
+    },
+    "scenarios": {
+      "title": "परिदृश्य",
+      "subtitle": "निगरानी वर्कफ़्लो"
+    },
+    "workOrders": {
+      "title": "कार्य आदेश",
+      "subtitle": "रखरखाव कार्य"
+    },
+    "costAdministration": {
+      "title": "लागत प्रशासन",
+      "subtitle": "ईंधन और रखरखाव दरें"
+    },
+    "users": {
+      "title": "उपयोगकर्ता प्रबंधन",
+      "subtitle": "पहुँच और अनुमतियाँ"
+    },
+    "clientUsers": {
+      "title": "क्लाइंट उपयोगकर्ता",
+      "subtitle": "लोग और पहुँच"
+    },
+    "roles": {
+      "title": "भूमिकाएँ और अनुमतियाँ",
+      "subtitle": "पेज पहुँच नियंत्रण"
+    },
+    "settings": {
+      "title": "सेटिंग्स",
+      "subtitle": "सिस्टम पैरामीटर"
+    },
+    "dashboard": {
+      "title": "डैशबोर्ड",
+      "subtitle": "फ़्लीट टेलीमैटिक्स"
+    },
+    "dashboardPlatform": {
+      "title": "डैशबोर्ड",
+      "subtitle": "प्लेटफ़ॉर्म अवलोकन"
+    }
+  },
+  "rsuite": {
+    "loading": "लोड हो रहा है...",
+    "emptyMessage": "कोई डेटा नहीं मिला",
+    "remove": "हटाएँ",
+    "clear": "साफ़ करें",
+    "noResultsText": "कोई परिणाम नहीं मिला",
+    "placeholder": "चुनें",
+    "searchPlaceholder": "खोजें",
+    "checkAll": "सभी",
+    "newItem": "नया आइटम",
+    "createOption": "विकल्प \"{0}\" बनाएँ",
+    "su": "रवि",
+    "mo": "सोम",
+    "tu": "मंगल",
+    "we": "बुध",
+    "th": "गुरु",
+    "fr": "शुक्र",
+    "sa": "शनि",
+    "ok": "ठीक है",
+    "today": "आज",
+    "yesterday": "कल",
+    "now": "अभी",
+    "hours": "घंटे",
+    "minutes": "मिनट",
+    "seconds": "सेकंड",
+    "last7Days": "पिछले 7 दिन",
+    "more": "और",
+    "prev": "पिछला",
+    "next": "अगला",
+    "first": "पहला",
+    "last": "अंतिम",
+    "limit": "{0} / पेज",
+    "total": "कुल पंक्तियाँ: {0}",
+    "skip": "जाएँ{0}",
+    "close": "बंद करें",
+    "showPath": "पथ दिखाएँ",
+    "on": "चालू",
+    "off": "बंद",
+    "alert": "सूचना",
+    "confirm": "पुष्टि करें",
+    "cancel": "रद्द करें",
+    "upload": "अपलोड करें",
+    "uploading": "अपलोड हो रहा है",
+    "uploadError": "त्रुटि",
+    "uploadDone": "पूरा हुआ",
+    "removeFile": "फ़ाइल हटाएँ",
+    "unfilled": "नहीं भरा",
+    "notSelected": "चुना नहीं गया"
+  },
+  "prompts": {
+    "suspendReason": "{{name}} को निलंबित क्यों किया जा रहा है?",
+    "takeBackReason": "{{imei}} को वापस स्टॉक में क्यों लिया जा रहा है?",
+    "retireReason": "{{imei}} को सेवा से क्यों हटाया जा रहा है?"
+  }
+}

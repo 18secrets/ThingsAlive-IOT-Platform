@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Activity, Layers, Info } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import {
   ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput,
 } from '../../lib/api';
@@ -19,6 +20,7 @@ interface MapSensorsModalProps {
 export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, existingMapping, availableSensors, industryTypes,
 }) => {
+  const { t } = useTranslation('catalog');
   const [toolName, setToolName] = useState('');
   const [industryTypeId, setIndustryTypeId] = useState<string | null>(null);
   const [activeSensorMap, setActiveSensorMap] = useState<Record<string, boolean>>({});
@@ -49,8 +51,8 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
   if (!isOpen) return null;
 
   const industryOptions = industryTypes
-    .filter((t) => t.status === 'active' || t.id === existingMapping?.industryTypeId)
-    .map((t) => ({ label: t.status === 'active' ? `${t.name} (${t.code})` : `${t.name} (${t.code}) — inactive`, value: t.id }));
+    .filter((it) => it.status === 'active' || it.id === existingMapping?.industryTypeId)
+    .map((it) => ({ label: it.status === 'active' ? `${it.name} (${it.code})` : t('mapSensors.inactiveOption', { name: it.name, code: it.code }), value: it.id }));
 
   const toggleSensor = (sensor: Sensor) => {
     setActiveSensorMap((prev) => {
@@ -103,7 +105,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} the tool mapping.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('mapSensors.saveFailed') : t('mapSensors.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -124,10 +126,10 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
             </div>
             <div>
               <h3 className="font-semibold text-base text-slate-900 dark:text-white">
-                {isEditing ? 'Edit Tool Mapping Profile' : 'Create Tool Mapping from Admin Sensors'}
+                {isEditing ? t('mapSensors.editTitle') : t('mapSensors.newTitle')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Select from Master Admin Sensors to assemble a tool configuration profile
+                {t('mapSensors.subtitle')}
               </p>
             </div>
           </div>
@@ -145,28 +147,28 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
           <div className="p-3 bg-sky-50 dark:bg-sky-950/40 rounded-xl border border-sky-200 dark:border-sky-800/60 flex items-center justify-between text-xs text-sky-800 dark:text-sky-300">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-              <span>Catalog Source: <strong>{availableSensors.length} Admin Sensors Available</strong></span>
+              <span><Trans t={t} i18nKey="mapSensors.catalogSource" count={availableSensors.length} components={{ b: <strong /> }} /></span>
             </div>
-            <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-300 uppercase tracking-wider">Master Data</span>
+            <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-300 uppercase tracking-wider">{t('mapSensors.masterData')}</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Tool Profile Name <span className="text-red-500">*</span>
+                {t('mapSensors.toolProfileName')} <span className="text-red-500">*</span>
               </label>
               <Input
                 size="sm"
                 required
                 value={toolName}
                 onChange={(value) => setToolName(value)}
-                placeholder="e.g. Crusher Rig Pro Telematics"
+                placeholder={t('mapSensors.toolProfilePlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Industrial Domain
+                {t('mapSensors.industrialDomain')}
               </label>
               <SelectPicker
                 size="sm"
@@ -174,12 +176,12 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
                 data={industryOptions}
                 value={industryTypeId}
                 onChange={(value) => setIndustryTypeId(value ?? null)}
-                placeholder={industryOptions.length ? 'Select an industry type' : 'No active industry types yet'}
+                placeholder={industryOptions.length ? t('mapSensors.selectIndustry') : t('mapSensors.noActiveIndustries')}
                 searchable={industryOptions.length > 8}
               />
               {!industryTypeId && existingMapping?.industryTypeLegacy && (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                  Previously typed as "{existingMapping.industryTypeLegacy}" — pick the matching type.
+                  {t('mapSensors.previouslyTyped', { value: existingMapping.industryTypeLegacy })}
                 </p>
               )}
             </div>
@@ -188,10 +190,10 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Select Admin Sensors & Parameter Channels
+                {t('mapSensors.selectSensors')}
               </label>
               <span className="text-xs font-semibold text-sky-600 dark:text-sky-400">
-                {totalActiveSensors} Sensors • {totalActiveParams} Parameters Active
+                {t('mapSensors.sensorsCount', { count: totalActiveSensors })} • {t('mapSensors.paramsActive', { count: totalActiveParams })}
               </span>
             </div>
 
@@ -227,7 +229,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
                       </button>
 
                       <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400">
-                        {isSensorActive ? `${activeParams.length} Active` : 'Excluded'}
+                        {isSensorActive ? t('mapSensors.activeCount', { count: activeParams.length }) : t('mapSensors.excluded')}
                       </span>
                     </div>
 
@@ -257,7 +259,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
                 );
               })}
               {availableSensors.length === 0 && (
-                <p className="text-slate-400 py-4 text-center">No reference sensors yet — add one first.</p>
+                <p className="text-slate-400 py-4 text-center">{t('mapSensors.noSensors')}</p>
               )}
             </div>
           </div>
@@ -273,7 +275,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
 
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            Profile saves into master Admin Tool Mappings
+            {t('mapSensors.footer')}
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -282,7 +284,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -290,7 +292,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               disabled={busy}
               className="px-5 py-2 bg-[#0B7285] text-white hover:bg-[#095C6B] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {busy ? 'Saving…' : 'Save Tool Mapping'}
+              {busy ? t('common.saving') : t('mapSensors.save')}
             </button>
           </div>
         </div>

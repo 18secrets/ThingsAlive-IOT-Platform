@@ -83,6 +83,7 @@ import { AssistantProposal } from '../assistant/assistant-proposal.entity';
 import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
 import { RecFrame } from '../rec-frame/rec-frame.entity';
 import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
+import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
 import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
@@ -183,6 +184,7 @@ export const ENTITIES = [
   RecEvidenceBundle,
   RecFrame,
   ...FORECAST_ENTITIES,
+  ...EMBEDDING_ENTITIES,
   ...EVALUATION_ENTITIES,
 ];
 
