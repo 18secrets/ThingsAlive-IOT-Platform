@@ -1,0 +1,92 @@
+{
+  "page": {
+    "title": "Drafts for review",
+    "subtitle": "Alert workflows and KPIs the platform proposed, waiting for approval"
+  },
+  "filter": {
+    "allKinds": "All kinds",
+    "allStatuses": "All statuses"
+  },
+  "refresh": "Refresh",
+  "loading": "Loading…",
+  "empty": "No drafts match.",
+  "unvalidatedShort": "Not enough history to replay — approving creates its rules switched off.",
+  "kind": {
+    "workflow": "Alert workflow",
+    "kpi": "KPI"
+  },
+  "status": {
+    "proposed": "Proposed",
+    "compiled": "Checking",
+    "compile_refused": "Refused",
+    "gate_refused": "Failed replay",
+    "draft_ready": "Ready for review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "materialised": "Live",
+    "expired": "Expired"
+  },
+  "col": {
+    "kind": "Kind",
+    "what": "What it does",
+    "machine": "Machine",
+    "status": "Status",
+    "proposed": "Proposed"
+  },
+  "gate": {
+    "pass": "Passed",
+    "refuse": "Refused",
+    "insufficient_history": "Not enough history"
+  },
+  "errors": {
+    "load": "Could not load the drafts.",
+    "action": "Could not complete that."
+  },
+  "detail": {
+    "title": "Draft",
+    "whatItDoes": "What it does",
+    "compileRefused": "Why it was refused",
+    "unvalidated": "There was not enough history to replay this on the machine, so it is unvalidated. Approving creates its rules switched off; each can then be switched on here, and that choice is recorded.",
+    "replay": "90-day replay",
+    "windows": "Windows",
+    "fires": "Would have fired",
+    "outcome": "Outcome",
+    "whenFired": "When",
+    "firedOn": "{{machine}}: fired {{total}} times; showing {{kept}}",
+    "provenance": "Where it came from",
+    "proposedAt": "Proposed {{at}} by {{emitter}}",
+    "expiresAt": "expires {{at}}",
+    "approvedAt": "Approved {{at}}",
+    "rejectedAt": "Rejected {{at}}",
+    "openAlertAgent": "Open in Alert Agent",
+    "enableRule": "Switch on rule {{n}}",
+    "enableConfirm": "Switch this rule on although it was never validated against history?",
+    "enabled": "Rule switched on.",
+    "reject": "Reject",
+    "rejectReason": "Why reject it? (optional)",
+    "rejected": "Rejected.",
+    "approve": "Approve",
+    "approveConfirm": "Approve this draft? It becomes live for the account.",
+    "approveUnvalidatedConfirm": "Approve this unvalidated draft? Its rules are created switched off.",
+    "approved": "Approved and created."
+  },
+  "propose": {
+    "button": "Propose a KPI",
+    "title": "Propose a KPI",
+    "intro": "The platform assembles the KPI from your choice and checks it; it becomes a draft for your super admin to approve.",
+    "intent": {
+      "bind-named-formula": "Bind a library formula",
+      "ratio-kpis": "Ratio of two KPIs"
+    },
+    "formula": "Library formula",
+    "chooseFormula": "Choose a published formula…",
+    "noFormulas": "No published formulas in the library.",
+    "signalFor": "Signal for \"{{role}}\"",
+    "numerator": "Numerator KPI",
+    "denominator": "Denominator KPI",
+    "needTwoKpis": "This machine needs at least two KPIs for a ratio.",
+    "failed": "Could not propose this KPI.",
+    "proposing": "Proposing…",
+    "submit": "Propose"
+  }
+}

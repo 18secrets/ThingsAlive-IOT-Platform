@@ -35,6 +35,7 @@ import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
 import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
+import { DraftsPage } from './pages/DraftsPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ThingsCarePage } from './pages/ThingsCarePage';
 import { ThingsCareDetailPage } from './pages/ThingsCareDetailPage';
@@ -1582,6 +1583,7 @@ function AppData() {
           <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
           <Route path="production-monitoring/:sourceSystem/:externalId" element={<ProductionMonitoringDetailPage />} />
           <Route path="alert-agent" element={<AlertAgentPage />} />
+          <Route path="drafts" element={<DraftsPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="predictions" element={<LivePredictionsPage />} />
           <Route path="scenarios" element={<ScenariosPage />} />

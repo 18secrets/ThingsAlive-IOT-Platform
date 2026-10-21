@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError, Workflow, WorkflowVersion, apiListWorkflows, apiRetireWorkflow } from '../../lib/api';
 import { WorkflowDraft } from '../../utils/workflowParser';
 import { specSignals } from '../alerts/workflow/workflowGraph';
+import { useNavigate } from 'react-router-dom';
 
 type RowStatus = 'Deployed' | 'Draft' | 'Disabled';
 
@@ -65,6 +66,7 @@ interface AlertAgentViewProps {
 
 export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOpen }) => {
   const { t } = useTranslation('alerts');
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -153,6 +155,14 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
           />
         </div>
 
+        <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => navigate('/drafts?kind=workflow')}
+          className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+        >
+          {t('agentList.drafts')}
+        </button>
         {/* Add Alert — hands off to the AI Onboarding assistant, same as "Setup with AI" on Devices */}
         <button
           id="add-alert-btn"
@@ -162,6 +172,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
           <Sparkles className="w-4 h-4" />
           <span>{t('agentList.addAlert')}</span>
         </button>
+        </div>
       </div>
 
       {error && (

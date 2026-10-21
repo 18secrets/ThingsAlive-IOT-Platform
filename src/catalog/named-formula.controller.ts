@@ -86,3 +86,21 @@ export class NamedFormulaController {
     return this.namedFormulas.publish(scope, slug, version);
   }
 }
+
+/**
+ * The published half of the formula catalogue, for accounts (QGEN2). `catalog.read` —
+ * every client role has it — because choosing a formula to bind is reading the library,
+ * not authoring it; the routes above stay `catalog.write` and keep drafts out of sight.
+ */
+@ApiTags('Named Formulas')
+@Controller('catalog')
+export class PublishedNamedFormulaController {
+  constructor(private readonly namedFormulas: NamedFormulaService) {}
+
+  @Get('named-formulas')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Published named formulas, newest published version of each — what a KPI proposal can bind' })
+  list(@Query('category') category?: string) {
+    return this.namedFormulas.listPublished(category);
+  }
+}

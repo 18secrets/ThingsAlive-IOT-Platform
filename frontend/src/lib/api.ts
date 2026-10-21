@@ -4458,3 +4458,131 @@ export function apiSetMyClassModelAnchors(slug: string, anchors: ModelAnchor[]):
 export function apiConfirmMyModelAnchor(slug: string, signal: string): Promise<TenantModel> {
   return authFetch(`${myModelPath(slug)}/anchors/${encodeURIComponent(signal)}/confirm`, { method: "POST" });
 }
+
+// ---------------------------------------------------------------- generated drafts
+
+/**
+ * Generated drafts (QGEN1-3): an alert workflow or a KPI the platform assembles from a
+ * closed list of intents, compiles, gates (a workflow by a 90-day replay per machine)
+ * and holds until the account's super admin approves it, which is what makes it real.
+ * A proposal that lacks a selection answers `needs_input` naming each missing field.
+ */
+export type ProposalKind = "kpi" | "workflow";
+export type ProposalStatus =
+  | "proposed" | "compile_refused" | "compiled" | "gate_refused" | "draft_ready"
+  | "approved" | "rejected" | "materialised" | "expired";
+export type GateOutcome = "pass" | "refuse" | "insufficient_history" | "not_applicable";
+
+export interface ProposalIntent {
+  intent: string;
+  name: string;
+  description: string;
+  requiredFields: string[];
+  optionalFields: string[];
+}
+
+export interface ProposalReplayRun {
+  id: string;
+  proposalId: string;
+  sourceSystem: string;
+  externalId: string;
+  windowFrom: string;
+  windowTo: string;
+  compilerVersion: string;
+  signals: Record<string, unknown>[];
+  windowsEvaluated: number;
+  fires: number;
+  outcome: Exclude<GateOutcome, "not_applicable">;
+  outcomeReason: string;
+  startedAt: string;
+  finishedAt: string;
+}
+
+export interface Proposal {
+  id: string;
+  kind: ProposalKind;
+  scope: "tenant" | "class";
+  status: ProposalStatus;
+  gateOutcome: GateOutcome | null;
+  /** Never "ready" for a draft nobody may switch on. */
+  readiness: "ready" | "pending" | "blocked";
+  reason: string | null;
+  /** One plain sentence on where it stands. */
+  sentence: string;
+  /** The gate had too little history: approving it creates its rules switched off. */
+  unvalidated: boolean;
+  expired: boolean;
+  expiresAt: string;
+  seed: Record<string, unknown>;
+  target: Record<string, unknown>;
+  targetVersions: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  /** What it would do, in plain English. */
+  rendering: string[];
+  compileResult: Record<string, unknown> | null;
+  gateDetail: Record<string, unknown> | null;
+  provenance: { emitterKind: string; emitterVersion: string; proposedBy: string; proposedAt: string } & Record<string, unknown>;
+  approval: { by: string; at: string } | null;
+  rejection: { by: string; at: string; reason: string | null } | null;
+  /** What approval created: a workflow and its rules, or a client formula. */
+  materialisedRef: ({ workflowId?: string; ruleIds?: string[] } & Record<string, unknown>) | null;
+  replayRuns?: ProposalReplayRun[];
+}
+
+export type ProposeResult = Proposal | { status: "needs_input"; missing: { field: string; reason: string; detail: string }[] };
+export const needsInput = (r: ProposeResult): r is Extract<ProposeResult, { status: "needs_input" }> => r.status === "needs_input";
+
+export function apiListWorkflowProposalIntents(): Promise<ProposalIntent[]> {
+  return authFetch("/workflow-proposal-intents");
+}
+
+export function apiListKpiProposalIntents(): Promise<ProposalIntent[]> {
+  return authFetch("/kpi-proposal-intents");
+}
+
+/** `alert.author`. The target must be one machine for now. */
+export function apiProposeWorkflow(seed: Record<string, unknown>): Promise<ProposeResult> {
+  return authFetch("/workflow-proposals", { method: "POST", body: JSON.stringify(seed) });
+}
+
+export function apiProposeKpi(sourceSystem: string, externalId: string, seed: Record<string, unknown>): Promise<ProposeResult> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/kpi-proposals`, {
+    method: "POST", body: JSON.stringify(seed),
+  });
+}
+
+export function apiListProposals(filter: { kind?: ProposalKind; status?: ProposalStatus } = {}): Promise<Proposal[]> {
+  const params = new URLSearchParams();
+  if (filter.kind) params.set("kind", filter.kind);
+  if (filter.status) params.set("status", filter.status);
+  const qs = params.toString();
+  return authFetch(`/proposals${qs ? `?${qs}` : ""}`);
+}
+
+export function apiGetProposal(id: string): Promise<Proposal> {
+  return authFetch(`/proposals/${id}`);
+}
+
+/** One machine's replay, with every window that fired. */
+export function apiGetProposalReplayRun(id: string, runId: string): Promise<ProposalReplayRun & { firesDetail: Record<string, unknown> }> {
+  return authFetch(`/proposals/${id}/replay-runs/${runId}`);
+}
+
+/** `proposal.approve`. Rechecks scope, expiry and versions; 409 names a failed recheck. Idempotent. */
+export function apiApproveProposal(id: string): Promise<Proposal> {
+  return authFetch(`/proposals/${id}/approve`, { method: "POST" });
+}
+
+export function apiRejectProposal(id: string, reason?: string): Promise<Proposal> {
+  return authFetch(`/proposals/${id}/reject`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) });
+}
+
+/** `alert.author`. Switch on a rule an unvalidated draft created, recording who chose to. */
+export function apiEnableProposalRule(id: string, ruleId: string): Promise<unknown> {
+  return authFetch(`/proposals/${id}/rules/${ruleId}/enable`, { method: "POST" });
+}
+
+/** Published library formulas, newest published version of each: what a KPI draft can bind. */
+export function apiListPublishedNamedFormulas(): Promise<NamedFormula[]> {
+  return authFetch("/catalog/named-formulas");
+}

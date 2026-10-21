@@ -31,6 +31,20 @@ export class NamedFormulaService {
     return this.formulas.find({ where, order: { slug: 'ASC', version: 'DESC' } });
   }
 
+  /**
+   * What an account may bind (QGEN2's bind-named-formula): only published formulas, and
+   * only each one's newest published version, because that is the one a binding takes.
+   * Drafts stay with the people authoring the library.
+   */
+  async listPublished(category?: string): Promise<NamedFormula[]> {
+    const rows = await this.formulas.find({
+      where: { status: 'published', ...(category ? { category } : {}) },
+      order: { slug: 'ASC', version: 'DESC' },
+    });
+    const seen = new Set<string>();
+    return rows.filter((r) => !seen.has(r.slug) && seen.add(r.slug));
+  }
+
   allVersions(slug: string): Promise<NamedFormula[]> {
     return this.formulas.find({ where: { slug }, order: { version: 'DESC' } });
   }

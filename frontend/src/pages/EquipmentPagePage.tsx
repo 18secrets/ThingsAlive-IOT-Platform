@@ -13,6 +13,7 @@ import { Chip } from '../components/common/Chip';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
+import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
 
 // Day names are `days.0`–`days.6` (Sunday first, matching Weekday).
 const DAY_OPTIONS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
@@ -400,7 +401,9 @@ export const EquipmentPagePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   // undefined = closed; null = open on the first KPI; a key = open on that KPI.
   const [exploring, setExploring] = useState<string | null | undefined>(undefined);
-  const { t } = useTranslation('equipment');
+  const [proposing, setProposing] = useState(false);
+  // drafts: for the Propose a KPI button and modal title, which live with the drafts page.
+  const { t } = useTranslation(['equipment', 'drafts']);
 
   usePageHeader({
     title: page?.equipment.name ?? externalId ?? t('translation:sidebar.equipment'),
@@ -447,9 +450,14 @@ export const EquipmentPagePage: React.FC = () => {
             {page.layout.fallback ? ` · ${t('common.fallbackLayout')}` : ''}
           </p>
           {page.equipment.classSlug && (
-            <button onClick={() => setExploring(null)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-sky-700 hover:bg-sky-50 cursor-pointer">
-              {t('equipmentPage.exploreKpis')}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setProposing(true)} className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-white/70 text-white hover:bg-white/10 cursor-pointer">
+                {t('drafts:propose.button')}
+              </button>
+              <button onClick={() => setExploring(null)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-sky-700 hover:bg-sky-50 cursor-pointer">
+                {t('equipmentPage.exploreKpis')}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -467,6 +475,12 @@ export const EquipmentPagePage: React.FC = () => {
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+
+      <Modal isOpen={proposing} onClose={() => setProposing(false)} title={t('drafts:propose.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-xl">
+        {proposing && page.equipment.classSlug && (
+          <ProposeKpi sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} classSlug={page.equipment.classSlug} />
+        )}
+      </Modal>
 
       <Modal isOpen={exploring !== undefined} onClose={() => setExploring(undefined)} title={t('kpiExplorer.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-2xl">
         {exploring !== undefined && (

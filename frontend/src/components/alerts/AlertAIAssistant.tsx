@@ -12,7 +12,8 @@ import {
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { WorkflowDraft, parsePromptToWorkflow, mentionsSensorKeyword } from '../../utils/workflowParser';
-import { ApiError, Workflow, WorkflowScope, apiAssembleWorkflow, apiListWorkflows } from '../../lib/api';
+import { ApiError, Workflow, WorkflowScope, apiAssembleWorkflow, apiListWorkflows, apiProposeWorkflow, needsInput } from '../../lib/api';
+import { useNavigate } from 'react-router-dom';
 import { completeAssembled, starterSpec } from './workflow/workflowGraph';
 import { machineKey, useWorkflowScope } from './workflow/useWorkflowScope';
 
@@ -106,6 +107,9 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   const [combine, setCombine] = useState<'allOf' | 'anyOf'>('allOf');
   const [assembling, setAssembling] = useState(false);
   const [assembleError, setAssembleError] = useState<string | null>(null);
+  const [proposing, setProposing] = useState(false);
+  const [proposeMissing, setProposeMissing] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   // The chosen machine's failure modes, from its class in this account's catalog.
   const failureModes = useMemo(() => {
@@ -166,6 +170,30 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       setAssembleError(err instanceof ApiError ? err.message : t('assistant.assembleFailed'));
     } finally {
       setAssembling(false);
+    }
+  };
+
+  /**
+   * The same selection as a generated draft (QGEN3): replayed over 90 days on the machine
+   * and held for the super admin's approval, instead of opened straight in the editor.
+   * The key makes a double click return the one draft rather than two.
+   */
+  const handlePropose = async () => {
+    if (!canAct || !chosenMode) return;
+    setProposing(true);
+    setAssembleError(null);
+    setProposeMissing([]);
+    try {
+      const result = await apiProposeWorkflow({
+        intent: 'watch-failure-mode', target: scope(), failureModeCode: chosenMode.code, combine, name: chosenMode.name,
+        idempotencyKey: `wf-${equipmentId}-${chosenMode.code}-${combine}-${Date.now()}`,
+      });
+      if (needsInput(result)) setProposeMissing(result.missing.map((m) => m.detail));
+      else navigate(`/drafts?id=${result.id}`);
+    } catch (err) {
+      setAssembleError(err instanceof ApiError ? err.message : t('assistant.proposeFailed'));
+    } finally {
+      setProposing(false);
     }
   };
 
@@ -275,6 +303,15 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
               >
                 {assembling ? t('assistant.assembling') : t('assistant.assemble')}
               </button>
+              <button
+                type="button"
+                onClick={handlePropose}
+                disabled={!chosenMode || proposing}
+                title={t('assistant.proposeHint')}
+                className="px-4 py-2 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
+              >
+                {proposing ? t('assistant.proposing') : t('assistant.propose')}
+              </button>
             </div>
           )}
           {chosenMode && (
@@ -283,6 +320,12 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             </p>
           )}
           {assembleError && <p className="text-xs text-rose-600 dark:text-rose-400">{assembleError}</p>}
+          {proposeMissing.length > 0 && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+              <p className="font-semibold">{t('assistant.proposeNeedsInput')}</p>
+              {proposeMissing.map((m, i) => <p key={i}>{m}</p>)}
+            </div>
+          )}
         </div>
       )}
 

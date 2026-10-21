@@ -112,7 +112,8 @@
     "pendingDraft": "Draft v{{version}} not yet published",
     "rulesOff_one": "{{count}} rule switched off",
     "rulesOff_other": "{{count}} rules switched off",
-    "loading": "Loading alert workflows…"
+    "loading": "Loading alert workflows…",
+    "drafts": "Drafts for review"
   },
   "assistant": {
     "heroTitle": "Describe your alarm in natural language",
@@ -169,7 +170,12 @@
     "assembling": "Assembling…",
     "assembleFailed": "Could not assemble this failure mode.",
     "watches": "watches {{signals}}",
-    "assembleNoTemplate": "No copied alert template watches {{signals}}, so its threshold is left blank. Set it on the canvas before saving — none is assumed."
+    "assembleNoTemplate": "No copied alert template watches {{signals}}, so its threshold is left blank. Set it on the canvas before saving — none is assumed.",
+    "propose": "Propose for review",
+    "proposing": "Proposing…",
+    "proposeHint": "Replays it over 90 days on this machine and sends it to your super admin to approve, instead of opening it in the editor.",
+    "proposeFailed": "Could not propose this workflow.",
+    "proposeNeedsInput": "The proposal needs more before it can be made:"
   },
   "workflow": {
     "name": "Workflow name",
