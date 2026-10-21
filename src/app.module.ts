@@ -34,6 +34,7 @@ import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
+import { EvaluationModule } from './evaluation/evaluation.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
@@ -113,6 +114,7 @@ export class AppModule {
               ShiftModule,
               ForecastModule,
               ForecastSchedulingModule,
+              EvaluationModule,
               TelemetryPartitionModule,
               TelemetryArchiveModule,
               UtilizationModule,
