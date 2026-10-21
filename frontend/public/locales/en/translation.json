@@ -5,7 +5,8 @@
     "password": "Password",
     "active": "Active",
     "client": "Client",
-    "language": "Language"
+    "language": "Language",
+    "restoringSession": "Restoring your session…"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -51,7 +52,8 @@
     "submit": "Sign In",
     "submitting": "Signing in…",
     "failed": "Sign-in failed.",
-    "haveToken": "Have an invitation token? Set your password"
+    "haveToken": "Have an invitation token? Set your password",
+    "identifierPlaceholder": "you@yourcompany.com"
   },
   "forgot": {
     "title": "Forgot your password?",
@@ -60,7 +62,8 @@
     "submitting": "Sending…",
     "failed": "Could not send a reset link.",
     "sentTitle": "Check your email",
-    "sentBody": "If an account exists for <1>{{email}}</1>, a reset link is on its way."
+    "sentBody": "If an account exists for <1>{{email}}</1>, a reset link is on its way.",
+    "emailPlaceholder": "you@yourcompany.com"
   },
   "invite": {
     "titleReset": "Choose a new password",
@@ -199,5 +202,59 @@
       "title": "Dashboard",
       "subtitle": "Platform Overview"
     }
+  },
+  "rsuite": {
+    "loading": "Loading...",
+    "emptyMessage": "No data found",
+    "remove": "Remove",
+    "clear": "Clear",
+    "noResultsText": "No results found",
+    "placeholder": "Select",
+    "searchPlaceholder": "Search",
+    "checkAll": "All",
+    "newItem": "New item",
+    "createOption": "Create option \"{0}\"",
+    "su": "Su",
+    "mo": "Mo",
+    "tu": "Tu",
+    "we": "We",
+    "th": "Th",
+    "fr": "Fr",
+    "sa": "Sa",
+    "ok": "OK",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "now": "Now",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds",
+    "last7Days": "Last 7 Days",
+    "more": "More",
+    "prev": "Previous",
+    "next": "Next",
+    "first": "First",
+    "last": "Last",
+    "limit": "{0} / page",
+    "total": "Total Rows: {0}",
+    "skip": "Go to{0}",
+    "close": "Close",
+    "showPath": "Show path",
+    "on": "ON",
+    "off": "OFF",
+    "alert": "Alert",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "upload": "Upload",
+    "uploading": "Uploading",
+    "uploadError": "Error",
+    "uploadDone": "Finished",
+    "removeFile": "Remove file",
+    "unfilled": "Unfilled",
+    "notSelected": "Not selected"
+  },
+  "prompts": {
+    "suspendReason": "Why is {{name}} being suspended?",
+    "takeBackReason": "Why is {{imei}} being taken back into stock?",
+    "retireReason": "Why is {{imei}} being retired?"
   }
 }

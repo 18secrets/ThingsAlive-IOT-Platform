@@ -90,7 +90,7 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onCl
         outcomes: draft.outcomes,
         kpiValue: draft.outcomes.includes('kpi') ? result.value : undefined,
         alertOutcome: draft.outcomes.includes('alert') ? (result.triggered ? 'Breach' : 'No breach') : undefined,
-        predictionText: draft.outcomes.includes('prediction') ? `${result.predicted} ${sensor.unit} over ${draft.horizonHours} h. Linear planning projection, not a failure model.` : undefined,
+        predictionText: draft.outcomes.includes('prediction') ? t('rule.predictionText', { value: result.predicted, unit: sensor.unit, hours: draft.horizonHours }) : undefined,
       });
     }
     onClose();

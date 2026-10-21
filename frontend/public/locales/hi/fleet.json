@@ -69,7 +69,8 @@
       "prediction": "पूर्वानुमान"
     },
     "horizon": "पूर्वानुमान अवधि (घंटे)",
-    "choosePreview": "मशीनें चुनें और पूर्वावलोकन करें"
+    "choosePreview": "मशीनें चुनें और पूर्वावलोकन करें",
+    "predictionText": "{{hours}} घंटे में {{value}} {{unit}}। रैखिक योजना अनुमान, विफलता मॉडल नहीं।"
   },
   "ruleCard": {
     "revision": "संशोधन {{revision}} · {{status}}",

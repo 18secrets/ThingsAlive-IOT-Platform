@@ -68,7 +68,7 @@ export const LoginScreen: React.FC = () => {
                 autoFocus
                 value={identifier}
                 onChange={(value) => setIdentifier(value)}
-                placeholder="you@yourcompany.com"
+                placeholder={t('login.identifierPlaceholder')}
               />
             </div>
 

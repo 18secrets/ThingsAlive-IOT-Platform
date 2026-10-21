@@ -69,7 +69,8 @@
       "prediction": "ପୂର୍ବାନୁମାନ"
     },
     "horizon": "ପୂର୍ବାନୁମାନ ଅବଧି (ଘଣ୍ଟା)",
-    "choosePreview": "ମେସିନ୍ ବାଛି ପ୍ରିଭ୍ୟୁ ଦେଖନ୍ତୁ"
+    "choosePreview": "ମେସିନ୍ ବାଛି ପ୍ରିଭ୍ୟୁ ଦେଖନ୍ତୁ",
+    "predictionText": "{{hours}} ଘଣ୍ଟାରେ {{value}} {{unit}}। ରେଖୀୟ ଯୋଜନା ଅନୁମାନ, ବିଫଳତା ମଡେଲ୍ ନୁହେଁ।"
   },
   "ruleCard": {
     "revision": "ସଂଶୋଧନ {{revision}} · {{status}}",

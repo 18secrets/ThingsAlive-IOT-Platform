@@ -68,7 +68,7 @@ export const ForgotPasswordScreen: React.FC = () => {
                     type="email"
                     value={email}
                     onChange={(value) => setEmail(value)}
-                    placeholder="you@yourcompany.com"
+                    placeholder={t('forgot.emailPlaceholder')}
                   />
                 </div>
 

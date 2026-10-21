@@ -69,7 +69,8 @@
       "prediction": "అంచనా"
     },
     "horizon": "అంచనా వ్యవధి (గంటలు)",
-    "choosePreview": "యంత్రాలను ఎంచుకుని ప్రివ్యూ చూడండి"
+    "choosePreview": "యంత్రాలను ఎంచుకుని ప్రివ్యూ చూడండి",
+    "predictionText": "{{hours}} గంటల్లో {{value}} {{unit}}. రేఖీయ ప్రణాళిక అంచనా, వైఫల్య నమూనా కాదు."
   },
   "ruleCard": {
     "revision": "సవరణ {{revision}} · {{status}}",

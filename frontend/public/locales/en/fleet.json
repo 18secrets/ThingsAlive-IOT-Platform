@@ -69,7 +69,8 @@
       "prediction": "Prediction"
     },
     "horizon": "Prediction horizon (hours)",
-    "choosePreview": "Choose machines & preview"
+    "choosePreview": "Choose machines & preview",
+    "predictionText": "{{value}} {{unit}} over {{hours}} h. Linear planning projection, not a failure model."
   },
   "ruleCard": {
     "revision": "Revision {{revision}} · {{status}}",
