@@ -78,6 +78,11 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   // at the point of use. Nothing about either varies per tenant, so there is
   // nothing for a tenant copy to hold that the platform row does not already say.
   {
+    table: 'rec_evidence_bundle', disposition: 'exclude',
+    reason: 'tenant-owned evidence about one machine at one instant (QREC1); class_slug records which class '
+      + 'copy the steps read, it is not class content — nothing about a grant writes or copies it',
+  },
+  {
     table: 'causal_chain', disposition: 'exclude',
     reason: 'platform-owned, no tenant_id column by design (1757870000000-CausalChains.ts); '
       + 'read directly by equipment_class_slug in chain.service.ts at diagnosis time',

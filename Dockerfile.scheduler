@@ -1,0 +1,58 @@
+# The scheduler image (QML1, D46): the api's image plus Python and the forecaster.
+#
+# Separate from Dockerfile so the api never carries torch (QML1-SIZE: variant D, 605 MB
+# compressed, against the api's 117 MB). Railway selects a Dockerfile per service, not
+# a build target, so the split is two files; railway.scheduler.json points here once
+# Deepak confirms the scheduler service reads that file (see the QML1 MR).
+#
+# Layer order is the point of this file: Python, torch and the weights sit below the
+# source copy, so a change under src/ rebuilds only the last layers (QML1-SIZE measured
+# a warm rebuild unchanged against the api's).
+
+# ---- build ----------------------------------------------------------------
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+COPY tsconfig*.json ./
+COPY src ./src
+RUN npm run build
+
+# ---- runtime --------------------------------------------------------------
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv
+# The lock is the whole closure with hashes, so pip installs exactly it (--no-deps)
+# rather than re-resolving; hash mode refuses an extra such as transformers[torch] that
+# it resolves to a version the lock does not hold. `pip check` fails the build if the
+# lock is ever missing something a package needs. CPU torch only: no CUDA wheels.
+COPY python/forecast/requirements.txt /opt/forecast-requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir --no-deps --require-hashes -r /opt/forecast-requirements.txt \
+ && /opt/venv/bin/pip check
+
+# The weights, fetched once at build time at a pinned revision. At runtime the worker is
+# offline: a container that downloads its model on first start makes cold start depend
+# on Hugging Face. The revision and the file's sha256 must match the forecast_model row,
+# or the pass refuses to run (QML1 section 2).
+ARG TTM_MODEL=ibm-granite/granite-timeseries-ttm-r2
+ARG TTM_REVISION=d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f
+RUN /opt/venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('${TTM_MODEL}', revision='${TTM_REVISION}', local_dir='/opt/models/ttm-r2', allow_patterns=['config.json', 'generation_config.json', 'model.safetensors'])"
+ENV HF_HUB_OFFLINE=1 \
+    TTM_MODEL_NAME=granite-timeseries-ttm-r2 \
+    TTM_REVISION=d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f \
+    TTM_MODEL_DIR=/opt/models/ttm-r2 \
+    FORECAST_PYTHON=/opt/venv/bin/python
+
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY --from=build /app/dist ./dist
+COPY python/forecast/infer.py ./python/forecast/infer.py
+
+USER node
+EXPOSE 8080
+CMD ["node", "dist/main.js"]

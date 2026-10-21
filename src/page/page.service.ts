@@ -26,13 +26,16 @@ import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
+import { forecastDeclarations } from '../forecast/forecast-inputs';
+import { ForecastReader } from '../forecast/forecast-reader';
 import { classifyFreshness } from '../signal-binding/services/signal-freshness';
-import { EquipmentClassSensorRequirement } from '../catalog/entities/equipment-class-sensor-requirement.entity';
 import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { failureModeStatus } from '../rec-engine/attribute';
+import { isUnobserved, observeSignals } from '../rec-engine/observe';
 import {
-  AlertRow, FailureModeRow, FailureModeStatus, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
+  AlertRow, FailureModeRow, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
   ParameterRow, READINESS_SEVERITY, ReadinessRow, signalReadiness, SiteKpiData, unfilled,
 } from './page-widgets';
 
@@ -90,6 +93,7 @@ export class PageService {
     private readonly clientCatalog: ClientCatalogService,
     private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
+    private readonly forecasts: ForecastReader,
   ) {}
 
   // ================================================================ machine page
@@ -133,6 +137,14 @@ export class PageService {
         has('forecast_chart') ? this.forecastDeclarations(profile) : Promise.resolve(new Set<string>()),
       ]);
 
+    // Which of the failure modes' signals cannot be seen, read the way the recommendation
+    // engine reads them, so this widget and its Attribute step cannot disagree (QREC1 §3).
+    const modeSignals = [...new Set((modes as ClientEquipmentClassFailureMode[]).flatMap((f) => f.signals))];
+    const observed = modeSignals.length
+      ? await withTenantSession(this.ds, scope, (m) => observeSignals(m, scope.tenantId, profile, modeSignals, at))
+      : new Map();
+    const unobserved = modeSignals.filter((sig) => isUnobserved(observed.get(sig)));
+
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
     const formulaByKey = new Map<string, ClientFormula>((formulas as ClientFormula[]).map((f) => [f.formulaKey, f]));
 
@@ -173,7 +185,7 @@ export class PageService {
           if (!classSlug) return unfilled(h, 'not_configured', 'unclassified');
           const rows: FailureModeRow[] = (modes as ClientEquipmentClassFailureMode[]).map((f) => ({
             code: f.code, name: f.name, symptom: f.symptom, severity: f.severity, signals: f.signals,
-            status: failureModeStatus(f.signals, openAlerts!.signals),
+            status: failureModeStatus(f.signals, openAlerts!.signals, unobserved),
           }));
           return filled(h, rows);
         }
@@ -191,11 +203,14 @@ export class PageService {
         case 'parameter_list':
           return filled(h, toParameterRows(parameterRows!));
 
-        case 'forecast_chart':
-          // A forecast nobody declared is a configuration gap; a declared one has no
-          // producer until QML1, and the widget says that rather than drawing nothing.
+        case 'forecast_chart': {
+          // A forecast nobody declared is a configuration gap; a declared one is read from
+          // what the forecast pass wrote (QML1), and says why when there is nothing to show.
           if (!w.boundTo || !forecastDeclared.has(w.boundTo)) return unfilled(h, 'not_configured', 'forecast_not_declared');
-          return unfilled(h, 'not_available', 'no_forecast_model');
+          const answer = await withTenantSession(this.ds, scope, (m) =>
+            this.forecasts.chart(m, scope.tenantId, profile, w.boundTo!, at));
+          return answer.readiness === 'ready' ? filled(h, answer.data) : unfilled(h, answer.readiness, answer.reason);
+        }
 
         case 'machine_list':
         default:
@@ -499,12 +514,10 @@ export class PageService {
     };
   }
 
-  /** The signals this machine's class version declares a forecast for (QREC0a). */
+  /** The signals this machine's class version declares a forecast for (QREC0a) — the
+   * forecast pass's own definition (QML1 §3), so the two cannot disagree. */
   private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
-    if (!profile.equipmentClassSlug || !profile.classVersion) return new Set();
-    const rows = await this.ds.getRepository(EquipmentClassSensorRequirement).find({
-      where: { classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion, forecastEnabled: true },
-    });
+    const rows = await forecastDeclarations(this.ds.manager, profile.equipmentClassSlug, profile.classVersion);
     return new Set(rows.map((r) => r.measurementRole));
   }
 
@@ -557,18 +570,6 @@ export function ruleSignal(rule: AlertRule): string | null {
   return typeof signal === 'string' && signal ? signal : null;
 }
 
-/**
- * Derived, never stored (task QPAGE1 §4): `active` when an open alert's rule watches
- * one of the mode's signals; `clear` only when every open alert on the machine can be
- * traced to a signal and none is the mode's; `unknown` when any open alert came from
- * a rule that names no signal — that alert might be this failure, and "clear" would
- * be a guess.
- */
-export function failureModeStatus(modeSignals: string[], openAlertSignals: (string | null)[]): FailureModeStatus {
-  if (openAlertSignals.some((s) => s !== null && modeSignals.includes(s))) return 'active';
-  if (openAlertSignals.some((s) => s === null)) return 'unknown';
-  return 'clear';
-}
 
 function readinessRows(coverage: Awaited<ReturnType<SignalBindingService['coverage']>>, at: Date): ReadinessRow[] {
   const row = (r: { measurementRole: string; componentScope: string; lastReadingAt: string | null;

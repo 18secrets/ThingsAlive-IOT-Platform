@@ -15,6 +15,10 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { FleetImportModule } from './fleet-import/fleet-import.module';
+import { RecEngineModule } from './rec-engine/rec-engine.module';
+import { RecFrameModule } from './rec-frame/rec-frame.module';
 import { SignalBindingModule } from './signal-binding/signal-binding.module';
 import { KpiModule } from './kpi/kpi.module';
 import { IncidentModule } from './incident/incident.module';
@@ -24,9 +28,12 @@ import { PageModule } from './page/page.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
+import { WorkflowModule } from './workflow/workflow.module';
 import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
+import { ForecastModule } from './forecast/forecast.module';
+import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
 import { UtilizationModule } from './utilization/utilization.module';
@@ -94,6 +101,7 @@ export class AppModule {
               MailModule,
               TenancyModule,
               EquipmentModule,
+              FleetImportModule,
               SignalBindingModule,
               KpiModule,
       PageModule,
@@ -103,6 +111,8 @@ export class AppModule {
       AssetsModule,
               WorkModule,
               ShiftModule,
+              ForecastModule,
+              ForecastSchedulingModule,
               TelemetryPartitionModule,
               TelemetryArchiveModule,
               UtilizationModule,
@@ -111,7 +121,11 @@ export class AppModule {
               IntelligenceModule,
               LegacyModule,
               AlertModule,
+              WorkflowModule,
               ParameterModule,
+              AssistantModule,
+              RecEngineModule,
+              RecFrameModule,
             ]
           : []),
       ],

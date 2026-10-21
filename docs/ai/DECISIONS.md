@@ -189,6 +189,147 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+## D42 — QREC1's thirteen questions, answered
+
+Answered by Tapas, 2026-10-19, taking every recommendation in
+`prompts/QREC1-prompt.md` §12. Numbered D42 because D18–D41 are already used in
+`decisions/ai-layer-decisions.md` — including D21, the decision this task implements.
+
+1. **Ship without QML1.** Detect's residual source reports `not_available` /
+   `no_forecast_model` for every forecast-declared signal until a forecast exists.
+2. **A bundle belongs to a machine at an instant**, with a nullable `incident_id`
+   (foreign key to `incident`) set when a live incident exists.
+3. **`prediction.read` may POST.** The write is a derived, immutable record of reads
+   the caller could make anyway.
+4. **Downtime cost stays `pending`.** `operating_cost_per_hour` is not the cost of a
+   machine standing; a `downtime_cost_per_hour` parameter is a follow-up.
+5. **`estimated_hours` is labour only.** No downtime line, no fuel line, until the
+   library can author either.
+6. **Parts are an unpriced list.** Pricing them needs a per-tenant price list.
+7. **Precedent searches all history** the tenant holds for the machine.
+8. **Precedent is this machine only.** Fleet precedent is a separate, labelled section later.
+9. **Module `rec-engine`, routes `rec-evidence`.** The scenario `RecommendationService` keeps its name.
+10. **No per-tenant enable/disable** of recommendations yet.
+11. **On request only.** Opening a page reads; it never evaluates.
+12. **Acceptance into work is its own task**, after QREC2, with its own concurrency test.
+13. **`ajv` and `ajv-formats` are devDependencies**, for validating contract payloads in
+    tests only. Whether either becomes a runtime dependency is QREC2's question.
+
+## D43 — Workflow compiler: the nine questions QWF1 asked, answered
+
+2026-10-19, answered by Tapas before QWF1 started.
+
+1. **Vocabulary.** The Visual Workflow addendum (WF01–WF08) is not in the repository or
+   on any machine that has looked. QWF1's node set is the one derived from D16:
+   `ReadSignal`, `Threshold`, `FreshnessGate`, `PredictionSeverity`, `FuelLoss`,
+   `ChainOrigin`, `AllOf` / `AnyOf`, `Notify`. If the addendum surfaces, it is reconciled
+   against this list, not merged beside it.
+2. **The composite is a structured tree of the existing leaf parameter sets**, not a
+   formula plan. It satisfies D25 literally — no expression enters the alert path — and
+   reuses the leaf evaluators and their wording.
+3. **Each leaf keeps its own M-of-N.** A combined window would need readings aligned
+   across signals on different clocks, and nobody has decided how.
+4. **Caps: 50 nodes, depth 8** (`MAX_WORKFLOW_NODES`, `MAX_WORKFLOW_DEPTH`). An alert
+   workflow is a handful of conditions feeding a Notify; raising either is one constant.
+5. **No workflow-template table yet.** Assembly composes from the account's copies of
+   alert templates and its failure modes.
+6. **Everything on `alert.author`**, reads on `prediction.read`. Operator drafting and
+   delegated publish (G03) are a later task that adds a capability and a scope, once.
+7. **A compiled rule can be switched off and on by itself.** That is operational, not
+   semantic; its content still changes only by republishing. The workflow's read shows
+   which of its rules are off.
+8. **Site- and class-scope publish goes ahead with per-machine readiness listed**, and is
+   refused only when no covered machine is ready. Machine scope with any signal unbound
+   is refused, as a rule on a machine that is not there is today.
+9. **Replay for hand-drawn workflows** comes after QGEN1, as information, never a gate.
+
+## D44 — 2.0's objects share 1.0's Utho bucket, under `ta2/`
+
+Decided 2026-10-19 by Tapas. A **dated exception to D01**, narrow and named: 2.0 writes
+class visuals (and later the 3-D twin's assets) into IoT Platform 1.0's Utho object
+storage bucket, `bucket-huod37sz` in Noida, under the key prefix `ta2/`
+(`ASSET_S3_KEY_PREFIX`). It does not write anywhere else in that bucket, and it writes
+nothing to 1.0's database.
+
+Why an exception rather than a bucket of 2.0's own, which was the first choice: the only
+Utho credential available is 1.0's object-storage key, and Utho refuses it
+`CreateBucket` (403 AccessDenied, tried path-style, with a location constraint and
+virtual-host style). A new bucket needs the Utho console or an account API token.
+
+What it costs, stated so it is not forgotten: that key can read and delete everything in
+the bucket, including 1.0's nightly `db-backups/` of `iotdb`. Any service holding
+`ASSET_S3_*` therefore holds the means to delete 1.0's backups. The prefix keeps 2.0's
+*writes* apart; it does not limit the key.
+
+Lifted when a bucket of 2.0's own exists, ideally with a key scoped to it: set the six
+`ASSET_S3_*` variables to it and copy `ta2/` across. Stored keys carry no prefix, so
+nothing in the database changes.
+
+Found while doing this: 1.0's `.env` names its bucket `bucket-huod37s`, which Utho
+refuses; the bucket the key can see is `bucket-huod37sz`. 1.0's backup script uploads to
+the first. Its backups may not be landing — for 1.0's owners to check.
+
+## D45 — Who hears about an escalation, and how (QNOTIFY1)
+
+Decided 2026-10-19 by Tapas, taking the recommendations in `prompts/QNOTIFY1-prompt.md` §8.
+
+- **Who.** Level 1 (acknowledgement overdue): the incident's owner; with no owner who
+  can see the machine, everyone who holds `action.assign`. Level 2 (resolution
+  overdue): the owner and everyone with `action.assign`. "Holds" and "can see" are
+  resolved per person through the same `ScopeResolver` the API uses, so suspended and
+  invited users are never told, and a site-scoped user only about machines in their
+  sites.
+- **How.** Email only. SMS or WhatsApp is a separate task with its own provider decision.
+- **Backlog.** An event older than 24 hours is not delivered; it is marked `failed`
+  with the reason, so nobody gets a day-old page.
+- **No opt-outs or quiet hours** in v1: an escalation is something already ignored once.
+- **Retries.** 5 attempts, waiting 1, 2, 4 and 8 minutes between them, then `failed`.
+- **Levels stand alone.** A level-2 email does not resend a level-1 that failed.
+
+## D46 — How QML1 forecasts: the answers to its seventeen questions
+
+Decided 2026-10-19, answered by Tapas. Numbering follows `prompts/QML1-prompt.md`'s
+Questions section; the code that holds each answer is named.
+
+1. **Process boundary.** Node owns the database; Python is a pure stdin/stdout function,
+   one child per pass (`src/forecast/forecast-worker.ts`, `python/forecast/infer.py`).
+2. **Image.** glibc for both services. The api image (`Dockerfile`, now
+   `node:22-bookworm-slim`) never carries Python or torch; the scheduler's
+   (`Dockerfile.scheduler`) adds Python 3.11, CPU torch, granite-tsfm and the weights,
+   below the source copy. Railway picks a Dockerfile per service, not a build target, so
+   the split is two files. **Not yet wired:** `test/deployment.spec.ts` asserts both
+   services build from `Dockerfile`, and pointing `railway.scheduler.json` at
+   `Dockerfile.scheduler` is that test's change to make, with Deepak confirming the
+   scheduler service reads `railway.scheduler.json`.
+3. **Cadence.** A platform constant of four hours (`FORECAST_CADENCE_MS`); no column.
+4. **Budget.** 25% of the cadence (`FORECAST_BUDGET_RATIO`).
+5. **Step and rollup.** Hourly steps; `forecast_input_bucket`, extended incrementally.
+6. **Gaps.** Refused below `MIN_COVERAGE_RATIO` (0.5, the KPI evaluator's, reused); only
+   gaps between two real buckets are filled, on a straight line; a gap at either end is
+   refused; the count of filled steps is on the forecast row (`buildContext`).
+7. **Intervals.** Empirical quantiles of the (machine, signal, model)'s clean residuals at
+   the same lead time, pooled where a lead has fewer than 20. No band, no forecast shown:
+   a machine's first 14 days read `baseline_not_established` (`ForecastReader.chart`).
+8. **Residual grain.** Per forecast step, not per raw reading.
+9. **Retention.** 90 days for residuals, daily samples, the rollup and skip records.
+10. **Model retirement** restarts the 14-day clock: the band is keyed by model.
+11. **Band width.** The 2.5th–97.5th percentile of clean residuals, 95% (`BAND_QUANTILES`).
+12. **Operating periods only.** Each residual records whether its hour was operating, by the
+    KPI baseline's own gate; a machine with no shift schedule never learns a band, and says
+    `no_shift_schedule`.
+13. **Stale forecast.** Older than the cadence plus one tick (`forecastStaleAfterMs`).
+14. **Tenant-added signals** are out of scope for QML1; a follow-up.
+15. **CI.** The real-model check is not in CI yet; it is run locally in the amd64 image
+    for the MR (`scripts/forecast/real-model-check.js`). A CI job follows the image wiring.
+16. **Licence.** granite-timeseries-ttm-r2 at d6a79570… is **Apache-2.0** by its model card
+    at that revision (commercial use permitted). The same card says IBM "will not be
+    maintaining this code going forward". Recorded on the `forecast_model` row and in the
+    migration comment.
+17. **Activation.** The migration seeds the pinned row `active`; that seeding is Tapas's
+    recorded approval of 19 Oct 2026. Any later activation is a platform-staff action with
+    an audit row, after QEVAL1 has reported on the candidate.
+
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

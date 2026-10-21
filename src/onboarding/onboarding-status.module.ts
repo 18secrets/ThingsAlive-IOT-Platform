@@ -8,5 +8,6 @@ import { OnboardingStatusService } from './onboarding-status.service';
   imports: [SignalBindingModule],
   controllers: [OnboardingStatusController],
   providers: [OnboardingStatusService],
+  exports: [OnboardingStatusService],
 })
 export class OnboardingStatusModule {}
