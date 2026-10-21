@@ -12,6 +12,7 @@
 export const WIDGET_TYPES = [
   'kpi_number', 'kpi_gauge', 'kpi_chart', 'signal_chart', 'readiness_list', 'schematic',
   'alert_list', 'work_order_list', 'service_due', 'failure_modes', 'recommendations', 'machine_list',
+  'parameter_list', 'forecast_chart', 'twin_model',
 ] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
@@ -44,6 +45,12 @@ export const WIDGET_SPECS: Readonly<Record<WidgetType, WidgetSpec>> = Object.fre
   failure_modes: { binds: 'none', scopes: ['equipment'] },
   recommendations: { binds: 'none', scopes: ['equipment'] },
   machine_list: { binds: 'none', scopes: ['site'] },
+  // QREC0b.1: the client parameters in force here, each with the scope that set it.
+  parameter_list: { binds: 'none', scopes: ['equipment', 'site'] },
+  // QREC0b.1: the slot for a declared forecast. QML1 supplies the forecast.
+  forecast_chart: { binds: 'signal', scopes: ['equipment'] },
+  // QTWIN1: the 3-D twin. The class supplies the model; the tenant places the markers.
+  twin_model: { binds: 'none', scopes: ['equipment'] },
 });
 
 export const isWidgetType = (v: string): v is WidgetType => (WIDGET_TYPES as readonly string[]).includes(v);

@@ -9,33 +9,20 @@ import {
   SensorItem,
   ToolMappingItem,
   CategoryItem,
-  EquipmentItem,
-  DeviceItem,
   PlantItem,
-  IndustryTypeItem,
   ClientAccount,
   ClientUserItem,
   RoleDefinition,
-  TemplateAlertRule,
-  TemplateKpiFormula,
-  TemplatePredictiveRule,
 } from './types';
 import {
   INITIAL_SENSORS,
   INITIAL_TOOL_MAPPINGS,
   INITIAL_CATEGORIES,
-  INITIAL_EQUIPMENT,
-  INITIAL_DEVICES,
-  INITIAL_INDUSTRY_TYPES,
   INITIAL_PLANTS,
-  INITIAL_ONBOARDING_SESSIONS,
   INITIAL_CLIENT_USERS,
   INITIAL_ROLES,
-  INITIAL_TEMPLATE_SENSOR_LINKS,
-  INITIAL_TEMPLATE_ALERT_RULES,
-  INITIAL_TEMPLATE_KPI_FORMULAS,
-  INITIAL_TEMPLATE_PREDICTIVE_RULES,
 } from './data/mockData';
+import i18n from './i18n';
 import { AuthProvider, useAuth } from './lib/AuthProvider';
 import { PageHeaderProvider } from './lib/PageHeaderContext';
 import { RequireAuth, GuestOnly } from './routes/guards';
@@ -45,7 +32,6 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { ForgotPasswordScreen } from './components/auth/ForgotPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
-import { EquipmentTemplateDetailPage } from './pages/EquipmentTemplateDetailPage';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { SitePagePage } from './pages/SitePagePage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
@@ -63,6 +49,8 @@ import { IncidentManagementPage } from './pages/IncidentManagementPage';
 import { ProductionMonitoringPage } from './pages/ProductionMonitoringPage';
 import { ProductionMonitoringDetailPage } from './pages/ProductionMonitoringDetailPage';
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
+import { LiveDashboardPage } from './pages/LiveDashboardPage';
+import { ThingDetailLivePage } from './pages/ThingDetailLivePage';
 import { ScenariosPage } from './pages/ScenariosPage';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
 import { CostAdministrationPage } from './pages/CostAdministrationPage';
@@ -71,11 +59,11 @@ import { ClientUsersPage } from './pages/ClientUsersPage';
 import { RolesPage } from './pages/RolesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import {
-  apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount,
+  apiListAccounts, apiCreateAccount, apiUpdateAccount, apiSuspendAccount, apiReinstateAccount, apiDeleteAccount,
   apiResendInvitation, apiListPlants, apiCreatePlant, apiUpdatePlant, apiRetirePlant, apiReopenPlant,
   apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
-  apiPublishEquipmentClass, apiRetireEquipmentClass,
+  apiPublishEquipmentClass, apiRetireEquipmentClass, apiUnretireEquipmentClass,
   apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula,
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
@@ -91,18 +79,19 @@ import {
   apiListEquipmentKpis, apiListMyCatalogScenarios, apiListActivations, apiActivationTransition,
   apiGetActivationHistory, apiGetEquipmentRecommendations,
   apiListPlatformStaff, apiInvitePlatformStaff, apiSetPlatformStaffRole,
-  apiSuspendPlatformStaff, apiReinstatePlatformStaff,
+  apiSuspendPlatformStaff, apiReinstatePlatformStaff, apiDeletePlatformStaff,
   apiListSensorCategories, apiCreateSensorCategory, apiListSensors, apiCreateSensor, apiUpdateSensor,
-  apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory,
+  apiRetireSensorCategory, apiUnretireSensorCategory, apiDeleteSensorCategory, apiRenameSensorCategory,
   apiRetireSensor, apiUnretireSensor, apiDeleteSensor,
-  apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping,
+  apiListToolMappings, apiCreateToolMapping, apiUpdateToolMapping, apiDeleteToolMapping,
+  apiListIndustryTypes, apiCreateIndustryType, apiUpdateIndustryType, apiDeleteIndustryType,
+  apiListUnmatchedIndustries, apiRematchIndustries, IndustryType, IndustryTypeInput, UnmatchedIndustry,
   apiListSignalAliases, apiUpsertSignalAlias, apiDeleteSignalAlias,
   apiListSignalStates, apiReplaceSignalStates,
   apiListDevicePool, apiRegisterDevices, apiAssignDevices,
-  apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock,
-  apiListEquipmentTemplates, apiCreateEquipmentTemplate, apiUpdateEquipmentTemplate,
+  apiReleaseDevices, apiRetireDevices, apiReturnDevicesToStock, apiUpdateDevice,
   apiListRoles, apiCreateRole, apiUpdateRole, apiDeleteRole,
-  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiSetUserAccess,
+  apiListTenantUsers, apiInviteUser, apiSetUserRole, apiSuspendUser, apiReinstateUser, apiDeleteUser, apiSetUserAccess,
   apiChangePassword,
   ApiError, Account, ResendInvitationResult, Plant, PlantInput, EquipmentClass, EquipmentClassInput,
   Scenario, ScenarioInput, AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput,
@@ -110,7 +99,7 @@ import {
   NamedFormula, NamedFormulaInput,
   SensorCategory, Sensor, SensorInput, ToolMapping, ToolMappingInput, SignalAlias, SignalAliasInput,
   SignalStateVocabEntry, SignalStateCode, GeoJsonPolygon, ImportResult, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput, EquipmentProfile, EquipmentInput,
+  EquipmentProfile, EquipmentInput,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction,
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput, SetUserAccessInput,
@@ -118,10 +107,6 @@ import {
 
 const CLIENT_USERS_KEY = 'ta_client_users';
 const ROLES_KEY = 'ta_roles';
-const TEMPLATE_SENSOR_LINKS_KEY = 'ta_template_sensor_links';
-const ALERT_RULES_KEY = 'ta_template_alert_rules';
-const KPI_FORMULAS_KEY = 'ta_template_kpi_formulas';
-const PREDICTIVE_RULES_KEY = 'ta_template_predictive_rules';
 
 function loadClientUsers(): ClientUserItem[] {
   try {
@@ -140,60 +125,6 @@ function loadRoles(): RoleDefinition[] {
     return INITIAL_ROLES;
   }
 }
-
-// Equipment class configuration is UI-only (no backend yet — see App.tsx's own
-// comment where this state is declared), so localStorage is what makes it survive
-// a reload or a fresh sign-in on the same machine instead of resetting every time.
-function loadTemplateSensorLinks(): Record<string, string[]> {
-  try {
-    const raw = localStorage.getItem(TEMPLATE_SENSOR_LINKS_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_SENSOR_LINKS;
-  } catch {
-    return INITIAL_TEMPLATE_SENSOR_LINKS;
-  }
-}
-
-function loadAlertRules(): TemplateAlertRule[] {
-  try {
-    const raw = localStorage.getItem(ALERT_RULES_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_ALERT_RULES;
-  } catch {
-    return INITIAL_TEMPLATE_ALERT_RULES;
-  }
-}
-
-function loadKpiFormulas(): TemplateKpiFormula[] {
-  try {
-    const raw = localStorage.getItem(KPI_FORMULAS_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_KPI_FORMULAS;
-  } catch {
-    return INITIAL_TEMPLATE_KPI_FORMULAS;
-  }
-}
-
-function loadPredictiveRules(): TemplatePredictiveRule[] {
-  try {
-    const raw = localStorage.getItem(PREDICTIVE_RULES_KEY);
-    return raw ? JSON.parse(raw) : INITIAL_TEMPLATE_PREDICTIVE_RULES;
-  } catch {
-    return INITIAL_TEMPLATE_PREDICTIVE_RULES;
-  }
-}
-
-// A client's own equipment templates and their sensors/alert rules/KPI formulas —
-// same UI-only reasoning as above, but keyed per client id rather than one shared
-// key: two different clients on the same machine (or the same browser used to
-// review a demo account) must never see each other's, and neither may ever leak
-// into Master Admin's own global list.
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-const clientKey = (base: string, clientId: string) => `${base}_${clientId}`;
 
 // A real account, as the existing ClientAccount-shaped UI displays it.
 // Contact info is the account's ceo-manager, not a separate "contact person" —
@@ -250,10 +181,8 @@ function AppData() {
   // same shape as equipmentClasses above.
   const [namedFormulas, setNamedFormulas] = useState<NamedFormula[]>([]);
   const [namedFormulasError, setNamedFormulasError] = useState<string | undefined>(undefined);
-  // Prediction scenarios across every class (task: wire the Templates-styled
-  // detail UI to the real catalog instead of the mock TemplatePredictiveRule
-  // localStorage layer). Same shape as equipmentClasses: platform-owned,
-  // fetched flat, filtered per class in the detail page.
+  // Prediction scenarios across every class. Same shape as equipmentClasses:
+  // platform-owned, fetched flat, filtered per class in the detail page.
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [scenariosError, setScenariosError] = useState<string | undefined>(undefined);
   // Alert rule templates across every class — same shape as scenarios above.
@@ -305,25 +234,6 @@ function AppData() {
   const [signalStatesError, setSignalStatesError] = useState<string | undefined>(undefined);
   const [devicePool, setDevicePool] = useState<PooledDevice[]>([]);
   const [devicePoolError, setDevicePoolError] = useState<string | undefined>(undefined);
-  // Onboarding-convenience templates — separate from `equipmentClasses` above,
-  // which is the prediction catalog and stays untouched by this.
-  const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
-  const [equipmentTemplatesError, setEquipmentTemplatesError] = useState<string | undefined>(undefined);
-  // Equipment class configuration — UI only, no backend yet. Sensors/alert
-  // rules/KPI formulas are all keyed by equipmentTemplateId directly rather than
-  // by any separate "Equipment Class" row: the template itself is what they're
-  // attached to.
-  const [templateSensorLinks, setTemplateSensorLinks] = useState<Record<string, string[]>>(loadTemplateSensorLinks);
-  const [alertRules, setAlertRules] = useState<TemplateAlertRule[]>(loadAlertRules);
-  const [kpiFormulas, setKpiFormulas] = useState<TemplateKpiFormula[]>(loadKpiFormulas);
-  const [predictiveRules, setPredictiveRules] = useState<TemplatePredictiveRule[]>(loadPredictiveRules);
-  // This client's own equipment templates — loaded/persisted per clientId below,
-  // never touching Master Admin's global equivalents above.
-  const [myEquipmentTemplates, setMyEquipmentTemplates] = useState<EquipmentTemplate[]>([]);
-  const [myTemplateSensorLinks, setMyTemplateSensorLinks] = useState<Record<string, string[]>>({});
-  const [myAlertRules, setMyAlertRules] = useState<TemplateAlertRule[]>([]);
-  const [myKpiFormulas, setMyKpiFormulas] = useState<TemplateKpiFormula[]>([]);
-  const [myPredictiveRules, setMyPredictiveRules] = useState<TemplatePredictiveRule[]>([]);
   // The signed-in client's own real roles/users (/identity/roles, /identity/users)
   // — separate from the mock `roles`/`clientUsers` below, which still feed the
   // Master-Admin-only cross-client view (AllClientUsersView), out of scope this
@@ -340,11 +250,10 @@ function AppData() {
   const [sensors, setSensors] = useState<SensorItem[]>(INITIAL_SENSORS);
   const [toolMappings, setToolMappings] = useState<ToolMappingItem[]>(INITIAL_TOOL_MAPPINGS);
   const [categories, setCategories] = useState<CategoryItem[]>(INITIAL_CATEGORIES);
-  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
-  const [devices, setDevices] = useState<DeviceItem[]>(INITIAL_DEVICES);
-  const [industryTypes, setIndustryTypes] = useState<IndustryTypeItem[]>(INITIAL_INDUSTRY_TYPES);
+  const [industryTypes, setIndustryTypes] = useState<IndustryType[]>([]);
+  const [industryTypesError, setIndustryTypesError] = useState<string | undefined>(undefined);
+  const [unmatchedIndustries, setUnmatchedIndustries] = useState<UnmatchedIndustry[]>([]);
   const [plants, setPlants] = useState<PlantItem[]>(INITIAL_PLANTS);
-  const [onboardingSessions, setOnboardingSessions] = useState(INITIAL_ONBOARDING_SESSIONS);
 
   const refreshAccounts = async () => {
     try {
@@ -755,6 +664,19 @@ function AppData() {
     }
   };
 
+  // The unmatched list rides along: it changes whenever a type is created, renamed or
+  // re-matched, and the tab shows both together.
+  const refreshIndustryTypes = async () => {
+    try {
+      const [types, unmatched] = await Promise.all([apiListIndustryTypes(), apiListUnmatchedIndustries()]);
+      setIndustryTypes(types);
+      setUnmatchedIndustries(unmatched);
+      setIndustryTypesError(undefined);
+    } catch (err) {
+      setIndustryTypesError(err instanceof ApiError ? err.message : 'Could not load industry types.');
+    }
+  };
+
   const refreshSignalAliases = async () => {
     try {
       setSignalAliases(await apiListSignalAliases());
@@ -782,21 +704,9 @@ function AppData() {
     }
   };
 
-  const refreshEquipmentTemplates = async () => {
-    try {
-      setEquipmentTemplates(await apiListEquipmentTemplates());
-      setEquipmentTemplatesError(undefined);
-    } catch (err) {
-      setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
-    }
-  };
-
-  // Sensors, their categories, and equipment templates — reference data both roles
-  // now read (`device-catalog.read` / `equipment-template.read`, granted to every
-  // tenant role): a client's own Equipment Template page needs the real sensor
-  // catalog to show attached parameters, and the real template list to find the
-  // Master Library class they opened. Tool mappings and the device pool stay
-  // master-admin only below — clients have no capability for either.
+  // Sensors and their categories — reference data both roles read
+  // (`device-catalog.read`, granted to every tenant role). Tool mappings and the
+  // device pool stay master-admin only below — clients have no capability for either.
   useEffect(() => {
     // Wait for the session-resume check: `authUser` can be a cached, optimistic
     // value from sessionStorage before the real access token is confirmed to
@@ -811,13 +721,6 @@ function AppData() {
           return [null, null] as const;
         });
       if (live && cats && list) { setSensorCategories(cats); setRealSensors(list); setSensorsError(undefined); }
-
-      try {
-        const templates = await apiListEquipmentTemplates();
-        if (live) { setEquipmentTemplates(templates); setEquipmentTemplatesError(undefined); }
-      } catch (err) {
-        if (live) setEquipmentTemplatesError(err instanceof ApiError ? err.message : 'Could not load equipment templates.');
-      }
     })();
     return () => { live = false; };
   }, [authUser, restoringSession]);
@@ -838,6 +741,13 @@ function AppData() {
         if (live) { setDevicePool(pool); setDevicePoolError(undefined); }
       } catch (err) {
         if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+      }
+
+      try {
+        const [types, unmatched] = await Promise.all([apiListIndustryTypes(), apiListUnmatchedIndustries()]);
+        if (live) { setIndustryTypes(types); setUnmatchedIndustries(unmatched); setIndustryTypesError(undefined); }
+      } catch (err) {
+        if (live) setIndustryTypesError(err instanceof ApiError ? err.message : 'Could not load industry types.');
       }
 
       try {
@@ -864,61 +774,6 @@ function AppData() {
   useEffect(() => {
     localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
   }, [roles]);
-
-  useEffect(() => {
-    localStorage.setItem(TEMPLATE_SENSOR_LINKS_KEY, JSON.stringify(templateSensorLinks));
-  }, [templateSensorLinks]);
-
-  useEffect(() => {
-    localStorage.setItem(ALERT_RULES_KEY, JSON.stringify(alertRules));
-  }, [alertRules]);
-
-  useEffect(() => {
-    localStorage.setItem(KPI_FORMULAS_KEY, JSON.stringify(kpiFormulas));
-  }, [kpiFormulas]);
-
-  useEffect(() => {
-    localStorage.setItem(PREDICTIVE_RULES_KEY, JSON.stringify(predictiveRules));
-  }, [predictiveRules]);
-
-  // Load this client's own equipment-template config the moment their id is
-  // known — not on mount, because it isn't known then. Re-runs if a different
-  // client signs in on the same browser, so the previous client's data is
-  // never shown to the next one.
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    const cid = authUser.clientId;
-    setMyEquipmentTemplates(loadJson(clientKey('ta_client_equipment_templates', cid), []));
-    setMyTemplateSensorLinks(loadJson(clientKey('ta_client_template_sensor_links', cid), {}));
-    setMyAlertRules(loadJson(clientKey('ta_client_alert_rules', cid), []));
-    setMyKpiFormulas(loadJson(clientKey('ta_client_kpi_formulas', cid), []));
-    setMyPredictiveRules(loadJson(clientKey('ta_client_predictive_rules', cid), []));
-  }, [authUser?.role, authUser?.clientId]);
-
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    localStorage.setItem(clientKey('ta_client_equipment_templates', authUser.clientId), JSON.stringify(myEquipmentTemplates));
-  }, [myEquipmentTemplates, authUser?.role, authUser?.clientId]);
-
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    localStorage.setItem(clientKey('ta_client_template_sensor_links', authUser.clientId), JSON.stringify(myTemplateSensorLinks));
-  }, [myTemplateSensorLinks, authUser?.role, authUser?.clientId]);
-
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    localStorage.setItem(clientKey('ta_client_alert_rules', authUser.clientId), JSON.stringify(myAlertRules));
-  }, [myAlertRules, authUser?.role, authUser?.clientId]);
-
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    localStorage.setItem(clientKey('ta_client_kpi_formulas', authUser.clientId), JSON.stringify(myKpiFormulas));
-  }, [myKpiFormulas, authUser?.role, authUser?.clientId]);
-
-  useEffect(() => {
-    if (authUser?.role !== 'client' || !authUser.clientId) return;
-    localStorage.setItem(clientKey('ta_client_predictive_rules', authUser.clientId), JSON.stringify(myPredictiveRules));
-  }, [myPredictiveRules, authUser?.role, authUser?.clientId]);
 
 
   // Self-service password change from Settings, for either role — POST
@@ -978,7 +833,7 @@ function AppData() {
     if (!current) return;
     try {
       if (current.status === 'Active') {
-        const reason = window.prompt(`Why is ${current.clientName} being suspended?`);
+        const reason = window.prompt(i18n.t('prompts.suspendReason', { name: current.clientName }));
         if (!reason) return;
         await apiSuspendAccount(id, reason);
       } else {
@@ -988,6 +843,13 @@ function AppData() {
     } catch (err) {
       setAccountsError(err instanceof ApiError ? err.message : 'That action failed.');
     }
+  };
+
+  // Only a suspended account nobody ever signed in to, holding no data — the
+  // backend refuses anything else and says why.
+  const handleDeleteAccount = async (tenantId: string) => {
+    await apiDeleteAccount(tenantId);
+    await refreshAccounts();
   };
 
   // Only works while the super admin has never accepted the first one — see
@@ -1021,6 +883,11 @@ function AppData() {
     const updated = await apiSuspendUser(userId, reason);
     await refreshTenantUsers();
     return updated;
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    await apiDeleteUser(userId);
+    await refreshTenantUsers();
   };
 
   const handleReinstateUser = async (userId: string) => {
@@ -1086,6 +953,11 @@ function AppData() {
     await refreshSensorCatalog();
     return restored;
   };
+  const handleRenameSensorCategory = async (id: string, name: string) => {
+    const renamed = await apiRenameSensorCategory(id, name);
+    await refreshSensorCatalog();
+    return renamed;
+  };
   const handleDeleteSensorCategory = async (id: string) => {
     await apiDeleteSensorCategory(id);
     await refreshSensorCatalog();
@@ -1108,6 +980,10 @@ function AppData() {
     const created = await apiCreateToolMapping(input);
     await refreshToolMappings();
     return created;
+  };
+  const handleDeleteToolMapping = async (id: string) => {
+    await apiDeleteToolMapping(id);
+    await refreshToolMappings();
   };
   const handleUpdateToolMapping = async (id: string, input: ToolMappingInput) => {
     const updated = await apiUpdateToolMapping(id, input);
@@ -1151,7 +1027,7 @@ function AppData() {
   };
 
   const handleReleaseDevice = async (imei: string) => {
-    const reason = window.prompt(`Why is ${imei} being taken back into stock?`);
+    const reason = window.prompt(i18n.t('prompts.takeBackReason', { imei }));
     if (!reason) return;
     try {
       reportBadOutcome(await apiReleaseDevices([imei], reason));
@@ -1162,13 +1038,20 @@ function AppData() {
   };
 
   const handleRetireDevice = async (imei: string) => {
-    const reason = window.prompt(`Why is ${imei} being retired?`);
+    const reason = window.prompt(i18n.t('prompts.retireReason', { imei }));
     if (!reason) return;
     try {
       reportBadOutcome(await apiRetireDevices([imei], reason));
     } catch (err) {
       setDevicePoolError(err instanceof ApiError ? err.message : 'Could not retire the device.');
     }
+    await refreshDevicePool();
+  };
+
+  // Rethrows, unlike the movements above: the edit modal shows the refusal (a tool
+  // profile change on a device that has left stock) next to the field.
+  const handleUpdateDevice = async (imei: string, input: Parameters<typeof apiUpdateDevice>[1]) => {
+    await apiUpdateDevice(imei, input);
     await refreshDevicePool();
   };
 
@@ -1213,6 +1096,15 @@ function AppData() {
     }
   };
 
+  const handleUnretireEquipmentClass = async (slug: string) => {
+    try {
+      await apiUnretireEquipmentClass(slug);
+      await refreshEquipmentClasses();
+    } catch (err) {
+      setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not un-retire.');
+    }
+  };
+
   const handleCreateNamedFormula = async (slug: string, input: NamedFormulaInput) => {
     const created = await apiCreateNamedFormula(slug, input);
     await refreshNamedFormulas();
@@ -1225,13 +1117,12 @@ function AppData() {
     return updated;
   };
 
+  // Rethrows: the reason a formula cannot publish (a dimension mismatch, an
+  // undeclared role) is shown on that formula's own card, not in a banner the
+  // person may have scrolled past.
   const handlePublishNamedFormula = async (slug: string, version: number) => {
-    try {
-      await apiPublishNamedFormula(slug, version);
-      await refreshNamedFormulas();
-    } catch (err) {
-      setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not publish.');
-    }
+    await apiPublishNamedFormula(slug, version);
+    await refreshNamedFormulas();
   };
 
   // The commercial boundary (entitlement.service.ts) — a tenant cannot grant
@@ -1464,154 +1355,19 @@ function AppData() {
     await refreshPlatformStaff();
   };
 
+  const handleDeleteStaff = async (id: string) => {
+    await apiDeletePlatformStaff(id);
+    await refreshPlatformStaff();
+  };
+
   const handleReinstateStaff = async (id: string) => {
     await apiReinstatePlatformStaff(id);
     await refreshPlatformStaff();
   };
-  const handleCreateEquipmentTemplate = async (input: EquipmentTemplateInput) => {
-    const created = await apiCreateEquipmentTemplate(input);
-    await refreshEquipmentTemplates();
-    return created;
-  };
-  const handleUpdateEquipmentTemplate = async (id: string, input: EquipmentTemplateInput) => {
-    const updated = await apiUpdateEquipmentTemplate(id, input);
-    await refreshEquipmentTemplates();
-    return updated;
-  };
-
-  const handleOpenEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
-
   const handleOpenEquipmentClass = (slug: string) => navigate(`/admin/category/${slug}`);
 
   const handleOpenCatalogImport = () => navigate('/admin/catalog-import');
 
-  const handleAttachTemplateSensor = (templateId: string, sensorId: string) =>
-    setTemplateSensorLinks((prev) => ({
-      ...prev,
-      [templateId]: [...new Set([...(prev[templateId] ?? []), sensorId])],
-    }));
-
-  const handleDetachTemplateSensor = (templateId: string, sensorId: string) =>
-    setTemplateSensorLinks((prev) => ({
-      ...prev,
-      [templateId]: (prev[templateId] ?? []).filter((id) => id !== sensorId),
-    }));
-
-  const handleCreateAlertRule = (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) =>
-    setAlertRules((prev) => [
-      { ...rule, id: `alert-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdateAlertRule = (rule: TemplateAlertRule) =>
-    setAlertRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-  const handleDeleteAlertRule = (id: string) =>
-    setAlertRules((prev) => prev.filter((r) => r.id !== id));
-
-  const handleCreateKpiFormula = (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) =>
-    setKpiFormulas((prev) => [
-      { ...formula, id: `kpi-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdateKpiFormula = (formula: TemplateKpiFormula) =>
-    setKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
-  const handleDeleteKpiFormula = (id: string) =>
-    setKpiFormulas((prev) => prev.filter((f) => f.id !== id));
-
-  const handleCreatePredictiveRule = (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) =>
-    setPredictiveRules((prev) => [
-      { ...rule, id: `pred-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdatePredictiveRule = (rule: TemplatePredictiveRule) =>
-    setPredictiveRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-  const handleDeletePredictiveRule = (id: string) =>
-    setPredictiveRules((prev) => prev.filter((r) => r.id !== id));
-
-  // This client's own equipment templates — created/edited entirely client-side
-  // (no API), mirroring the Master Admin handlers above one-for-one but writing
-  // to the client-scoped state instead. Never touches `equipmentTemplates`,
-  // `templateSensorLinks`, `alertRules` or `kpiFormulas`.
-  const handleCreateMyEquipmentTemplate = async (input: EquipmentTemplateInput): Promise<EquipmentTemplate> => {
-    const now = new Date().toISOString();
-    const created: EquipmentTemplate = {
-      id: `my-template-${Date.now()}`,
-      name: input.name ?? '',
-      category: input.category ?? null,
-      manufacturer: input.manufacturer ?? null,
-      engineType: input.engineType ?? null,
-      fuelTankCapacityLiters: input.fuelTankCapacityLiters ?? null,
-      serviceIntervalHours: input.serviceIntervalHours ?? null,
-      description: input.description ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    setMyEquipmentTemplates((prev) => [created, ...prev]);
-    return created;
-  };
-
-  const handleUpdateMyEquipmentTemplate = async (id: string, input: EquipmentTemplateInput): Promise<EquipmentTemplate> => {
-    const existing = myEquipmentTemplates.find((t) => t.id === id);
-    if (!existing) throw new Error('Template not found.');
-    const updated: EquipmentTemplate = {
-      ...existing,
-      name: input.name ?? existing.name,
-      category: input.category ?? existing.category,
-      manufacturer: input.manufacturer ?? existing.manufacturer,
-      engineType: input.engineType ?? existing.engineType,
-      fuelTankCapacityLiters: input.fuelTankCapacityLiters ?? existing.fuelTankCapacityLiters,
-      serviceIntervalHours: input.serviceIntervalHours ?? existing.serviceIntervalHours,
-      description: input.description ?? existing.description,
-      updatedAt: new Date().toISOString(),
-    };
-    setMyEquipmentTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
-    return updated;
-  };
-
-  const handleOpenMyEquipmentTemplate = (templateId: string) => navigate(`/admin/equipment-template/${templateId}`);
-
-  const handleAttachMyTemplateSensor = (templateId: string, sensorId: string) =>
-    setMyTemplateSensorLinks((prev) => ({
-      ...prev,
-      [templateId]: [...new Set([...(prev[templateId] ?? []), sensorId])],
-    }));
-
-  const handleDetachMyTemplateSensor = (templateId: string, sensorId: string) =>
-    setMyTemplateSensorLinks((prev) => ({
-      ...prev,
-      [templateId]: (prev[templateId] ?? []).filter((id) => id !== sensorId),
-    }));
-
-  const handleCreateMyAlertRule = (rule: Omit<TemplateAlertRule, 'id' | 'createdAt'>) =>
-    setMyAlertRules((prev) => [
-      { ...rule, id: `my-alert-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdateMyAlertRule = (rule: TemplateAlertRule) =>
-    setMyAlertRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-  const handleDeleteMyAlertRule = (id: string) =>
-    setMyAlertRules((prev) => prev.filter((r) => r.id !== id));
-
-  const handleCreateMyKpiFormula = (formula: Omit<TemplateKpiFormula, 'id' | 'createdAt'>) =>
-    setMyKpiFormulas((prev) => [
-      { ...formula, id: `my-kpi-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdateMyKpiFormula = (formula: TemplateKpiFormula) =>
-    setMyKpiFormulas((prev) => prev.map((f) => (f.id === formula.id ? formula : f)));
-  const handleDeleteMyKpiFormula = (id: string) =>
-    setMyKpiFormulas((prev) => prev.filter((f) => f.id !== id));
-
-  const handleCreateMyPredictiveRule = (rule: Omit<TemplatePredictiveRule, 'id' | 'createdAt'>) =>
-    setMyPredictiveRules((prev) => [
-      { ...rule, id: `my-pred-${Date.now()}`, createdAt: new Date().toISOString() },
-      ...prev,
-    ]);
-  const handleUpdateMyPredictiveRule = (rule: TemplatePredictiveRule) =>
-    setMyPredictiveRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-  const handleDeleteMyPredictiveRule = (id: string) =>
-    setMyPredictiveRules((prev) => prev.filter((r) => r.id !== id));
-
-  const handleAddEquipment = (newEquip: EquipmentItem) => setEquipmentList([newEquip, ...equipmentList]);
   // POST /equipment/plants, for real. Runs inside the caller's own tenant
   // session — there is no client picker, unlike the mock version this
   // replaced, because the plant already belongs to whoever is asking.
@@ -1644,35 +1400,25 @@ function AppData() {
     await refreshPlants();
     return updated;
   };
-  const handleAddIndustryType = (newType: IndustryTypeItem) => setIndustryTypes([newType, ...industryTypes]);
-  const handleUpdateIndustryType = (updatedType: IndustryTypeItem) =>
-    setIndustryTypes(industryTypes.map((i) => (i.id === updatedType.id ? updatedType : i)));
-  const handleDeleteIndustryType = (id: string) => setIndustryTypes(industryTypes.filter((i) => i.id !== id));
-  const handleAddDevice = (newDevice: DeviceItem) => setDevices([newDevice, ...devices]);
-  const handleDeleteDevice = (id: number) => setDevices(devices.filter((d) => d.id !== id));
-  const handleToggleOnboardingActive = (id: string) =>
-    setOnboardingSessions(onboardingSessions.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
-  const handleRefreshOnboardingSession = (id: string) =>
-    setOnboardingSessions(onboardingSessions.map((s) => (s.id === id ? { ...s, updatedAt: 'Just now' } : s)));
-
-  const templateSensorCounts = Object.fromEntries(
-    equipmentTemplates.map((t) => [t.id, (templateSensorLinks[t.id] ?? []).length]),
-  );
-  const templateAlertCounts = Object.fromEntries(
-    equipmentTemplates.map((t) => [t.id, alertRules.filter((r) => r.equipmentTemplateId === t.id).length]),
-  );
-  const templateKpiCounts = Object.fromEntries(
-    equipmentTemplates.map((t) => [t.id, kpiFormulas.filter((f) => f.equipmentTemplateId === t.id).length]),
-  );
-  const myTemplateSensorCounts = Object.fromEntries(
-    myEquipmentTemplates.map((t) => [t.id, (myTemplateSensorLinks[t.id] ?? []).length]),
-  );
-  const myTemplateAlertCounts = Object.fromEntries(
-    myEquipmentTemplates.map((t) => [t.id, myAlertRules.filter((r) => r.equipmentTemplateId === t.id).length]),
-  );
-  const myTemplateKpiCounts = Object.fromEntries(
-    myEquipmentTemplates.map((t) => [t.id, myKpiFormulas.filter((f) => f.equipmentTemplateId === t.id).length]),
-  );
+  // Tool mappings are refreshed too: they show the type's name, so a rename or a
+  // re-match changes what that table reads.
+  const handleCreateIndustryType = async (input: IndustryTypeInput & { name: string; code: string }) => {
+    await apiCreateIndustryType(input);
+    await refreshIndustryTypes();
+  };
+  const handleUpdateIndustryType = async (id: string, input: IndustryTypeInput) => {
+    await apiUpdateIndustryType(id, input);
+    await Promise.all([refreshIndustryTypes(), refreshToolMappings()]);
+  };
+  const handleDeleteIndustryType = async (id: string) => {
+    await apiDeleteIndustryType(id);
+    await refreshIndustryTypes();
+  };
+  const handleRematchIndustries = async () => {
+    const result = await apiRematchIndustries();
+    await Promise.all([refreshIndustryTypes(), refreshToolMappings()]);
+    return result;
+  };
 
   return (
     <Routes>
@@ -1689,22 +1435,12 @@ function AppData() {
           <Route
             path="dashboard"
             element={
-              <DashboardPage
-                clients={clients}
-                devices={devices}
-                equipmentList={equipmentList}
-                onboardingSessions={onboardingSessions}
-                masterEquipmentTemplates={equipmentTemplates}
-                myEquipmentTemplates={myEquipmentTemplates}
-                templateSensorLinks={templateSensorLinks}
-                myTemplateSensorLinks={myTemplateSensorLinks}
-                alertRules={alertRules}
-                myAlertRules={myAlertRules}
-                realSensors={realSensors}
-              />
+              <DashboardPage clients={clients} />
             }
           />
           <Route path="dashboard/:thingId" element={<ThingDetailPage />} />
+          <Route path="dashboard-live" element={<LiveDashboardPage />} />
+          <Route path="dashboard/:sourceSystem/:externalId" element={<ThingDetailLivePage />} />
 
           <Route path="admin">
             <Route index element={<AdminIndexRedirect />} />
@@ -1712,12 +1448,6 @@ function AppData() {
               path="devices/new"
               element={
                 <DeviceSetupPage
-                  toolMappings={toolMappings}
-                  sensors={sensors}
-                  categories={categories}
-                  plants={plants}
-                  clients={clients}
-                  onSaveDevice={handleAddDevice}
                   realToolMappings={realToolMappings}
                   onRegisterDevices={handleRegisterDevices}
                 />
@@ -1761,62 +1491,6 @@ function AppData() {
                 />
               }
             />
-            <Route
-              path="equipment-template/:templateId"
-              element={authUser?.role === 'client' ? (
-                // Equipment Templates was removed from the client's Administration
-                // tab bar (see AdminManagement.tsx's CLIENT_VISIBLE_ADMIN_SUBTABS) —
-                // this route has no tab-bar entry point any more, but stayed directly
-                // navigable by URL until now. A client landing here (bookmark, back
-                // button) goes to their Administration default instead.
-                <Navigate to="/admin/plant" replace />
-              ) : (
-                <EquipmentTemplateDetailPage
-                  // Alert rules, KPI formulas and predictive rules are different
-                  // from sensors/the template itself: Master Admin's rules are the
-                  // account's defaults and stay visible (read-only) to every
-                  // client, alongside whatever a client has additionally authored
-                  // for themselves — so both `x` (master) and `myX` (client-owned,
-                  // only when signed in as a client) are always passed down. A
-                  // client's own create/update/delete only ever touches `myX`;
-                  // Master Admin's own create/update/delete only ever touches `x`.
-                  isClientView={false}
-                  // This branch only ever renders for Master Admin now — a client is
-                  // redirected above before reaching this element — so every prop
-                  // below is Master Admin's own data/handlers, not the client's.
-                  templates={equipmentTemplates}
-                  allSensors={realSensors}
-                  sensorCategories={sensorCategories}
-                  templateSensorLinks={templateSensorLinks}
-                  onAttachSensor={handleAttachTemplateSensor}
-                  onDetachSensor={handleDetachTemplateSensor}
-                  alertRules={alertRules}
-                  onCreateAlertRule={handleCreateAlertRule}
-                  onUpdateAlertRule={handleUpdateAlertRule}
-                  onDeleteAlertRule={handleDeleteAlertRule}
-                  myAlertRules={undefined}
-                  onCreateMyAlertRule={handleCreateMyAlertRule}
-                  onUpdateMyAlertRule={handleUpdateMyAlertRule}
-                  onDeleteMyAlertRule={handleDeleteMyAlertRule}
-                  kpiFormulas={kpiFormulas}
-                  onCreateKpiFormula={handleCreateKpiFormula}
-                  onUpdateKpiFormula={handleUpdateKpiFormula}
-                  onDeleteKpiFormula={handleDeleteKpiFormula}
-                  myKpiFormulas={undefined}
-                  onCreateMyKpiFormula={handleCreateMyKpiFormula}
-                  onUpdateMyKpiFormula={handleUpdateMyKpiFormula}
-                  onDeleteMyKpiFormula={handleDeleteMyKpiFormula}
-                  predictiveRules={predictiveRules}
-                  onCreatePredictiveRule={handleCreatePredictiveRule}
-                  onUpdatePredictiveRule={handleUpdatePredictiveRule}
-                  onDeletePredictiveRule={handleDeletePredictiveRule}
-                  myPredictiveRules={undefined}
-                  onCreateMyPredictiveRule={handleCreateMyPredictiveRule}
-                  onUpdateMyPredictiveRule={handleUpdateMyPredictiveRule}
-                  onDeleteMyPredictiveRule={handleDeleteMyPredictiveRule}
-                />
-              )}
-            />
             <Route path="equipment/:sourceSystem/:externalId/page" element={<EquipmentPagePage />} />
             <Route path="sites/:plantId/page" element={<SitePagePage />} />
             <Route
@@ -1827,6 +1501,8 @@ function AppData() {
                   toolMappings={toolMappings}
                   categories={categories}
                   industryTypes={industryTypes}
+                  industryTypesError={industryTypesError}
+                  unmatchedIndustries={unmatchedIndustries}
                   plants={plants}
                   sensorCategories={sensorCategories}
                   realSensors={realSensors}
@@ -1841,11 +1517,13 @@ function AppData() {
                   onCreateSensorCategory={handleCreateSensorCategory}
                   onRetireSensorCategory={handleRetireSensorCategory}
                   onUnretireSensorCategory={handleUnretireSensorCategory}
+                  onRenameSensorCategory={handleRenameSensorCategory}
                   onDeleteSensorCategory={handleDeleteSensorCategory}
                   realToolMappings={realToolMappings}
                   toolMappingsError={toolMappingsError}
                   onCreateToolMapping={handleCreateToolMapping}
                   onUpdateToolMapping={handleUpdateToolMapping}
+                  onDeleteToolMapping={handleDeleteToolMapping}
                   signalAliases={signalAliases}
                   signalAliasesError={signalAliasesError}
                   onUpsertSignalAlias={handleUpsertSignalAlias}
@@ -1859,6 +1537,7 @@ function AppData() {
                   onAssignDevice={handleAssignDevice}
                   onReleaseDevice={handleReleaseDevice}
                   onRetireDevice={handleRetireDevice}
+                  onUpdateDevice={handleUpdateDevice}
                   onReturnDeviceToStock={handleReturnDeviceToStock}
                   equipmentClasses={equipmentClasses}
                   equipmentClassesError={equipmentClassesError}
@@ -1866,6 +1545,7 @@ function AppData() {
                   onUpdateEquipmentClass={handleUpdateEquipmentClass}
                   onPublishEquipmentClass={handlePublishEquipmentClass}
                   onRetireEquipmentClass={handleRetireEquipmentClass}
+                  onUnretireEquipmentClass={handleUnretireEquipmentClass}
                   onOpenEquipmentClass={handleOpenEquipmentClass}
                   onOpenCatalogImport={handleOpenCatalogImport}
                   namedFormulas={namedFormulas}
@@ -1873,24 +1553,10 @@ function AppData() {
                   onCreateNamedFormula={handleCreateNamedFormula}
                   onUpdateNamedFormula={handleUpdateNamedFormula}
                   onPublishNamedFormula={handlePublishNamedFormula}
-                  equipmentTemplates={equipmentTemplates}
-                  equipmentTemplatesError={equipmentTemplatesError}
-                  onCreateEquipmentTemplate={handleCreateEquipmentTemplate}
-                  onUpdateEquipmentTemplate={handleUpdateEquipmentTemplate}
-                  onOpenEquipmentTemplate={handleOpenEquipmentTemplate}
-                  templateSensorCounts={templateSensorCounts}
-                  templateAlertCounts={templateAlertCounts}
-                  templateKpiCounts={templateKpiCounts}
-                  myEquipmentTemplates={myEquipmentTemplates}
-                  onCreateMyEquipmentTemplate={handleCreateMyEquipmentTemplate}
-                  onUpdateMyEquipmentTemplate={handleUpdateMyEquipmentTemplate}
-                  onOpenMyEquipmentTemplate={handleOpenMyEquipmentTemplate}
-                  myTemplateSensorCounts={myTemplateSensorCounts}
-                  myTemplateAlertCounts={myTemplateAlertCounts}
-                  myTemplateKpiCounts={myTemplateKpiCounts}
-                  onAddIndustryType={handleAddIndustryType}
+                  onCreateIndustryType={handleCreateIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}
+                  onRematchIndustries={handleRematchIndustries}
                   realPlants={realPlants}
                   plantsError={plantsError}
                   onCreatePlant={handleCreatePlant}
@@ -1929,6 +1595,7 @@ function AppData() {
                   onUpdateAccount={handleUpdateAccount}
                   onResendInvitation={handleResendInvitation}
                   onToggleClientStatus={handleToggleClientStatus}
+                  onDeleteAccount={handleDeleteAccount}
                   entitlements={entitlements}
                   entitlementsError={entitlementsError}
                   onGrantEntitlement={handleGrantEntitlement}
@@ -1939,6 +1606,7 @@ function AppData() {
                   onSetStaffRole={handleSetStaffRole}
                   onSuspendStaff={handleSuspendStaff}
                   onReinstateStaff={handleReinstateStaff}
+                  onDeleteStaff={handleDeleteStaff}
                 />
               }
             />
@@ -1946,19 +1614,13 @@ function AppData() {
 
           <Route
             path="ai-onboarding"
-            element={
-              <AiOnboardingPage
-                sessions={onboardingSessions}
-                onToggleActive={handleToggleOnboardingActive}
-                onRefreshSession={handleRefreshOnboardingSession}
-              />
-            }
+            element={<AiOnboardingPage />}
           />
 
           <Route path="things-care" element={<ThingsCarePage />} />
           <Route path="things-care/:sourceSystem/:externalId" element={<ThingsCareDetailPage />} />
           <Route path="things-shield" element={<ThingsShieldPage />} />
-          <Route path="things-shield/:thingId" element={<ThingsShieldDetailPage />} />
+          <Route path="things-shield/:sourceSystem/:externalId" element={<ThingsShieldDetailPage />} />
           <Route path="incident-management" element={<IncidentManagementPage />} />
           <Route path="production-monitoring" element={<ProductionMonitoringPage />} />
           <Route path="production-monitoring/:sourceSystem/:externalId" element={<ProductionMonitoringDetailPage />} />
@@ -1979,6 +1641,7 @@ function AppData() {
                 onSetStaffRole={handleSetStaffRole}
                 onSuspendStaff={handleSuspendStaff}
                 onReinstateStaff={handleReinstateStaff}
+                onDeleteStaff={handleDeleteStaff}
                 clients={clients}
                 clientUsers={clientUsers}
                 roles={roles}
@@ -2000,6 +1663,7 @@ function AppData() {
                 onSetUserRole={handleSetUserRole}
                 onSuspendUser={handleSuspendUser}
                 onReinstateUser={handleReinstateUser}
+                onDeleteUser={handleDeleteUser}
                 plants={realPlants}
                 equipment={realEquipment}
                 onSetUserAccess={handleSetUserAccess}

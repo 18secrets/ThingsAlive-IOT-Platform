@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, EquipmentInput, EquipmentProfile, Plant, ServiceTier } from '../../lib/api';
 import { ClientAccount } from '../../types';
 
@@ -19,12 +20,14 @@ interface MasterAddEquipmentModalProps {
   existingEquipment?: EquipmentProfile | null;
 }
 
+// Labels are equipment.tier.<value> in the devices namespace.
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
-const TIER_OPTIONS = TIERS.map((t) => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }));
 
 export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment,
 }) => {
+  const { t } = useTranslation(['devices', 'shared']);
+  const TIER_OPTIONS = TIERS.map((tier) => ({ label: t(`equipment.tier.${tier}`), value: tier }));
   const [tenantId, setTenantId] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -104,7 +107,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
       if (existingEquipment) {
         const plantChanged = plantId !== (existingEquipment.plantId ?? '');
         if (plantChanged) {
-          const reason = window.prompt(`Why is ${finalName} moving site?`);
+          const reason = window.prompt(t('equipment.movePrompt', { name: finalName }));
           if (!reason) { setBusy(false); return; }
           await onMove(existingEquipment.sourceSystem, existingEquipment.externalId, plantId || null, reason, tenantId);
         }
@@ -133,7 +136,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
       reset();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'register'} this equipment.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('equipment.saveFailed') : t('equipment.registerFailed')));
     } finally {
       setBusy(false);
     }
@@ -147,10 +150,11 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {isEditing ? 'Edit Equipment' : 'Register Equipment'}
+            {isEditing ? t('equipment.editTitle') : t('equipment.register')}
           </h3>
           <button
             onClick={() => { reset(); onClose(); }}
+            aria-label={t('shared:close')}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -160,74 +164,74 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-sm">
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Client <span className="text-rose-500">*</span>
+              {t('translation:common.client')} <span className="text-rose-500">*</span>
             </label>
             <SelectPicker
               data={clientOptions}
               value={tenantId || null}
               onChange={(value) => { setTenantId(value ?? ''); setPlantId(''); }}
-              placeholder="— Select client —"
+              placeholder={t('assign.selectClient')}
               disabled={isEditing}
               block
               searchable={clientOptions.length > 6}
               cleanable={false}
             />
             {isEditing && (
-              <p className="text-[11px] text-slate-400 mt-1">Which account this machine belongs to isn't changed here.</p>
+              <p className="text-[11px] text-slate-400 mt-1">{t('equipment.clientLocked')}</p>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Code <span className="text-rose-500">*</span>
+                {t('equipment.col.code')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 disabled={isEditing}
                 value={code}
                 onChange={(value) => setCode(value)}
-                placeholder="e.g. DG-01"
+                placeholder={t('equipment.codePlaceholder')}
                 className="font-mono text-xs"
               />
               <p className="text-[11px] text-slate-400 mt-1">
                 {isEditing
-                  ? "Permanent — this machine's identity, not changed here."
-                  : "This machine's permanent identity. Not changed later."}
+                  ? t('equipment.codeLocked')
+                  : t('equipment.codeHint')}
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Equipment Name <span className="text-rose-500">*</span>
+                {t('equipment.name')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 value={name}
                 onChange={(value) => setName(value)}
-                placeholder="e.g. Komatsu PC210LC"
+                placeholder={t('equipment.namePlaceholder')}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Description
+              {t('equipment.description')}
             </label>
             <Input
               value={description}
               onChange={(value) => setDescription(value)}
-              placeholder="Equipment role & function"
+              placeholder={t('equipment.descriptionPlaceholder')}
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Site
+              {t('equipment.col.site')}
             </label>
             <SelectPicker
               data={plantOptions}
               value={plantId || null}
               onChange={(value) => setPlantId(value ?? '')}
-              placeholder={!tenantId ? 'Pick a client first' : plantsLoading ? 'Loading sites…' : 'Unassigned'}
+              placeholder={!tenantId ? t('equipment.pickClientFirst') : plantsLoading ? t('equipment.loadingSites') : t('pool.unassigned')}
               disabled={!tenantId || plantsLoading}
               block
               searchable={plantOptions.length > 6}
@@ -238,36 +242,36 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Manufacturer
+                {t('equipment.manufacturer')}
               </label>
               <Input
                 value={manufacturer}
                 onChange={(value) => setManufacturer(value)}
-                placeholder="e.g. Komatsu"
+                placeholder={t('equipment.manufacturerPlaceholder')}
                 size="sm"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Model Number
+                {t('equipment.modelNumber')}
               </label>
               <Input
                 value={modelNumber}
                 onChange={(value) => setModelNumber(value)}
-                placeholder="e.g. EC210"
+                placeholder={t('equipment.modelNumberPlaceholder')}
                 size="sm"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Serial Number
+                {t('equipment.serialNumber')}
               </label>
               <Input
                 value={serialNumber}
                 onChange={(value) => setSerialNumber(value)}
-                placeholder="e.g. SER-4920"
+                placeholder={t('equipment.serialNumberPlaceholder')}
                 className="font-mono"
                 size="sm"
               />
@@ -276,7 +280,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Service Tier
+              {t('equipment.serviceTier')}
             </label>
             <SelectPicker
               data={TIER_OPTIONS}
@@ -300,7 +304,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
               onClick={() => { reset(); onClose(); }}
               className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('shared:cancel')}
             </button>
             <button
               type="submit"
@@ -309,7 +313,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
             >
               <Check className="w-4 h-4" />
               <span>
-                {busy ? (isEditing ? 'Saving…' : 'Registering…') : (isEditing ? 'Save Changes' : 'Register Equipment')}
+                {busy ? (isEditing ? t('shared:saving') : t('register.registering')) : (isEditing ? t('shared:saveChanges') : t('equipment.register'))}
               </span>
             </button>
           </div>

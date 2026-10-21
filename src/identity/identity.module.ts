@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SCOPE_RESOLVER } from '../auth/scope-resolver';
+import { MailModule } from '../mail/mail.module';
 import { PLATFORM_SESSION_VALIDATOR } from '../auth/platform-session-validator';
 import { AppUser } from './entities/app-user.entity';
 import { TenantRole } from './entities/tenant-role.entity';
@@ -35,6 +36,7 @@ import { UserService } from './services/user.service';
  */
 @Module({
   imports: [
+    MailModule,
     TypeOrmModule.forFeature([
       TenantRole, AppUser, UserPlantAccess, UserEquipmentAccess,
       UserInvitation, UserSession, UserSecurityEvent,

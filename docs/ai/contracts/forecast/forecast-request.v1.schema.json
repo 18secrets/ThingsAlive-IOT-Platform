@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://things-alive.io/schemas/forecast-request.v1.json",
+  "title": "ForecastRequestV1",
+  "description": "Node to the Python forecast worker (QML1). Opaque series ids only: no tenant, IMEI or machine name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "model", "contextLength", "predictionLength", "series"],
+  "properties": {
+    "contract": { "const": "forecast-request.v1" },
+    "model": {
+      "type": "object", "additionalProperties": false, "required": ["key", "revision"],
+      "properties": { "key": { "type": "string" }, "revision": { "type": "string" } }
+    },
+    "contextLength": { "type": "integer", "minimum": 1 },
+    "predictionLength": { "type": "integer", "minimum": 1 },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "stepSeconds", "start", "values"],
+        "properties": {
+          "id": { "type": "string" },
+          "stepSeconds": { "type": "integer", "minimum": 1 },
+          "start": { "type": "string", "format": "date-time" },
+          "values": { "type": "array", "items": { "type": "number" }, "description": "Exactly contextLength values; no nulls." }
+        }
+      }
+    }
+  }
+}

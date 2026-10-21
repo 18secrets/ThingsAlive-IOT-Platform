@@ -4,8 +4,10 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 export interface SensorParameterSpec {
   parameter: string;
   unit: string;
-  min: number;
-  max: number;
+  /** null until someone sets it: a sensor created from a catalog import knows its
+   *  channels and units, but the workbook carries no range. */
+  min: number | null;
+  max: number | null;
   normalRange: string;
   notes?: string;
 }

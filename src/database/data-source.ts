@@ -26,6 +26,9 @@ import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placeme
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
+import { WorkflowDefinition } from '../workflow/entities/workflow-definition.entity';
+import { WorkflowLayout } from '../workflow/entities/workflow-layout.entity';
+import { WorkflowVersion } from '../workflow/entities/workflow-version.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { ShiftRun } from '../shift/entities/shift-run.entity';
@@ -52,6 +55,7 @@ import { EquipmentTemplate } from '../equipment-template/entities/equipment-temp
 import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';
+import { NotificationDelivery } from '../events/notification-delivery.entity';
 import { CatalogImportBatch } from '../catalog-import/entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../catalog-import/entities/catalog-import-row.entity';
 import { SignalBindingVersion } from '../signal-binding/entities/signal-binding-version.entity';
@@ -70,6 +74,21 @@ import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-eq
 import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
 import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
 import { ClientEquipmentTemplate } from '../equipment-template/entities/client-equipment-template.entity';
+import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
+import { IndustryType } from '../device-catalog/entities/industry-type.entity';
+import { Incident } from '../incident/entities/incident.entity';
+import { IncidentAlert, IncidentEvent, IncidentSlaPolicy } from '../incident/entities/incident-link.entities';
+import { TelemetryArchive } from '../telemetry/archive/telemetry-archive.entity';
+import { AssistantUsage } from '../assistant/assistant-usage.entity';
+import { AssistantProposal } from '../assistant/assistant-proposal.entity';
+import { RecEvidenceBundle } from '../rec-engine/rec-evidence-bundle.entity';
+import { ArtifactProposal } from '../proposal/entities/artifact-proposal.entity';
+import { ReplayRun } from '../proposal/entities/replay-run.entity';
+import { ProposalRuleEnablement } from '../proposal/entities/proposal-rule-enablement.entity';
+import { RecFrame } from '../rec-frame/rec-frame.entity';
+import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
+import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
+import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -97,6 +116,7 @@ export const ENTITIES = [
   EquipmentScenario,
   ScenarioActivationEvent,
   DomainEvent,
+  NotificationDelivery,
   Prediction,
   PredictionBaseline,
   DeviceInventory,
@@ -121,6 +141,9 @@ export const ENTITIES = [
   DeviceLinkHealth,
   CausalChainDefinition,
   AlertRule,
+  WorkflowDefinition,
+  WorkflowVersion,
+  WorkflowLayout,
   AlertEvent,
   PlatformUser,
   PlatformSession,
@@ -154,6 +177,23 @@ export const ENTITIES = [
   SignalState,
   ShieldEvidenceRecord,
   ClientEquipmentTemplate,
+  BreakdownEvent,
+  IndustryType,
+  Incident,
+  IncidentAlert,
+  IncidentEvent,
+  IncidentSlaPolicy,
+  TelemetryArchive,
+  AssistantUsage,
+  AssistantProposal,
+  RecEvidenceBundle,
+  RecFrame,
+  ArtifactProposal,
+  ReplayRun,
+  ProposalRuleEnablement,
+  ...FORECAST_ENTITIES,
+  ...EMBEDDING_ENTITIES,
+  ...EVALUATION_ENTITIES,
 ];
 
 export interface DataSourceChoices {

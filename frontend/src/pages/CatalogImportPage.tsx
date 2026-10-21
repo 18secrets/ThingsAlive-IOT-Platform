@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2,
   UploadCloud, Layers, Radio, Trash2, Check, X,
@@ -36,16 +37,12 @@ const ACTION_STYLE: Record<string, string> = {
   unchanged: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
 };
 
-const ACTION_LABEL: Record<string, string> = {
-  create: 'New class',
-  new_version: 'New version',
-  unchanged: 'Unchanged',
-};
-
 export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   batches, batchesError, onDownloadTemplate, onUpload, onLoadDiff, onApply, onDiscard, onReviewSensors,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('catalog');
+  const actionLabel = (action: string) => t(`import.action.${action}`, { defaultValue: action });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
@@ -66,9 +63,9 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   const [reviewError, setReviewError] = useState<string | undefined>(undefined);
 
   usePageHeader({
-    title: 'Equipment Library Import',
-    subtitle: 'Bulk-author classes, scenarios & alert rules from a workbook',
-    breadcrumb: 'Equipment Classes',
+    title: t('import.title'),
+    subtitle: t('import.subtitle'),
+    breadcrumb: t('classDetail.breadcrumb'),
     onBack: () => navigate('/admin/category'),
   });
 
@@ -86,7 +83,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     try {
       setDiff(await onLoadDiff(id));
     } catch (err) {
-      setDiffError(err instanceof ApiError ? err.message : 'Could not load the diff for this batch.');
+      setDiffError(err instanceof ApiError ? err.message : t('import.diffFailed'));
     } finally {
       setLoadingDiff(false);
     }
@@ -108,7 +105,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       const { id } = await onUpload(file);
       await openDiff(id);
     } catch (err) {
-      setUploadError(err instanceof ApiError ? err.message : 'Could not upload the workbook.');
+      setUploadError(err instanceof ApiError ? err.message : t('import.uploadFailed'));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -123,7 +120,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       const summary = await onApply(selectedBatchId);
       setApplySummary(summary);
     } catch (err) {
-      setDiffError(err instanceof ApiError ? err.message : 'Could not apply this batch.');
+      setDiffError(err instanceof ApiError ? err.message : t('import.applyFailed'));
     } finally {
       setApplying(false);
     }
@@ -139,7 +136,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       setDiff(null);
       setApplySummary(null);
     } catch (err) {
-      setDiffError(err instanceof ApiError ? err.message : 'Could not discard this batch.');
+      setDiffError(err instanceof ApiError ? err.message : t('import.discardFailed'));
     } finally {
       setDiscarding(false);
     }
@@ -174,7 +171,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       setSensorDecisions({});
       setCategoryDecisions({});
     } catch (err) {
-      setReviewError(err instanceof ApiError ? err.message : 'Could not save these decisions.');
+      setReviewError(err instanceof ApiError ? err.message : t('import.reviewFailed'));
     } finally {
       setReviewingSensors(false);
     }
@@ -184,11 +181,9 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     <div className="space-y-3" data-purpose="catalog-import">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Equipment Library Import</h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('import.title')}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            Download the workbook template, fill it in offline, and upload it here.
-            Every upload is reviewed as a dry-run diff before anything is written —
-            applying is a separate, explicit step.
+            {t('import.intro')}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -198,7 +193,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
             className="px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-60 flex items-center gap-2"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{downloading ? 'Preparing…' : 'Download Template'}</span>
+            <span>{downloading ? t('import.preparing') : t('import.downloadTemplate')}</span>
           </button>
           <input
             ref={fileInputRef}
@@ -213,7 +208,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
             className="px-4 py-2.5 rounded-lg bg-[#0B7285] hover:bg-[#095C6B] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 flex items-center gap-2"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>{uploading ? 'Uploading…' : 'Upload Workbook'}</span>
+            <span>{uploading ? t('visual.uploading') : t('import.uploadWorkbook')}</span>
           </button>
         </div>
       </div>
@@ -228,12 +223,12 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
         {/* Recent batches */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2 h-fit">
-          <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">Recent Uploads</h3>
+          <h3 className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">{t('import.recentUploads')}</h3>
           {batchesError && (
             <p className="text-[11px] text-rose-600 dark:text-rose-400">{batchesError}</p>
           )}
           {batches.length === 0 && !batchesError && (
-            <p className="text-[11px] text-slate-400 italic">No workbooks uploaded yet.</p>
+            <p className="text-[11px] text-slate-400 italic">{t('import.noUploads')}</p>
           )}
           <div className="space-y-1.5">
             {batches.map((b) => (
@@ -253,7 +248,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                 <div className="flex items-center justify-between mt-1.5">
                   <span className="text-[10px] text-slate-400">{new Date(b.createdAt).toLocaleString()}</span>
                   <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold uppercase rounded border ${STATUS_STYLE[b.status]}`}>
-                    {b.status}
+                    {t(`import.status.${b.status}`, { defaultValue: b.status })}
                   </span>
                 </div>
               </button>
@@ -265,13 +260,13 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
         <div className="space-y-4">
           {!selectedBatchId && (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-10 shadow-xs text-center text-slate-400 text-sm">
-              Upload a workbook, or pick a recent one, to see its dry-run diff here.
+              {t('import.pickPrompt')}
             </div>
           )}
 
           {loadingDiff && (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-10 shadow-xs text-center text-slate-400 text-sm">
-              Loading diff…
+              {t('import.loadingDiff')}
             </div>
           )}
 
@@ -288,25 +283,25 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {selectedBatch?.filename ?? 'Batch'}
+                      {selectedBatch?.filename ?? t('import.batch')}
                     </h3>
                     <p className="text-[11px] text-slate-400 mt-0.5">{diff.partialApplyNote}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {selectedBatch && (
                       <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[selectedBatch.status]}`}>
-                        {selectedBatch.status}
+                        {t(`import.status.${selectedBatch.status}`, { defaultValue: selectedBatch.status })}
                       </span>
                     )}
                     {selectedBatch && selectedBatch.status !== 'applied' && !applySummary && (
                       <button
                         onClick={handleDiscard}
                         disabled={discarding}
-                        title="Discard this batch — only possible before it's applied"
+                        title={t('import.discardHint')}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-60"
                       >
                         <Trash2 className="w-3 h-3" />
-                        <span>{discarding ? 'Discarding…' : 'Discard'}</span>
+                        <span>{discarding ? t('import.discarding') : t('import.discard')}</span>
                       </button>
                     )}
                   </div>
@@ -315,16 +310,16 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                 <div className="flex flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
                     <Layers className="w-3 h-3 text-sky-600" />
-                    <span>{diff.classes.length} classes referenced</span>
+                    <span>{t('import.classesReferenced', { count: diff.classes.length })}</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
                     <Radio className="w-3 h-3 text-sky-600" />
-                    <span>{diff.sensorCapabilities.valid} sensor capabilities valid</span>
+                    <span>{t('import.capabilitiesValid', { count: diff.sensorCapabilities.valid })}</span>
                   </div>
                   {diff.rejectedRows.length > 0 && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium text-[11px] rounded-md border border-rose-200 dark:border-rose-800">
                       <AlertCircle className="w-3 h-3" />
-                      <span>{diff.rejectedRows.length} rows rejected</span>
+                      <span>{t('import.rowsRejected', { count: diff.rejectedRows.length })}</span>
                     </div>
                   )}
                 </div>
@@ -336,7 +331,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs text-slate-700 dark:text-slate-200">#{c.slug}</span>
                         <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded border ${ACTION_STYLE[c.action]}`}>
-                          {ACTION_LABEL[c.action]}
+                          {actionLabel(c.action)}
                         </span>
                       </div>
                       <div className="flex gap-1.5 text-[10px] text-slate-400">
@@ -349,14 +344,14 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                     </div>
                   ))}
                   {diff.classes.length === 0 && (
-                    <p className="text-xs text-slate-400 italic">No classes referenced in this workbook.</p>
+                    <p className="text-xs text-slate-400 italic">{t('import.noClasses')}</p>
                   )}
                 </div>
 
                 {/* Rejected rows */}
                 {diff.rejectedRows.length > 0 && (
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Rejected rows</span>
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{t('import.rejectedRows')}</span>
                     <div className="max-h-48 overflow-y-auto space-y-1">
                       {diff.rejectedRows.map((r, i) => (
                         <div key={i} className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-slate-300">
@@ -372,18 +367,18 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
                     {hasOutstandingProposals && (
                       <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                        Approve or dismiss every proposed sensor and category below before applying.
+                        {t('import.resolveFirstNote')}
                       </p>
                     )}
                     <div className="flex justify-end">
                       <button
                         onClick={handleApply}
                         disabled={applying || hasOutstandingProposals}
-                        title={hasOutstandingProposals ? 'Resolve the proposed sensors/categories first' : undefined}
+                        title={hasOutstandingProposals ? t('import.resolveFirstHint') : undefined}
                         className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         <UploadCloud className="w-3.5 h-3.5" />
-                        <span>{applying ? 'Applying…' : 'Apply This Batch'}</span>
+                        <span>{applying ? t('import.applying') : t('import.apply')}</span>
                       </button>
                     </div>
                   </div>
@@ -393,22 +388,21 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
               {(proposedCategories.length > 0 || proposedSensors.length > 0) && (
                 <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-xl p-5 shadow-xs space-y-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Proposed sensors &amp; categories</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t('import.proposedTitle')}</h3>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      This workbook names sensors or categories the catalog doesn&apos;t have yet. Approve to create
-                      them, or dismiss to leave the referencing rows unresolved. No re-upload needed afterwards.
+                      {t('import.proposedIntro')}
                     </p>
                   </div>
 
                   {proposedCategories.length > 0 && (
                     <div className="space-y-1.5">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Categories</span>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('sensors.categories')}</span>
                       {proposedCategories.map((c) => (
                         <div key={c.slug} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">{c.name}</p>
                             <p className="text-[10px] text-slate-400 truncate">
-                              needed by: {c.proposedBySensors.join(', ')}
+                              {t('import.neededBy', { list: c.proposedBySensors.join(', ') })}
                             </p>
                           </div>
                           <ReviewToggle
@@ -422,7 +416,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
 
                   {proposedSensors.length > 0 && (
                     <div className="space-y-1.5">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Sensors</span>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('import.sensors')}</span>
                       {proposedSensors.map((s) => (
                         <div key={s.slug} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
                           <div className="min-w-0">
@@ -431,8 +425,8 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                               {s.category && <span className="text-slate-400 font-normal"> · {s.category}</span>}
                             </p>
                             <p className="text-[10px] text-slate-400 truncate">
-                              {[s.parameterKey, s.canonicalUnit].filter(Boolean).join(' · ') || 'no parameter/unit declared'}
-                              {' · used by: '}{s.usedByClasses.join(', ')}
+                              {[s.parameterKey, s.canonicalUnit].filter(Boolean).join(' · ') || t('import.noParamUnit')}
+                              {' · '}{t('import.usedBy', { list: s.usedByClasses.join(', ') })}
                             </p>
                           </div>
                           <ReviewToggle
@@ -457,7 +451,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                       disabled={reviewingSensors || !decisionCount}
                       className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      <span>{reviewingSensors ? 'Saving…' : `Save ${decisionCount || ''} decision${decisionCount === 1 ? '' : 's'}`}</span>
+                      <span>{reviewingSensors ? t('common.saving') : (decisionCount ? t('import.saveDecisions', { count: decisionCount }) : t('import.saveDecisionsNone'))}</span>
                     </button>
                   </div>
                 </div>
@@ -467,21 +461,23 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                 <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 rounded-xl p-5 shadow-xs space-y-3">
                   <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                     <CheckCircle2 className="w-4 h-4" />
-                    <h3 className="text-sm font-semibold">Applied</h3>
+                    <h3 className="text-sm font-semibold">{t('import.applied')}</h3>
                   </div>
                   <div className="space-y-1.5">
                     {Object.entries(applySummary.classes).map(([slug, result]) => (
                       <div key={slug} className="flex items-center justify-between text-xs">
                         <span className="font-mono text-slate-700 dark:text-slate-200">#{slug}</span>
                         <span className="text-slate-500 dark:text-slate-400">
-                          {ACTION_LABEL[result.action]} · v{result.version} ·{' '}
+                          {actionLabel(result.action)} · v{result.version} ·{' '}
                           {Object.entries(result.created).map(([k, v]) => `${v} ${k}`).join(', ')}
                         </span>
                       </div>
                     ))}
                   </div>
                   <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    Sensor capabilities: {applySummary.sensorCapabilities.created} created, {applySummary.sensorCapabilities.skipped} skipped.
+                    {applySummary.sensorCapabilities.parametersAdded
+                      ? t('import.capabilitiesSummaryWithParams', { created: applySummary.sensorCapabilities.created, skipped: applySummary.sensorCapabilities.skipped, count: applySummary.sensorCapabilities.parametersAdded })
+                      : t('import.capabilitiesSummary', { created: applySummary.sensorCapabilities.created, skipped: applySummary.sensorCapabilities.skipped })}
                   </p>
                 </div>
               )}
@@ -494,7 +490,9 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
 };
 
 /** Approve / Dismiss pair for one proposed sensor or category row. */
-const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDecision) => void }> = ({ value, onChange }) => (
+const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDecision) => void }> = ({ value, onChange }) => {
+  const { t } = useTranslation('catalog');
+  return (
   <div className="flex items-center gap-1.5 shrink-0">
     <button
       onClick={() => onChange(value === 'approve' ? undefined : 'approve')}
@@ -504,7 +502,7 @@ const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDe
           : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
       }`}
     >
-      <Check className="w-3 h-3" /> Approve
+      <Check className="w-3 h-3" /> {t('import.approve')}
     </button>
     <button
       onClick={() => onChange(value === 'dismiss' ? undefined : 'dismiss')}
@@ -514,7 +512,8 @@ const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDe
           : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
       }`}
     >
-      <X className="w-3 h-3" /> Dismiss
+      <X className="w-3 h-3" /> {t('import.dismiss')}
     </button>
   </div>
-);
+  );
+};

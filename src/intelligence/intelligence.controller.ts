@@ -1,14 +1,39 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  IsArray, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested,
+  ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
-import { ChainNode } from './services/causal-chain';
 import { ChainService } from './services/chain.service';
+
+export class ChainDriverDto {
+  @IsString() @IsNotEmpty() signal: string;
+  @IsNumber() coefficient: number;
+  @IsOptional() @IsNumber() lagSeconds?: number;
+}
+
+/**
+ * One stage, declared field by field (dashboard testing, issue 11).
+ *
+ * `nodes` used to be a bare `ChainNode[]`. With `enableImplicitConversion` and no
+ * `@Type()`, class-transformer turned every stage into an empty array that still
+ * carried the stage's fields as properties: `validateChain` read them and passed, and
+ * the jsonb column kept only the array. Every chain written through this route was
+ * stored as `[[]]`, and the console's editor crashed opening one. The same trap
+ * `TemplateClassDto` documents for expected signals.
+ */
+export class ChainNodeDto {
+  @IsString() @IsNotEmpty() signal: string;
+  @IsOptional() @IsString() label?: string;
+  @IsNumber() intercept: number;
+  @IsArray() @ValidateNested({ each: true }) @Type(() => ChainDriverDto) drivers: ChainDriverDto[];
+  @IsNumber() warnAbove: number;
+  @IsNumber() criticalAbove: number;
+  @IsOptional() @IsIn(['above', 'below', 'either']) direction?: 'above' | 'below' | 'either';
+}
 
 export class ChainDraftDto {
   @IsString() @IsNotEmpty() equipmentClassSlug: string;
@@ -19,7 +44,7 @@ export class ChainDraftDto {
   // The stage shape is validated by `validateChain`, which checks the things that
   // matter — cycles, self-drive, thresholds that can never fire — rather than only
   // that the fields are present.
-  @IsArray() nodes: ChainNode[];
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ChainNodeDto) nodes: ChainNodeDto[];
   @IsOptional() @IsInt() @Min(1) alignmentSeconds?: number;
   @IsOptional() @IsString() provenance?: string;
 }

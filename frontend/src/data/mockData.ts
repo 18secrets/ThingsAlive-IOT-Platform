@@ -2,20 +2,14 @@ import {
   SensorItem,
   ToolMappingItem,
   CategoryItem,
-  EquipmentItem,
-  DeviceItem,
   IndustryTypeItem,
   ProtocolItem,
   PlantItem,
-  OnboardingSessionItem,
   ClientAccount,
   PlatformUserItem,
   RoleDefinition,
   ClientUserItem,
   CLIENT_ASSIGNABLE_TABS,
-  TemplateAlertRule,
-  TemplateKpiFormula,
-  TemplatePredictiveRule,
 } from "../types";
 
 export const INITIAL_SENSORS: SensorItem[] = [
@@ -1504,258 +1498,6 @@ export const INITIAL_CATEGORIES: CategoryItem[] = [
   },
 ];
 
-// Each equipment below is deliberately linked (via deviceId) to one of the
-// present INITIAL_DEVICES records, so its toolMapping/assignedSensors mirror
-// exactly what selecting that device in the Add Equipment form would produce.
-export const INITIAL_EQUIPMENT: EquipmentItem[] = [
-  {
-    id: 21,
-    name: "Tipper",
-    description:
-      "Rigid dump truck for bulk cement and fly ash transport to construction sites",
-    category: "Kiln & Mill Auxiliaries",
-    maintPlant: "Ariyalur Cement Works",
-    cclNumber: "CCL-ARY-HRM-001",
-    manufacturer: "FLSmidth",
-    modelNumber: "Horomill 4400",
-    licensePlate: "TN33EQ7001",
-    engine: "Hydraulic Direct Drive",
-    fuelCapacity: 150,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "Cemindia",
-    deviceId: 303,
-    toolMapping: "ITDC Tool",
-    assignedSensors: [
-      "Hydraulic_Pressure_Sensor",
-      "Hydraulic_Temperature_Sensor",
-    ],
-  },
-  {
-    id: 22,
-    name: "Excavator",
-    description:
-      "Rotary kiln drive gear for clinker production and raw meal grinding",
-    category: "Kiln & Mill Auxiliaries",
-    maintPlant: "Damoh Grinding Unit",
-    cclNumber: "CCL-DMH-BMT-001",
-    manufacturer: "FLSmidth",
-    modelNumber: "UMS 4.6x14",
-    licensePlate: "MP20EQ4402",
-    engine: "Hydraulic Direct Drive",
-    fuelCapacity: 150,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "Cemindia",
-    deviceId: 304,
-    toolMapping: "ITDC Tool",
-    assignedSensors: [
-      "Hydraulic_Pressure_Sensor",
-      "Hydraulic_Temperature_Sensor",
-    ],
-  },
-  {
-    id: 23,
-    name: "Generator",
-    description:
-      "Electric powertrain dyno bench for EV motor, battery, and inverter validation",
-    category: "Powertrain Test Benches",
-    maintPlant: "Alwar Plant",
-    cclNumber: "CCL-ALW-EDR-001",
-    manufacturer: "AVL",
-    modelNumber: "e-Drive 350",
-    licensePlate: "RJ02EQ3103",
-    engine: "Electric Drive (AC/DC)",
-    fuelCapacity: 0,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "TMTL",
-    deviceId: 311,
-    toolMapping: "TMTL Tool",
-    assignedSensors: ["Battery_Voltage_Sensor", "Current_Sensor"],
-  },
-  {
-    id: 24,
-    name: "Tractor",
-    description:
-      "Automated electric axle assembly and end-of-line battery test conveyor",
-    category: "Vehicle Assembly Conveyors",
-    maintPlant: "Bopal Plant",
-    cclNumber: "CCL-BPL-EAX-001",
-    manufacturer: "Bosch",
-    modelNumber: "eAxle Gen3",
-    licensePlate: "GJ01EQ3212",
-    engine: "Electric Drive",
-    fuelCapacity: 0,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "TMTL",
-    deviceId: 312,
-    toolMapping: "TMTL Tool",
-    assignedSensors: ["Battery_Voltage_Sensor", "Current_Sensor"],
-  },
-  {
-    id: 25,
-    name: "Dump Truck",
-    description:
-      "205-tonne rigid dump truck for overburden and ore haulage at surface mines",
-    category: "Mining Haulage Fleet",
-    maintPlant: "KGF Heavy Fabrication Plant",
-    cclNumber: "CCL-KGF-BH205-001",
-    manufacturer: "BEML",
-    modelNumber: "BH205E",
-    licensePlate: "KA07EQ5313",
-    engine: "Hybrid (Diesel-Electric)",
-    fuelCapacity: 800,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "BEML",
-    deviceId: 313,
-    toolMapping: "BEML Tool",
-    assignedSensors: ["RPM_Sensor", "Fuel_Level_Sensor"],
-  },
-  {
-    id: 26,
-    name: "Excavator",
-    description:
-      "18-tonne class crawler excavator for construction and mining support work",
-    category: "Excavator Heavy Class",
-    maintPlant: "Mysuru Rail Coach Complex",
-    cclNumber: "CCL-MYS-BE180-001",
-    manufacturer: "BEML",
-    modelNumber: "BE180",
-    licensePlate: "KA09EQ5414",
-    engine: "Diesel (Internal Combustion)",
-    fuelCapacity: 450,
-    status: "Active",
-    onboardStatus: "Onboarded",
-    clientName: "BEML",
-    deviceId: 314,
-    toolMapping: "BEML Tool",
-    assignedSensors: ["RPM_Sensor", "Fuel_Level_Sensor"],
-  },
-];
-
-// Devices below mirror INITIAL_TOOL_MAPPINGS: for each of the 3 clients (Cemindia, TMTL, BEML),
-// 2 devices per tool (BEML Tool, ITDC Tool, TMTL Tool) = 3 clients x 3 tools x 2 devices = 18 devices.
-// The device name is always the tool name it runs; only the IMEI is unique per device.
-export const INITIAL_DEVICES: DeviceItem[] = [
-  {
-    id: 303,
-    name: "ITDC Tool",
-    imei: "356789100700003",
-    status: "Online",
-    toolProfile: "ITDC Tool",
-    category: "Cement & Building Materials",
-    plant: "Ariyalur Cement Works",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "3 mins ago",
-    clientName: "Cemindia",
-  },
-  {
-    id: 304,
-    name: "ITDC Tool",
-    imei: "356789100700004",
-    status: "Offline",
-    toolProfile: "ITDC Tool",
-    category: "Cement & Building Materials",
-    plant: "Damoh Grinding Unit",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "5 mins ago",
-    clientName: "Cemindia",
-  },
-  {
-    id: 311,
-    name: "TMTL Tool",
-    imei: "356789100700011",
-    status: "Online",
-    toolProfile: "TMTL Tool",
-    category: "Automotive",
-    plant: "Alwar Plant",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "3 mins ago",
-    clientName: "TMTL",
-  },
-  {
-    id: 312,
-    name: "TMTL Tool",
-    imei: "356789100700012",
-    status: "Offline",
-    toolProfile: "TMTL Tool",
-    category: "Automotive",
-    plant: "Bopal Plant",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "5 mins ago",
-    clientName: "TMTL",
-  },
-  {
-    id: 313,
-    name: "BEML Tool",
-    imei: "356789100700013",
-    status: "Online",
-    toolProfile: "BEML Tool",
-    category: "Transport",
-    plant: "KGF Heavy Fabrication Plant",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "8 mins ago",
-    clientName: "BEML",
-  },
-  {
-    id: 314,
-    name: "BEML Tool",
-    imei: "356789100700014",
-    status: "Online",
-    toolProfile: "BEML Tool",
-    category: "Transport",
-    plant: "Mysuru Rail Coach Complex",
-    selectedSensors: [
-      "RPM_Sensor",
-      "Fuel_Level_Sensor",
-      "Engine_Temperature_Sensor",
-      "Oil_Temperature_Sensor",
-      "Oil_Pressure_Sensor",
-    ],
-    mappedSensorsCount: 2,
-    lastPing: "12 mins ago",
-    clientName: "BEML",
-  },
-];
-
 export const INITIAL_INDUSTRY_TYPES: IndustryTypeItem[] = [
   {
     id: "ind-1",
@@ -1941,29 +1683,6 @@ export const INITIAL_PLANTS: PlantItem[] = [
   },
 ];
 
-export const INITIAL_ONBOARDING_SESSIONS: OnboardingSessionItem[] = [
-  {
-    id: "ob-1",
-    name: "Lucknow Infrastructure Onboarding",
-    sitesCount: 2,
-    equipmentCount: 6,
-    status: "Completed",
-    active: true,
-    createdAt: "28 Aug 2026",
-    updatedAt: "03 Sep 2026",
-  },
-  {
-    id: "ob-2",
-    name: "Pune Automotive Line Setup",
-    sitesCount: 1,
-    equipmentCount: 4,
-    status: "In Progress",
-    active: true,
-    createdAt: "05 Sep 2026",
-    updatedAt: "07 Sep 2026",
-  },
-];
-
 // Seeded so both first-login (forced password change) and steady-state client
 // login can be demoed immediately.
 export const INITIAL_CLIENTS: ClientAccount[] = [
@@ -2005,14 +1724,14 @@ export const INITIAL_CLIENTS: ClientAccount[] = [
   },
 ];
 
-// Backfill the real clientId FK onto plants/devices/equipment seeded above by
+// Backfill the real clientId FK onto the plants seeded above by
 // matching their existing clientName string against INITIAL_CLIENTS — done
 // here as a post-process rather than editing every seed object individually.
 const CLIENT_ID_BY_NAME: Record<string, string> = {};
 INITIAL_CLIENTS.forEach((c) => {
   CLIENT_ID_BY_NAME[c.clientName] = c.id;
 });
-[...INITIAL_PLANTS, ...INITIAL_DEVICES, ...INITIAL_EQUIPMENT].forEach((item) => {
+INITIAL_PLANTS.forEach((item) => {
   if (item.clientName && CLIENT_ID_BY_NAME[item.clientName]) {
     item.clientId = CLIENT_ID_BY_NAME[item.clientName];
   }
@@ -2053,140 +1772,4 @@ export const INITIAL_USERS: PlatformUserItem[] = [
   { id: 44, employeeId: "EMP0011", username: "constructionOperational", email: "constructionOperational@thingsalive.io", role: "Operational", phone: "7686342876", active: true },
   { id: 43, employeeId: "EMP0010", username: "constructionExecutive", email: "tagore1357@gmail.com", role: "Executive", phone: "8567524574", active: true },
   { id: 40, employeeId: "EMP0007", username: "Premchand", email: "clientexecutive@gmail.com", role: "Super Admin", phone: "8999999898", active: true },
-];
-
-// --- Equipment Template configuration defaults (Sensors / Alert Rules / KPI
-// Formulas / Predictive Maintenance) for three of the real equipment templates
-// seeded in the local backend (Diesel Generator Set, Hydraulic Excavator,
-// Portable Air Compressor). Equipment template config has no backend yet (see
-// the comment on TemplateAlertRule in types.ts), so these are the fallback a
-// fresh browser loads before anything is edited — the same role INITIAL_SENSORS
-// plays for the sensor catalog. The equipmentTemplateId/sensor id values below
-// are real UUIDs from that seed data; if the local database is ever reseeded
-// with new ids, these will need updating to match.
-const DIESEL_GENERATOR_TEMPLATE_ID = "a00ffc91-c664-463e-b2c9-902b5a721660";
-const HYDRAULIC_EXCAVATOR_TEMPLATE_ID = "6f17752e-028a-4eda-9a92-c605ef15c7d0";
-const AIR_COMPRESSOR_TEMPLATE_ID = "ab1a7b5c-2a39-482d-b89e-90c90314a19e";
-
-export const INITIAL_TEMPLATE_SENSOR_LINKS: Record<string, string[]> = {
-  [DIESEL_GENERATOR_TEMPLATE_ID]: [
-    "b5c28e8b-e1e0-42c2-afe1-fd1c32fd3a68", // Engine_Temperature_Sensor
-    "44c803b1-9416-4b25-8f50-4069f1ea40a4", // Oil_Pressure_Sensor
-  ],
-  [HYDRAULIC_EXCAVATOR_TEMPLATE_ID]: [
-    "66b9d3bf-15de-4205-9301-1f57f6212f62", // Hydraulic_Pressure_Sensor
-    "e13b0ceb-3c03-42d3-9ad1-d37cb36a08d6", // Hydraulic_Oil_Level_Sensor
-  ],
-  [AIR_COMPRESSOR_TEMPLATE_ID]: [
-    "af61a0a5-10a0-4919-82f3-37906415acb3", // Air_Filter_Pressure_Sensor
-    "bfa13535-8581-4ee4-a5e3-f5545b355fcc", // Air_Temperature_Sensor
-  ],
-};
-
-export const INITIAL_TEMPLATE_ALERT_RULES: TemplateAlertRule[] = [
-  {
-    id: "alert-seed-diesel-generator",
-    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
-    name: "High Coolant Temperature",
-    parameter: "Engine coolant temperature",
-    condition: ">",
-    threshold: 110,
-    severity: "critical",
-    message: "Engine coolant temperature critical — shut down and inspect.",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "alert-seed-hydraulic-excavator",
-    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
-    name: "Low Hydraulic Oil Level",
-    parameter: "Hydraulic oil level",
-    condition: "<",
-    threshold: 30,
-    severity: "warning",
-    message: "Hydraulic oil level below safe threshold — top up before next shift.",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "alert-seed-air-compressor",
-    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
-    name: "High Air Filter Restriction",
-    parameter: "Air filter restriction",
-    condition: ">",
-    threshold: 3.5,
-    severity: "warning",
-    message: "Air filter restriction above OEM limit — replace filter.",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-];
-
-export const INITIAL_TEMPLATE_KPI_FORMULAS: TemplateKpiFormula[] = [
-  {
-    id: "kpi-seed-diesel-generator",
-    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
-    name: "Thermal Load Index",
-    formula: "Engine coolant temperature / 105",
-    unit: "ratio",
-    description: "Current coolant temperature against rated max — watch as it approaches 1.0.",
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "kpi-seed-hydraulic-excavator",
-    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
-    name: "Hydraulic Pressure Utilization",
-    formula: "Hydraulic pressure / 400 * 100",
-    unit: "%",
-    description: "Percent of maximum rated system pressure.",
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "kpi-seed-air-compressor",
-    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
-    name: "Filter Load Index",
-    formula: "Air filter restriction / 3.7 * 100",
-    unit: "%",
-    description: "Percent of the OEM filter-replacement threshold.",
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-];
-
-export const INITIAL_TEMPLATE_PREDICTIVE_RULES: TemplatePredictiveRule[] = [
-  {
-    id: "pred-seed-diesel-generator",
-    equipmentTemplateId: DIESEL_GENERATOR_TEMPLATE_ID,
-    name: "Coolant Temperature Drift",
-    parameter: "Engine coolant temperature",
-    tier: "T1",
-    method: "unsupervised",
-    windowDays: 7,
-    caption: "vs 7-day rolling baseline",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "pred-seed-hydraulic-excavator",
-    equipmentTemplateId: HYDRAULIC_EXCAVATOR_TEMPLATE_ID,
-    name: "Hydraulic Pressure Drop",
-    parameter: "Hydraulic pressure",
-    tier: "T0",
-    method: "rule-based",
-    windowDays: 3,
-    caption: "vs 3-day rolling baseline — flags gradual seal wear",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
-  {
-    id: "pred-seed-air-compressor",
-    equipmentTemplateId: AIR_COMPRESSOR_TEMPLATE_ID,
-    name: "Air Filter Restriction Trend",
-    parameter: "Air filter restriction",
-    tier: "T1",
-    method: "unsupervised",
-    windowDays: 7,
-    caption: "vs 7-day rolling baseline — flags gradual clogging before threshold breach",
-    active: true,
-    createdAt: "2026-09-21T00:00:00.000Z",
-  },
 ];

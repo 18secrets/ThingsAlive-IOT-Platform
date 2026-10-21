@@ -1,19 +1,18 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem,
+  AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem,
   ClientAccount,
 } from '../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -22,7 +21,9 @@ interface AdminPageProps {
   sensors: SensorItem[];
   toolMappings: ToolMappingItem[];
   categories: CategoryItem[];
-  industryTypes: IndustryTypeItem[];
+  industryTypes: IndustryType[];
+  industryTypesError?: string;
+  unmatchedIndustries: UnmatchedIndustry[];
   plants: PlantItem[];
   sensorCategories: SensorCategory[];
   realSensors: Sensor[];
@@ -37,11 +38,13 @@ interface AdminPageProps {
   onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
   onRetireSensorCategory: (id: string) => Promise<SensorCategory>;
   onUnretireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onRenameSensorCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteSensorCategory: (id: string) => Promise<void>;
   realToolMappings: ToolMapping[];
   toolMappingsError?: string;
   onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  onDeleteToolMapping: (id: string) => Promise<void>;
   signalAliases: SignalAlias[];
   signalAliasesError?: string;
   onUpsertSignalAlias: (input: SignalAliasInput) => Promise<SignalAlias>;
@@ -55,6 +58,7 @@ interface AdminPageProps {
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
   onRetireDevice: (imei: string) => Promise<void>;
+  onUpdateDevice: (imei: string, input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null }) => Promise<void>;
   onReturnDeviceToStock: (imei: string) => Promise<void>;
   equipmentClasses: EquipmentClass[];
   equipmentClassesError?: string;
@@ -62,6 +66,7 @@ interface AdminPageProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onUnretireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
   onOpenCatalogImport: () => void;
   namedFormulas: NamedFormula[];
@@ -69,25 +74,10 @@ interface AdminPageProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
-  equipmentTemplates: EquipmentTemplate[];
-  equipmentTemplatesError?: string;
-  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenEquipmentTemplate: (templateId: string) => void;
-  templateSensorCounts: Record<string, number>;
-  templateAlertCounts: Record<string, number>;
-  templateKpiCounts: Record<string, number>;
-  myEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplatesError?: string;
-  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenMyEquipmentTemplate: (templateId: string) => void;
-  myTemplateSensorCounts: Record<string, number>;
-  myTemplateAlertCounts: Record<string, number>;
-  myTemplateKpiCounts: Record<string, number>;
-  onAddIndustryType: (industryType: IndustryTypeItem) => void;
-  onUpdateIndustryType: (industryType: IndustryTypeItem) => void;
-  onDeleteIndustryType: (id: string) => void;
+  onCreateIndustryType: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
+  onUpdateIndustryType: (id: string, input: IndustryTypeInput) => Promise<void>;
+  onDeleteIndustryType: (id: string) => Promise<void>;
+  onRematchIndustries: () => Promise<{ matched: number; unmatched: number }>;
   realPlants: Plant[];
   plantsError?: string;
   onCreatePlant: (input: PlantInput) => Promise<Plant>;
@@ -146,6 +136,7 @@ interface AdminPageProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  onDeleteAccount: (id: string) => Promise<void>;
   entitlements: Entitlement[];
   entitlementsError?: string;
   onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
@@ -158,6 +149,7 @@ interface AdminPageProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
 }
 
 export const AdminPage: React.FC<AdminPageProps> = (props) => {
@@ -180,6 +172,8 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       toolMappings={props.toolMappings}
       categories={props.categories}
       industryTypes={props.industryTypes}
+      industryTypesError={props.industryTypesError}
+      unmatchedIndustries={props.unmatchedIndustries}
       plants={visiblePlants}
       sensorCategories={props.sensorCategories}
       realSensors={props.realSensors}
@@ -194,11 +188,13 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateSensorCategory={props.onCreateSensorCategory}
       onRetireSensorCategory={props.onRetireSensorCategory}
       onUnretireSensorCategory={props.onUnretireSensorCategory}
+      onRenameSensorCategory={props.onRenameSensorCategory}
       onDeleteSensorCategory={props.onDeleteSensorCategory}
       realToolMappings={props.realToolMappings}
       toolMappingsError={props.toolMappingsError}
       onCreateToolMapping={props.onCreateToolMapping}
       onUpdateToolMapping={props.onUpdateToolMapping}
+      onDeleteToolMapping={props.onDeleteToolMapping}
       signalAliases={props.signalAliases}
       signalAliasesError={props.signalAliasesError}
       onUpsertSignalAlias={props.onUpsertSignalAlias}
@@ -212,6 +208,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onAssignDevice={props.onAssignDevice}
       onReleaseDevice={props.onReleaseDevice}
       onRetireDevice={props.onRetireDevice}
+      onUpdateDevice={props.onUpdateDevice}
       onReturnDeviceToStock={props.onReturnDeviceToStock}
       equipmentClasses={props.equipmentClasses}
       equipmentClassesError={props.equipmentClassesError}
@@ -219,6 +216,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateEquipmentClass={props.onUpdateEquipmentClass}
       onPublishEquipmentClass={props.onPublishEquipmentClass}
       onRetireEquipmentClass={props.onRetireEquipmentClass}
+      onUnretireEquipmentClass={props.onUnretireEquipmentClass}
       onOpenEquipmentClass={props.onOpenEquipmentClass}
       onOpenCatalogImport={props.onOpenCatalogImport}
       namedFormulas={props.namedFormulas}
@@ -226,25 +224,10 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateNamedFormula={props.onCreateNamedFormula}
       onUpdateNamedFormula={props.onUpdateNamedFormula}
       onPublishNamedFormula={props.onPublishNamedFormula}
-      equipmentTemplates={props.equipmentTemplates}
-      equipmentTemplatesError={props.equipmentTemplatesError}
-      onCreateEquipmentTemplate={props.onCreateEquipmentTemplate}
-      onUpdateEquipmentTemplate={props.onUpdateEquipmentTemplate}
-      onOpenEquipmentTemplate={props.onOpenEquipmentTemplate}
-      templateSensorCounts={props.templateSensorCounts}
-      templateAlertCounts={props.templateAlertCounts}
-      templateKpiCounts={props.templateKpiCounts}
-      myEquipmentTemplates={props.myEquipmentTemplates}
-      myEquipmentTemplatesError={props.myEquipmentTemplatesError}
-      onCreateMyEquipmentTemplate={props.onCreateMyEquipmentTemplate}
-      onUpdateMyEquipmentTemplate={props.onUpdateMyEquipmentTemplate}
-      onOpenMyEquipmentTemplate={props.onOpenMyEquipmentTemplate}
-      myTemplateSensorCounts={props.myTemplateSensorCounts}
-      myTemplateAlertCounts={props.myTemplateAlertCounts}
-      myTemplateKpiCounts={props.myTemplateKpiCounts}
-      onAddIndustryType={props.onAddIndustryType}
+      onCreateIndustryType={props.onCreateIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}
+      onRematchIndustries={props.onRematchIndustries}
       realPlants={props.realPlants}
       plantsError={props.plantsError}
       onCreatePlant={props.onCreatePlant}
@@ -289,6 +272,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onUpdateAccount={props.onUpdateAccount}
       onResendInvitation={props.onResendInvitation}
       onToggleClientStatus={props.onToggleClientStatus}
+      onDeleteAccount={props.onDeleteAccount}
       entitlements={props.entitlements}
       entitlementsError={props.entitlementsError}
       onGrantEntitlement={props.onGrantEntitlement}
@@ -299,6 +283,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onSetStaffRole={props.onSetStaffRole}
       onSuspendStaff={props.onSuspendStaff}
       onReinstateStaff={props.onReinstateStaff}
+      onDeleteStaff={props.onDeleteStaff}
       restrictToClientAdmin={restrictToClientAdmin}
     />
   );

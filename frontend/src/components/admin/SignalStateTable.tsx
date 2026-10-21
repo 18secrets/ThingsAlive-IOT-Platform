@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, AlertCircle } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { SignalStateVocabEntry, SignalStateCode } from '../../lib/api';
 import { AddSignalStateModal } from './AddSignalStateModal';
 
@@ -18,9 +19,16 @@ interface RoleGroup {
 export const SignalStateTable: React.FC<SignalStateTableProps> = ({
   states, error, onReplaceStates,
 }) => {
+  const { t } = useTranslation('catalog');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleGroup | null>(null);
+  // Stable between renders: the modal resets its form whenever this changes, so a
+  // fresh array on every render wiped whatever was being typed.
+  const editingStates = useMemo(
+    () => editingRole?.states.map((s) => ({ state: s.state, code: s.code })) ?? [],
+    [editingRole],
+  );
 
   const groups = useMemo<RoleGroup[]>(() => {
     const byRole = new Map<string, SignalStateVocabEntry[]>();
@@ -48,7 +56,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder="Search Measurement Role or State..."
+              placeholder={t('states.searchPlaceholder')}
               size="sm"
               className="w-full pl-9!"
             />
@@ -61,7 +69,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Vocabulary</span>
+          <span>{t('states.add')}</span>
         </button>
       </div>
 
@@ -77,9 +85,9 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-4">Measurement Role</th>
-                <th className="py-3 px-4">States</th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className="py-3 px-4">{t('states.measurementRole')}</th>
+                <th className="py-3 px-4">{t('states.states')}</th>
+                <th className="py-3 px-4 text-center">{t('common.action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
@@ -105,7 +113,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
                       <button
                         onClick={() => { setEditingRole(g); setIsModalOpen(true); }}
                         className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                        title="Edit Vocabulary"
+                        title={t('states.edit')}
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -117,7 +125,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
               {filteredGroups.length === 0 && (
                 <tr>
                   <td colSpan={3} className="py-10 text-center text-slate-400 text-sm">
-                    No signal state vocabularies found.
+                    {t('states.none')}
                   </td>
                 </tr>
               )}
@@ -126,9 +134,9 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
         </div>
 
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div>Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredGroups.length}</span> Measurement Roles</div>
+          <div><Trans t={t} i18nKey="states.showing" count={filteredGroups.length} components={{ b: <span className="font-semibold text-slate-800 dark:text-slate-200" /> }} /></div>
           <div className="text-[11px] text-slate-400 font-sans">
-            A role's whole vocabulary is replaced as a set — there is no single-state edit
+            {t('states.footer')}
           </div>
         </div>
       </div>
@@ -138,7 +146,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
         onClose={() => { setIsModalOpen(false); setEditingRole(null); }}
         onSave={onReplaceStates}
         existingRole={editingRole?.role ?? null}
-        existingStates={editingRole?.states.map((s) => ({ state: s.state, code: s.code })) ?? []}
+        existingStates={editingStates}
       />
     </div>
   );

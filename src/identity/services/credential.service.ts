@@ -50,7 +50,7 @@ export interface RequestContext {
 export const ACCESS_TOKEN_SECONDS = 3600;
 const REFRESH_TOKEN_DAYS = 30;
 const INVITATION_DAYS = 14;
-const RESET_HOURS = 2;
+export const RESET_HOURS = 2;
 
 /** Five, then fifteen minutes. Enough to stop online guessing, not enough to be a weapon. */
 const MAX_FAILURES = 5;
@@ -100,6 +100,39 @@ export class CredentialService {
       if (!user) throw new BadRequestException('No such person in this account.');
 
       return this.mint(m, user, purpose, scope.userId, now);
+    });
+  }
+
+  /**
+   * A fresh invitation for somebody in this account who lost theirs before using it
+   * (dashboard testing, issue 4) — the same rule as `ProvisioningService.resendInvitation`
+   * for an account's first administrator, extended to everyone else.
+   *
+   * Only while they are still `invited`. Once a password is set the way back in is
+   * "forgot password", which only the person themselves can start; a suspended person
+   * is reinstated first, so letting them back in is one decision rather than a side
+   * effect of resending a link.
+   */
+  async reissueInvitation(
+    scope: RequestScope, userId: string, now = new Date(),
+  ): Promise<{ email: string; token: string; expiresAt: Date }> {
+    return withTenantId(this.ds, scope.tenantId, async (m) => {
+      // Locked so two re-sends for one person queue: otherwise both retire nothing,
+      // both insert, and two links stay live.
+      const user = await m.getRepository(AppUser).findOne({
+        where: { tenantId: scope.tenantId, id: userId }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new BadRequestException('No such person in this account.');
+      if (user.status === 'suspended') {
+        throw new BadRequestException(`${user.email} is suspended. Reinstate them before sending a new invitation.`);
+      }
+      if (user.status !== 'invited') {
+        throw new BadRequestException(
+          `${user.email} has already set a password. They need "forgot password" instead.`,
+        );
+      }
+      const { token, expiresAt } = await this.mint(m, user, 'invite', scope.userId, now);
+      return { email: user.email, token, expiresAt };
     });
   }
 
@@ -359,6 +392,16 @@ export class CredentialService {
   }
 
   // -------------------------------------------------------------------- resetting
+
+  /**
+   * Whether a client user signs in with this address. Tenant-spanning because sign-in
+   * has no tenant yet; it reveals nothing to the caller, only to `AuthController`.
+   */
+  async hasAccount(email: string): Promise<boolean> {
+    const normalised = email.trim().toLowerCase();
+    return runTenantSpanning(this.ds, 'sign-in account lookup', (m) =>
+      m.getRepository(AppUser).exists({ where: { email: normalised } }));
+  }
 
   /**
    * Always the same answer.

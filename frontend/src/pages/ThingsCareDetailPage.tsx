@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Gauge, Plus, RefreshCw, Wrench,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import {
   apiGetLatestPredictions, apiGetPredictionBaselines, apiGetPredictionHistory, apiListEquipment, apiListWorkOrders,
   apiRefreshPredictionBaselines, apiScorePredictionsNow,
 } from '../lib/api';
+import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 
 const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   none: 'emerald', low: 'emerald', medium: 'amber', high: 'rose', critical: 'rose',
@@ -24,6 +26,7 @@ const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> 
  *  above) — collapsed by default, a support/diagnostic aid rather than a screen an
  *  operator visits for its own sake. */
 function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const { t } = useTranslation('care');
   const [open, setOpen] = useState(false);
   const [baselines, setBaselines] = useState<PredictionBaseline[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -34,7 +37,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
     setLoading(true);
     apiGetPredictionBaselines(sourceSystem, externalId)
       .then((rows) => { setBaselines(rows); setError(undefined); })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load baselines.'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t('errors.loadBaselines')))
       .finally(() => setLoading(false));
   };
 
@@ -51,7 +54,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
       setBaselines(rows);
       setError(undefined);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not recompute baselines.');
+      window.alert(err instanceof ApiError ? err.message : t('errors.recomputeBaselines'));
     } finally {
       setRefreshing(false);
     }
@@ -64,8 +67,8 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
         className="w-full px-4 py-3 flex items-center justify-between gap-2.5 cursor-pointer"
       >
         <div className="text-left">
-          <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">Baselines</div>
-          <div className="text-xs text-slate-400">What each signal's mean/stddev is measured against</div>
+          <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('baselines.title')}</div>
+          <div className="text-xs text-slate-400">{t('baselines.subtitle')}</div>
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </button>
@@ -78,15 +81,15 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
               disabled={refreshing}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Recompute
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {t('baselines.recompute')}
             </button>
           </div>
 
-          {loading && <p className="text-slate-400">Loading…</p>}
+          {loading && <p className="text-slate-400">{t('common.loading')}</p>}
           {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
 
           {baselines && baselines.length === 0 && (
-            <p className="text-slate-400">No baseline computed yet for this machine.</p>
+            <p className="text-slate-400">{t('baselines.empty')}</p>
           )}
 
           {baselines && baselines.length > 0 && (
@@ -94,13 +97,13 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
               <table className="w-full text-left">
                 <thead className="text-slate-400 font-semibold">
                   <tr>
-                    <th className="py-1.5 pr-3">Signal</th>
-                    <th className="py-1.5 pr-3">Mean</th>
-                    <th className="py-1.5 pr-3">Stddev</th>
-                    <th className="py-1.5 pr-3">Samples</th>
-                    <th className="py-1.5 pr-3">Coverage</th>
-                    <th className="py-1.5 pr-3">Source</th>
-                    <th className="py-1.5">Computed</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.signal')}</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.mean')}</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.stddev')}</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.samples')}</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.coverage')}</th>
+                    <th className="py-1.5 pr-3">{t('baselines.col.source')}</th>
+                    <th className="py-1.5">{t('baselines.col.computed')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
@@ -128,6 +131,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [history, setHistory] = useState<Map<string, Prediction[]>>(new Map());
@@ -137,8 +141,8 @@ export const ThingsCareDetailPage: React.FC = () => {
   const [scoring, setScoring] = useState(false);
 
   usePageHeader({
-    title: profile?.name ?? externalId ?? 'Machine not found',
-    subtitle: 'ThingsCare Detail',
+    title: profile?.name ?? externalId ?? t('page.machineNotFound'),
+    subtitle: t('page.detailSubtitle'),
     onBack: () => navigate('/things-care'),
   });
 
@@ -161,7 +165,7 @@ export const ThingsCareDetailPage: React.FC = () => {
     apiListWorkOrders({ equipment: externalId }).then((o) => { if (live) setOrders(o); }).catch(() => {});
     load()
       .then(() => { if (live) setError(undefined); })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load predictions.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadPredictions')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,22 +176,26 @@ export const ThingsCareDetailPage: React.FC = () => {
     setScoring(true);
     try {
       const result = await apiScorePredictionsNow(sourceSystem, externalId);
-      window.alert(`Scored ${result.written.length} scenario(s). ${result.skipped.length} skipped. ${result.raised.length} job(s) raised.`);
+      window.alert([
+        t('detail.scored', { count: result.written.length }),
+        t('detail.skipped', { count: result.skipped.length }),
+        t('detail.raised', { count: result.raised.length }),
+      ].join(' '));
       await load();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not score this machine now.');
+      window.alert(err instanceof ApiError ? err.message : t('errors.scoreNow'));
     } finally {
       setScoring(false);
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
 
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Deterministic scoring</span>
-        <h2 className="text-xl font-bold">ThingsCare: Scenario Risk</h2>
+        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('hero.eyebrow')}</span>
+        <h2 className="text-xl font-bold">{t('hero.title')}</h2>
       </div>
 
       {error && (
@@ -205,17 +213,17 @@ export const ThingsCareDetailPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={scoreNow} disabled={scoring} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-              <RefreshCw className={`w-4 h-4 ${scoring ? 'animate-spin' : ''}`} /> Score now
+              <RefreshCw className={`w-4 h-4 ${scoring ? 'animate-spin' : ''}`} /> {t('detail.scoreNow')}
             </button>
             <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
-              <Plus className="w-4 h-4" /> Create work order
+              <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
             </button>
             {sourceSystem && externalId && (
               <button
                 onClick={() => navigate(`/admin/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer"
               >
-                <ExternalLink className="w-4 h-4" /> View equipment page
+                <ExternalLink className="w-4 h-4" /> {t('common.viewEquipmentPage')}
               </button>
             )}
           </div>
@@ -223,12 +231,15 @@ export const ThingsCareDetailPage: React.FC = () => {
       </div>
 
       {sourceSystem && externalId && <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />}
+      {sourceSystem && externalId && (
+        <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+      )}
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">Active scenarios</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">{t('detail.activeScenarios')}</h3>
         {predictions.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-            No active scenario has produced a prediction for this machine yet.
+            {t('detail.noPrediction')}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -241,14 +252,14 @@ export const ThingsCareDetailPage: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{p.clientScenarioSlug}</h4>
                       <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                        <Chip tone={SEVERITY_TONE[p.severity]}>{p.severity}</Chip>
-                        <Chip title="How much of the picture was available">{p.confidence}</Chip>
-                        <Chip icon={Bell} tone={p.abnormalCount > 0 ? 'amber' : 'slate'}>{p.abnormalCount} abnormal</Chip>
+                        <Chip tone={SEVERITY_TONE[p.severity]}>{t(`severity.${p.severity}`, { defaultValue: p.severity })}</Chip>
+                        <Chip title={t('card.confidenceTitle')}>{t(`confidence.${p.confidence}`, { defaultValue: p.confidence })}</Chip>
+                        <Chip icon={Bell} tone={p.abnormalCount > 0 ? 'amber' : 'slate'}>{t('detail.abnormal', { count: p.abnormalCount })}</Chip>
                       </div>
                     </div>
                     {trend.length >= 2 && <Sparkline values={trend} colorClass="text-sky-600 dark:text-sky-400" />}
                   </div>
-                  <p className="text-[11px] text-slate-400">{p.windowDays}d window · {p.modelRef} · {new Date(p.computedAt).toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-400">{t('detail.window', { count: p.windowDays })} · {p.modelRef} · {new Date(p.computedAt).toLocaleString()}</p>
                   {p.signals.length > 0 && (
                     <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
                       {p.signals.map((s) => (
@@ -256,7 +267,7 @@ export const ThingsCareDetailPage: React.FC = () => {
                           <span className="text-slate-600 dark:text-slate-300">{s.signal}</span>
                           <div className="flex items-center gap-2">
                             {s.value != null && <span className="font-mono text-slate-400">{s.value.toFixed(2)}</span>}
-                            <Chip tone={SIGNAL_STATE_TONE[s.state]}>{s.state}</Chip>
+                            <Chip tone={SIGNAL_STATE_TONE[s.state]}>{t(`signalState.${s.state}`, { defaultValue: s.state })}</Chip>
                           </div>
                         </div>
                       ))}
@@ -270,16 +281,16 @@ export const ThingsCareDetailPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">Maintenance history</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">{t('detail.maintenanceHistory')}</h3>
         {orders.length === 0 ? (
-          <p className="text-sm text-slate-400">No work orders for this machine yet.</p>
+          <p className="text-sm text-slate-400">{t('detail.noWorkOrders')}</p>
         ) : (
           <div className="space-y-2">
             {orders.map((o) => (
               <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-start gap-2">
                 <Wrench className="w-4.5 h-4.5 text-slate-400 mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{o.title} · {o.status}</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{o.title} · {t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}</p>
                   {o.resolution && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{o.resolution}</p>}
                 </div>
               </div>
@@ -290,7 +301,7 @@ export const ThingsCareDetailPage: React.FC = () => {
 
       {predictions.length === 0 && (
         <Chip icon={CheckCircle2} tone="slate" size="md">
-          Needs an active client scenario with enough baseline history before a prediction can be produced.
+          {t('detail.needsScenario')}
         </Chip>
       )}
     </div>

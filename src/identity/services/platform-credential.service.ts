@@ -10,7 +10,7 @@ import { PlatformUser } from '../entities/platform-user.entity';
 import { PlatformSession } from '../entities/platform-session.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
 import { PasswordService } from './password.service';
-import { ACCESS_TOKEN_SECONDS, RequestContext, SignInResult } from './credential.service';
+import { ACCESS_TOKEN_SECONDS, RESET_HOURS, RequestContext, SignInResult } from './credential.service';
 
 type Refusal = { kind: 'refused'; message: string };
 type Allowed<T> = { kind: 'allowed'; value: T };
@@ -225,24 +225,90 @@ export class PlatformCredentialService {
   async issueInvitation(
     platformUserId: string, by: string, now = new Date(),
   ): Promise<{ token: string; expiresAt: Date }> {
-    const user = await this.ds.getRepository(PlatformUser).findOne({ where: { id: platformUserId } });
-    if (!user) throw new BadRequestException('No such platform user.');
+    return this.ds.transaction((m) => this.mintInvitation(m, platformUserId, by, now, false));
+  }
 
+  /**
+   * A fresh invitation for somebody who lost theirs before using it (dashboard
+   * testing, issue 4). Without this the only way forward was a new account, and the
+   * email the person actually uses was already taken by the abandoned one.
+   *
+   * Only while they are still `invited`. Once a password is set an invitation would
+   * be a second way to take over the account, and a suspended person is reinstated
+   * first so that letting them back in is one decision rather than a side effect.
+   */
+  async reissueInvitation(
+    platformUserId: string, by: string, now = new Date(),
+  ): Promise<{ email: string; token: string; expiresAt: Date }> {
     return this.ds.transaction(async (m) => {
-      const repo = m.getRepository(PlatformInvitation);
-      await repo.update(
-        { platformUserId: user.id, consumedAt: IsNull() },
-        { consumedAt: now },
-      );
+      const { email, token, expiresAt } = await this.mintInvitation(m, platformUserId, by, now, true);
+      return { email, token, expiresAt };
+    });
+  }
 
+  private async mintInvitation(
+    m: EntityManager, platformUserId: string, by: string, now: Date, onlyIfInvited: boolean,
+  ): Promise<{ email: string; token: string; expiresAt: Date }> {
+    // The row lock serialises two invitations for one person. Without it both retire
+    // nothing, both insert, and two tokens stay live, which retiring exists to prevent.
+    const user = await m.getRepository(PlatformUser).findOne({
+      where: { id: platformUserId }, lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) throw new BadRequestException('No such platform user.');
+    if (onlyIfInvited && user.status === 'suspended') {
+      throw new BadRequestException(`${user.email} is suspended. Reinstate them before sending a new invitation.`);
+    }
+    if (onlyIfInvited && user.status !== 'invited') {
+      throw new BadRequestException(
+        `${user.email} has already set a password. A new invitation cannot replace it.`,
+      );
+    }
+
+    const repo = m.getRepository(PlatformInvitation);
+    await repo.update(
+      { platformUserId: user.id, consumedAt: IsNull() },
+      { consumedAt: now },
+    );
+
+    const token = this.passwords.newToken();
+    const expiresAt = new Date(now.getTime() + INVITATION_DAYS * 86_400_000);
+    await repo.save(repo.create({
+      platformUserId: user.id,
+      tokenHash: this.passwords.fingerprint(token),
+      expiresAt, consumedAt: null, createdBy: by,
+    }));
+    return { email: user.email, token, expiresAt };
+  }
+
+  /**
+   * A reset token for a staff member who forgot their password (dashboard testing,
+   * issue 10). Staff had no way back in at all: change-password needs the current one.
+   *
+   * It is a `platform_invitation` with the reset's short life rather than a new kind of
+   * row: accepting one already sets the password, activates the account and ends every
+   * session, which is exactly a reset. Outstanding tokens are retired first, and a
+   * suspended person gets nothing — same as `CredentialService.requestReset`, and like
+   * it this says nothing to the caller about whether the address exists.
+   */
+  async requestReset(email: string, ctx: RequestContext = {}, now = new Date()): Promise<{ token?: string }> {
+    const normalised = email.trim().toLowerCase();
+    return runTenantSpanning(this.ds, 'platform password reset request', async (m) => {
+      const user = await m.getRepository(PlatformUser).findOne({
+        where: { email: normalised }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!user || user.status === 'suspended') return {};
+
+      const repo = m.getRepository(PlatformInvitation);
+      await repo.update({ platformUserId: user.id, consumedAt: IsNull() }, { consumedAt: now });
       const token = this.passwords.newToken();
-      const expiresAt = new Date(now.getTime() + INVITATION_DAYS * 86_400_000);
       await repo.save(repo.create({
         platformUserId: user.id,
         tokenHash: this.passwords.fingerprint(token),
-        expiresAt, consumedAt: null, createdBy: by,
+        expiresAt: new Date(now.getTime() + RESET_HOURS * 3_600_000),
+        consumedAt: null, createdBy: null,
       }));
-      return { token, expiresAt };
+      await this.record(m, 'password.reset-requested', { userId: user.id, ctx });
+      return { token };
     });
   }
 

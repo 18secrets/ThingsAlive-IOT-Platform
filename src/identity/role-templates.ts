@@ -39,6 +39,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'equipment-template.read', 'device-catalog.read',
       'parameters.read', 'parameters.write',
       'shield.read', 'shield.write',
+      'proposal.approve',
     ],
     // The account's own administrator gets every page the console has, not a
     // curated subset — "CEO/Manager" is this account's Super Admin (holds

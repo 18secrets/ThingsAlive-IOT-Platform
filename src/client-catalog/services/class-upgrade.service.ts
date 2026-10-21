@@ -10,7 +10,9 @@ import { LayoutWidget, mergeTenantLayout } from '../../catalog/layout/layout-rul
 import { loadLayout } from '../../catalog/services/class-layout';
 import { toFailureModeJsonb } from '../../catalog/services/class-failure-modes';
 import { loadAnchors, loadVisual } from '../../catalog/services/class-visual.service';
+import { loadModel, loadModelAnchors } from '../../catalog/services/class-model.service';
 import { Anchor, mergeTenantAnchors } from '../../catalog/visual/anchor-rules';
+import { mergeTenantModelAnchors, ModelAnchor } from '../../catalog/visual/model-anchor-rules';
 import { withTenantSession } from '../../scope/tenant-session';
 import { ClientEquipmentClass } from '../entities/client-equipment-class.entity';
 import { ClientEquipmentClassFailureMode } from '../entities/client-equipment-class-failure-mode.entity';
@@ -19,6 +21,7 @@ import { ClientEquipmentClassRecommendation } from '../entities/client-equipment
 import { ClientEquipmentClassVisualAnchor } from '../entities/client-equipment-class-visual-anchor.entity';
 import { ClientFormula } from '../entities/client-formula.entity';
 import { ContentKind, PlannedChange, planUpgrade, same } from './class-upgrade-plan';
+import { toTenantModelAnchor } from './client-model.service';
 import { classContentChecksum } from './provenance';
 
 type Formula = EquipmentClassFormula | ClientFormula;
@@ -62,6 +65,8 @@ export interface UpgradePreview {
   recommendations: Summary[];
   layout: { added: string[]; removed: string[]; keptCustom: string[] };
   anchors: { added: string[]; removed: string[]; keptCustom: string[]; needsRecheck: string[] };
+  /** The 3-D model's markers (task QTWIN1), by the same rule against `geometry_version`. */
+  modelAnchors: { added: string[]; removed: string[]; keptCustom: string[]; needsRecheck: string[] };
 }
 
 export interface UpgradeResult extends UpgradePreview {
@@ -83,6 +88,11 @@ interface Loaded {
   /** No `geometry_version` exists: a different schematic image between the two
    * versions is the geometry change (QUPGRADE1 §3). */
   geometryChanged: boolean;
+  modelAnchors: ClientEquipmentClassVisualAnchor[];
+  nextModelAnchors: ModelAnchor[];
+  /** The two versions' models carry different `geometry_version`s — or only one has a
+   * model. Either way a marker placed on the old mesh may not sit on the new one. */
+  modelGeometryChanged: boolean;
 }
 
 /**
@@ -143,24 +153,28 @@ export class ClassUpgradeService {
     if (!cls) throw new NotFoundException(`This account does not hold "${slug}".`);
     const from = cls.templateVersion ?? 0;
     const where = { tenantId, clientEquipmentClassSlug: slug };
-    const [formulas, modes, recs, layout, anchors] = await Promise.all([
+    const [formulas, modes, recs, layout, anchors, modelAnchors] = await Promise.all([
       m.getRepository(ClientFormula).find({ where }),
       m.getRepository(ClientEquipmentClassFailureMode).find({ where }),
       m.getRepository(ClientEquipmentClassRecommendation).find({ where }),
       m.getRepository(ClientEquipmentClassLayout).find({ where, order: { position: 'ASC' } }),
-      m.getRepository(ClientEquipmentClassVisualAnchor).find({ where }),
+      m.getRepository(ClientEquipmentClassVisualAnchor).find({ where: { ...where, tier: 'schematic' } }),
+      m.getRepository(ClientEquipmentClassVisualAnchor).find({ where: { ...where, tier: 'model' } }),
     ]);
     const versions = new Set<number>([from]);
     for (const r of [...formulas, ...modes, ...recs]) if (r.templateVersion != null) versions.add(r.templateVersion);
     const base = new Map<number, Loaded['base'] extends Map<number, infer V> ? V : never>();
     for (const v of versions) base.set(v, await this.template(slug, v));
     const pm = this.ds.manager;
-    const [nextLayout, nextAnchors, oldVisual, newVisual] = await Promise.all([
+    const [nextLayout, nextAnchors, oldVisual, newVisual, nextModelAnchors, oldModel, newModel] = await Promise.all([
       loadLayout(pm, slug, toVersion), loadAnchors(pm, slug, toVersion), loadVisual(pm, slug, from), loadVisual(pm, slug, toVersion),
+      loadModelAnchors(pm, slug, toVersion), loadModel(pm, slug, from), loadModel(pm, slug, toVersion),
     ]);
     return {
       cls, from, base, next: await this.template(slug, toVersion), formulas, modes, recs, layout, anchors,
       nextLayout, nextAnchors, geometryChanged: (oldVisual?.assetKey ?? null) !== (newVisual?.assetKey ?? null),
+      modelAnchors, nextModelAnchors,
+      modelGeometryChanged: (oldModel?.geometryVersion ?? null) !== (newModel?.geometryVersion ?? null),
     };
   }
 
@@ -227,6 +241,19 @@ export class ClassUpgradeService {
         keptCustom: custom,
         needsRecheck: l.geometryChanged ? custom : [],
       },
+      modelAnchors: this.describeModelAnchors(l),
+    };
+  }
+
+  private describeModelAnchors(l: Loaded): UpgradePreview['modelAnchors'] {
+    const tenantSignals = new Set(l.modelAnchors.map((a) => a.signal));
+    const nextSignals = new Set(l.nextModelAnchors.map((a) => a.signal));
+    const custom = l.modelAnchors.filter((a) => a.placementCustom);
+    return {
+      added: [...nextSignals].filter((sig) => !tenantSignals.has(sig)),
+      removed: l.modelAnchors.filter((a) => !a.placementCustom && !nextSignals.has(a.signal)).map((a) => a.signal),
+      keptCustom: custom.map((a) => a.signal),
+      needsRecheck: custom.filter((a) => a.needsRecheck || l.modelGeometryChanged).map((a) => a.signal),
     };
   }
 
@@ -277,13 +304,25 @@ export class ClassUpgradeService {
       l.nextAnchors,
     );
     const recheckBefore = new Map(l.anchors.map((a) => [a.signal, a.needsRecheck]));
-    await anchorRepo.delete({ tenantId, clientEquipmentClassSlug: slug });
+    await anchorRepo.delete({ tenantId, clientEquipmentClassSlug: slug, tier: 'schematic' });
     if (mergedAnchors.length) {
       await anchorRepo.save(mergedAnchors.map((a) => anchorRepo.create({
         tenantId, clientEquipmentClassSlug: slug, ...a,
         // A hand-placed marker on a picture that changed may now point at the wrong part.
         needsRecheck: a.placementCustom && (l.geometryChanged || (recheckBefore.get(a.signal) ?? false)),
         templateVersion: to, copiedAt: now,
+      })));
+    }
+
+    // The model's markers (task QTWIN1): the same merge, with the geometry rule. Written
+    // with `template_version` = the new version, which is the mesh the database checks a
+    // position against — a marker now waiting for a recheck is exempt from that check.
+    const mergedModel = mergeTenantModelAnchors(l.modelAnchors.map(toTenantModelAnchor), l.nextModelAnchors, l.modelGeometryChanged);
+    await anchorRepo.delete({ tenantId, clientEquipmentClassSlug: slug, tier: 'model' });
+    if (mergedModel.length) {
+      await anchorRepo.save(mergedModel.map((a) => anchorRepo.create({
+        tenantId, clientEquipmentClassSlug: slug, tier: 'model', signal: a.signal, posX: a.x, posY: a.y, posZ: a.z,
+        label: a.label, placementCustom: a.placementCustom, needsRecheck: a.needsRecheck, templateVersion: to, copiedAt: now,
       })));
     }
 

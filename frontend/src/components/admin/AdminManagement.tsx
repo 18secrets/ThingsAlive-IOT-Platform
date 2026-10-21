@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Disc,
@@ -10,17 +11,16 @@ import {
   ShieldCheck,
   FunctionSquare
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, IndustryTypeItem, PlantItem, ClientAccount } from '../../types';
+import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
-  EquipmentTemplate, EquipmentTemplateInput,
   InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole,
   Entitlement, EquipmentProfile, EquipmentInput, EquipmentPlacementEvent,
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -28,8 +28,8 @@ import { SignalAliasTable } from './SignalAliasTable';
 import { SignalStateTable } from './SignalStateTable';
 import { CategoryView } from './CategoryView';
 import { NamedFormulaView } from './NamedFormulaView';
-import { EquipmentTemplateView } from './EquipmentTemplateView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
+import { TelemetryArchiveView } from './TelemetryArchiveView';
 import { ClientDeviceManagement } from '../devices/ClientDeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
@@ -41,7 +41,10 @@ interface AdminManagementProps {
   sensors: SensorItem[];
   toolMappings: ToolMappingItem[];
   categories: CategoryItem[];
-  industryTypes: IndustryTypeItem[];
+  /** Real industry types (GET /device-catalog/industry-types) — Master Admin only. */
+  industryTypes: IndustryType[];
+  industryTypesError?: string;
+  unmatchedIndustries: UnmatchedIndustry[];
   plants: PlantItem[];
   /** The real reference sensors/categories/tool mappings — Master Admin only.
    *  Separate from the mock `sensors`/`toolMappings` above, which still feed
@@ -59,11 +62,13 @@ interface AdminManagementProps {
   onCreateSensorCategory: (name: string) => Promise<SensorCategory>;
   onRetireSensorCategory: (id: string) => Promise<SensorCategory>;
   onUnretireSensorCategory: (id: string) => Promise<SensorCategory>;
+  onRenameSensorCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteSensorCategory: (id: string) => Promise<void>;
   realToolMappings: ToolMapping[];
   toolMappingsError?: string;
   onCreateToolMapping: (input: ToolMappingInput) => Promise<ToolMapping>;
   onUpdateToolMapping: (id: string, input: ToolMappingInput) => Promise<ToolMapping>;
+  onDeleteToolMapping: (id: string) => Promise<void>;
   signalAliases: SignalAlias[];
   signalAliasesError?: string;
   onUpsertSignalAlias: (input: SignalAliasInput) => Promise<SignalAlias>;
@@ -80,6 +85,7 @@ interface AdminManagementProps {
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
   onRetireDevice: (imei: string) => Promise<void>;
+  onUpdateDevice: (imei: string, input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null }) => Promise<void>;
   onReturnDeviceToStock: (imei: string) => Promise<void>;
   /** The real catalog — platform-owned template classes, Master Admin only. */
   equipmentClasses: EquipmentClass[];
@@ -88,6 +94,7 @@ interface AdminManagementProps {
   onUpdateEquipmentClass: (slug: string, input: EquipmentClassInput) => Promise<EquipmentClass>;
   onPublishEquipmentClass: (slug: string) => Promise<void>;
   onRetireEquipmentClass: (slug: string) => Promise<void>;
+  onUnretireEquipmentClass: (slug: string) => Promise<void>;
   onOpenEquipmentClass: (slug: string) => void;
   onOpenCatalogImport: () => void;
   /** Physics shared across classes, Master Admin only. */
@@ -96,29 +103,10 @@ interface AdminManagementProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
-  /** Common onboarding fields, Master Admin only — deliberately separate from
-   *  the prediction catalog above; see EquipmentTemplate's own comment. */
-  equipmentTemplates: EquipmentTemplate[];
-  equipmentTemplatesError?: string;
-  onCreateEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenEquipmentTemplate: (templateId: string) => void;
-  templateSensorCounts: Record<string, number>;
-  templateAlertCounts: Record<string, number>;
-  templateKpiCounts: Record<string, number>;
-  /** This client's own templates — client role only, invisible to Master Admin
-   *  and every other client. See ClientEquipmentTemplateView's own comment. */
-  myEquipmentTemplates: EquipmentTemplate[];
-  myEquipmentTemplatesError?: string;
-  onCreateMyEquipmentTemplate: (input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onUpdateMyEquipmentTemplate: (id: string, input: EquipmentTemplateInput) => Promise<EquipmentTemplate>;
-  onOpenMyEquipmentTemplate: (templateId: string) => void;
-  myTemplateSensorCounts: Record<string, number>;
-  myTemplateAlertCounts: Record<string, number>;
-  myTemplateKpiCounts: Record<string, number>;
-  onAddIndustryType?: (industryType: IndustryTypeItem) => void;
-  onUpdateIndustryType?: (industryType: IndustryTypeItem) => void;
-  onDeleteIndustryType?: (id: string) => void;
+  onCreateIndustryType?: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
+  onUpdateIndustryType?: (id: string, input: IndustryTypeInput) => Promise<void>;
+  onDeleteIndustryType?: (id: string) => Promise<void>;
+  onRematchIndustries?: () => Promise<{ matched: number; unmatched: number }>;
   /** The signed-in client's own sites, real (GET /equipment/plants) — client role only. */
   realPlants: Plant[];
   plantsError?: string;
@@ -187,6 +175,7 @@ interface AdminManagementProps {
   ) => Promise<Account>;
   onResendInvitation: (tenantId: string) => Promise<ResendInvitationResult>;
   onToggleClientStatus: (id: string) => void;
+  onDeleteAccount: (id: string) => Promise<void>;
   entitlements: Entitlement[];
   entitlementsError?: string;
   onGrantEntitlement: (tenantId: string, equipmentClassSlug: string, note?: string) => Promise<Entitlement>;
@@ -199,6 +188,7 @@ interface AdminManagementProps {
   onSetStaffRole: (id: string, role: PlatformStaffRole) => Promise<void>;
   onSuspendStaff: (id: string, reason: string) => Promise<void>;
   onReinstateStaff: (id: string) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
 }
@@ -216,6 +206,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   toolMappings,
   categories,
   industryTypes,
+  industryTypesError,
+  unmatchedIndustries,
   plants,
   sensorCategories,
   realSensors,
@@ -230,11 +222,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreateSensorCategory,
   onRetireSensorCategory,
   onUnretireSensorCategory,
+  onRenameSensorCategory,
   onDeleteSensorCategory,
   realToolMappings,
   toolMappingsError,
   onCreateToolMapping,
   onUpdateToolMapping,
+  onDeleteToolMapping,
   signalAliases,
   signalAliasesError,
   onUpsertSignalAlias,
@@ -245,6 +239,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   devicePool,
   onReleaseDevice,
   onRetireDevice,
+  onUpdateDevice,
   onReturnDeviceToStock,
   devicePoolError,
   onRegisterDevices,
@@ -255,6 +250,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateEquipmentClass,
   onPublishEquipmentClass,
   onRetireEquipmentClass,
+  onUnretireEquipmentClass,
   onOpenEquipmentClass,
   onOpenCatalogImport,
   namedFormulas,
@@ -262,25 +258,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreateNamedFormula,
   onUpdateNamedFormula,
   onPublishNamedFormula,
-  equipmentTemplates,
-  equipmentTemplatesError,
-  onCreateEquipmentTemplate,
-  onUpdateEquipmentTemplate,
-  onOpenEquipmentTemplate,
-  templateSensorCounts,
-  templateAlertCounts,
-  templateKpiCounts,
-  myEquipmentTemplates,
-  myEquipmentTemplatesError,
-  onCreateMyEquipmentTemplate,
-  onUpdateMyEquipmentTemplate,
-  onOpenMyEquipmentTemplate,
-  myTemplateSensorCounts,
-  myTemplateAlertCounts,
-  myTemplateKpiCounts,
-  onAddIndustryType,
+  onCreateIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
+  onRematchIndustries,
   realPlants,
   plantsError,
   onCreatePlant,
@@ -323,6 +304,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateAccount,
   onResendInvitation,
   onToggleClientStatus,
+  onDeleteAccount,
   entitlements,
   entitlementsError,
   onGrantEntitlement,
@@ -333,28 +315,29 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onSetStaffRole,
   onSuspendStaff,
   onReinstateStaff,
+  onDeleteStaff,
   restrictToClientAdmin,
 }) => {
+  const { t } = useTranslation('admin');
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'industry', label: 'Industry Type', icon: BarChart3 },
-    { id: 'clients', label: 'Clients', icon: Briefcase },
-    { id: 'staff', label: 'Staff', icon: ShieldCheck },
-    { id: 'plant', label: 'Plant', icon: Building2 },
-    { id: 'category', label: 'Equipment Classes', icon: LayoutGrid },
-    { id: 'named-formula', label: 'Named Formulas', icon: FunctionSquare },
-    { id: 'sensor', label: 'Sensor', icon: Disc },
-    { id: 'tool-mapping', label: 'Tool Mapping', icon: Wrench },
-    { id: 'signal-alias', label: 'Signal Aliases', icon: Disc },
-    { id: 'signal-state', label: 'Signal States', icon: Disc },
-    { id: 'devices', label: 'Devices', icon: Cpu },
-    { id: 'equipment', label: 'Equipment', icon: Wrench },
-    { id: 'equipment-template', label: 'Equipment Templates', icon: LayoutGrid },
+    { id: 'industry', label: t('tabs.industryType'), icon: BarChart3 },
+    { id: 'clients', label: t('translation:sidebar.clients'), icon: Briefcase },
+    { id: 'staff', label: t('translation:sidebar.staff'), icon: ShieldCheck },
+    { id: 'plant', label: t('tabs.plant'), icon: Building2 },
+    { id: 'category', label: t('tabs.equipmentClasses'), icon: LayoutGrid },
+    { id: 'named-formula', label: t('tabs.namedFormulas'), icon: FunctionSquare },
+    { id: 'sensor', label: t('tabs.sensor'), icon: Disc },
+    { id: 'tool-mapping', label: t('tabs.toolMapping'), icon: Wrench },
+    { id: 'signal-alias', label: t('tabs.signalAliases'), icon: Disc },
+    { id: 'signal-state', label: t('tabs.signalStates'), icon: Disc },
+    { id: 'devices', label: t('translation:sidebar.devices'), icon: Cpu },
+    { id: 'equipment', label: t('translation:sidebar.equipment'), icon: Wrench },
+    { id: 'telemetry-archive', label: t('tabs.telemetryArchive'), icon: Disc },
   ];
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —
   // the same reason "Manage Access" doesn't exist for them either, see
-  // ClientManagement) and no Equipment Templates (client-only "my templates"
-  // entry point). Clients/Staff/Devices/Equipment moved out of this bar
+  // ClientManagement). Clients/Staff/Devices/Equipment moved out of this bar
   // entirely (2026-10-10) — they're promoted to their own sidebar entries
   // (see Shell.tsx's ADMIN_PROMOTED_SUBTABS) because the bar had grown too
   // crowded; PROMOTED_SUBTABS below is what's left of that filter. A client's
@@ -363,7 +346,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant', 'equipment-template', ...PROMOTED_SUBTABS].includes(tab.id)
+      !['plant', ...PROMOTED_SUBTABS].includes(tab.id)
     ));
 
   // A promoted tab (Master Admin only) is reached directly from the sidebar
@@ -418,6 +401,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreateCategory={onCreateSensorCategory}
             onRetireCategory={onRetireSensorCategory}
             onUnretireCategory={onUnretireSensorCategory}
+            onRenameCategory={onRenameSensorCategory}
             onDeleteCategory={onDeleteSensorCategory}
           />
         )}
@@ -428,7 +412,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             error={toolMappingsError}
             onCreateMapping={onCreateToolMapping}
             onUpdateMapping={onUpdateToolMapping}
+            onDeleteMapping={onDeleteToolMapping}
             availableSensors={realSensors}
+            industryTypes={industryTypes}
           />
         )}
 
@@ -439,6 +425,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpsertAlias={onUpsertSignalAlias}
             onDeleteAlias={onDeleteSignalAlias}
           />
+        )}
+
+        {!restrictToClientAdmin && activeSubTab === 'telemetry-archive' && (
+          <TelemetryArchiveView clientName={(id) => clients.find((c) => c.id === id)?.clientName ?? id} />
         )}
 
         {!restrictToClientAdmin && activeSubTab === 'signal-state' && (
@@ -457,6 +447,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateClass={onUpdateEquipmentClass}
             onPublishClass={onPublishEquipmentClass}
             onRetireClass={onRetireEquipmentClass}
+            onUnretireClass={onUnretireEquipmentClass}
             onOpenClass={onOpenEquipmentClass}
             onOpenBulkImport={onOpenCatalogImport}
           />
@@ -472,25 +463,15 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
-        {!restrictToClientAdmin && activeSubTab === 'equipment-template' && (
-          <EquipmentTemplateView
-            templates={equipmentTemplates}
-            error={equipmentTemplatesError}
-            onCreateTemplate={onCreateEquipmentTemplate}
-            onUpdateTemplate={onUpdateEquipmentTemplate}
-            onOpenTemplate={onOpenEquipmentTemplate}
-            sensorCounts={templateSensorCounts}
-            alertCounts={templateAlertCounts}
-            kpiCounts={templateKpiCounts}
-          />
-        )}
-
         {!restrictToClientAdmin && activeSubTab === 'industry' && (
           <IndustryTypeView
             items={industryTypes}
-            onAddIndustryType={onAddIndustryType}
+            error={industryTypesError}
+            unmatched={unmatchedIndustries}
+            onCreateIndustryType={onCreateIndustryType}
             onUpdateIndustryType={onUpdateIndustryType}
             onDeleteIndustryType={onDeleteIndustryType}
+            onRematchIndustries={onRematchIndustries}
           />
         )}
 
@@ -525,6 +506,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onAssign={onAssignDevice}
             onRelease={onReleaseDevice}
             onRetire={onRetireDevice}
+            onUpdate={onUpdateDevice}
             onReturnToStock={onReturnDeviceToStock}
           />
         )}
@@ -580,6 +562,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onUpdateAccount={onUpdateAccount}
             onResendInvitation={onResendInvitation}
             onToggleStatus={onToggleClientStatus}
+            onDeleteAccount={onDeleteAccount}
             equipmentClasses={equipmentClasses}
             entitlements={entitlements}
             entitlementsError={entitlementsError}
@@ -596,6 +579,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onSetRole={onSetStaffRole}
             onSuspend={onSuspendStaff}
             onReinstate={onReinstateStaff}
+            onDelete={onDeleteStaff}
           />
         )}
       </div>

@@ -5,6 +5,7 @@ import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-fo
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
+import { Sensor } from '../../device-catalog/entities/sensor.entity';
 import {
   danglingRecommendations, insertClassContent, toFailureModeJsonb,
 } from '../../catalog/services/class-failure-modes';
@@ -26,7 +27,7 @@ export interface ClassApplyResult {
 
 export interface ApplySummary {
   classes: Record<string, ClassApplyResult>;
-  sensorCapabilities: { created: number; skipped: number };
+  sensorCapabilities: { created: number; skipped: number; parametersAdded: number };
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
@@ -100,7 +101,7 @@ export class CatalogImportApplyService {
           const allForClass = rows.filter((r) => classSlugOf(r) === slug);
           const { current, content: currentContent } = await loadCurrentClass(m, slug);
           const entry = await computeClassDiffEntry(
-            m, slug, allForClass, slugRows, current, currentContent, 'create',
+            m, slug, allForClass, slugRows, current, currentContent, 'create', batch.templateVersion,
           );
           if (entry.warnings.length) {
             problems.push(this.describeWarnings(slug, entry.warnings, entry));
@@ -151,11 +152,19 @@ export class CatalogImportApplyService {
       );
       const capRepo = m.getRepository(SensorRoleCapability);
       let capabilitiesCreated = 0;
+      // The channel each row says its sensor exposes, gathered per sensor: the
+      // capability row links a signal to the sensor, but a tool mapping may only name
+      // a parameter the sensor itself declares (requireValidMappedSensors), so a link
+      // with no matching parameterSpec leaves the sensor impossible to wire.
+      const parametersBySensor = new Map<string, { parameter: string; unit: string | null }[]>();
       for (const r of validRows.filter((r) => r.sheet === 'sensor_capability')) {
         const sensor = resolvedSensorByRowId.get(r.id);
         if (!sensor) throw new Error(`sensor_capability row ${r.rowNumber} was valid but did not resolve a sensor.`);
         const measurementRole = str(r.payload.signal);
         const parameterKey = strOrNull(r.payload.parameter_key);
+        const wanted = parametersBySensor.get(sensor.id) ?? [];
+        wanted.push({ parameter: parameterKey ?? measurementRole, unit: strOrNull(r.payload.canonical_unit) });
+        parametersBySensor.set(sensor.id, wanted);
         const existingCap = await capRepo.findOne({ where: { sensorId: sensor.id, measurementRole, parameterKey } });
         if (existingCap) {
           r.status = 'applied';
@@ -172,6 +181,27 @@ export class CatalogImportApplyService {
         capabilitiesCreated += 1;
       }
 
+      // Only parameters the sensor does not already declare are added — an existing
+      // spec, with whatever range somebody set by hand, is never touched, and
+      // re-applying the same workbook adds nothing. The workbook carries no range, so
+      // the added ones have none rather than an invented 0–0.
+      const sensorRepo = m.getRepository(Sensor);
+      let parametersAdded = 0;
+      for (const [sensorId, wanted] of parametersBySensor) {
+        const sensor = await sensorRepo.findOne({ where: { id: sensorId } });
+        if (!sensor) continue;
+        const declared = new Set((sensor.parameterSpecs ?? []).map((p) => p.parameter));
+        const missing = wanted.filter((w, i) => !declared.has(w.parameter)
+          && wanted.findIndex((x) => x.parameter === w.parameter) === i);
+        if (!missing.length) continue;
+        sensor.parameterSpecs = [...(sensor.parameterSpecs ?? []), ...missing.map((w) => ({
+          parameter: w.parameter, unit: w.unit ?? '', min: null, max: null, normalRange: '',
+          notes: 'From a catalog import: set the expected range.',
+        }))];
+        await sensorRepo.save(sensor);
+        parametersAdded += missing.length;
+      }
+
       // Rows marked invalid are skipped and recorded as skipped, not silently dropped.
       for (const r of invalidRows) r.status = 'skipped';
       await rowRepo.save(rows);
@@ -181,6 +211,7 @@ export class CatalogImportApplyService {
         sensorCapabilities: {
           created: capabilitiesCreated,
           skipped: invalidRows.filter((r) => r.sheet === 'sensor_capability').length,
+          parametersAdded,
         },
       };
 
@@ -227,7 +258,7 @@ export class CatalogImportApplyService {
     const formulaRepo = m.getRepository(EquipmentClassFormula);
 
     const { current, content: currentContent } = await loadCurrentClass(m, slug);
-    const proposed = buildProposedClass(rows, currentContent);
+    const proposed = buildProposedClass(rows, currentContent, batch.templateVersion);
     const identical = current !== null && classesIdentical(proposed, currentContent);
 
     // A recommendation row naming a missing failure mode is already invalid at
@@ -246,6 +277,7 @@ export class CatalogImportApplyService {
     const classFields = {
       name: proposed.name, description: proposed.description, category: proposed.category,
       serviceIntervalHours: proposed.serviceIntervalHours,
+      ...proposed.oem,
       // Deprecated jsonb, still written (task QREC0a) — the rows below are what is read.
       expectedSignals: proposed.expectedSignals, failureModes: toFailureModeJsonb(proposed.failureModes),
       defaultThresholds: proposed.defaultThresholds,

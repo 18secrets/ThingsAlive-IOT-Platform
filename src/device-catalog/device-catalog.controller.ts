@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested,
+  IsArray, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
@@ -46,6 +46,9 @@ export class MappedSensorDto {
 
 export class ToolMappingDto {
   @IsOptional() @IsString() toolName?: string;
+  /** An active industry type's id (task QINDUSTRY); `null` clears it. */
+  @IsOptional() @IsUUID() industryTypeId?: string | null;
+  /** Transitional: accepted only when it names one active type exactly (§7 Q6). */
   @IsOptional() @IsString() industryType?: string;
   @IsOptional() @IsString() protocol?: string;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MappedSensorDto)
@@ -54,6 +57,17 @@ export class ToolMappingDto {
 
 export class CreateToolMappingDto extends ToolMappingDto {
   @IsString() @IsNotEmpty() declare toolName: string;
+}
+
+export class IndustryTypeDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsIn(['active', 'inactive']) status?: 'active' | 'inactive';
+}
+
+export class CreateIndustryTypeDto extends IndustryTypeDto {
+  @IsString() @IsNotEmpty() declare name: string;
+  @IsString() @IsNotEmpty() declare code: string;
 }
 
 /**
@@ -79,6 +93,13 @@ export class DeviceCatalogController {
   @ApiOperation({ summary: 'Add a sensor category' })
   createCategory(@Body() dto: CreateSensorCategoryDto) {
     return this.catalog.createCategory(dto.name);
+  }
+
+  @Patch('categories/:id')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Rename a sensor category. Sensors keep it — they hold it by id' })
+  renameCategory(@Param('id') id: string, @Body() dto: CreateSensorCategoryDto) {
+    return this.catalog.renameCategory(id, dto.name);
   }
 
   @Post('categories/:id/retire')
@@ -150,6 +171,55 @@ export class DeviceCatalogController {
     return this.catalog.deleteCategory(id);
   }
 
+  // ---- Industry types (task QINDUSTRY) ---------------------------------------------
+
+  @Get('industry-types')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Industry types; ?status=active for the tool-mapping picker' })
+  listIndustryTypes(@Query('status') status?: string) {
+    if (status !== undefined && status !== 'active' && status !== 'inactive') {
+      throw new BadRequestException(`status must be active or inactive, not "${status}".`);
+    }
+    return this.catalog.listIndustryTypes(status as 'active' | 'inactive' | undefined);
+  }
+
+  @Post('industry-types')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Create an industry type' })
+  createIndustryType(@CurrentScope() scope: RequestScope, @Body() dto: CreateIndustryTypeDto) {
+    return this.catalog.createIndustryType(dto, scope.userId);
+  }
+
+  @Patch('industry-types/:id')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Rename, recode, activate or deactivate an industry type' })
+  updateIndustryType(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: IndustryTypeDto) {
+    return this.catalog.updateIndustryType(id, dto, scope.userId);
+  }
+
+  @Delete('industry-types/:id')
+  @HttpCode(204)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Delete an industry type no tool mapping uses; 409 naming the count otherwise' })
+  deleteIndustryType(@Param('id') id: string) {
+    return this.catalog.deleteIndustryType(id);
+  }
+
+  // Before `tool-mappings/:id`, which would otherwise read the path segment as an id.
+  @Get('tool-mappings/unmatched-industries')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Pre-QINDUSTRY industry text that matches no type, with counts' })
+  unmatchedIndustries() {
+    return this.catalog.unmatchedIndustries();
+  }
+
+  @Post('tool-mappings/unmatched-industries/rematch')
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Match unmatched mappings to the active types that now exist; never moves a set one' })
+  rematchIndustries() {
+    return this.catalog.rematchIndustries();
+  }
+
   @Get('tool-mappings')
   @Requires('device-catalog.write')
   @ApiOperation({ summary: 'Every tool mapping, with its sensors resolved by name' })
@@ -176,6 +246,14 @@ export class DeviceCatalogController {
   @ApiOperation({ summary: 'Edit a tool mapping' })
   updateToolMapping(@Param('id') id: string, @Body() dto: ToolMappingDto) {
     return this.catalog.updateToolMapping(id, dto);
+  }
+
+  @Delete('tool-mappings/:id')
+  @HttpCode(204)
+  @Requires('device-catalog.write')
+  @ApiOperation({ summary: 'Delete a tool mapping no device uses; refused while any device does' })
+  deleteToolMapping(@Param('id') id: string) {
+    return this.catalog.deleteToolMapping(id);
   }
 }
 

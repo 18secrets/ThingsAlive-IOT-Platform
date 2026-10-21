@@ -1,0 +1,53 @@
+{
+  "format": "ta2.retrieval-golden@1",
+  "name": "seed:demo excavator smoke set",
+  "version": "1",
+  "kind": "smoke",
+  "authoredBy": "QEVAL1b harness (not domain-authored; proves the pipeline only)",
+  "authoredAt": "2026-10-20",
+  "queries": [
+    {
+      "id": "smoke-coolant",
+      "classSlug": "demo-excavator",
+      "text": "engine coolant temperature keeps rising even at normal load",
+      "expect": [
+        {
+          "kind": "failure_mode",
+          "classSlug": "demo-excavator",
+          "code": "COOLANT_OVERHEAT"
+        }
+      ]
+    },
+    {
+      "id": "smoke-hydraulic",
+      "classSlug": "demo-excavator",
+      "text": "hydraulic oil running hotter than its working band",
+      "expect": [
+        {
+          "kind": "failure_mode",
+          "classSlug": "demo-excavator",
+          "code": "HYD_OVERHEAT"
+        },
+        {
+          "kind": "recommendation",
+          "classSlug": "demo-excavator",
+          "code": "HYD_OVERHEAT",
+          "action": "Check the hydraulic oil cooler and oil level."
+        }
+      ]
+    },
+    {
+      "id": "smoke-oil-pressure",
+      "classSlug": "demo-excavator",
+      "text": "oil pressure dropping while the engine runs, what do I do",
+      "expect": [
+        {
+          "kind": "recommendation",
+          "classSlug": "demo-excavator",
+          "code": "LOW_OIL_PRESSURE",
+          "action": "Stop the engine; check oil level and the pressure sender."
+        }
+      ]
+    }
+  ]
+}

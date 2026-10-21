@@ -9,7 +9,7 @@ import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNam
 
 const SECRET = 'test-secret-client-templates';
 const ISSUER = 'things-alive-client-templates-test';
-const MIGRATION = 'ClientEquipmentTemplates1759500000000';
+const MIGRATION = 'ClientEquipmentTemplates1761900000000';
 
 const acme: RequestScope = { tenantId: 'acme', userId: 'u-acme', roles: ['admin'], isPlatformRole: false };
 const globex: RequestScope = { tenantId: 'globex', userId: 'u-globex', roles: ['admin'], isPlatformRole: false };

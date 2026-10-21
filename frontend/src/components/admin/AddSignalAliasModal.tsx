@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, SignalAlias, SignalAliasInput } from '../../lib/api';
 
 interface AddSignalAliasModalProps {
@@ -13,7 +14,8 @@ interface AddSignalAliasModalProps {
 export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
   isOpen, onClose, onSave, existingAlias,
 }) => {
-  const [sourceSystem, setSourceSystem] = useState('*');
+  const { t } = useTranslation('catalog');
+  const [sourceSystem, setSourceSystem] = useState('');
   const [alias, setAlias] = useState('');
   const [canonical, setCanonical] = useState('');
   const [unit, setUnit] = useState('');
@@ -25,7 +27,8 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setSourceSystem(existingAlias?.sourceSystem ?? '*');
+    // `*` is how the API spells "any source system"; the field shows it as blank.
+    setSourceSystem(existingAlias?.sourceSystem === '*' ? '' : existingAlias?.sourceSystem ?? '');
     setAlias(existingAlias?.alias ?? '');
     setCanonical(existingAlias?.canonical ?? '');
     setUnit(existingAlias?.unit ?? '');
@@ -37,10 +40,10 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalSourceSystem = sourceSystem.trim();
+    const finalSourceSystem = sourceSystem.trim() || '*';
     const finalAlias = alias.trim();
     const finalCanonical = canonical.trim();
-    if (!finalSourceSystem || !finalAlias || !finalCanonical) return;
+    if (!finalAlias || !finalCanonical) return;
 
     setBusy(true);
     setError(undefined);
@@ -54,7 +57,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditing ? 'save' : 'create'} this alias.`);
+      setError(err instanceof ApiError ? err.message : (isEditing ? t('aliasModal.saveFailed') : t('aliasModal.createFailed')));
     } finally {
       setBusy(false);
     }
@@ -72,12 +75,12 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
-                {isEditing ? 'Edit Signal Alias' : 'New Signal Alias'}
+                {isEditing ? t('aliasModal.editTitle') : t('aliasModal.newTitle')}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">
                 {isEditing
-                  ? 'The source system and upstream spelling are permanent — only the mapping changes.'
-                  : 'Takes effect immediately — no draft, no publish step.'}
+                  ? t('aliasModal.editSubtitle')
+                  : t('aliasModal.newSubtitle')}
               </p>
             </div>
           </div>
@@ -94,21 +97,20 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Source System <span className="text-rose-500">*</span>
+                {t('aliases.sourceSystem')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
               </label>
               <Input
                 size="sm"
-                required
                 autoFocus
                 disabled={isEditing}
                 value={sourceSystem}
                 onChange={(value) => setSourceSystem(value)}
-                placeholder="e.g. legacy-iot, or * for any"
+                placeholder={t('aliasModal.sourcePlaceholder')}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Upstream Spelling <span className="text-rose-500">*</span>
+                {t('aliases.upstreamSpelling')} <span className="text-rose-500">*</span>
               </label>
               <Input
                 size="sm"
@@ -116,34 +118,34 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
                 disabled={isEditing}
                 value={alias}
                 onChange={(value) => setAlias(value)}
-                placeholder="e.g. FuelLevel"
+                placeholder={t('aliasModal.aliasPlaceholder')}
               />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Canonical Name <span className="text-rose-500">*</span>
+              {t('aliases.canonicalName')} <span className="text-rose-500">*</span>
             </label>
             <Input
               size="sm"
               required
               value={canonical}
               onChange={(value) => setCanonical(value)}
-              placeholder="e.g. fuel_level"
+              placeholder={t('aliasModal.canonicalPlaceholder')}
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Unit <span className="text-slate-400 font-normal">(optional)</span>
+              {t('sensorModal.unit')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
             </label>
-            <Input size="sm" value={unit} onChange={(value) => setUnit(value)} placeholder="e.g. %" />
+            <Input size="sm" value={unit} onChange={(value) => setUnit(value)} placeholder={t('aliasModal.unitPlaceholder')} />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Note <span className="text-slate-400 font-normal">(optional)</span>
+              {t('aliases.note')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
             </label>
             <Input
               as="textarea"
@@ -151,7 +153,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
               rows={2}
               value={note}
               onChange={(value) => setNote(value)}
-              placeholder="Why this mapping exists, e.g. which logger firmware spells it this way"
+              placeholder={t('aliasModal.notePlaceholder')}
             />
           </div>
 
@@ -164,7 +166,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory
+              <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -172,7 +174,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
                 onClick={onClose}
                 className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -180,7 +182,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : (isEditing ? 'Save Alias' : 'Create Alias')}</span>
+                <span>{busy ? t('common.saving') : (isEditing ? t('aliasModal.save') : t('aliasModal.create'))}</span>
               </button>
             </div>
           </div>

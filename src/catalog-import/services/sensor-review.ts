@@ -35,6 +35,10 @@ export interface ProposedSensor {
   category: string | null;
   parameterKey: string | null;
   canonicalUnit: string | null;
+  /** Every channel the workbook says this sensor exposes, across all its
+   *  sensor_capability rows — what approval writes as the sensor's parameterSpecs.
+   *  `parameterKey`/`canonicalUnit` above are only the first group's. */
+  parameters: { parameter: string; unit: string | null }[];
   proposedByRows: number[];
   usedByClasses: string[];
 }
@@ -227,14 +231,24 @@ export async function analyzeSensorCapability(
       const slug = group.sensorSlugGiven ?? slugify(group.sensorName);
       const category = strOrNull(representative.payload.category);
       const signal = str(representative.payload.signal);
+      // A row with no parameter_key names its channel by the signal it carries, the
+      // same reading apply gives it when it writes the role capability.
+      const groupParameters = group.rows.map((r) => ({
+        parameter: group.parameterKey ?? str(r.payload.signal),
+        unit: strOrNull(r.payload.canonical_unit),
+      })).filter((p) => !!p.parameter);
       const existingProposal = proposedSensorsByKey.get(slug);
       if (existingProposal) {
         existingProposal.proposedByRows = [...existingProposal.proposedByRows, ...rowNumbers].sort((a, b) => a - b);
         existingProposal.usedByClasses = [...new Set([...existingProposal.usedByClasses, ...signalUsersFor(signal)])].sort();
+        for (const p of groupParameters) {
+          if (!existingProposal.parameters.some((q) => q.parameter === p.parameter)) existingProposal.parameters.push(p);
+        }
       } else {
         proposedSensorsByKey.set(slug, {
           slug, name: group.sensorName, category,
           parameterKey: group.parameterKey, canonicalUnit: strOrNull(representative.payload.canonical_unit),
+          parameters: groupParameters.filter((p, i, all) => all.findIndex((q) => q.parameter === p.parameter) === i),
           proposedByRows: rowNumbers, usedByClasses: signalUsersFor(signal),
         });
       }

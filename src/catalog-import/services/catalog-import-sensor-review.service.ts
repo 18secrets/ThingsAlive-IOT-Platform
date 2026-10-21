@@ -125,8 +125,15 @@ export class CatalogImportSensorReviewService {
               );
             }
           }
+          // The channels and units come from the workbook. The expected range does
+          // not — the template has no column for it — so it is left empty for the
+          // admin to set rather than invented: 0–0 would read as a real limit.
           await sensorRepo.save(sensorRepo.create({
-            sensorName: proposal.name, slug, categoryId, parameterSpecs: [],
+            sensorName: proposal.name, slug, categoryId,
+            parameterSpecs: proposal.parameters.map((p) => ({
+              parameter: p.parameter, unit: p.unit ?? '', min: null, max: null, normalRange: '',
+              notes: 'From a catalog import: set the expected range.',
+            })),
           }));
         }
         this.recordDecision(batch, { kind: 'sensor', slug, decision: 'approved', by: decidedBy, at: nowIso() });

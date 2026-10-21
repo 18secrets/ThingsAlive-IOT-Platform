@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, MapPin,
+  Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, RotateCw, MapPin, Trash2,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import {
-  ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, SetUserAccessInput, TenantRole, TenantUser,
+  ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, ResendInvitationResult, SetUserAccessInput,
+  TenantRole, TenantUser, apiResendUserInvitation,
 } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { EditUserAccessModal } from './EditUserAccessModal';
 
 interface ClientUserManagementProps {
@@ -17,6 +20,7 @@ interface ClientUserManagementProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
   plants: Plant[];
   equipment: EquipmentProfile[];
   onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
@@ -29,14 +33,16 @@ const STATUS_STYLE: Record<TenantUser['status'], string> = {
 };
 
 export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
-  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser,
+  users, roles, error, onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser,
   plants, equipment, onSetUserAccess,
 }) => {
+  const { t } = useTranslation('users');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
   const [accessUser, setAccessUser] = useState<TenantUser | null>(null);
+  const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
 
   const roleName = useMemo(() => {
     const byId = new Map(roles.map((r) => [r.slug, r.name]));
@@ -69,7 +75,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
     try {
       await action();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'That action failed.');
+      setActionError(err instanceof ApiError ? err.message : t('clientUsers.actionFailed'));
     } finally {
       setBusyId(null);
     }
@@ -77,13 +83,14 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
 
   return (
     <div id="client-user-management-view" className="space-y-3">
+      <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Name or Email..."
+            placeholder={t('clientUsers.searchPlaceholder')}
             className="pl-9!"
             size="sm"
           />
@@ -93,7 +100,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
           className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Invite User</span>
+          <span>{t('invite.title')}</span>
         </button>
       </div>
 
@@ -109,11 +116,11 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
               <tr>
-                <th className="py-3 px-4">Name</th>
-                <th className="py-3 px-4">Email</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-center">Actions</th>
+                <th className="py-3 px-4">{t('col.name')}</th>
+                <th className="py-3 px-4">{t('col.email')}</th>
+                <th className="py-3 px-4">{t('col.role')}</th>
+                <th className="py-3 px-4">{t('col.status')}</th>
+                <th className="py-3 px-4 text-center">{t('col.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -127,12 +134,12 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
                       <span className="flex items-center gap-1.5">
                         {u.fullName}
-                        {superAdmin && <span title="Super Admin"><Crown className="w-4 h-4 text-amber-500" /></span>}
+                        {superAdmin && <span title={t('common.superAdmin')}><Crown className="w-4 h-4 text-amber-500" /></span>}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">{u.email}</td>
                     <td className="py-3 px-4">
-                      <span title={lastCeoManager ? "This account's only ceo-manager — move someone else into this role first" : undefined}>
+                      <span title={lastCeoManager ? t('clientUsers.lastCeoManager') : undefined}>
                         <SelectPicker
                           data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                           value={u.roleSlug}
@@ -146,7 +153,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
-                        {u.status}
+                        {t(`userStatus.${u.status}`, { defaultValue: u.status })}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -155,9 +162,33 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                           <button
                             onClick={() => setAccessUser(u)}
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                            title={`Edit which ${userScopeShape === 'plant' ? 'sites' : 'machines'} this person can see`}
+                            title={userScopeShape === 'plant' ? t('clientUsers.editSites') : t('clientUsers.editMachines')}
                           >
                             <MapPin className="w-4 h-4" />
+                          </button>
+                        )}
+                        {u.status === 'invited' && (
+                          <button
+                            onClick={() => runAction(u.id, async () => setReissued(await apiResendUserInvitation(u.id)))}
+                            disabled={busy}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-30 transition-colors cursor-pointer"
+                            title={t('clientUsers.resend')}
+                          >
+                            <RotateCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        {u.status !== 'active' && !superAdmin && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(t('clientUsers.deleteConfirm', { name: u.fullName }))) {
+                                runAction(u.id, () => onDeleteUser(u.id));
+                              }
+                            }}
+                            disabled={busy}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                            title={t('clientUsers.deleteTitle')}
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                         {u.status === 'suspended' ? (
@@ -165,19 +196,19 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             onClick={() => runAction(u.id, () => onReinstateUser(u.id))}
                             disabled={busy}
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-30 transition-colors cursor-pointer"
-                            title="Reinstate"
+                            title={t('common.reinstate')}
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
                         ) : (
                           <button
                             onClick={() => {
-                              const reason = window.prompt(`Why is ${u.fullName} being suspended?`);
+                              const reason = window.prompt(t('clientUsers.suspendPrompt', { name: u.fullName }));
                               if (reason) runAction(u.id, () => onSuspendUser(u.id, reason));
                             }}
                             disabled={busy || superAdmin}
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                            title={superAdmin ? "The Super Admin can't be suspended" : 'Suspend'}
+                            title={superAdmin ? t('clientUsers.cantSuspendSuperAdmin') : t('common.suspend')}
                           >
                             <Ban className="w-4 h-4" />
                           </button>
@@ -193,7 +224,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                   <td colSpan={5} className="py-10">
                     <div className="flex flex-col items-center gap-2 text-slate-400 text-sm">
                       <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                      <span>No users found.</span>
+                      <span>{t('clientUsers.empty')}</span>
                     </div>
                   </td>
                 </tr>
@@ -239,6 +270,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
   const [error, setError] = useState<string | undefined>(undefined);
   const [invited, setInvited] = useState<InviteUserResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation('users');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -267,7 +299,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
       });
       setInvited(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not invite this person.');
+      setError(err instanceof ApiError ? err.message : t('invite.failed'));
     } finally {
       setBusy(false);
     }
@@ -288,7 +320,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-            {invited ? 'Invitation Sent' : 'Invite User'}
+            {invited ? t('invite.sent') : t('invite.title')}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
@@ -298,67 +330,66 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
         {invited ? (
           <div className="p-6 space-y-4 text-sm">
             <p className="text-slate-600 dark:text-slate-300">
-              <strong className="text-slate-900 dark:text-white">{invited.fullName}</strong> can accept with this token.
+              <Trans i18nKey="invite.canAccept" t={t} values={{ name: invited.fullName }} components={{ b: <strong className="text-slate-900 dark:text-white" /> }} />
             </p>
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Invitation Token</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('invite.token')}</label>
               <div className="relative">
                 <Input readOnly value={invited.invitationToken ?? ''} className="pr-9 font-mono" />
-                <button type="button" onClick={handleCopyToken} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Copy token">
+                <button type="button" onClick={handleCopyToken} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title={t('invite.copyToken')}>
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
               {invited.invitationExpiresAt && (
                 <p className="text-xs text-slate-400 mt-1">
-                  Expires {new Date(invited.invitationExpiresAt).toLocaleString()}. There is no password to hand
-                  over — they set their own via the accept-invitation link with this token.
+                  {t('invite.expires', { date: new Date(invited.invitationExpiresAt).toLocaleString() })}
                 </p>
               )}
             </div>
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
               <button onClick={onClose} className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs transition-colors cursor-pointer">
-                Done
+                {t('common.done')}
               </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('invite.fullName')} <span className="text-rose-500">*</span></label>
               <Input
                 required
                 autoFocus
                 value={fullName}
                 onChange={(value) => setFullName(value)}
-                placeholder="e.g. Priya Sharma"
+                placeholder={t('common.eg', { example: 'Priya Sharma' })}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('col.email')} <span className="text-rose-500">*</span></label>
               <Input
                 type="email"
                 required
                 value={email}
                 onChange={(value) => setEmail(value)}
-                placeholder="e.g. priya.sharma@example.com"
+                placeholder={t('common.eg', { example: 'priya.sharma@example.com' })}
               />
-              <p className="text-xs text-slate-400 mt-1">This is how they'll sign in — there is no separate username.</p>
+              <p className="text-xs text-slate-400 mt-1">{t('invite.emailHint')}</p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Phone</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('invite.phone')}</label>
               <Input
                 type="tel"
                 value={phone}
                 onChange={(value) => setPhone(value)}
-                placeholder="e.g. +91 98100 22341"
+                placeholder={t('common.eg', { example: '+91 98100 22341' })}
                 className="font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Role <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('col.role')} <span className="text-rose-500">*</span></label>
               <SelectPicker
                 data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                 value={roleSlug}
@@ -375,11 +406,11 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
 
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
               <button type="button" onClick={onClose} className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-                Cancel
+                {t('common.cancel')}
               </button>
               <button type="submit" disabled={busy} className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
                 <Check className="w-4 h-4" />
-                <span>{busy ? 'Inviting…' : 'Send Invitation'}</span>
+                <span>{busy ? t('invite.inviting') : t('invite.send')}</span>
               </button>
             </div>
           </form>

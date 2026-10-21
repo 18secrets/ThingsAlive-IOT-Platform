@@ -1,4 +1,5 @@
 ﻿import { WidgetType } from '../catalog/layout/widget-types';
+import type { ForecastChartData } from '../forecast/forecast-reader';
 import { KpiEnvelope, Readiness, SeriesPoint } from '../kpi/types';
 
 /**
@@ -22,7 +23,21 @@ export const WIDGET_PRODUCERS: Readonly<Record<WidgetType, string>> = Object.fre
   recommendations: 'client_equipment_class_recommendation (QREC0a)',
   machine_list: 'SignalBindingService.coverage per machine, AlertService.listEvents',
   schematic: 'equipment_class_visual + the tenant\'s anchors (QREC0c); readiness via coverage, values via readBucketed',
+  parameter_list: 'ParameterService.effective (QPARAM1)',
+  // No forecast producer exists until QML1. The declaration is read so the widget can
+  // say which of the two it is waiting on, not to stand in for a forecast.
+  forecast_chart: 'ForecastReader.chart (QML1); equipment_class_sensor_requirement.forecast_enabled says whether one is declared',
+  twin_model: 'equipment_class_visual (tier model) + the tenant\'s model anchors (QTWIN1); readiness via coverage, values via readBucketed',
 });
+
+/** One client parameter as it stands for this machine or site. `source` is null when no
+ * scope sets it — shown, not hidden, because "nobody has entered this" is the answer. */
+export interface ParameterRow {
+  name: string;
+  value: unknown;
+  unit: string | null;
+  source: { scope: string; scopeRef: string | null; effectiveFrom: string } | null;
+}
 
 export type PageReadiness = Readiness;
 
@@ -104,9 +119,27 @@ export interface SchematicData {
   unplacedSignals: { signal: string; readiness: PageReadiness; reason: string | null }[];
 }
 
+/**
+ * The 3-D twin (task QTWIN1 §4) — the schematic's shape with a position in model units.
+ * A marker waiting for a recheck is in the tray, not on the model: the geometry changed
+ * under it, and drawing it where it was would be the silent misplacement D39 forbids.
+ */
+export interface TwinModelData {
+  modelUrl: string;
+  contentType: string | null;
+  geometryVersion: number | null;
+  bounds: { min: [number, number, number]; max: [number, number, number] } | null;
+  anchors: {
+    signal: string; x: number; y: number; z: number; label: string | null;
+    readiness: PageReadiness; reason: string | null; value: number | null; unit: string | null;
+  }[];
+  unplacedSignals: { signal: string; needsRecheck: boolean; readiness: PageReadiness; reason: string | null }[];
+}
+
 export type WidgetData =
   | KpiWidgetData | SignalChartData | ReadinessRow[] | AlertRow[] | WorkOrderRow[] | ServiceDueData
-  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData | SchematicData;
+  | FailureModeRow[] | RecommendationRow[] | MachineRow[] | SiteKpiData | SchematicData | ParameterRow[]
+  | ForecastChartData | TwinModelData;
 
 export interface PageWidget {
   widgetKey: string;

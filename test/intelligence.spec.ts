@@ -8,6 +8,7 @@ import { ChainNode } from '../src/intelligence/services/causal-chain';
 import { ChainService, validateChain } from '../src/intelligence/services/chain.service';
 import { runTenantSpanning } from '../src/scope/tenant-session';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { bindProjectedDevice } from './bind-projected-devices';
 
 const OIL: ChainNode = {
   signal: 'engine_oil_temperature',
@@ -115,13 +116,16 @@ describeDb('chain authoring and diagnosis', () => {
    * and fail against real data, which is exactly what happened here before this.
    */
   const fitDevice = async () => {
-    await runTenantSpanning(owner, 'test fixture', (m) => m.query(
-      `INSERT INTO "device_projection"
-         ("tenant_id","source_system","external_id","checksum","imei","equipment_external_id",
-          "payload","source_updated_at","synced_at","status")
-       VALUES ('acme',$1,$2,'c',$2,'DG-1','{}'::jsonb,$3,$3,'live')
-       ON CONFLICT DO NOTHING`,
-      [CLIENT_SOURCE_SYSTEM, IMEI, NOW]));
+    await runTenantSpanning(owner, 'test fixture', async (m) => {
+      await m.query(
+        `INSERT INTO "device_projection"
+           ("tenant_id","source_system","external_id","checksum","imei","equipment_external_id",
+            "payload","source_updated_at","synced_at","status")
+         VALUES ('acme',$1,$2,'c',$2,'DG-1','{}'::jsonb,$3,$3,'live')
+         ON CONFLICT DO NOTHING`,
+        [CLIENT_SOURCE_SYSTEM, IMEI, NOW]);
+      await bindProjectedDevice(m, { tenantId: 'acme', sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: 'DG-1', imei: IMEI });
+    });
   };
 
   /** Put a reading on the wire for this machine, `agoSeconds` before NOW. */

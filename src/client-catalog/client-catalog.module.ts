@@ -8,6 +8,8 @@ import { ClientCatalogService } from './services/client-catalog.service';
 import { CopyOnGrantService } from './services/copy-on-grant.service';
 import { ClientVisualService } from './services/client-visual.service';
 import { ClientVisualController } from './client-visual.controller';
+import { ClientModelService } from './services/client-model.service';
+import { ClientModelController } from './client-model.controller';
 import { ClassUpgradeController } from './class-upgrade.controller';
 import { ClassUpgradeService } from './services/class-upgrade.service';
 
@@ -18,8 +20,8 @@ import { ClassUpgradeService } from './services/class-upgrade.service';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ClientEquipmentClass, ClientScenario, ClientFormula])],
-  controllers: [ClientCatalogController, ClientVisualController, ClassUpgradeController],
-  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService, ClassUpgradeService],
+  controllers: [ClientCatalogController, ClientVisualController, ClientModelController, ClassUpgradeController],
+  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService, ClientModelService, ClassUpgradeService],
   exports: [ClientCatalogService, CopyOnGrantService],
 })
 export class ClientCatalogModule {}

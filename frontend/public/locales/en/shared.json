@@ -1,0 +1,84 @@
+{
+  "close": "Close",
+  "done": "Done",
+  "cancel": "Cancel",
+  "save": "Save",
+  "saveChanges": "Save Changes",
+  "saving": "Saving…",
+  "creating": "Creating…",
+  "loading": "Loading…",
+  "optional": "Optional",
+  "backToClients": "Back to Clients",
+  "filters": {
+    "button": "Filters",
+    "selectedEquipment": "Selected equipment",
+    "allMatchingEquipment": "All matching equipment",
+    "title": "Filter Equipment",
+    "intro": "Choose your scope, then apply.",
+    "sitePlant": "Site / Plant",
+    "allSitesPlants": "All sites / plants",
+    "equipmentClass": "Equipment class",
+    "allClasses": "All classes",
+    "connectionStatus": "Connection status",
+    "allConnections": "All connections",
+    "findEquipment": "Find equipment",
+    "findPlaceholder": "Name or machine code",
+    "clear": "Clear selections",
+    "apply": "Apply filters"
+  },
+  "connection": {
+    "online": "Online",
+    "offline": "Offline",
+    "noData": "No link data",
+    "onlineHint": "Its logger reported in the latest health window",
+    "offlineHint": "Its logger went dark in the latest health window",
+    "noDataHint": "No device-health verdict yet, so it matches neither Online nor Offline"
+  },
+  "token": {
+    "title": "New Invitation Token",
+    "intro": "The old token stopped working the moment this one was issued for <1>{{email}}</1>.",
+    "label": "Invitation Token",
+    "copy": "Copy token",
+    "expires": "Expires {{when}}."
+  },
+  "askAI": {
+    "button": "Ask AI",
+    "helpTitle": "ThingsAlive Documentation & Help",
+    "guideTitle": "ThingsAlive IoT OS Guide",
+    "gotIt": "Got it",
+    "assistantName": "ThingsAlive Assistant",
+    "assistantTagline": "Fleet & telemetry intelligence",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "justNow": "Just now",
+    "placeholder": "Ask about telematics, sensors, errors...",
+    "send": "Send",
+    "welcome": "Hello! I am your ThingsAlive Telematics AI Assistant. You can ask me about sensor telemetry thresholds, equipment health, CAN-bus mapping, or device onboarding status.",
+    "prompts": {
+      "offline": "Which devices are offline?",
+      "dust": "Show Dust Collector status",
+      "volvo": "Volvo EC210 service status"
+    },
+    "topics": {
+      "admin": {
+        "title": "Admin Console & Sub-tabs",
+        "body": "Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Plants, and Tool Mappings."
+      },
+      "equipment": {
+        "title": "Equipment & Categorization",
+        "body": "Configure industrial excavators, mobile cranes, and conveyors with engine specifications, maintenance intervals, and fuel capacities."
+      },
+      "devices": {
+        "title": "Device Onboarding & Tool Mapping",
+        "body": "Register hardware modems by IMEI and auto-bind sensor parameter channels via preconfigured Tool Profiles."
+      }
+    },
+    "reply": {
+      "offline": "Device #131 (PowerCommand Cloud) on Generator Unit is currently OFFLINE. Last ping was 4 hours ago via Eicher Motors gateway. Diagnostic code: CAN-BUS TIMEOUT (Error 0x4B).",
+      "dust": "Dust_Collector_Monitoring (SN-CBM-001) is active on the Kiln Drive Monitoring Kit. Current differential pressure is nominal at 1.4 kPa with opacity index at 3.2%.",
+      "volvo": "Volvo EC210 Crawler Excavator (ID #14, License UP32CE9136) at Lucknow Infrastructure Plant is active. Next scheduled hydraulic service is in 38 operational hours.",
+      "fuel": "Category CAT-HEE-001 has normalized fuel capacity set to 400 Liters with automated telemetry percentage bounds enabled.",
+      "summary": "Telemetry summary for \"{{query}}\": 18 equipment items logged, 20 telematics units provisioned (9 online, 1 offline, 10 pending data cycle). All MODBUS and J1939 protocols are operating within expected latencies."
+    }
+  }
+}

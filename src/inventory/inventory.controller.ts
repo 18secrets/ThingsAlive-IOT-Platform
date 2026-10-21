@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ArrayMaxSize, ArrayNotEmpty, IsArray, IsISO8601, IsNotEmpty, IsOptional, IsString, IsUUID,
@@ -9,6 +9,7 @@ import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { InventoryState } from './entities/device-inventory.entity';
+import { FleetOnboardingService } from './services/fleet-onboarding.service';
 import { InventoryService } from './services/inventory.service';
 
 export class RegisterDeviceDto {
@@ -38,6 +39,21 @@ export class RegisterBatchDto {
   @ArrayMaxSize(500)
   @ValidateNested({ each: true }) @Type(() => RegisterDeviceDto)
   devices: RegisterDeviceDto[];
+}
+
+/** Every field optional; one left out is kept. `toolMappingId: null` clears it. */
+export class UpdateDeviceDto {
+  @IsOptional() @IsString()
+  model?: string | null;
+
+  @IsOptional() @IsUUID()
+  toolMappingId?: string | null;
+
+  @IsOptional() @IsString()
+  batchRef?: string | null;
+
+  @IsOptional() @IsString()
+  notes?: string | null;
 }
 
 export class AssignDto {
@@ -80,7 +96,24 @@ export class ClaimDto {
 @ApiTags('Device inventory')
 @Controller('inventory')
 export class InventoryController {
-  constructor(private readonly inventory: InventoryService) {}
+  constructor(
+    private readonly inventory: InventoryService,
+    private readonly onboarding: FleetOnboardingService,
+  ) {}
+
+  @Get('fleet-onboarding/:tenantId')
+  @Requires('device.manage')
+  @ApiOperation({ summary: 'What onboarding this account\'s 1.0 fleet would add, and what conflicts. Writes nothing' })
+  onboardingPlan(@CurrentScope() scope: RequestScope, @Param('tenantId') tenantId: string) {
+    return this.onboarding.plan(scope, tenantId);
+  }
+
+  @Post('fleet-onboarding/:tenantId/apply')
+  @Requires('device.manage')
+  @ApiOperation({ summary: 'Register this account\'s 1.0 machines and loggers in 2.0. Idempotent; conflicts are listed, not resolved' })
+  onboardingApply(@CurrentScope() scope: RequestScope, @Param('tenantId') tenantId: string) {
+    return this.onboarding.apply(scope, tenantId);
+  }
 
   @Get('pool')
   @Requires('device.manage')
@@ -109,6 +142,13 @@ export class InventoryController {
       receivedAt: d.receivedAt ? new Date(d.receivedAt) : null,
       notes: d.notes ?? null,
     })));
+  }
+
+  @Patch('devices/:imei')
+  @Requires('device.manage')
+  @ApiOperation({ summary: 'Correct a device\'s model, tool profile (in stock only), batch or notes' })
+  updateDevice(@CurrentScope() scope: RequestScope, @Param('imei') imei: string, @Body() body: UpdateDeviceDto) {
+    return this.inventory.updateDevice(scope, imei, body);
   }
 
   @Post('assign')

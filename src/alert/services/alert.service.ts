@@ -1,3 +1,4 @@
+import { absorbAlerts } from '../../incident/incident-absorb';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -141,6 +142,14 @@ export class AlertService {
       const repo = m.getRepository(AlertRule);
       const rule = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
       if (!rule) throw new NotFoundException('No such alert rule in this account.');
+      // The sentence; `trg_alert_rule_compiled_guard` is the backstop. A compiled rule
+      // is edited through its graph, or the two stop describing the same thing (D16).
+      if (rule.compiledFromWorkflowId) {
+        throw new ConflictException(
+          `"${rule.name}" is compiled from workflow ${rule.compiledFromWorkflowId}. `
+          + 'Edit the workflow and republish it; switching the rule off is still allowed.',
+        );
+      }
 
       const merged: RuleInput = {
         slug: input.slug ?? rule.slug,
@@ -318,6 +327,9 @@ export class AlertService {
           resolvedBy: null, resolvedAt: null, resolutionNote: null,
         })));
       }
+      // Into incidents in this same transaction (phase 2): an alert and the incident
+      // that owns it commit together or not at all.
+      await absorbAlerts(m, context.tenantId, fired);
       return fired;
     });
   }
@@ -356,6 +368,11 @@ export class AlertService {
       );
     }
     if (!input.name?.trim()) throw new BadRequestException('A rule needs a name.');
+    // Compiler-only (task QWF1): a hand-written composite would be the one rule kind
+    // with no graph to read it back from. The table's CHECK refuses it too.
+    if (input.trigger === 'composite') {
+      throw new BadRequestException('A composite rule is written by publishing a workflow, not by hand.');
+    }
 
     const problem = validateParams(input.trigger, input.params);
     if (problem) throw new BadRequestException(problem);

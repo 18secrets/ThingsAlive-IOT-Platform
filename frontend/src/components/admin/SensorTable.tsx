@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Eye, Edit2, AlertCircle, ChevronsUpDown, Archive, RotateCcw, Trash2, Tags } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, Sensor, SensorCategory, SensorInput } from '../../lib/api';
 import { compareByCategoryOrder, sortByCategory } from '../../lib/sensorCategoryOrder';
 import { AddSensorModal } from './AddSensorModal';
@@ -21,14 +22,16 @@ interface SensorTableProps {
   onCreateCategory: (name: string) => Promise<SensorCategory>;
   onRetireCategory: (id: string) => Promise<SensorCategory>;
   onUnretireCategory: (id: string) => Promise<SensorCategory>;
+  onRenameCategory: (id: string, name: string) => Promise<SensorCategory>;
   onDeleteCategory: (id: string) => Promise<void>;
 }
 
 export const SensorTable: React.FC<SensorTableProps> = ({
   sensors, error, categories, showRetired, onToggleShowRetired,
   onCreateSensor, onUpdateSensor, onRetireSensor, onUnretireSensor, onDeleteSensor,
-  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory,
+  onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory, onRenameCategory,
 }) => {
+  const { t } = useTranslation('catalog');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -62,10 +65,10 @@ export const SensorTable: React.FC<SensorTableProps> = ({
 
   const categoryOptions = useMemo(
     () => [
-      { label: 'Filter by Category', value: 'All' },
+      { label: t('sensors.filterByCategory'), value: 'All' },
       ...sortedCategories.map((c) => ({ label: c.name, value: c.id })),
     ],
-    [sortedCategories],
+    [sortedCategories, t],
   );
 
   const withBusy = async (id: string, action: () => Promise<unknown>) => {
@@ -74,7 +77,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
     try {
       await action();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'That action failed.');
+      setActionError(err instanceof ApiError ? err.message : t('common.actionFailed'));
     } finally {
       setBusyId(null);
     }
@@ -89,7 +92,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder="Search Sensor Names..."
+              placeholder={t('sensors.searchPlaceholder')}
               size="sm"
               className="w-full pl-9!"
             />
@@ -111,16 +114,16 @@ export const SensorTable: React.FC<SensorTableProps> = ({
               onChange={(e) => onToggleShowRetired(e.target.checked)}
               className="accent-sky-600"
             />
-            Show retired
+            {t('common.showRetired')}
           </label>
 
           <button
             onClick={() => setIsCategoriesModalOpen(true)}
             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:border-sky-300 hover:text-sky-600 transition-colors flex items-center gap-1.5 cursor-pointer"
-            title="Manage sensor categories"
+            title={t('sensors.manageCategories')}
           >
             <Tags className="w-3.5 h-3.5" />
-            Categories
+            {t('sensors.categories')}
           </button>
         </div>
 
@@ -130,7 +133,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Sensor</span>
+          <span>{t('sensors.addSensor')}</span>
         </button>
       </div>
 
@@ -148,16 +151,16 @@ export const SensorTable: React.FC<SensorTableProps> = ({
               <tr>
                 <th className="py-3 px-6 font-medium">
                   <div className="flex items-center gap-1">
-                    <span>Category</span>
+                    <span>{t('sensors.category')}</span>
                     <ChevronsUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
-                <th className="py-3 px-6 font-medium">Sensor Name</th>
-                <th className="py-3 px-6 font-medium">Parameters</th>
-                <th className="py-3 px-6 font-medium">Status</th>
-                <th className="py-3 px-6 font-medium">Updated At</th>
-                <th className="py-3 px-4 font-medium text-center">View</th>
-                <th className="py-3 px-4 font-medium text-center">Actions</th>
+                <th className="py-3 px-6 font-medium">{t('sensors.sensorName')}</th>
+                <th className="py-3 px-6 font-medium">{t('sensors.parameters')}</th>
+                <th className="py-3 px-6 font-medium">{t('common.statusHeader')}</th>
+                <th className="py-3 px-6 font-medium">{t('sensors.updatedAt')}</th>
+                <th className="py-3 px-4 font-medium text-center">{t('common.view')}</th>
+                <th className="py-3 px-4 font-medium text-center">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-sm">
@@ -177,7 +180,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                           : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                       }`}>
-                        {retired ? 'Retired' : 'Live'}
+                        {retired ? t('common.statusLabel.retired') : t('sensors.live')}
                       </span>
                     </td>
                     <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
@@ -187,7 +190,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                       <button
                         onClick={() => setViewingSensor(sensor)}
                         className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors inline-flex items-center justify-center cursor-pointer"
-                        title="View Sensor Details"
+                        title={t('sensors.viewDetails')}
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -197,7 +200,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                         <button
                           onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
                           className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
-                          title="Edit Sensor"
+                          title={t('sensors.editSensor')}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -205,7 +208,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                           onClick={() => withBusy(sensor.id, () => (retired ? onUnretireSensor(sensor.id) : onRetireSensor(sensor.id)))}
                           disabled={busyId === sensor.id}
                           className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
-                          title={retired ? 'Return to live use' : 'Retire: hidden from new work, still resolves where already used'}
+                          title={retired ? t('sensors.unretireHint') : t('sensors.retireHint')}
                         >
                           {retired ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                         </button>
@@ -213,7 +216,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                           onClick={() => withBusy(sensor.id, () => onDeleteSensor(sensor.id))}
                           disabled={busyId === sensor.id}
                           className="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
-                          title="Delete — refused while any tool mapping references it"
+                          title={t('sensors.deleteHint')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -225,7 +228,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
               ) : (
                 <tr>
                   <td colSpan={7} className="py-10 text-center text-slate-400 text-sm">
-                    No sensors match your search filter.
+                    {t('sensors.noMatch')}
                   </td>
                 </tr>
               )}
@@ -234,7 +237,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         </div>
 
         <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-500 dark:text-slate-400">
-          Total Rows: <span className="font-medium text-slate-700 dark:text-slate-300">{filteredSensors.length}</span>
+          {t('common.totalRows')} <span className="font-medium text-slate-700 dark:text-slate-300">{filteredSensors.length}</span>
         </div>
       </div>
 
@@ -263,6 +266,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
         onRetire={onRetireCategory}
         onUnretire={onUnretireCategory}
         onDelete={onDeleteCategory}
+        onRename={onRenameCategory}
       />
     </div>
   );

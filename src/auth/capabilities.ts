@@ -32,6 +32,7 @@ export type Capability =
   | 'equipment-template.write'
   | 'prediction.read'
   | 'prediction.run'
+  | 'proposal.approve'
   | 'utilization.read'
   | 'parameters.read'
   | 'parameters.write'
@@ -134,6 +135,13 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // stored outcome, and an outcome that changes without an explanation is worse than
   // a stale one.
   'prediction.run': ['super admin', 'admin'],
+  // Approving a generated draft (task QGEN1, question 3). Approval materialises an
+  // artifact for the whole account — a KPI on its class copy, alert rules on its
+  // machines — and D27 makes that the tenant super admin's act. Not `alert.author`,
+  // which an admin also holds: writing a rule by hand and accepting one a generator
+  // wrote are different decisions. No platform role: a class-scope candidate is
+  // reviewed under `catalog.write`, once question 2 decides what may reach it.
+  'proposal.approve': ['super admin'],
   // How the fleet spent its time. Every role inside the tenant, plus platform
   // support: it is a report about the customer's own machines, and the narrowing
   // that matters — which machines — is done by the assignment list rather than here.

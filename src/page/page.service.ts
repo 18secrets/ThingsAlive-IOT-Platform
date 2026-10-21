@@ -4,6 +4,9 @@ import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual
 import { unplacedSignals } from '../catalog/visual/anchor-rules';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 import { toTenantAnchor } from '../client-catalog/services/client-visual.service';
+import { boundsOf } from '../catalog/services/class-model.service';
+import { modelTray } from '../catalog/visual/model-anchor-rules';
+import { platformModel, toTenantModelAnchor } from '../client-catalog/services/client-model.service';
 import { DataSource, In } from 'typeorm';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
@@ -26,12 +29,17 @@ import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
+import { forecastDeclarations } from '../forecast/forecast-inputs';
+import { ForecastReader } from '../forecast/forecast-reader';
 import { classifyFreshness } from '../signal-binding/services/signal-freshness';
+import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { failureModeStatus } from '../rec-engine/attribute';
+import { isUnobserved, observeSignals } from '../rec-engine/observe';
 import {
-  AlertRow, FailureModeRow, FailureModeStatus, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
-  READINESS_SEVERITY, ReadinessRow, signalReadiness, SiteKpiData, unfilled,
+  AlertRow, FailureModeRow, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
+  ParameterRow, READINESS_SEVERITY, ReadinessRow, signalReadiness, SiteKpiData, unfilled,
 } from './page-widgets';
 
 const KPI_TYPES: ReadonlySet<WidgetType> = new Set(['kpi_number', 'kpi_gauge', 'kpi_chart']);
@@ -74,6 +82,25 @@ export interface SitePage {
  * One call per producer, not one per widget: every KPI widget shares one
  * `evaluateAll`, every signal chart one bucketed read, and so on.
  */
+/**
+ * Each marker's readiness, for the schematic and the 3-D twin alike: the worst across a
+ * signal's components — a composite machine's marker is only as ready as its least-ready
+ * probe. A signal the class does not require has no coverage row, so nothing can say it
+ * is ready.
+ */
+function markerReadiness(
+  coverage: Awaited<ReturnType<SignalBindingService['coverage']>> | null, at: Date,
+): (signal: string) => { readiness: PageReadiness; reason: string | null } {
+  const bySignal = new Map<string, { readiness: PageReadiness; reason: string | null }>();
+  for (const row of coverage ? readinessRows(coverage, at) : []) {
+    const seen = bySignal.get(row.signal);
+    if (!seen || READINESS_SEVERITY[row.readiness] > READINESS_SEVERITY[seen.readiness]) {
+      bySignal.set(row.signal, { readiness: row.readiness, reason: row.reason });
+    }
+  }
+  return (signal) => bySignal.get(signal) ?? { readiness: 'not_configured' as const, reason: 'not_required' };
+}
+
 @Injectable()
 export class PageService {
   private readonly reader = new TelemetryWindowReader();
@@ -86,7 +113,9 @@ export class PageService {
     private readonly workOrders: WorkOrderService,
     private readonly service: ServiceForecastService,
     private readonly clientCatalog: ClientCatalogService,
+    private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
+    private readonly forecasts: ForecastReader,
   ) {}
 
   // ================================================================ machine page
@@ -108,24 +137,38 @@ export class PageService {
     // The schematic's picture and this account's markers, first: its anchors decide
     // which signals the one bucketed read below has to cover.
     const schematic = has('schematic') && classSlug ? await this.schematicSource(scope, classSlug) : null;
+    // The 3-D twin's the same way (QTWIN1): one bucketed read serves both pictures.
+    const twin = has('twin_model') && classSlug ? await this.modelSource(scope, classSlug) : null;
     const chartSignals = [...new Set([
       ...visible.filter((w) => w.widgetType === 'signal_chart' && w.boundTo).map((w) => w.boundTo!),
       ...(schematic?.anchors.map((a) => a.signal) ?? []),
+      ...(twin?.anchors.filter((a) => !a.needsRecheck).map((a) => a.signal) ?? []),
     ])];
 
     // One call per producer, each only if some widget needs it.
-    const [envelopes, formulas, chartData, coverage, openAlerts, openWork, forecast, modes, recommendations] =
+    const [envelopes, formulas, chartData, coverage, openAlerts, openWork, forecast, modes, recommendations,
+      parameterRows, forecastDeclared] =
       await Promise.all([
         has('kpi_number', 'kpi_gauge', 'kpi_chart') ? this.kpis.evaluateAll(scope, ref, at) : Promise.resolve(null),
         has('kpi_number', 'kpi_gauge', 'kpi_chart') && classSlug ? this.clientFormulas(scope, classSlug) : Promise.resolve([]),
         chartSignals.length ? this.signalCharts(scope, ref, classSlug, chartSignals, at) : Promise.resolve(null),
-        has('readiness_list', 'schematic') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
+        has('readiness_list', 'schematic', 'twin_model') && classSlug ? this.bindings.coverage(scope, ref, at) : Promise.resolve(null),
         has('alert_list', 'failure_modes') ? this.openAlerts(scope, [ref]) : Promise.resolve(null),
         has('work_order_list') ? this.openWorkOrders(scope, [ref]) : Promise.resolve(null),
         has('service_due') ? this.service.fleetForecast(scope, at) : Promise.resolve(null),
         has('failure_modes') && classSlug ? this.clientRows(scope, ClientEquipmentClassFailureMode, classSlug) : Promise.resolve([]),
         has('recommendations') && classSlug ? this.clientRows(scope, ClientEquipmentClassRecommendation, classSlug) : Promise.resolve([]),
+        has('parameter_list') ? this.parameters.effective(scope, { scope: 'equipment', scopeRef: profile.id }, at) : Promise.resolve(null),
+        has('forecast_chart') ? this.forecastDeclarations(profile) : Promise.resolve(new Set<string>()),
       ]);
+
+    // Which of the failure modes' signals cannot be seen, read the way the recommendation
+    // engine reads them, so this widget and its Attribute step cannot disagree (QREC1 §3).
+    const modeSignals = [...new Set((modes as ClientEquipmentClassFailureMode[]).flatMap((f) => f.signals))];
+    const observed = modeSignals.length
+      ? await withTenantSession(this.ds, scope, (m) => observeSignals(m, scope.tenantId, profile, modeSignals, at))
+      : new Map();
+    const unobserved = modeSignals.filter((sig) => isUnobserved(observed.get(sig)));
 
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
     const formulaByKey = new Map<string, ClientFormula>((formulas as ClientFormula[]).map((f) => [f.formulaKey, f]));
@@ -167,7 +210,7 @@ export class PageService {
           if (!classSlug) return unfilled(h, 'not_configured', 'unclassified');
           const rows: FailureModeRow[] = (modes as ClientEquipmentClassFailureMode[]).map((f) => ({
             code: f.code, name: f.name, symptom: f.symptom, severity: f.severity, signals: f.signals,
-            status: failureModeStatus(f.signals, openAlerts!.signals),
+            status: failureModeStatus(f.signals, openAlerts!.signals, unobserved),
           }));
           return filled(h, rows);
         }
@@ -181,6 +224,21 @@ export class PageService {
 
         case 'schematic':
           return this.schematicWidget(h, schematic, coverage, chartData, at);
+
+        case 'twin_model':
+          return this.twinModelWidget(h, twin, coverage, chartData, at);
+
+        case 'parameter_list':
+          return filled(h, toParameterRows(parameterRows!));
+
+        case 'forecast_chart': {
+          // A forecast nobody declared is a configuration gap; a declared one is read from
+          // what the forecast pass wrote (QML1), and says why when there is nothing to show.
+          if (!w.boundTo || !forecastDeclared.has(w.boundTo)) return unfilled(h, 'not_configured', 'forecast_not_declared');
+          const answer = await withTenantSession(this.ds, scope, (m) =>
+            this.forecasts.chart(m, scope.tenantId, profile, w.boundTo!, at));
+          return answer.readiness === 'ready' ? filled(h, answer.data) : unfilled(h, answer.readiness, answer.reason);
+        }
 
         case 'machine_list':
         default:
@@ -238,14 +296,14 @@ export class PageService {
       const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
       if (!cls) return null;
       const rows = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
-        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug }, order: { signal: 'ASC' },
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug, tier: 'schematic' }, order: { signal: 'ASC' },
       });
       return { cls, anchors: rows.map(toTenantAnchor) };
     });
     if (!found) return null;
     const visual = found.cls.templateSlug && found.cls.templateVersion != null
       ? await this.ds.getRepository(EquipmentClassVisual).findOne({
-        where: { classSlug: found.cls.templateSlug, classVersion: found.cls.templateVersion },
+        where: { classSlug: found.cls.templateSlug, classVersion: found.cls.templateVersion, tier: 'schematic' },
       })
       : null;
     return {
@@ -277,17 +335,7 @@ export class PageService {
     if (!source.visual.assetKey) return unfilled(h, 'not_available', 'upload_pending');
     if (!this.storage.configured) return unfilled(h, 'not_available', 'assets_unavailable');
 
-    // Worst readiness per signal across its components — a composite machine's
-    // marker is only as ready as its least-ready probe.
-    const bySignal = new Map<string, { readiness: PageReadiness; reason: string | null }>();
-    for (const row of coverage ? readinessRows(coverage, at) : []) {
-      const seen = bySignal.get(row.signal);
-      if (!seen || READINESS_SEVERITY[row.readiness] > READINESS_SEVERITY[seen.readiness]) {
-        bySignal.set(row.signal, { readiness: row.readiness, reason: row.reason });
-      }
-    }
-    // A signal the class does not require has no coverage row, so nothing can say it is ready.
-    const readinessOf = (signal: string) => bySignal.get(signal) ?? { readiness: 'not_configured' as const, reason: 'not_required' };
+    const readinessOf = markerReadiness(coverage, at);
 
     const anchors = source.anchors.map((a) => {
       const r = readinessOf(a.signal);
@@ -305,6 +353,59 @@ export class PageService {
       imageUrl: await this.storage.readUrl(source.visual.assetKey),
       width: source.visual.widthPx, height: source.visual.heightPx,
       anchors, unplacedSignals: unplaced,
+    });
+  }
+
+  /** The platform model for the version this account's copy tracks, and this account's
+   * own model anchors (task QTWIN1). Null when the account does not hold the class. */
+  private async modelSource(scope: RequestScope, classSlug: string) {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId: scope.tenantId, slug: classSlug } });
+      if (!cls) return null;
+      const rows = await m.getRepository(ClientEquipmentClassVisualAnchor).find({
+        where: { tenantId: scope.tenantId, clientEquipmentClassSlug: classSlug, tier: 'model' }, order: { signal: 'ASC' },
+      });
+      return {
+        model: await platformModel(m, cls), anchors: rows.map(toTenantModelAnchor),
+        declared: cls.expectedSignals.map((s) => s.signal),
+        units: new Map(cls.expectedSignals.map((s) => [s.signal, s.unit])),
+      };
+    });
+  }
+
+  /**
+   * The 3-D twin (task QTWIN1 §4): the schematic's rules with a third coordinate. Each
+   * marker carries the page's readiness and the newest value; a marker the geometry
+   * changed under goes to the tray with `needsRecheck`, not onto the model. The unfilled
+   * states are the schematic's, with `no_model` — the one that tells the reader to fall
+   * back to the schematic or the list.
+   */
+  private async twinModelWidget(
+    h: Header,
+    source: Awaited<ReturnType<PageService['modelSource']>>,
+    coverage: Awaited<ReturnType<SignalBindingService['coverage']>> | null,
+    charts: Awaited<ReturnType<PageService['signalCharts']>> | null,
+    at: Date,
+  ): Promise<PageWidget> {
+    if (!source?.model) return unfilled(h, 'not_available', 'no_model');
+    if (!source.model.assetKey) return unfilled(h, 'not_available', 'upload_pending');
+    if (!this.storage.configured) return unfilled(h, 'not_available', 'assets_unavailable');
+
+    const readinessOf = markerReadiness(coverage, at);
+    const anchors = source.anchors.filter((a) => !a.needsRecheck).map((a) => {
+      const r = readinessOf(a.signal);
+      const chart = charts?.get(a.signal);
+      return {
+        signal: a.signal, x: a.x, y: a.y, z: a.z, label: a.label, readiness: r.readiness, reason: r.reason,
+        value: r.readiness === 'ready' && chart?.ok ? chart.latest : null,
+        unit: source.units.get(a.signal) ?? null,
+      };
+    });
+    const unplaced = modelTray(source.declared, source.anchors).map((t) => ({ ...t, ...readinessOf(t.signal) }));
+    return filled(h, {
+      modelUrl: await this.storage.readUrl(source.model.assetKey),
+      contentType: source.model.contentType, geometryVersion: source.model.geometryVersion,
+      bounds: boundsOf(source.model), anchors, unplacedSignals: unplaced,
     });
   }
 
@@ -444,13 +545,14 @@ export class PageService {
     const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
     const has = (...types: WidgetType[]) => layout.some((w) => types.includes(w.widgetType as WidgetType));
 
-    const [alerts, work, worst, siteKpis] = await Promise.all([
+    const [alerts, work, worst, siteKpis, siteParameters] = await Promise.all([
       has('alert_list', 'machine_list') && refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
       has('work_order_list') && refs.length ? this.openWorkOrders(scope, refs) : Promise.resolve([]),
       // Each machine's worst signal readiness — its coverage, not its KPIs. A site page
       // that evaluates every KPI of every machine is the shape that makes it unusable.
-      has('machine_list') ? Promise.all(machines.map((e) => this.machineReadiness(scope, e, at))) : Promise.resolve([]),
+      has('machine_list') ? this.machineReadiness(scope, machines, at) : Promise.resolve([]),
       this.siteKpiEnvelopes(scope, machines, layout, at),
+      has('parameter_list') ? this.parameters.effective(scope, { scope: 'site', scopeRef: plant.id }, at) : Promise.resolve(null),
     ]);
 
     const widgets = layout.map((w): PageWidget => {
@@ -469,6 +571,8 @@ export class PageService {
           return filled(h, work);
         case 'kpi_number': case 'kpi_gauge': case 'kpi_chart':
           return siteKpiWidget(h, w, siteKpis.get(w.boundTo ?? '') ?? []);
+        case 'parameter_list':
+          return filled(h, toParameterRows(siteParameters!));
         default:
           return unfilled(h, 'not_available', 'not_on_this_page');
       }
@@ -481,34 +585,51 @@ export class PageService {
     };
   }
 
-  private async machineReadiness(scope: RequestScope, e: EquipmentProfile, at: Date): Promise<PageReadiness> {
-    if (!e.equipmentClassSlug) return 'not_configured';
-    const coverage = await this.bindings.coverage(scope, { sourceSystem: e.sourceSystem, externalId: e.externalId }, at);
-    const rows = readinessRows(coverage, at);
-    if (!rows.length) return 'not_configured';
-    return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+  /** The signals this machine's class version declares a forecast for (QREC0a) — the
+   * forecast pass's own definition (QML1 §3), so the two cannot disagree. */
+  private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
+    const rows = await forecastDeclarations(this.ds.manager, profile.equipmentClassSlug, profile.classVersion);
+    return new Set(rows.map((r) => r.measurementRole));
   }
 
-  /** For each bound site KPI, each machine's own envelope for that key — `evaluateOne`
-   * per (machine, key), so a site page never evaluates KPIs no widget shows. A
-   * machine whose class does not declare the key is `not_declared`, normal in a
-   * mixed fleet, not an error. */
+  /** Each machine's worst signal readiness, from one batched coverage read for the
+   * whole site (task QTX1) rather than one per machine — the cost that made the site
+   * page linear in machines. */
+  private async machineReadiness(scope: RequestScope, machines: EquipmentProfile[], at: Date): Promise<PageReadiness[]> {
+    const classified = machines.filter((e) => e.equipmentClassSlug);
+    const coverage = await this.bindings.coverageMany(
+      scope, classified.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId })), at,
+    );
+    return machines.map((e) => {
+      const result = coverage.get(`${e.sourceSystem}/${e.externalId}`);
+      if (!e.equipmentClassSlug || !result) return 'not_configured';
+      const rows = readinessRows(result, at);
+      if (!rows.length) return 'not_configured';
+      return rows.reduce<PageReadiness>((acc, r) => (READINESS_SEVERITY[r.readiness] > READINESS_SEVERITY[acc] ? r.readiness : acc), 'ready');
+    });
+  }
+
+  /** For each bound site KPI, each machine's own envelope for that key — one
+   * `evaluateKeys` per machine for every bound key (task QTX1), so a site page never
+   * evaluates KPIs no widget shows, nor opens a session per key. A machine whose class
+   * does not declare the key is `not_declared`, normal in a mixed fleet, not an error. */
   private async siteKpiEnvelopes(
     scope: RequestScope, machines: EquipmentProfile[], layout: SiteLayoutWidget[], at: Date,
   ): Promise<Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>> {
     const keys = [...new Set(layout.filter((w) => KPI_TYPES.has(w.widgetType as WidgetType) && w.boundTo).map((w) => w.boundTo!))];
     const result = new Map<string, ({ machine: EquipmentProfile; env: KpiEnvelope | null })[]>();
+    if (!keys.length) return result;
+    const perMachine = await Promise.all(machines.map(async (machine) => {
+      if (!machine.equipmentClassSlug) return new Map<string, KpiEnvelope>();
+      try {
+        return await this.kpis.evaluateKeys(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, keys, at);
+      } catch (err) {
+        if (err instanceof NotFoundException) return new Map<string, KpiEnvelope>();
+        throw err;
+      }
+    }));
     for (const key of keys) {
-      result.set(key, await Promise.all(machines.map(async (machine) => {
-        if (!machine.equipmentClassSlug) return { machine, env: null };
-        try {
-          const env = await this.kpis.evaluateOne(scope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, key, at);
-          return { machine, env };
-        } catch (err) {
-          if (err instanceof NotFoundException) return { machine, env: null };
-          throw err;
-        }
-      })));
+      result.set(key, machines.map((machine, i) => ({ machine, env: perMachine[i].get(key) ?? null })));
     }
     return result;
   }
@@ -520,18 +641,6 @@ export function ruleSignal(rule: AlertRule): string | null {
   return typeof signal === 'string' && signal ? signal : null;
 }
 
-/**
- * Derived, never stored (task QPAGE1 §4): `active` when an open alert's rule watches
- * one of the mode's signals; `clear` only when every open alert on the machine can be
- * traced to a signal and none is the mode's; `unknown` when any open alert came from
- * a rule that names no signal — that alert might be this failure, and "clear" would
- * be a guess.
- */
-export function failureModeStatus(modeSignals: string[], openAlertSignals: (string | null)[]): FailureModeStatus {
-  if (openAlertSignals.some((s) => s !== null && modeSignals.includes(s))) return 'active';
-  if (openAlertSignals.some((s) => s === null)) return 'unknown';
-  return 'clear';
-}
 
 function readinessRows(coverage: Awaited<ReturnType<SignalBindingService['coverage']>>, at: Date): ReadinessRow[] {
   const row = (r: { measurementRole: string; componentScope: string; lastReadingAt: string | null;
@@ -580,4 +689,8 @@ function siteKpiWidget(
     excluded: { notDeclared, notReady },
   };
   return filled(h, data);
+}
+
+function toParameterRows(rows: Awaited<ReturnType<ParameterService['effective']>>): ParameterRow[] {
+  return rows.map((r) => ({ name: r.name, value: r.value, unit: r.unit, source: r.source }));
 }

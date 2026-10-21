@@ -10,6 +10,8 @@ import { AlertRow } from '../page/page-widgets';
 import { ruleSignal } from '../page/page.service';
 import { withTenantSession } from '../scope/tenant-session';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { Incident as IncidentRow } from './entities/incident.entity';
+import { IncidentRecord, toRecord } from './incident-record.service';
 
 /** The same two sets the machine page reads, so a machine is "in an incident" here
  * exactly when its page shows an open alert. */
@@ -31,6 +33,9 @@ export interface Incident {
   /** `null` when the caller does not hold `action.work`: the jobs exist, this caller
    * may not read them, and an empty list would claim there are none. */
   openWorkOrders: IncidentWorkOrder[] | null;
+  /** The machine's live incident record (phase 2): owner, status and SLA clock. Null only
+   * for alerts raised outside the evaluator, which nothing gathered into an incident. */
+  incident: IncidentRecord | null;
 }
 
 export interface IncidentList {
@@ -67,10 +72,15 @@ export class IncidentService {
     const externalIds = [...new Set(events.map((e) => e.externalId))];
     const ruleIds = [...new Set(events.map((e) => e.ruleId))];
 
-    const { profiles, rules } = await withTenantSession(this.ds, scope, async (m) => ({
+    const { profiles, rules, records } = await withTenantSession(this.ds, scope, async (m) => ({
       profiles: await m.getRepository(EquipmentProfile).find({ where: { tenantId: scope.tenantId, externalId: In(externalIds) } }),
       rules: await m.getRepository(AlertRule).find({ where: { tenantId: scope.tenantId, id: In(ruleIds) } }),
+      records: await m.getRepository(IncidentRow).createQueryBuilder('i')
+        .where('i.tenant_id = :t', { t: scope.tenantId }).andWhere(`i.status <> 'resolved'`)
+        .andWhere('i.external_id IN (:...ids)', { ids: externalIds }).getMany(),
     }));
+    const now = new Date();
+    const recordByKey = new Map(records.map((r) => [keyOf(r), toRecord(r, now)]));
     const profileByKey = new Map(profiles.map((p) => [keyOf(p), p]));
     const signalOfRule = new Map(rules.map((r) => [r.id, ruleSignal(r)]));
 
@@ -111,6 +121,7 @@ export class IncidentService {
           signal: signalOfRule.get(e.ruleId) ?? null, message: e.summary, acknowledged: e.state === 'acknowledged',
         })),
         openWorkOrders: orders === null ? null : ordersByKey.get(key) ?? [],
+        incident: recordByKey.get(key) ?? null,
       };
     });
 

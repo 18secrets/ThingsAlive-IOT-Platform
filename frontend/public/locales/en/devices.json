@@ -1,0 +1,157 @@
+{
+  "state": {
+    "in-stock": "In stock",
+    "assigned": "Assigned",
+    "retired": "Retired"
+  },
+  "status": {
+    "Online": "Online",
+    "Offline": "Offline"
+  },
+  "pool": {
+    "searchPlaceholder": "Search IMEI, model, tool profile or client...",
+    "allStates": "All States",
+    "register": "Register Device",
+    "col": {
+      "model": "Model",
+      "toolProfile": "Tool Profile",
+      "state": "State",
+      "action": "Action"
+    },
+    "unassigned": "Unassigned",
+    "historyHint": "History: every account and machine it has been on",
+    "editHint": "Edit model, tool profile, batch or notes",
+    "assignHint": "Assign to a client",
+    "retireHint": "Retire: dead, lost or written off",
+    "releaseHint": "Take back into stock",
+    "returnHint": "Repaired — bring back into stock",
+    "empty": "No devices found matching criteria.",
+    "totalRows": "Total Rows:"
+  },
+  "history": {
+    "title": "Device history",
+    "loadFailed": "Could not load the history.",
+    "empty": "No history recorded.",
+    "machine": "machine {{id}}",
+    "action": {
+      "register": "Registered",
+      "assign": "Assigned to client",
+      "release": "Taken back into stock",
+      "retire": "Retired",
+      "return-to-stock": "Returned to stock",
+      "claim": "Fitted to a machine",
+      "unclaim": "Taken off its machine"
+    }
+  },
+  "edit": {
+    "saveFailed": "Could not save this device.",
+    "title": "Edit device",
+    "model": "Model",
+    "modelPlaceholder": "e.g. FMB120",
+    "toolProfile": "Tool profile",
+    "none": "None",
+    "profileLocked": "Fixed while the device is {{state}}: a client machine may already be bound to the signals this profile declares.",
+    "batch": "Batch / delivery note",
+    "notes": "Notes"
+  },
+  "register": {
+    "failed": "Could not register these devices.",
+    "backToPool": "Back to Device Pool",
+    "title": "Register Devices",
+    "introPage": "Add arriving stock by IMEI. Assigning a device to a client is a separate step from the device pool.",
+    "intro": "Add arriving stock by IMEI. Assigning a device to a client is a separate step.",
+    "toolMapping": "Tool Mapping",
+    "optionalSuffix": "(optional)",
+    "noToolProfile": "— No tool profile —",
+    "batchRef": "Batch Reference",
+    "batchPlaceholder": "e.g. PO-92",
+    "addRow": "Add row",
+    "imeiPlaceholder": "15-digit IMEI",
+    "modelPlaceholder": "Model (optional)",
+    "removeRow": "Remove row",
+    "result": "{{registered}} registered.",
+    "resultWithSkipped": "{{registered}} registered, {{skipped}} already known (skipped).",
+    "registering": "Registering…",
+    "submit": "Register"
+  },
+  "assign": {
+    "failed": "Could not assign the device.",
+    "title": "Assign Device",
+    "selectClient": "— Select client —",
+    "assigning": "Assigning…",
+    "submit": "Assign"
+  },
+  "list": {
+    "searchPlaceholder": "Search Devices...",
+    "statusPlaceholder": "Select Status (All)",
+    "add": "Add Device",
+    "col": {
+      "id": "ID",
+      "name": "Device Name",
+      "imei": "IMEI Number",
+      "status": "Status"
+    },
+    "editHint": "Edit Device Configuration",
+    "deleteHint": "Decommission Device",
+    "rowsPerPage": "Rows per page:",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "setupPage": {
+    "subtitle": "Device pool",
+    "breadcrumb": "Device Management"
+  },
+  "equipment": {
+    "status": {
+      "active": "Active",
+      "retired": "Retired"
+    },
+    "tier": {
+      "basic": "Basic",
+      "standard": "Standard",
+      "advanced": "Advanced",
+      "full": "Full"
+    },
+    "noSite": "No site",
+    "allClients": "All clients",
+    "allStatuses": "All statuses",
+    "retirePrompt": "Why is {{name}} being retired?",
+    "retireFailed": "Could not retire this machine.",
+    "historyFailed": "Could not load placement history.",
+    "searchPlaceholder": "Search machine, code or client...",
+    "register": "Register Equipment",
+    "col": {
+      "code": "Code",
+      "name": "Name",
+      "site": "Site",
+      "tier": "Tier",
+      "actions": "Actions"
+    },
+    "edit": "Edit",
+    "placementHistory": "Placement history",
+    "retire": "Retire",
+    "noHistory": "No placement history for this asset yet.",
+    "empty": "No equipment found matching criteria.",
+    "movePrompt": "Why is {{name}} moving site?",
+    "saveFailed": "Could not save this equipment.",
+    "registerFailed": "Could not register this equipment.",
+    "editTitle": "Edit Equipment",
+    "clientLocked": "Which account this machine belongs to isn't changed here.",
+    "codePlaceholder": "e.g. DG-01",
+    "codeLocked": "Permanent — this machine's identity, not changed here.",
+    "codeHint": "This machine's permanent identity. Not changed later.",
+    "name": "Equipment Name",
+    "namePlaceholder": "e.g. Komatsu PC210LC",
+    "description": "Description",
+    "descriptionPlaceholder": "Equipment role & function",
+    "pickClientFirst": "Pick a client first",
+    "loadingSites": "Loading sites…",
+    "manufacturer": "Manufacturer",
+    "manufacturerPlaceholder": "e.g. Komatsu",
+    "modelNumber": "Model Number",
+    "modelNumberPlaceholder": "e.g. EC210",
+    "serialNumber": "Serial Number",
+    "serialNumberPlaceholder": "e.g. SER-4920",
+    "serviceTier": "Service Tier"
+  }
+}

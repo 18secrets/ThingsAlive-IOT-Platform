@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowUp, RefreshCw, Settings } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { AnchorEditor } from '../components/visual/AnchorEditor';
 import {
-  ApiError, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
-  MyEquipmentClass, ScenarioProvenance,
-  apiAdoptLatestScenarioTemplate, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
+  ApiError, ClassUpgradePreview, ClientScenario, EditClientScenarioInput, EditMyEquipmentClassInput, MyClassLayoutWidget,
+  MyEquipmentClass, ScenarioProvenance, UpgradeAction, UpgradeChange,
+  TenantVisual, apiGetMyClassVisual, apiSetMyClassAnchors,
+  apiAdoptLatestScenarioTemplate, apiApplyClassUpgrade, apiPreviewClassUpgrade, apiEditMyCatalogEquipmentClass, apiEditMyCatalogScenario,
   apiGetMyCatalogClassLayout, apiGetMyCatalogEquipmentClass, apiGetMyCatalogScenario, apiListMyCatalogScenarios,
   apiReorderMyCatalogLayout, apiSetMyCatalogWidgetHidden,
 } from '../lib/api';
@@ -17,7 +21,8 @@ const SEVERITY_TONE: Record<ClientScenario['severity'], 'slate' | 'sky' | 'amber
 };
 
 export const ScenariosPage: React.FC = () => {
-  usePageHeader({ title: 'Scenarios', subtitle: "Your Account's Prediction Catalog" });
+  const { t } = useTranslation('scenarios');
+  usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [scenarios, setScenarios] = useState<ClientScenario[]>([]);
   const [classFilter, setClassFilter] = useState('all');
   const [error, setError] = useState<string | undefined>(undefined);
@@ -32,7 +37,7 @@ export const ScenariosPage: React.FC = () => {
     let live = true;
     apiListMyCatalogScenarios()
       .then((s) => { if (live) { setScenarios(s); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load scenarios.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('page.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, []);
@@ -52,7 +57,7 @@ export const ScenariosPage: React.FC = () => {
       await apiEditMyCatalogScenario(scenario.slug, { enabled: !scenario.enabled });
       await refresh();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change this scenario.');
+      window.alert(err instanceof ApiError ? err.message : t('page.toggleFailed'));
     } finally {
       setBusySlug(null);
     }
@@ -64,15 +69,15 @@ export const ScenariosPage: React.FC = () => {
       setEditing(null);
       await refresh();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not save this scenario.');
+      window.alert(err instanceof ApiError ? err.message : t('page.saveFailed'));
     }
   }
 
   return (
     <div id="scenarios-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Things Scenarios</h2>
-        <p className="text-sm text-sky-100">Your account's copies of the prediction scenarios it has adopted.</p>
+        <h2 className="text-xl font-bold">{t('page.heading')}</h2>
+        <p className="text-sm text-sky-100">{t('page.intro')}</p>
       </div>
 
       {error && (
@@ -84,7 +89,7 @@ export const ScenariosPage: React.FC = () => {
 
       <div className="flex items-center gap-2">
         <SelectPicker
-          data={[{ label: 'All equipment classes', value: 'all' }, ...classes.map((c) => ({ label: c, value: c }))]}
+          data={[{ label: t('page.allClasses'), value: 'all' }, ...classes.map((c) => ({ label: c, value: c }))]}
           value={classFilter}
           onChange={(value) => setClassFilter(value ?? 'all')}
           searchable={false}
@@ -97,16 +102,16 @@ export const ScenariosPage: React.FC = () => {
             onClick={() => setManagingClass(classFilter)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer"
           >
-            <Settings className="w-3.5 h-3.5" /> Manage class
+            <Settings className="w-3.5 h-3.5" /> {t('page.manageClass')}
           </button>
         )}
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         {loading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-slate-500">{t('page.loading')}</p>
         ) : visible.length === 0 ? (
-          <p className="text-sm text-slate-400">No scenarios adopted yet. Entitlements are granted from Administration, and scenarios copy in from there.</p>
+          <p className="text-sm text-slate-400">{t('page.empty')}</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {visible.map((s) => (
@@ -117,29 +122,29 @@ export const ScenariosPage: React.FC = () => {
                     disabled={busySlug === s.slug}
                     onClick={() => toggle(s)}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${s.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                    title={s.enabled ? 'Disable' : 'Enable'}
+                    title={s.enabled ? t('page.disable') : t('page.enable')}
                   >
                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[s.severity]}>{s.severity}</Chip>
-                  <Chip tone="slate">Tier {s.tier}</Chip>
+                  <Chip tone={SEVERITY_TONE[s.severity]}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone="slate">{t('page.tier', { tier: s.tier })}</Chip>
                   <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
                   {s.templateSlug ? (
-                    <Chip tone="slate" title="Copied in when this equipment class was granted to the account">
-                      from {s.templateSlug}{s.templateVersion != null ? ` v${s.templateVersion}` : ''}
+                    <Chip tone="slate" title={t('page.fromTemplateTitle')}>
+                      {t('page.fromTemplate', { template: `${s.templateSlug}${s.templateVersion != null ? ` v${s.templateVersion}` : ''}` })}
                     </Chip>
                   ) : (
-                    <Chip tone="slate" title="Authored directly in this account, not copied from a template">self-authored</Chip>
+                    <Chip tone="slate" title={t('page.selfAuthoredTitle')}>{t('page.selfAuthored')}</Chip>
                   )}
                 </div>
                 {s.description && <p className="text-xs text-slate-400 dark:text-slate-500">{s.description}</p>}
                 <p className="text-[11px] text-slate-400">
-                  Needs {s.requiredSignals.join(', ') || 'no signals'} · {s.minimumHistoryDays}d history
+                  {t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}
                 </p>
                 <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                  Edit
+                  {t('page.edit')}
                 </button>
               </div>
             ))}
@@ -147,11 +152,11 @@ export const ScenariosPage: React.FC = () => {
         )}
       </div>
 
-      <Modal isOpen={editing !== null} onClose={() => setEditing(null)} title="Edit scenario" subtitle="Client Scenario" maxWidth="max-w-xl">
+      <Modal isOpen={editing !== null} onClose={() => setEditing(null)} title={t('edit.title')} subtitle={t('edit.subtitle')} maxWidth="max-w-xl">
         {editing && <ScenarioEditForm scenario={editing} onCancel={() => setEditing(null)} onSave={(input) => save(editing.slug, input)} />}
       </Modal>
 
-      <Modal isOpen={managingClass !== null} onClose={() => setManagingClass(null)} title="Manage equipment class" subtitle="Your Account's Copy" maxWidth="max-w-2xl">
+      <Modal isOpen={managingClass !== null} onClose={() => setManagingClass(null)} title={t('manage.title')} subtitle={t('manage.subtitle')} maxWidth="max-w-2xl">
         {managingClass && <ClassManageModal slug={managingClass} onClose={() => setManagingClass(null)} />}
       </Modal>
     </div>
@@ -159,6 +164,7 @@ export const ScenariosPage: React.FC = () => {
 };
 
 const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slug, onClose }) => {
+  const { t } = useTranslation('scenarios');
   const [cls, setCls] = useState<MyEquipmentClass | null>(null);
   const [widgets, setWidgets] = useState<MyClassLayoutWidget[]>([]);
   const [fallback, setFallback] = useState(false);
@@ -189,7 +195,7 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
         setWidgets(layout.widgets.slice().sort((a, b) => a.position - b.position));
         setError(undefined);
       })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load this class.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('manage.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [slug]);
@@ -202,7 +208,7 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       } as EditMyEquipmentClassInput);
       onClose();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not save this class.');
+      window.alert(err instanceof ApiError ? err.message : t('manage.saveFailed'));
     }
   }
 
@@ -212,7 +218,7 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       await apiSetMyCatalogWidgetHidden(slug, widget.widgetKey, !widget.hidden);
       await refreshLayout();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change this widget.');
+      window.alert(err instanceof ApiError ? err.message : t('manage.widgetFailed'));
     } finally {
       setBusyKey(null);
     }
@@ -229,50 +235,63 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       await apiReorderMyCatalogLayout(slug, reordered.map((w) => w.widgetKey));
       await refreshLayout();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not reorder the layout.');
+      window.alert(err instanceof ApiError ? err.message : t('manage.reorderFailed'));
       await refreshLayout();
     } finally {
       setBusyKey(null);
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  // After an upgrade the class's own fields may have followed the library too, so the
+  // form is reloaded along with the layout rather than left showing the old values.
+  async function reloadAfterUpgrade() {
+    const c = await apiGetMyCatalogEquipmentClass(slug);
+    setCls(c);
+    setName(c.name);
+    setDescription(c.description ?? '');
+    setCategory(c.category ?? '');
+    await refreshLayout();
+  }
+
+  if (loading) return <p className="text-sm text-slate-500">{t('page.loading')}</p>;
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
   if (!cls) return null;
 
   return (
     <div className="space-y-5">
+      <ClassUpgradeSection slug={slug} onUpgraded={reloadAfterUpgrade} />
+
       <form onSubmit={saveDetails} className="space-y-4">
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Name</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.name')}</span>
           <Input required value={name} onChange={(value) => setName(value)} />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Description</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.description')}</span>
           <Input as="textarea" rows={2} value={description} onChange={(value) => setDescription(value)} />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Category</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.category')}</span>
           <Input value={category} onChange={(value) => setCategory(value)} />
         </label>
         <div className="flex items-center justify-end gap-3">
           <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors cursor-pointer">
-            Save details
+            {t('manage.saveDetails')}
           </button>
         </div>
       </form>
 
       <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Machine page layout</h4>
-          {fallback && <span className="text-[11px] text-slate-400">Computed fallback — nothing to hide or reorder until this class has a saved layout</span>}
+          <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('manage.layout')}</h4>
+          {fallback && <span className="text-[11px] text-slate-400">{t('manage.fallback')}</span>}
         </div>
         <div className="space-y-1.5">
           {widgets.map((w, i) => (
             <div key={w.widgetKey} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{w.title ?? w.widgetKey}</p>
-                <p className="text-[11px] text-slate-400">{w.widgetType}{w.positionCustom ? ' · reordered' : ''}</p>
+                <p className="text-[11px] text-slate-400">{w.widgetType}{w.positionCustom ? ` · ${t('manage.reordered')}` : ''}</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button disabled={fallback || busyKey === w.widgetKey || i === 0} onClick={() => move(i, -1)} className="p-1.5 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed">
@@ -285,16 +304,164 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
                   disabled={fallback || busyKey === w.widgetKey}
                   onClick={() => toggleHidden(w)}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${!w.hidden ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                  title={fallback ? 'No saved layout yet' : w.hidden ? 'Show' : 'Hide'}
+                  title={fallback ? t('manage.noSavedLayout') : w.hidden ? t('manage.show') : t('manage.hide')}
                 >
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${!w.hidden ? 'translate-x-4.5' : 'translate-x-1'}`} />
                 </button>
               </div>
             </div>
           ))}
-          {widgets.length === 0 && <p className="text-xs text-slate-400">No widgets on this class's page.</p>}
+          {widgets.length === 0 && <p className="text-xs text-slate-400">{t('manage.noWidgets')}</p>}
         </div>
       </div>
+
+      <MyClassMarkers slug={slug} />
+    </div>
+  );
+};
+
+/** The account's copy of the class schematic: the image is the library's, the markers
+ *  can be moved or added here, and a moved one stays put through later upgrades. */
+const MyClassMarkers: React.FC<{ slug: string }> = ({ slug }) => {
+  const { t } = useTranslation('scenarios');
+  const [visual, setVisual] = useState<TenantVisual | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetMyClassVisual(slug)
+      .then((v) => { if (live) setVisual(v); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('markers.loadFailed')); });
+    return () => { live = false; };
+  }, [slug]);
+
+  return (
+    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('markers.title')}</h4>
+      {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!visual ? (
+        !error && <p className="text-xs text-slate-400">{t('page.loading')}</p>
+      ) : visual.state === 'assets_unavailable' ? (
+        <p className="text-xs text-slate-400">{t('markers.noStorage')}</p>
+      ) : visual.state !== 'ready' || !visual.imageUrl ? (
+        <p className="text-xs text-slate-400">{t('markers.noImage')}</p>
+      ) : (
+        <AnchorEditor
+          imageUrl={visual.imageUrl}
+          anchors={visual.anchors}
+          unplacedSignals={visual.unplacedSignals}
+          onSave={async (anchors) => { setVisual(await apiSetMyClassAnchors(slug, anchors)); }}
+          note={t('markers.note')}
+        />
+      )}
+    </div>
+  );
+};
+
+
+/** "3 updated from the library, 1 kept (yours)" — empty when nothing of that kind moves. */
+function summarise(t: TFunction<'scenarios'>, changes: UpgradeChange[]): string {
+  const counts = new Map<UpgradeAction, number>();
+  for (const c of changes) {
+    // An inherited row the library didn't touch is "replaced" with itself; not news.
+    if (c.action === 'replace' && c.upstream === 'unchanged') continue;
+    counts.set(c.action, (counts.get(c.action) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([action, n]) => t(`upgrade.action.${action}`, { count: n })).join(', ');
+}
+
+/** The library's newer version of this class, what taking it would change, and the
+ *  button that applies exactly the version shown (QUPGRADE1). */
+const ClassUpgradeSection: React.FC<{ slug: string; onUpgraded: () => Promise<void> }> = ({ slug, onUpgraded }) => {
+  const { t } = useTranslation('scenarios');
+  const [preview, setPreview] = useState<ClassUpgradePreview | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [applying, setApplying] = useState(false);
+  const [notice, setNotice] = useState<string | undefined>(undefined);
+
+  const load = () => apiPreviewClassUpgrade(slug)
+    .then((p) => { setPreview(p); setError(undefined); })
+    .catch((err) => setError(err instanceof ApiError ? err.message : t('upgrade.checkFailed')));
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug]);
+
+  async function apply() {
+    if (!preview) return;
+    if (!window.confirm(t('upgrade.confirm', { version: preview.toVersion }))) return;
+    setApplying(true);
+    setNotice(undefined);
+    try {
+      const result = await apiApplyClassUpgrade(slug, preview.toVersion);
+      setNotice(result.upgraded ? t('upgrade.upgraded', { version: result.toVersion }) : t('upgrade.alreadyOn', { version: result.toVersion }));
+      await onUpgraded();
+      await load();
+    } catch (err) {
+      // Most likely a newer version published after this preview: show the fresh one.
+      setError(err instanceof ApiError ? err.message : t('upgrade.failed'));
+      await load();
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  if (error) return <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>;
+  if (!preview) return <p className="text-xs text-slate-400">{t('upgrade.checking')}</p>;
+
+  if (preview.upToDate) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        <span>{t('upgrade.upToDate', { version: preview.toVersion })}</span>
+        {notice && <span className="text-slate-400">{notice}</span>}
+      </div>
+    );
+  }
+
+  const lines: [string, string][] = [
+    // The preview says whether the fields follow the library, not whether v-next changed
+    // them, so this states the rule rather than claiming a change.
+    [t('upgrade.classDetails'), preview.classFields.action === 'keep' ? t('upgrade.keptYours') : t('upgrade.followLibrary')],
+    [t('upgrade.formulas'), summarise(t, preview.formulas)],
+    [t('upgrade.failureModes'), summarise(t, preview.failureModes)],
+    [t('upgrade.recommendations'), summarise(t, preview.recommendations)],
+    [t('upgrade.pageWidgets'), [
+      preview.layout.added.length ? t('upgrade.added', { count: preview.layout.added.length }) : '',
+      preview.layout.removed.length ? t('upgrade.removed', { count: preview.layout.removed.length }) : '',
+      preview.layout.keptCustom.length ? t('upgrade.arrangementsKept', { count: preview.layout.keptCustom.length }) : '',
+    ].filter(Boolean).join(', ')],
+    [t('upgrade.schematicAnchors'), [
+      preview.anchors.added.length ? t('upgrade.added', { count: preview.anchors.added.length }) : '',
+      preview.anchors.removed.length ? t('upgrade.removed', { count: preview.anchors.removed.length }) : '',
+      preview.anchors.needsRecheck.length ? t('upgrade.toRecheck', { count: preview.anchors.needsRecheck.length }) : '',
+    ].filter(Boolean).join(', ')],
+  ];
+
+  return (
+    <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-sky-800 dark:text-sky-300">
+          {t('upgrade.available', { version: preview.toVersion })} <span className="font-normal">{t('upgrade.youHave', { version: preview.fromVersion })}</span>
+        </p>
+        <button
+          onClick={apply}
+          disabled={applying}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          <ArrowUpCircle className="w-3.5 h-3.5" /> {applying ? t('upgrade.upgrading') : t('upgrade.upgradeTo', { version: preview.toVersion })}
+        </button>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+        {lines.filter(([, text]) => text).map(([label, text]) => (
+          <React.Fragment key={label}>
+            <dt className="text-slate-500 dark:text-slate-400">{label}</dt>
+            <dd className="text-slate-700 dark:text-slate-200">{text}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      {lines.slice(1).every(([, text]) => !text) && (
+        <p className="text-[11px] text-slate-500">{t('upgrade.noChanges')}</p>
+      )}
+      {notice && <p className="text-[11px] text-slate-500">{notice}</p>}
     </div>
   );
 };
@@ -304,6 +471,7 @@ const ScenarioEditForm: React.FC<{
   onCancel: () => void;
   onSave: (input: EditClientScenarioInput) => void;
 }> = ({ scenario, onCancel, onSave }) => {
+  const { t } = useTranslation('scenarios');
   const [name, setName] = useState(scenario.name);
   const [description, setDescription] = useState(scenario.description ?? '');
   const [severity, setSeverity] = useState(scenario.severity);
@@ -324,7 +492,7 @@ const ScenarioEditForm: React.FC<{
       await apiAdoptLatestScenarioTemplate(scenario.slug);
       onCancel();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not adopt the latest template.');
+      window.alert(err instanceof ApiError ? err.message : t('edit.adoptFailed'));
     } finally {
       setAdopting(false);
     }
@@ -335,15 +503,15 @@ const ScenarioEditForm: React.FC<{
       {provenance?.newerTemplateAvailable && (
         <div className="flex items-center justify-between gap-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 rounded-lg px-3 py-2.5">
           <p className="text-xs text-sky-700 dark:text-sky-300">
-            Template version {provenance.newerTemplateVersion} is available (you have {provenance.templateVersion}). Adopting discards local edits.
+            {t('edit.newerTemplate', { newer: provenance.newerTemplateVersion, current: provenance.templateVersion })}
           </p>
           <button onClick={adopt} disabled={adopting} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer shrink-0">
-            <RefreshCw className={`w-3.5 h-3.5 ${adopting ? 'animate-spin' : ''}`} /> Adopt latest
+            <RefreshCw className={`w-3.5 h-3.5 ${adopting ? 'animate-spin' : ''}`} /> {t('edit.adoptLatest')}
           </button>
         </div>
       )}
       {provenance && !provenance.unchangedSinceCopy && (
-        <p className="text-xs text-slate-400">Edited locally since it was copied from {provenance.templateSlug ?? 'its template'}.</p>
+        <p className="text-xs text-slate-400">{t('edit.editedLocally', { template: provenance.templateSlug ?? t('edit.itsTemplate') })}</p>
       )}
 
       <form
@@ -354,18 +522,18 @@ const ScenarioEditForm: React.FC<{
         }}
       >
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Name</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.name')}</span>
           <Input required value={name} onChange={(value) => setName(value)} />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Description</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.description')}</span>
           <Input as="textarea" rows={2} value={description} onChange={(value) => setDescription(value)} />
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Severity</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.severity')}</span>
             <SelectPicker
-              data={['none', 'low', 'medium', 'high', 'critical'].map((s) => ({ label: s, value: s }))}
+              data={['none', 'low', 'medium', 'high', 'critical'].map((s) => ({ label: t(`severity.${s}`), value: s }))}
               value={severity}
               onChange={(value) => setSeverity((value ?? 'medium') as ClientScenario['severity'])}
               block
@@ -374,9 +542,9 @@ const ScenarioEditForm: React.FC<{
             />
           </div>
           <div className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Tier</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.tier')}</span>
             <SelectPicker
-              data={[1, 2, 3].map((t) => ({ label: `Tier ${t}`, value: t }))}
+              data={[1, 2, 3].map((n) => ({ label: t('page.tier', { tier: n }), value: n }))}
               value={tier}
               onChange={(value) => setTier((value ?? 1) as 1 | 2 | 3)}
               block
@@ -385,18 +553,18 @@ const ScenarioEditForm: React.FC<{
             />
           </div>
           <div className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Min. history (days)</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.minHistory')}</span>
             <InputNumber min={0} max={365} value={minimumHistoryDays} onChange={(value) => setMinimumHistoryDays(Number(value) || 0)} />
           </div>
         </div>
-        <p className="text-[11px] text-slate-400">Required signals: {scenario.requiredSignals.join(', ') || 'none'}</p>
+        <p className="text-[11px] text-slate-400">{t('form.requiredSignals', { signals: scenario.requiredSignals.join(', ') || t('form.none') })}</p>
 
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-            Cancel
+            {t('form.cancel')}
           </button>
           <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors cursor-pointer">
-            Save changes
+            {t('form.saveChanges')}
           </button>
         </div>
       </form>

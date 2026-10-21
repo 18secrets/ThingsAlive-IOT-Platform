@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Plus, Ban, Layers } from 'lucide-react';
 import { CheckPicker, Input } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { ApiError, Entitlement, EquipmentClass } from '../../lib/api';
 
@@ -18,6 +19,7 @@ interface ClientEntitlementsModalProps {
 export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = ({
   isOpen, onClose, client, equipmentClasses, entitlements, onGrant, onRevoke,
 }) => {
+  const { t } = useTranslation(['accounts', 'shared']);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,8 +47,10 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
   );
 
   const activeGrants = clientEntitlements.filter((e) => !e.revokedAt);
+  // A seed-only class exists for the demo tenant alone; the backend refuses every grant of
+  // it outside the demo seeder, so offering it here only sets up that refusal.
   const grantableClasses = publishedClasses.filter(
-    (ec) => !activeGrants.some((g) => g.equipmentClassSlug === ec.slug),
+    (ec) => !ec.seedOnly && !activeGrants.some((g) => g.equipmentClassSlug === ec.slug),
   );
   const grantableOptions = useMemo(
     () => grantableClasses.map((ec) => ({ label: ec.name ?? ec.slug, value: ec.slug })),
@@ -70,7 +74,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
       setSelectedSlugs([]);
       setNote('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not grant one or more classes.');
+      setError(err instanceof ApiError ? err.message : t('entitlements.grantFailed'));
     } finally {
       setBusy(false);
     }
@@ -82,7 +86,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
     try {
       await onRevoke(id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not revoke this grant.');
+      setError(err instanceof ApiError ? err.message : t('entitlements.revokeFailed'));
     } finally {
       setRevokingId(null);
     }
@@ -96,11 +100,12 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <div>
-            <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">Granted Classes</h3>
+            <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('entitlements.title')}</h3>
             <p className="text-[11px] text-slate-400 mt-0.5">{client.clientName}</p>
           </div>
           <button
             onClick={onClose}
+            aria-label={t('shared:close')}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -109,9 +114,9 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
 
         <div className="p-6 space-y-4 text-sm max-h-[70vh] overflow-y-auto">
           <div>
-            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Current grants</h4>
+            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">{t('entitlements.current')}</h4>
             {activeGrants.length === 0 ? (
-              <p className="text-xs text-slate-400">No equipment classes granted yet.</p>
+              <p className="text-xs text-slate-400">{t('entitlements.none')}</p>
             ) : (
               <ul className="space-y-2">
                 {activeGrants.map((g) => (
@@ -130,7 +135,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
                       onClick={() => handleRevoke(g.id)}
                       disabled={revokingId === g.id}
                       className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                      title="Revoke"
+                      title={t('entitlements.revoke')}
                     >
                       <Ban className="w-3.5 h-3.5" />
                     </button>
@@ -141,34 +146,34 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
           </div>
 
           <form onSubmit={handleGrant} className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300">Grant classes</h4>
+            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t('entitlements.grantHeading')}</h4>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Equipment Classes <span className="text-rose-500">*</span>
+                {t('entitlements.classes')} <span className="text-rose-500">*</span>
               </label>
               {grantableClasses.length === 0 ? (
                 <p className="text-[11px] text-slate-400">
                   {publishedClasses.length === 0
-                    ? 'No published equipment classes exist yet.'
-                    : 'Every published class is already granted.'}
+                    ? t('entitlements.noPublished')
+                    : t('entitlements.allGranted')}
                 </p>
               ) : (
                 <CheckPicker
                   data={grantableOptions}
                   value={selectedSlugs}
                   onChange={(value) => setSelectedSlugs(value ?? [])}
-                  placeholder="Select a published class…"
+                  placeholder={t('entitlements.selectPlaceholder')}
                   block
                   searchable={grantableOptions.length > 6}
                 />
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Note</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('entitlements.note')}</label>
               <Input
                 value={note}
                 onChange={(value) => setNote(value)}
-                placeholder="Optional"
+                placeholder={t('shared:optional')}
               />
             </div>
 
@@ -185,7 +190,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
-                <span>{busy ? 'Granting…' : `Grant${selectedSlugs.length ? ` (${selectedSlugs.length})` : ''}`}</span>
+                <span>{busy ? t('entitlements.granting') : (selectedSlugs.length ? t('entitlements.grantCount', { count: selectedSlugs.length }) : t('entitlements.grant'))}</span>
               </button>
             </div>
           </form>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   InviteUserInput, InviteUserResult, TenantRole, TenantUser, Plant, EquipmentProfile, SetUserAccessInput,
 } from '../lib/api';
@@ -17,6 +18,7 @@ interface ClientUsersPageProps {
   onSetUserRole: (userId: string, roleSlug: string) => Promise<TenantUser>;
   onSuspendUser: (userId: string, reason: string) => Promise<TenantUser>;
   onReinstateUser: (userId: string) => Promise<TenantUser>;
+  onDeleteUser: (userId: string) => Promise<void>;
   plants: Plant[];
   equipment: EquipmentProfile[];
   onSetUserAccess: (userId: string, input: SetUserAccessInput) => Promise<TenantUser>;
@@ -24,9 +26,10 @@ interface ClientUsersPageProps {
 
 export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   users, roles, error, manageAccessClientId, onBackToClients,
-  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, plants, equipment, onSetUserAccess,
+  onInviteUser, onSetUserRole, onSuspendUser, onReinstateUser, onDeleteUser, plants, equipment, onSetUserAccess,
 }) => {
   const { authUser } = useAuth();
+  const { t } = useTranslation('users');
   if (!authUser) return null;
 
   // user.manage is that account's own super admin only — there is no cross-tenant
@@ -34,9 +37,8 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
   // the Clients tab has nothing real to see here yet.
   if (authUser.role === 'master-admin' || manageAccessClientId) {
     return (
-      <NotAvailableNotice title="Not available yet" onBack={onBackToClients}>
-        Managing another account's users is the account's own super admin's call —
-        there is no Master Admin route for it today.
+      <NotAvailableNotice title={t('common.notAvailableYet')} onBack={onBackToClients}>
+        {t('notAvailable.users')}
       </NotAvailableNotice>
     );
   }
@@ -50,6 +52,7 @@ export const ClientUsersPage: React.FC<ClientUsersPageProps> = ({
       onSetUserRole={onSetUserRole}
       onSuspendUser={onSuspendUser}
       onReinstateUser={onReinstateUser}
+      onDeleteUser={onDeleteUser}
       plants={plants}
       equipment={equipment}
       onSetUserAccess={onSetUserAccess}

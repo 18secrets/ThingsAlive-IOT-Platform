@@ -4,6 +4,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { assignDefined } from '../../common/assign-defined';
 import { compileClassFormulas } from '../formula/formula-compiler';
 import {
   checkDimensions, checkSuspiciousBindings, substituteExpression,
@@ -16,12 +17,15 @@ import { SignalAlias } from '../entities/signal-alias.entity';
 import { AlertRuleTemplate } from '../entities/alert-rule-template.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
 import { validateParams } from '../../alert/services/alert-rules';
-import { validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals } from './content-validation';
+import {
+  oemFigureProblems, validateScenarioRequiredSignals, validateSignalCountForPublish, validateSignals,
+} from './content-validation';
 import {
   ClassContentError, copyClassContent, danglingRecommendations, fromFailureModeJsonb, insertClassContent,
   loadFailureModes, loadRecommendations, replaceDraftFailureModes, undeclaredFailureModeSignals,
 } from './class-failure-modes';
 import { copyLayout, loadLayout, presentationOf } from './class-layout';
+import { copyModel, modelPublishProblems } from './class-model.service';
 import { copyVisual, visualPublishProblems } from './class-visual.service';
 import { layoutProblems } from '../layout/layout-rules';
 
@@ -102,7 +106,7 @@ export class CatalogAuthoringService {
     const working = await this.workingClass(slug);
     const previous = working.id ? working.expectedSignals : [];
     const forked = !working.id;
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     await this.requireSaneSignals(working.expectedSignals, previous);
     this.logger.log(`${scope.userId} edited template class "${slug}" v${working.version}.`);
     return this.classes.manager.transaction(async (m) => {
@@ -113,6 +117,7 @@ export class CatalogAuthoringService {
         await copyClassContent(m, slug, working.version - 1, working.version);
         await copyLayout(m, slug, working.version - 1, working.version);
         await copyVisual(m, slug, working.version - 1, working.version);
+        await copyModel(m, slug, working.version - 1, working.version);
       }
       if (draft.failureModes) {
         try {
@@ -173,6 +178,11 @@ export class CatalogAuthoringService {
       // The visual (task QREC0c): an anchor on an undeclared signal, or an upload never
       // confirmed. No visual at all publishes normally.
       ...await visualPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
+      // The 3-D model (task QTWIN1): the same two, plus an anchor outside the model's box.
+      ...await modelPublishProblems(this.classes.manager, slug, draft.version, draft.expectedSignals.map((s) => s.signal)),
+      // OEM figures (task QCLASS-OEM). The constraints already refuse a bad row at write;
+      // this is the net that names the field for any path that reached a draft anyway.
+      ...oemFigureProblems(draft, draft.expectedSignals.map((s) => s.signal)),
     ];
     if (contentProblems.length) {
       throw new BadRequestException(`Cannot publish "${slug}" v${draft.version}: ${contentProblems.join(' ')}`);
@@ -354,6 +364,36 @@ export class CatalogAuthoringService {
     return this.classes.save(published);
   }
 
+  /**
+   * Offers a retired template again: its newest retired version becomes the published
+   * one. `retired` also marks every version a later publish superseded, so this only
+   * acts when nothing of the slug is published — a class with a live version was never
+   * retired as a whole, and reviving an older version beside it would put two
+   * `published` rows where every reader expects one.
+   *
+   * The slug's rows are locked for the check and the write, so a publish of the same
+   * slug cannot land in between and leave both versions published.
+   */
+  async unretireClass(scope: RequestScope, slug: string): Promise<EquipmentClassProfile> {
+    return this.classes.manager.transaction(async (m) => {
+      const rows = await m.getRepository(EquipmentClassProfile).createQueryBuilder('c')
+        .where('c.slug = :slug', { slug })
+        .orderBy('c.version', 'DESC')
+        .setLock('pessimistic_write')
+        .getMany();
+      if (!rows.length) throw new NotFoundException(`No template "${slug}".`);
+      const live = rows.find((r) => r.status === 'published');
+      if (live) {
+        throw new BadRequestException(`"${slug}" is not retired: v${live.version} is published.`);
+      }
+      const latestRetired = rows.find((r) => r.status === 'retired');
+      if (!latestRetired) throw new BadRequestException(`"${slug}" has never been published, so there is nothing to un-retire.`);
+      latestRetired.status = 'published';
+      this.logger.warn(`${scope.userId} un-retired template class "${slug}" (v${latestRetired.version} published again).`);
+      return m.getRepository(EquipmentClassProfile).save(latestRetired);
+    });
+  }
+
   async createScenario(scope: RequestScope, slug: string, draft: ScenarioDraft): Promise<ScenarioDefinition> {
     if (await this.scenarios.findOne({ where: { slug } })) {
       throw new BadRequestException(`Template scenario "${slug}" already exists. Edit it to create a new version.`);
@@ -380,7 +420,7 @@ export class CatalogAuthoringService {
     const working = await this.workingScenario(slug);
     const classSlug = draft.equipmentClassSlug ?? working.equipmentClassSlug;
     if (draft.requiredSignals) await this.requireDeclaredSignals(classSlug, draft.requiredSignals);
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     this.logger.log(`${scope.userId} edited template scenario "${slug}" v${working.version}.`);
     return this.scenarios.save(working);
   }
@@ -481,7 +521,7 @@ export class CatalogAuthoringService {
     scope: RequestScope, slug: string, draft: AlertTemplateDraft,
   ): Promise<AlertRuleTemplate> {
     const working = await this.workingAlertTemplate(slug);
-    Object.assign(working, draft);
+    assignDefined(working, draft as Partial<typeof working>);
     await this.requireAlertTemplateSane(working.equipmentClassSlug, working);
     this.logger.log(`${scope.userId} edited alert template "${slug}" v${working.version}.`);
     return this.alertTemplates.save(working);

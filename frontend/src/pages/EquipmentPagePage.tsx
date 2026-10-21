@@ -1,18 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
   ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
   ShiftInput, ShiftRun, Weekday, apiCreateShift, apiGetMachinePage, apiGetServiceHistory, apiGetShiftRuns,
-  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift,
+  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift, apiUpdateShift,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
+import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 
-const DAY_LABEL: Record<Weekday, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
+// Day names are `days.0`–`days.6` (Sunday first, matching Weekday).
 const DAY_OPTIONS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
 
 function minutesToClock(minutes: number): string {
@@ -35,12 +37,14 @@ const RUN_STATUS_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = 
 };
 
 function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const { t } = useTranslation('equipment');
   const [shifts, setShifts] = useState<EquipmentShift[]>([]);
   const [runs, setRuns] = useState<ShiftRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<EquipmentShift | null>(null);
 
   const refresh = () => apiListShifts(sourceSystem, externalId).then(setShifts);
 
@@ -50,7 +54,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
     apiGetShiftRuns(sourceSystem, externalId).then((r) => { if (live) setRuns(r); }).catch(() => {});
     apiListShifts(sourceSystem, externalId)
       .then((s) => { if (live) { setShifts(s); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the shift schedule.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('shifts.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +67,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       else await apiReinstateShift(sourceSystem, externalId, shift.id);
       await refresh();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change this shift.');
+      window.alert(err instanceof ApiError ? err.message : t('shifts.changeFailed'));
     } finally {
       setBusyId(null);
     }
@@ -75,24 +79,34 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       setAdding(false);
       await refresh();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not add this shift.');
+      window.alert(err instanceof ApiError ? err.message : t('shifts.addFailed'));
+    }
+  }
+
+  async function update(shift: EquipmentShift, input: ShiftInput) {
+    try {
+      await apiUpdateShift(sourceSystem, externalId, shift.id, input);
+      setEditing(null);
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : t('shifts.saveFailed'));
     }
   }
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Shift schedule</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('shifts.title')}</h3>
         <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
-          <Plus className="w-3.5 h-3.5" /> Add shift
+          <Plus className="w-3.5 h-3.5" /> {t('shifts.add')}
         </button>
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">Loading…</p>
+        <p className="text-xs text-slate-400">{t('common.loading')}</p>
       ) : shifts.length === 0 ? (
-        <p className="text-xs text-slate-400">No shifts configured. Utilization and availability stay "not_configured" until one exists.</p>
+        <p className="text-xs text-slate-400">{t('shifts.empty')}</p>
       ) : (
         <div className="space-y-2">
           {shifts.map((s) => (
@@ -100,17 +114,26 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
                 <p className="text-[11px] text-slate-400">
-                  {s.days.slice().sort().map((d) => DAY_LABEL[d]).join(', ')} · {minutesToClock(s.startMinute)}–{minutesToClock(s.endMinute)} ({s.timeZone})
+                  {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {minutesToClock(s.startMinute)}–{minutesToClock(s.endMinute)} ({s.timeZone})
                 </p>
               </div>
-              <button
-                disabled={busyId === s.id}
-                onClick={() => toggle(s)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                title={s.status === 'active' ? 'Retire' : 'Reinstate'}
-              >
-                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => setEditing(s)}
+                  className="px-2 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                >
+                  {t('common.edit')}
+                </button>
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => toggle(s)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                  title={s.status === 'active' ? t('shifts.retire') : t('shifts.reinstate')}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -118,29 +141,41 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
 
       {runs.length > 0 && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Recent shift runs</p>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
           {runs.slice(0, 5).map((r) => (
             <div key={r.id} className="flex items-center justify-between text-[11px]">
               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock3 className="w-3 h-3" />{r.localDate} · {r.shiftName}</span>
-              <Chip tone={RUN_STATUS_TONE[r.status] ?? 'slate'}>{r.detail ?? r.status}</Chip>
+              <Chip tone={RUN_STATUS_TONE[r.status] ?? 'slate'}>{r.detail ?? t(`runStatus.${r.status}`, { defaultValue: r.status })}</Chip>
             </div>
           ))}
         </div>
       )}
 
-      <Modal isOpen={adding} onClose={() => setAdding(false)} title="Add shift" subtitle="Working Hours" maxWidth="max-w-md">
+      <Modal isOpen={adding} onClose={() => setAdding(false)} title={t('shifts.add')} subtitle={t('shifts.workingHours')} maxWidth="max-w-md">
         <ShiftForm onCancel={() => setAdding(false)} onCreate={create} />
+      </Modal>
+
+      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={t('shifts.edit')} subtitle={editing?.name} maxWidth="max-w-md">
+        {editing && (
+          <ShiftForm key={editing.id} initial={editing} onCancel={() => setEditing(null)} onCreate={(input) => update(editing, input)} />
+        )}
       </Modal>
     </div>
   );
 }
 
-const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) => void }> = ({ onCancel, onCreate }) => {
-  const [name, setName] = useState('');
-  const [start, setStart] = useState('06:00');
-  const [end, setEnd] = useState('18:00');
-  const [days, setDays] = useState<Weekday[]>([1, 2, 3, 4, 5]);
-  const [timeZone, setTimeZone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+const ShiftForm: React.FC<{
+  /** Present when editing: the form starts from the shift's own values and saves them all. */
+  initial?: EquipmentShift;
+  onCancel: () => void;
+  onCreate: (input: ShiftInput) => void;
+}> = ({ initial, onCancel, onCreate }) => {
+  const { t } = useTranslation('equipment');
+  const [name, setName] = useState(initial?.name ?? '');
+  const [start, setStart] = useState(initial ? minutesToClock(initial.startMinute) : '06:00');
+  const [end, setEnd] = useState(initial ? minutesToClock(initial.endMinute) : '18:00');
+  const [days, setDays] = useState<Weekday[]>(initial?.days ?? [1, 2, 3, 4, 5]);
+  const [timeZone, setTimeZone] = useState(initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   const valid = useMemo(() => {
     const s = clockToMinutes(start);
@@ -160,23 +195,23 @@ const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) 
       }}
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Name</span>
-        <Input required value={name} onChange={(value) => setName(value)} placeholder="e.g. Day shift" />
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.name')}</span>
+        <Input required value={name} onChange={(value) => setName(value)} placeholder={t('shifts.namePlaceholder')} />
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Start (HH:MM)</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.start')}</span>
           <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">End (HH:MM)</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.end')}</span>
           <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
         </label>
       </div>
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Days</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.days')}</span>
         <CheckPicker
-          data={DAY_OPTIONS.map((d) => ({ label: DAY_LABEL[d], value: d }))}
+          data={DAY_OPTIONS.map((d) => ({ label: t(`days.${d}`), value: d }))}
           value={days}
           onChange={(value) => setDays((value ?? []) as Weekday[])}
           block
@@ -185,24 +220,22 @@ const ShiftForm: React.FC<{ onCancel: () => void; onCreate: (input: ShiftInput) 
         />
       </div>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Time zone (IANA)</span>
-        <Input required value={timeZone} onChange={(value) => setTimeZone(value)} placeholder="e.g. Asia/Kolkata" />
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.timeZone')}</span>
+        <Input required value={timeZone} onChange={(value) => setTimeZone(value)} placeholder={t('shifts.timeZonePlaceholder')} />
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-          Cancel
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={!valid} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
-          Add shift
+          {initial ? t('common.saveChanges') : t('shifts.add')}
         </button>
       </div>
     </form>
   );
 };
 
-const KIND_LABEL: Record<ServiceKind, string> = {
-  scheduled: 'Scheduled', unscheduled: 'Unscheduled', overhaul: 'Overhaul', 'meter-replaced': 'Meter replaced',
-};
+// Kind labels are `serviceKind.<kind>`.
 const KIND_TONE: Record<ServiceKind, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   scheduled: 'emerald', unscheduled: 'amber', overhaul: 'rose', 'meter-replaced': 'slate',
 };
@@ -210,6 +243,7 @@ const KIND_OPTIONS: ServiceKind[] = ['scheduled', 'unscheduled', 'overhaul', 'me
 const UNIT_OPTIONS: RuntimeUnit[] = ['hours', 'minutes', 'seconds'];
 
 function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
+  const { t } = useTranslation('equipment');
   const [records, setRecords] = useState<EquipmentServiceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -222,7 +256,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
     setLoading(true);
     apiGetServiceHistory(sourceSystem, externalId)
       .then((r) => { if (live) { setRecords(r); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load the service history.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('service.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,24 +268,24 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
       setRecording(false);
       await refresh();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not record this service.');
+      window.alert(err instanceof ApiError ? err.message : t('service.recordFailed'));
     }
   }
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Service history</h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('service.title')}</h3>
         <button onClick={() => setRecording(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
-          <Wrench className="w-3.5 h-3.5" /> Record service
+          <Wrench className="w-3.5 h-3.5" /> {t('service.record')}
         </button>
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">Loading…</p>
+        <p className="text-xs text-slate-400">{t('common.loading')}</p>
       ) : records.length === 0 ? (
-        <p className="text-xs text-slate-400">No service recorded yet. The forecast above falls back to commissioning as its datum until one is.</p>
+        <p className="text-xs text-slate-400">{t('service.empty')}</p>
       ) : (
         <div className="space-y-2">
           {records.map((r) => (
@@ -265,13 +299,13 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
                 </p>
                 {r.notes && <p className="text-[11px] text-slate-400 mt-0.5">{r.notes}</p>}
               </div>
-              <Chip tone={KIND_TONE[r.kind]}>{KIND_LABEL[r.kind]}</Chip>
+              <Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>
             </div>
           ))}
         </div>
       )}
 
-      <Modal isOpen={recording} onClose={() => setRecording(false)} title="Record service" subtitle="Service history" maxWidth="max-w-md">
+      <Modal isOpen={recording} onClose={() => setRecording(false)} title={t('service.record')} subtitle={t('service.title')} maxWidth="max-w-md">
         <ServiceRecordForm onCancel={() => setRecording(false)} onRecord={record} />
       </Modal>
     </div>
@@ -279,6 +313,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 }
 
 const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: RecordServiceInput) => void }> = ({ onCancel, onRecord }) => {
+  const { t } = useTranslation('equipment');
   const [performedAt, setPerformedAt] = useState(new Date().toISOString().slice(0, 10));
   const [kind, setKind] = useState<ServiceKind>('scheduled');
   const [meterReading, setMeterReading] = useState('');
@@ -308,13 +343,13 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
       }}
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Date performed</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.datePerformed')}</span>
         <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
       </label>
       <div className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Kind</span>
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.kind')}</span>
         <SelectPicker
-          data={KIND_OPTIONS.map((k) => ({ label: KIND_LABEL[k], value: k }))}
+          data={KIND_OPTIONS.map((k) => ({ label: t(`serviceKind.${k}`), value: k }))}
           value={kind}
           onChange={(value) => setKind((value ?? 'scheduled') as ServiceKind)}
           block
@@ -324,13 +359,13 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Meter reading</span>
-          <Input value={meterReading} onChange={(value) => setMeterReading(value)} placeholder="e.g. 1420" />
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.meterReading')}</span>
+          <Input value={meterReading} onChange={(value) => setMeterReading(value)} placeholder={t('service.meterReadingPlaceholder')} />
         </label>
         <div className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Unit</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.unit')}</span>
           <SelectPicker
-            data={UNIT_OPTIONS.map((u) => ({ label: u, value: u }))}
+            data={UNIT_OPTIONS.map((u) => ({ label: t(`runtimeUnit.${u}`), value: u }))}
             value={meterUnit}
             onChange={(value) => setMeterUnit((value ?? null) as RuntimeUnit | null)}
             block
@@ -339,18 +374,18 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
         </div>
       </div>
       {meterReading.trim() !== '' !== !!meterUnit && (
-        <p className="text-[11px] text-rose-500">A meter reading needs its unit, and a unit needs a reading.</p>
+        <p className="text-[11px] text-rose-500">{t('service.readingUnitPair')}</p>
       )}
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Notes</span>
-        <Input as="textarea" rows={3} value={notes} onChange={(value) => setNotes(value)} placeholder="What was done" />
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.notes')}</span>
+        <Input as="textarea" rows={3} value={notes} onChange={(value) => setNotes(value)} placeholder={t('service.notesPlaceholder')} />
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-          Cancel
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={!valid} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
-          Record service
+          {t('service.record')}
         </button>
       </div>
     </form>
@@ -363,10 +398,13 @@ export const EquipmentPagePage: React.FC = () => {
   const [page, setPage] = useState<MachinePage | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  // undefined = closed; null = open on the first KPI; a key = open on that KPI.
+  const [exploring, setExploring] = useState<string | null | undefined>(undefined);
+  const { t } = useTranslation('equipment');
 
   usePageHeader({
-    title: page?.equipment.name ?? externalId ?? 'Equipment',
-    subtitle: 'Equipment page',
+    title: page?.equipment.name ?? externalId ?? t('translation:sidebar.equipment'),
+    subtitle: t('equipmentPage.title'),
     onBack: () => navigate('/admin/equipment'),
   });
 
@@ -376,12 +414,12 @@ export const EquipmentPagePage: React.FC = () => {
     setLoading(true);
     apiGetMachinePage(sourceSystem, externalId)
       .then((result) => { if (live) { setPage(result); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load this equipment page.'); })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('equipmentPage.loadFailed')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
   if (error) {
     return (
       <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
@@ -399,22 +437,29 @@ export const EquipmentPagePage: React.FC = () => {
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-5 text-white space-y-1">
         <div className="flex items-center gap-2">
           <Gauge className="w-4 h-4" />
-          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">Equipment page</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('equipmentPage.title')}</span>
         </div>
         <h2 className="text-lg font-bold">{page.equipment.name ?? page.equipment.externalId}</h2>
-        <p className="text-xs text-sky-100">
-          {page.equipment.sourceSystem}/{page.equipment.externalId}
-          {page.equipment.classSlug ? ` · ${page.equipment.classSlug}` : ' · Not classified'}
-          {page.layout.fallback ? ' · fallback layout' : ''}
-        </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-sky-100">
+            {page.equipment.sourceSystem}/{page.equipment.externalId}
+            {page.equipment.classSlug ? ` · ${page.equipment.classSlug}` : ` · ${t('equipmentPage.notClassified')}`}
+            {page.layout.fallback ? ` · ${t('common.fallbackLayout')}` : ''}
+          </p>
+          {page.equipment.classSlug && (
+            <button onClick={() => setExploring(null)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-sky-700 hover:bg-sky-50 cursor-pointer">
+              {t('equipmentPage.exploreKpis')}
+            </button>
+          )}
+        </div>
       </div>
 
       {page.widgets.length === 0 && (
-        <p className="text-sm text-slate-400">No widgets configured for this equipment's class yet.</p>
+        <p className="text-sm text-slate-400">{t('equipmentPage.noWidgets')}</p>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {gauges.map((w) => <Widget key={w.widgetKey} widget={w} />)}
+        {gauges.map((w) => <Widget key={w.widgetKey} widget={w} onExploreKpi={(key) => setExploring(key)} />)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {lists.map((w) => <Widget key={w.widgetKey} widget={w} />)}
@@ -422,6 +467,17 @@ export const EquipmentPagePage: React.FC = () => {
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+
+      <Modal isOpen={exploring !== undefined} onClose={() => setExploring(undefined)} title={t('kpiExplorer.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-2xl">
+        {exploring !== undefined && (
+          <KpiExplorer
+            key={exploring ?? 'first'}
+            sourceSystem={page.equipment.sourceSystem}
+            externalId={page.equipment.externalId}
+            initialFormulaKey={exploring ?? undefined}
+          />
+        )}
+      </Modal>
     </div>
   );
 };

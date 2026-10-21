@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Plus, Trash2, Info, CheckCircle2, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, RegisterDeviceInput, ToolMapping } from '../../lib/api';
 
 interface RegisterDevicesModalProps {
@@ -20,6 +21,7 @@ const emptyRow = (): DeviceRow => ({ imei: '', model: '' });
 export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
   isOpen, onClose, toolMappings, onRegister,
 }) => {
+  const { t } = useTranslation(['devices', 'shared']);
   const [rows, setRows] = useState<DeviceRow[]>([emptyRow()]);
   const [toolMappingId, setToolMappingId] = useState('');
   const [batchRef, setBatchRef] = useState('');
@@ -45,7 +47,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
   const removeRow = (index: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
-  const toolMappingOptions = toolMappings.map((t) => ({ label: t.toolName, value: t.id }));
+  const toolMappingOptions = toolMappings.map((tm) => ({ label: tm.toolName, value: tm.id }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +70,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
       setResult(outcome);
       setRows([emptyRow()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not register these devices.');
+      setError(err instanceof ApiError ? err.message : t('register.failed'));
     } finally {
       setBusy(false);
     }
@@ -82,12 +84,12 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 max-h-[90vh]">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800 shrink-0">
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white text-base">Register Devices</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('register.title')}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Add arriving stock by IMEI. Assigning a device to a client is a separate step.
+              {t('register.intro')}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
+          <button onClick={onClose} aria-label={t('shared:close')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -96,14 +98,14 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Tool Mapping <span className="text-slate-400 font-normal">(optional)</span>
+                {t('register.toolMapping')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
               </label>
               <SelectPicker
                 size="sm"
                 data={toolMappingOptions}
                 value={toolMappingId || null}
                 onChange={(value) => setToolMappingId(value ?? '')}
-                placeholder="— No tool profile —"
+                placeholder={t('register.noToolProfile')}
                 block
                 searchable={toolMappingOptions.length > 6}
                 cleanable
@@ -111,13 +113,13 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
             </div>
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Batch Reference <span className="text-slate-400 font-normal">(optional)</span>
+                {t('register.batchRef')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
               </label>
               <Input
                 size="sm"
                 value={batchRef}
                 onChange={(value) => setBatchRef(value)}
-                placeholder="e.g. PO-92"
+                placeholder={t('register.batchPlaceholder')}
               />
             </div>
           </div>
@@ -125,7 +127,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Devices <span className="text-red-500">*</span>
+                {t('translation:sidebar.devices')} <span className="text-red-500">*</span>
               </label>
               <button
                 type="button"
@@ -133,7 +135,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
                 className="text-sky-600 dark:text-sky-400 font-medium flex items-center gap-1 hover:text-sky-700 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add row
+                {t('register.addRow')}
               </button>
             </div>
             <div className="space-y-2">
@@ -143,14 +145,14 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
                     size="sm"
                     value={row.imei}
                     onChange={(value) => updateRow(index, 'imei', value)}
-                    placeholder="15-digit IMEI"
+                    placeholder={t('register.imeiPlaceholder')}
                     className="col-span-7 font-mono"
                   />
                   <Input
                     size="sm"
                     value={row.model}
                     onChange={(value) => updateRow(index, 'model', value)}
-                    placeholder="Model (optional)"
+                    placeholder={t('register.modelPlaceholder')}
                     className="col-span-4"
                   />
                   <button
@@ -158,7 +160,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
                     onClick={() => removeRow(index)}
                     disabled={rows.length === 1}
                     className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Remove row"
+                    title={t('register.removeRow')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -169,7 +171,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
 
           <div>
             <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Notes <span className="text-slate-400 font-normal">(optional)</span>
+              {t('edit.notes')} <span className="text-slate-400 font-normal">{t('register.optionalSuffix')}</span>
             </label>
             <Input
               as="textarea"
@@ -191,8 +193,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
             <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               <span>
-                {result.registered} registered
-                {result.alreadyKnown ? `, ${result.alreadyKnown} already known (skipped)` : ''}.
+                {t(result.alreadyKnown ? 'register.resultWithSkipped' : 'register.result', { registered: result.registered, skipped: result.alreadyKnown })}
               </span>
             </div>
           )}
@@ -203,7 +204,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium"
             >
-              Done
+              {t('shared:done')}
             </button>
             <button
               type="submit"
@@ -211,7 +212,7 @@ export const RegisterDevicesModal: React.FC<RegisterDevicesModalProps> = ({
               className="px-5 py-2 rounded-lg bg-[#0077b6] hover:bg-[#023e8a] text-white font-medium shadow-xs flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />
-              {busy ? 'Registering…' : 'Register'}
+              {busy ? t('register.registering') : t('register.submit')}
             </button>
           </div>
         </form>

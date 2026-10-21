@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
+import { IndustryType, IndustryTypeStatus } from '../entities/industry-type.entity';
 import { slugify } from '../../catalog-import/services/sensor-review';
+import { assignDefined } from '../../common/assign-defined';
+import { rethrowDeleteRefusal } from '../../identity/delete-refusal';
 import { retiredSensorProblem } from './sensor-retirement';
 
 export interface ResolvedMappedSensor {
@@ -15,25 +18,18 @@ export interface ResolvedMappedSensor {
 
 export interface ResolvedToolMapping extends Omit<ToolMapping, 'mappedSensors'> {
   mappedSensors: ResolvedMappedSensor[];
+  /** The type's name, resolved on read, so a table that shows a name keeps showing one. */
+  industryType: string | null;
 }
 
 type SensorDraft = Partial<Pick<Sensor, 'sensorName' | 'categoryId' | 'description' | 'protocol' | 'parameterSpecs'>>;
-type ToolMappingDraft = Partial<Pick<ToolMapping, 'toolName' | 'industryType' | 'protocol'>> & {
+type ToolMappingDraft = Partial<Pick<ToolMapping, 'toolName' | 'protocol' | 'industryTypeId'>> & {
   mappedSensors?: MappedSensorRef[];
+  /** Transitional (§7 Q6): text accepted only when it names one active type exactly. */
+  industryType?: string;
 };
 
-/**
- * `draft` is a class-validator DTO: every optional field TypeScript declares is
- * defined as an own property (value `undefined`) at construction time, even when the
- * request body omitted it — an ordinary Object.assign would copy those `undefined`s
- * onto the entity and null out fields the caller never touched.
- */
-function assignDefined<T extends object>(target: T, draft: Partial<T>): T {
-  for (const [key, value] of Object.entries(draft)) {
-    if (value !== undefined) (target as unknown as Record<string, unknown>)[key] = value;
-  }
-  return target;
-}
+export interface IndustryTypeDraft { name?: string; code?: string; status?: IndustryTypeStatus }
 
 /**
  * Master Admin's reference data for wiring a device before it exists (task: complete
@@ -81,6 +77,28 @@ export class DeviceCatalogService {
     }
     if (existing) return existing;
     return this.categories.save(this.categories.create({ name: trimmed }));
+  }
+
+  /**
+   * Renaming is safe by construction: a sensor holds its category by id, never by
+   * name. The name stays unique because `uq_sensor_category_name` says so — two
+   * renames racing for one name cannot both land, and the loser is told which name.
+   */
+  async renameCategory(id: string, name: string): Promise<SensorCategory> {
+    const trimmed = name?.trim();
+    if (!trimmed) throw new BadRequestException('A category needs a name.');
+    const category = UUID.test(id) ? await this.categories.findOne({ where: { id } }) : null;
+    if (!category) throw new NotFoundException(`No category "${id}".`);
+    if (category.name === trimmed) return category;
+    category.name = trimmed;
+    try {
+      return await this.categories.save(category);
+    } catch (err) {
+      if (err instanceof QueryFailedError && (err as QueryFailedError & { code?: string }).code === '23505') {
+        throw new ConflictException(`A category named "${trimmed}" already exists.`);
+      }
+      throw err;
+    }
   }
 
   async retireCategory(id: string, userId: string): Promise<SensorCategory> {
@@ -257,7 +275,7 @@ export class DeviceCatalogService {
     const mappedSensors = await this.requireValidMappedSensors(draft.mappedSensors ?? [], []);
     const saved = await this.toolMappings.save(this.toolMappings.create({
       toolName: draft.toolName.trim(),
-      industryType: draft.industryType ?? null,
+      industryTypeId: await this.chosenIndustry(draft) ?? null,
       protocol: draft.protocol ?? null,
       mappedSensors,
     }));
@@ -270,9 +288,28 @@ export class DeviceCatalogService {
     const mappedSensors = draft.mappedSensors
       ? await this.requireValidMappedSensors(draft.mappedSensors, row.mappedSensors)
       : undefined;
-    assignDefined(row, { ...draft, ...(mappedSensors ? { mappedSensors } : {}) });
+    const industryTypeId = draft.industryTypeId !== undefined || draft.industryType !== undefined
+      ? await this.chosenIndustry(draft) : undefined;
+    const { industryType: _text, ...fields } = draft;
+    void _text;
+    assignDefined(row, { ...fields, industryTypeId, ...(mappedSensors ? { mappedSensors } : {}) });
     const saved = await this.toolMappings.save(row);
     return (await this.resolveAll([saved]))[0];
+  }
+
+  /**
+   * Remove a tool mapping no device uses (dashboard testing, issue 6). A device still
+   * pointing at it makes the database refuse (`fk_device_inventory_tool_mapping`):
+   * those devices belong to clients and sit behind row-level security, so a count
+   * taken here would read none and allow the delete anyway.
+   */
+  async deleteToolMapping(id: string): Promise<void> {
+    if (!UUID.test(id)) throw new NotFoundException(`No tool mapping "${id}".`);
+    const [row] = await this.toolMappings.query('SELECT delete_unused_tool_mapping($1::uuid) AS deleted', [id])
+      .catch((err: unknown) => rethrowDeleteRefusal(
+        err, 'Devices are still registered with this tool mapping. Move them to another mapping first.',
+      ));
+    if (!row.deleted) throw new NotFoundException(`No tool mapping "${id}".`);
   }
 
   /** Consumed by InventoryService.pool() so a registered device's tool profile shows its name. */
@@ -315,13 +352,145 @@ export class DeviceCatalogService {
     return refs;
   }
 
+  // ---- Industry types (task QINDUSTRY) -----------------------------------------------
+
+  /** Reached through the tool mappings' manager rather than injected, so every caller
+   * that constructs this service with its three repositories keeps working. */
+  private get industries() { return this.toolMappings.manager.getRepository(IndustryType); }
+
+  listIndustryTypes(status?: IndustryTypeStatus): Promise<IndustryType[]> {
+    return this.industries.find({ where: status ? { status } : {}, order: { name: 'ASC' } });
+  }
+
+  async createIndustryType(draft: IndustryTypeDraft, by: string): Promise<IndustryType> {
+    return this.saveIndustry(this.industries.create({
+      name: draft.name?.trim() ?? '', code: draft.code?.trim().toUpperCase() ?? '',
+      status: draft.status ?? 'active', createdBy: by, updatedBy: by,
+    }));
+  }
+
+  async updateIndustryType(id: string, draft: IndustryTypeDraft, by: string): Promise<IndustryType> {
+    const row = UUID.test(id) ? await this.industries.findOne({ where: { id } }) : null;
+    if (!row) throw new NotFoundException(`No industry type "${id}".`);
+    assignDefined(row, {
+      name: draft.name?.trim(), code: draft.code?.trim().toUpperCase(), status: draft.status, updatedBy: by,
+    });
+    return this.saveIndustry(row);
+  }
+
+  /** Refused by the foreign key while a mapping points at it; the 409 says how many. */
+  async deleteIndustryType(id: string): Promise<void> {
+    const row = UUID.test(id) ? await this.industries.findOne({ where: { id } }) : null;
+    if (!row) throw new NotFoundException(`No industry type "${id}".`);
+    try {
+      await this.industries.delete({ id });
+    } catch (err) {
+      if (err instanceof QueryFailedError && (err as { code?: string }).code === '23503') {
+        const n = await this.toolMappings.count({ where: { industryTypeId: id } });
+        throw new ConflictException(
+          `"${row.name}" is used by ${n} tool mapping(s). Make it inactive instead, or move them first.`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /** §2 step 2: the text that matched no type, with how many mappings carry it. */
+  async unmatchedIndustries(): Promise<{ text: string; mappings: number }[]> {
+    const rows: { text: string; mappings: number }[] = await this.toolMappings.query(
+      `SELECT btrim("industry_type_legacy") AS text, count(*)::int AS mappings
+         FROM "tool_mapping"
+        WHERE "industry_type_id" IS NULL AND coalesce(btrim("industry_type_legacy"), '') <> ''
+        GROUP BY 1 ORDER BY 2 DESC, 1`,
+    );
+    return rows;
+  }
+
+  /**
+   * Match the unmatched again, after Master Admin has created the types they name — the
+   * migration's own rule: exactly one active type, by name or code, ignoring case.
+   * Only ever fills an empty `industry_type_id`; it never moves a mapping already set.
+   */
+  async rematchIndustries(): Promise<{ matched: number; unmatched: number }> {
+    const [{ matched }] = await this.toolMappings.query(
+      `WITH candidates AS (
+         SELECT m."id" AS mapping_id, t."id" AS type_id, count(*) OVER (PARTITION BY m."id") AS n
+           FROM "tool_mapping" m
+           JOIN "industry_type" t
+             ON t."status" = 'active'
+            AND lower(btrim(m."industry_type_legacy")) IN (lower(t."name"), lower(t."code"))
+          WHERE m."industry_type_id" IS NULL
+       ), applied AS (
+         UPDATE "tool_mapping" m SET "industry_type_id" = c.type_id
+           FROM candidates c WHERE c.mapping_id = m."id" AND c.n = 1
+         RETURNING m."id"
+       )
+       SELECT count(*)::int AS matched FROM applied`,
+    );
+    const unmatched = (await this.unmatchedIndustries()).reduce((s, r) => s + r.mappings, 0);
+    return { matched, unmatched };
+  }
+
+  /**
+   * The type a write chooses: `industryTypeId`, which must be active, or — while the
+   * console still sends text (§7 Q6) — text naming exactly one active type by name or
+   * code. Anything else is a 400 naming the active types; nothing new lands in free text.
+   * `null` clears it.
+   */
+  private async chosenIndustry(draft: ToolMappingDraft): Promise<string | null | undefined> {
+    if (draft.industryTypeId === null) return null;
+    const active = await this.industries.find({ where: { status: 'active' }, order: { name: 'ASC' } });
+    const names = () => active.map((t) => `${t.name} (${t.code})`).join(', ') || 'none yet';
+    let chosen: IndustryType | undefined;
+    if (draft.industryTypeId !== undefined) {
+      chosen = active.find((t) => t.id === draft.industryTypeId);
+      if (!chosen) throw new BadRequestException(`industryTypeId must name an active industry type: ${names()}.`);
+    }
+    if (draft.industryType !== undefined && draft.industryType.trim() !== '') {
+      const text = draft.industryType.trim().toLowerCase();
+      const byText = active.filter((t) => t.name.toLowerCase() === text || t.code.toLowerCase() === text);
+      if (byText.length !== 1) {
+        throw new BadRequestException(`"${draft.industryType}" is not an active industry type. Choose one of: ${names()}.`);
+      }
+      if (chosen && chosen.id !== byText[0].id) {
+        throw new BadRequestException('industryTypeId and industryType name different industry types.');
+      }
+      chosen = byText[0];
+    }
+    return chosen?.id;
+  }
+
+  private async saveIndustry(row: IndustryType): Promise<IndustryType> {
+    try {
+      return await this.industries.save(row);
+    } catch (err) {
+      const pg = err as { code?: string; constraint?: string };
+      if (err instanceof QueryFailedError && pg.code === '23505') {
+        throw new ConflictException(pg.constraint === 'uq_industry_type_code'
+          ? `An industry type already has code "${row.code}".`
+          : `An industry type is already called "${row.name}" (in some spelling).`);
+      }
+      if (err instanceof QueryFailedError && pg.code === '23514') {
+        throw new BadRequestException(pg.constraint === 'ck_industry_type_code'
+          ? 'code must be 2–10 uppercase letters or digits.'
+          : pg.constraint === 'ck_industry_type_status' ? 'status must be active or inactive.'
+            : 'An industry type needs a name.');
+      }
+      throw err;
+    }
+  }
+
   private async resolveAll(rows: ToolMapping[]): Promise<ResolvedToolMapping[]> {
     const ids = [...new Set(rows.flatMap((r) => r.mappedSensors.map((s) => s.sensorId)))];
     const sensors = ids.length ? await this.sensors.find({ where: { id: In(ids) } }) : [];
     const byId = new Map(sensors.map((s) => [s.id, s]));
+    const typeIds = [...new Set(rows.map((r) => r.industryTypeId).filter((x): x is string => !!x))];
+    const types = typeIds.length ? await this.industries.find({ where: { id: In(typeIds) } }) : [];
+    const typeById = new Map(types.map((t) => [t.id, t.name]));
 
     return rows.map((row) => ({
       ...row,
+      industryType: row.industryTypeId ? typeById.get(row.industryTypeId) ?? null : null,
       mappedSensors: row.mappedSensors.map((ref) => ({
         sensorId: ref.sensorId,
         sensorName: byId.get(ref.sensorId)?.sensorName ?? '(deleted sensor)',

@@ -10,7 +10,16 @@ export type Readiness = 'ready' | 'blocked' | 'not_configured' | 'not_available'
 export type Reason =
   | 'unbound' | 'stale' | 'no_readings' | 'mapping_required'
   | 'baseline_not_established' | 'insufficient_coverage' | 'undefined_result'
-  | 'parameter_not_set' | 'site_boundary_not_set';
+  | 'parameter_not_set' | 'site_boundary_not_set'
+  // Task QFIX-BASELINE: a baseline learns only from operating periods. A machine with
+  // no shift schedule has none (`not_configured`); a z-score judging a reading taken
+  // while the machine was not operating has no honest answer (`not_available`).
+  | 'no_shift_schedule' | 'not_operating'
+  // A `not_configured` with no reason told the screen nothing it could act on. The
+  // formula's own window cannot be resolved yet (a `shift` window needs the machine's
+  // shift schedule, which the evaluator does not read), or the formula has no
+  // compiled plan to evaluate.
+  | 'window_not_resolved' | 'formula_not_compiled';
 
 export interface Coverage {
   expected: number;
@@ -47,7 +56,9 @@ export interface KpiEnvelope {
   value: number | SeriesPoint[] | null;
   unit: string;
   resultKind: 'scalar' | 'series';
-  window: { from: string; to: string };
+  /** `null` when no window could be resolved — never empty strings, which are not
+   *  dates and read as "Invalid Date" on any screen that formats them. */
+  window: { from: string; to: string } | null;
   readiness: Readiness;
   reason?: Reason;
   /** With `reason: 'parameter_not_set'` (task QPARAM1 §4a): which client parameters
