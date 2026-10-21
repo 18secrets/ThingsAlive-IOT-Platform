@@ -1,0 +1,108 @@
+{
+  "hero": {
+    "subtitle": "Jobs raised against your equipment"
+  },
+  "loading": "Loading…",
+  "empty": "No work orders for this selection.",
+  "errors": {
+    "load": "Could not load work orders.",
+    "update": "Could not update this job.",
+    "save": "Could not save this job.",
+    "assign": "Could not change who has this job.",
+    "raise": "Could not raise this job.",
+    "history": "Could not load the history."
+  },
+  "people": {
+    "someoneElse": "someone else",
+    "nobody": "nobody"
+  },
+  "prompts": {
+    "complete": "What was done?",
+    "cancel": "Why is this being cancelled?",
+    "reopen": "Why is this being reopened?"
+  },
+  "service": {
+    "heading": "Service due",
+    "hoursOverdue": "{{hours}}h overdue",
+    "hoursRemaining": "{{hours}}h remaining",
+    "notSet": "interval or meter not set",
+    "prefillTitle": "Service — {{name}}"
+  },
+  "serviceStatus": {
+    "overdue": "Overdue",
+    "due": "Due",
+    "approaching": "Approaching",
+    "ok": "Ok"
+  },
+  "status": {
+    "created": "Open",
+    "in-progress": "In progress",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "priority": {
+    "low": "Low",
+    "normal": "Normal",
+    "high": "High",
+    "urgent": "Urgent"
+  },
+  "event": {
+    "raised": "Raised",
+    "assigned": "Assigned",
+    "unassigned": "Unassigned",
+    "started": "Started",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "reopened": "Reopened",
+    "edited": "Edited"
+  },
+  "filters": {
+    "allStatuses": "All statuses"
+  },
+  "actions": {
+    "create": "Create work order",
+    "raise": "Raise work order",
+    "start": "Start",
+    "complete": "Complete",
+    "cancel": "Cancel",
+    "reopen": "Reopen",
+    "edit": "Edit",
+    "assign": "Assign",
+    "reassign": "Reassign",
+    "unassign": "Unassign",
+    "history": "History",
+    "save": "Save changes"
+  },
+  "card": {
+    "resolution": "Resolution: {{resolution}}",
+    "assignedTo": "Assigned to <b>{{name}}</b>",
+    "unassigned": "Unassigned",
+    "priority": "<cap>{{priority}}</cap> priority",
+    "due": "due {{date}}"
+  },
+  "modals": {
+    "edit": "Edit work order",
+    "assign": "Assign work order",
+    "history": "Work order history",
+    "create": "Create work order",
+    "createSubtitle": "New Maintenance Task"
+  },
+  "form": {
+    "task": "Task",
+    "taskPlaceholder": "e.g. Inspect coolant sensor",
+    "selectEquipment": "Select equipment",
+    "priority": "Priority",
+    "dueDate": "Due date",
+    "description": "Description",
+    "assignTo": "Assign to",
+    "nobodyUnassign": "Nobody (unassign)",
+    "noteOptional": "Note (optional)",
+    "notePlaceholder": "Why the change, if it helps whoever reads the history"
+  },
+  "history": {
+    "empty": "Nothing recorded yet.",
+    "by": "by {{name}}",
+    "to": "to {{name}}",
+    "from": "from {{name}}"
+  }
+}

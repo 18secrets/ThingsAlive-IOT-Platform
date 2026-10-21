@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Building2, ShieldCheck } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ClientAccount, ClientUserItem, RoleDefinition } from '../../types';
 import { InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole } from '../../lib/api';
 import { StaffManagement } from '../staff/StaffManagement';
@@ -37,10 +38,11 @@ export const UsersHub: React.FC<UsersHubProps> = ({
   onManageClientAccess,
 }) => {
   const [subTab, setSubTab] = useState<UsersSubTab>('platform');
+  const { t } = useTranslation('users');
 
   const tabs: { id: UsersSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'platform', label: 'Platform Users', icon: ShieldCheck },
-    { id: 'clients', label: 'Client Users', icon: Building2 },
+    { id: 'platform', label: t('hub.platformUsers'), icon: ShieldCheck },
+    { id: 'clients', label: t('translation:sidebar.clientUsers'), icon: Building2 },
   ];
 
   return (

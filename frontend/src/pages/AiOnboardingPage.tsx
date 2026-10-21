@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { OnboardingProgress } from '../components/onboarding/OnboardingProgress';
 import { AIOnboarding } from '../components/onboarding/AIOnboarding';
@@ -13,6 +14,7 @@ type View = 'list' | 'chat';
  */
 export const AiOnboardingPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation('onboarding');
   const [searchParams] = useSearchParams();
   // AdminPage's "AI-assisted setup" link and Devices' "Setup with AI" both
   // land here wanting the chat open immediately, rather than the list.
@@ -20,8 +22,8 @@ export const AiOnboardingPage: React.FC = () => {
 
   usePageHeader(
     view === 'chat'
-      ? { title: 'ChatBot Assistant', subtitle: 'AI Setup Assistant', breadcrumb: 'AI Onboarding', aiIndicator: true, onBack: () => setView('list') }
-      : { title: 'AI Onboarding', subtitle: 'Onboarding progress by site' },
+      ? { title: t('page.chatTitle'), subtitle: t('page.chatSubtitle'), breadcrumb: t('page.title'), aiIndicator: true, onBack: () => setView('list') }
+      : { title: t('page.title'), subtitle: t('page.subtitle') },
   );
 
   if (view === 'chat') {

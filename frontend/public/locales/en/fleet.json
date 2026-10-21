@@ -1,0 +1,94 @@
+{
+  "sensor": {
+    "fuel_level": "Fuel level",
+    "coolant_temperature": "Coolant temperature",
+    "oil_temperature": "Oil temperature",
+    "oil_pressure": "Oil pressure",
+    "throttle": "Throttle",
+    "engine_load": "Engine load",
+    "engine_runtime": "Engine runtime"
+  },
+  "crossLinks": {
+    "thingDetails": "Things Details",
+    "production": "Production"
+  },
+  "filters": {
+    "button": "Filters",
+    "selectedThing": "Selected Thing",
+    "allMatching": "All matching Things",
+    "title": "Filter Things",
+    "intro": "Choose your scope, then apply.",
+    "site": "Site / Plant",
+    "allSites": "All sites / plants",
+    "type": "Thing type",
+    "allTypes": "All Thing types",
+    "connection": "Connection status",
+    "allConnections": "All connections",
+    "online": "Online",
+    "offline": "Offline",
+    "find": "Find a Thing",
+    "findPlaceholder": "Name or Thing ID",
+    "clear": "Clear selections",
+    "apply": "Apply filters"
+  },
+  "rule": {
+    "createTitle": "Create Alert Rule",
+    "editTitle": "Edit Alert Rule",
+    "reviewSubtitle": "Simulate & Confirm",
+    "formSubtitle": "Rule Details",
+    "defaultName": "New scenario",
+    "selectMachines": "Select machines. Test values affect this preview only.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "previewReading": "Preview reading ({{unit}})",
+    "before": "Before: {{before}} → Proposed: {{proposed}}",
+    "beforeValue": "{{operator}} {{threshold}} {{unit}} · rev {{revision}}",
+    "notAssigned": "Not assigned",
+    "simResult": "KPI {{value}} {{unit}} · Alert {{alert}} · Predicted {{predicted}} {{unit}}",
+    "triggers": "triggers",
+    "noTrigger": "no trigger",
+    "back": "Back",
+    "cancel": "Cancel",
+    "runSimulation": "Run simulation",
+    "confirmSave": "Confirm & save",
+    "name": "Name",
+    "sensor": "Sensor",
+    "condition": "Condition",
+    "greaterThan": "Greater than",
+    "lessThan": "Less than",
+    "threshold": "Threshold",
+    "severity": "Severity",
+    "severityValue": {
+      "Warning": "Warning",
+      "Critical": "Critical"
+    },
+    "outcomes": "Outcomes",
+    "outcome": {
+      "kpi": "KPI",
+      "alert": "Alert",
+      "prediction": "Prediction"
+    },
+    "horizon": "Prediction horizon (hours)",
+    "choosePreview": "Choose machines & preview",
+    "predictionText": "{{value}} {{unit}} over {{hours}} h. Linear planning projection, not a failure model."
+  },
+  "ruleCard": {
+    "revision": "Revision {{revision}} · {{status}}",
+    "kpi": "KPI: {{value}} {{unit}}",
+    "alert": "Alert: {{value}}",
+    "alertOutcome": {
+      "Breach": "Breach",
+      "No breach": "No breach"
+    },
+    "prediction": "Prediction: {{text}}",
+    "editAssign": "Edit / assign",
+    "createWorkOrder": "Create work order"
+  },
+  "graph": {
+    "aria": "Recent sensor readings",
+    "outsideLimit": "Alert: outside the demonstration limit (0–{{max}} {{unit}})",
+    "noLimit": "Review: no validated operating limit",
+    "higher": "{{delta}} {{unit}} higher than the first sample · Range {{min}}–{{max}} {{unit}} · {{count}} recorded samples.",
+    "lower": "{{delta}} {{unit}} lower than the first sample · Range {{min}}–{{max}} {{unit}} · {{count}} recorded samples."
+  }
+}

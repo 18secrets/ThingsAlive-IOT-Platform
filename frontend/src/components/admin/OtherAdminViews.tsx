@@ -10,6 +10,7 @@ import {
   Hexagon,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, GeoJsonPolygon, IndustryType, IndustryTypeInput, Plant, PlantInput, UnmatchedIndustry,
 } from '../../lib/api';
@@ -37,6 +38,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   onDeleteIndustryType,
   onRematchIndustries,
 }) => {
+  const { t } = useTranslation('equipment');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | IndustryType['status']>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,12 +63,12 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   };
 
   const handleDelete = async (item: IndustryType) => {
-    if (!window.confirm(`Delete the industry type "${item.name}"? Tool mappings still using it will stop the delete.`)) return;
+    if (!window.confirm(t('industry.deleteConfirm', { name: item.name }))) return;
     setBusyId(item.id);
     try {
       await onDeleteIndustryType?.(item.id);
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not delete this industry type.');
+      window.alert(err instanceof ApiError ? err.message : t('industry.deleteFailed'));
     } finally {
       setBusyId(null);
     }
@@ -78,9 +80,11 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
     setNotice(undefined);
     try {
       const { matched, unmatched: left } = await onRematchIndustries();
-      setNotice(`${matched} tool mapping${matched === 1 ? '' : 's'} matched${left ? `; ${left} still need${left === 1 ? 's' : ''} a type` : ''}.`);
+      setNotice(left
+        ? t('industry.rematchedSome', { matched: t('industry.mappingsMatched', { count: matched }), left: t('industry.stillNeedType', { count: left }) })
+        : t('industry.rematchedAll', { matched: t('industry.mappingsMatched', { count: matched }) }));
     } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : 'Could not re-match tool mappings.');
+      setNotice(err instanceof ApiError ? err.message : t('industry.rematchFailed'));
     } finally {
       setRematching(false);
     }
@@ -105,13 +109,13 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Industry Type Names or Codes..."
+            placeholder={t('industry.searchPlaceholder')}
             size="sm"
             className="w-full pl-9!"
           />
         </div>
         <SelectPicker
-          data={[{ label: 'All statuses', value: 'all' }, { label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]}
+          data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('status.active'), value: 'active' }, { label: t('status.inactive'), value: 'inactive' }]}
           value={statusFilter}
           onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
           searchable={false}
@@ -127,7 +131,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
             className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Industry Type</span>
+            <span>{t('industry.add')}</span>
           </button>
         )}
       </div>
@@ -140,7 +144,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
             <>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                  {unmatchedMappings} tool mapping{unmatchedMappings === 1 ? '' : 's'} still carr{unmatchedMappings === 1 ? 'ies' : 'y'} an industry typed before industry types existed
+                  {t('industry.unmatched', { count: unmatchedMappings })}
                 </p>
                 {onRematchIndustries && (
                   <button
@@ -148,12 +152,12 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                     disabled={rematching}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950 disabled:opacity-50 cursor-pointer"
                   >
-                    {rematching ? 'Re-matching…' : 'Re-match'}
+                    {rematching ? t('industry.rematching') : t('industry.rematch')}
                   </button>
                 )}
               </div>
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                Add an active industry type whose name or code is exactly one of these, then Re-match:
+                {t('industry.unmatchedHint')}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {unmatched.map((u) => (
@@ -187,7 +191,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                       onClick={() => openModal(item)}
                       disabled={busyId === item.id}
                       className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer disabled:opacity-50"
-                      title="Edit Industry Type"
+                      title={t('industry.edit')}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -198,7 +202,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                       onClick={() => handleDelete(item)}
                       disabled={busyId === item.id}
                       className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
-                      title="Delete Industry Type"
+                      title={t('industry.delete')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -210,13 +214,13 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                 {item.name}
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Created: {new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {t('industry.created', { date: new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) })}
               </p>
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
               <span className={`font-semibold text-xs ${item.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                {item.status === 'active' ? '• Active' : '• Inactive'}
+                • {item.status === 'active' ? t('status.active') : t('status.inactive')}
               </span>
             </div>
           </div>
@@ -225,7 +229,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
         {filteredItems.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No industry types found.</span>
+            <span>{t('industry.empty')}</span>
           </div>
         )}
       </div>
@@ -260,6 +264,7 @@ interface PlantViewProps {
 export const PlantView: React.FC<PlantViewProps> = ({
   plants, error, onCreatePlant, onUpdatePlant, onToggleStatus, onOpenSitePage, onSetPlantBoundary,
 }) => {
+  const { t } = useTranslation('equipment');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
@@ -284,7 +289,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
           <Input
             value={searchTerm}
             onChange={(value) => setSearchTerm(value)}
-            placeholder="Search Plant Names, Codes, or Addresses..."
+            placeholder={t('plants.searchPlaceholder')}
             size="sm"
             className="w-full pl-9!"
           />
@@ -299,7 +304,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
           className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Plant</span>
+          <span>{t('plants.add')}</span>
         </button>
       </div>
 
@@ -329,7 +334,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
                       plant.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
-                    title={plant.status === 'active' ? 'Retire this site' : 'Reopen this site'}
+                    title={plant.status === 'active' ? t('plants.retireSite') : t('plants.reopenSite')}
                   >
                     <span
                       className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -344,7 +349,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
                       setIsModalOpen(true);
                     }}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title="Edit Plant"
+                    title={t('plants.edit')}
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -368,7 +373,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
                 className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
               >
                 <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>Site Page</span>
+                <span>{t('plants.sitePage')}</span>
               </button>
               <button
                 onClick={() => setBoundaryPlant(plant)}
@@ -377,16 +382,16 @@ export const PlantView: React.FC<PlantViewProps> = ({
                     ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
                     : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
                 }`}
-                title={plant.boundary ? 'Boundary set' : 'No boundary set'}
+                title={plant.boundary ? t('plants.boundarySetTitle') : t('plants.noBoundaryTitle')}
               >
                 <Hexagon className="w-3.5 h-3.5" />
-                <span>{plant.boundary ? 'Boundary Set' : 'Set Boundary'}</span>
+                <span>{plant.boundary ? t('plants.boundarySet') : t('plants.setBoundary')}</span>
               </button>
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
               <span className={`font-semibold text-xs ${plant.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                {plant.status === 'active' ? '• Active' : '• Retired'}
+                • {plant.status === 'active' ? t('status.active') : t('status.retired')}
               </span>
             </div>
           </div>
@@ -395,7 +400,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
         {filteredItems.length === 0 && (
           <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
             <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>No plants found.</span>
+            <span>{t('plants.empty')}</span>
           </div>
         )}
       </div>

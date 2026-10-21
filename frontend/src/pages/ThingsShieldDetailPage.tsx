@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, FileCheck2, HardHat, Lock, Plus, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
-import { EvidenceRecordCard, EvidenceRecordForm, STATUS_LABEL } from '../components/shield/EvidenceRecord';
+import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/EvidenceRecord';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import {
@@ -13,7 +14,6 @@ import {
 const CATEGORY_ICON: Record<ShieldCategory, React.FC<{ className?: string }>> = {
   compliance: FileCheck2, safety: HardHat, security: Lock,
 };
-const CATEGORY_LABEL: Record<ShieldCategory, string> = { compliance: 'Compliance', safety: 'Safety', security: 'Security' };
 
 const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate',
@@ -22,6 +22,7 @@ const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> 
 export const ThingsShieldDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('shield');
   const [shield, setShield] = useState<ShieldMachine | null>(null);
   const [records, setRecords] = useState<ShieldEvidence[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,8 +33,8 @@ export const ThingsShieldDetailPage: React.FC = () => {
   const [correcting, setCorrecting] = useState<ShieldEvidence | null>(null);
 
   usePageHeader({
-    title: shield?.machine.name ?? externalId ?? 'Machine not found',
-    subtitle: 'ThingsShield Detail',
+    title: shield?.machine.name ?? externalId ?? t('detail.notFoundTitle'),
+    subtitle: t('detail.subtitle'),
     onBack: () => navigate('/things-shield'),
   });
 
@@ -50,7 +51,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
       setRecords(list);
       setError(undefined);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load this machine.');
+      setError(err instanceof ApiError ? err.message : t('detail.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -67,12 +68,12 @@ export const ThingsShieldDetailPage: React.FC = () => {
     await load();
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-500">{t('page.loading')}</p>;
   if (notFound || !shield) {
     return (
       <div className="space-y-3">
         {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-        <p className="text-sm text-slate-500">This machine could not be found in your account.</p>
+        <p className="text-sm text-slate-500">{t('detail.notFound')}</p>
       </div>
     );
   }
@@ -84,8 +85,8 @@ export const ThingsShieldDetailPage: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">People · Machines · Evidence</span>
-        <h2 className="text-xl font-bold">ThingsShield: Safety, Compliance &amp; Risk</h2>
+        <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('page.eyebrow')}</span>
+        <h2 className="text-xl font-bold">{t('page.heading')}</h2>
       </div>
 
       {error && (
@@ -103,7 +104,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
               onClick={() => { setCategory(c); setAdding(false); setCorrecting(null); }}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg cursor-pointer ${category === c ? 'bg-sky-600 text-white' : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
             >
-              <Icon className="w-4 h-4" /> {CATEGORY_LABEL[c]}
+              <Icon className="w-4 h-4" /> {t(`category.${c}`)}
               <span className={`ml-1 w-2 h-2 rounded-full ${{ emerald: 'bg-emerald-400', amber: 'bg-amber-400', rose: 'bg-rose-500', slate: 'bg-slate-300' }[STATUS_TONE[shield.categories[c].status]]}`} />
             </button>
           );
@@ -119,26 +120,26 @@ export const ThingsShieldDetailPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{CATEGORY_LABEL[category]}</h4>
-          <Chip tone={STATUS_TONE[cell.status]} size="md">{STATUS_LABEL[cell.status]}</Chip>
+          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{t(`category.${category}`)}</h4>
+          <Chip tone={STATUS_TONE[cell.status]} size="md">{t(`status.${cell.status}`)}</Chip>
           <span className="text-[11px] text-slate-400">
-            Due soon = within {shield.dueSoonWindow.days} days ({shield.dueSoonWindow.source === 'default' ? 'default' : 'set by parameter'})
+            {t('detail.dueSoonWindow', { count: shield.dueSoonWindow.days, source: shield.dueSoonWindow.source === 'default' ? t('detail.windowDefault') : t('detail.windowParameter') })}
           </span>
         </div>
 
         {cell.record ? (
           <EvidenceRecordCard record={cell.record} status={cell.status} onCorrect={() => setCorrecting(cell.record)} />
         ) : (
-          <p className="text-sm text-slate-400">No {CATEGORY_LABEL[category].toLowerCase()} check recorded for this machine yet.</p>
+          <p className="text-sm text-slate-400">{t(`detail.noRecord.${category}`)}</p>
         )}
 
         <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300 cursor-pointer">
-          <Plus className="w-4 h-4" /> Add {CATEGORY_LABEL[category].toLowerCase()} record
+          <Plus className="w-4 h-4" /> {t(`detail.addRecord.${category}`)}
         </button>
 
         {others.length > 0 && (
           <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">History</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('detail.history')}</p>
             {others.map((r) => (
               <EvidenceRecordCard key={r.id} record={r} onCorrect={() => setCorrecting(r)} />
             ))}
@@ -151,7 +152,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
         className="w-full flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 cursor-pointer text-left"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-          <Siren className="w-4 h-4 text-amber-500" /> Incidents are tracked in Incident Management
+          <Siren className="w-4 h-4 text-amber-500" /> {t('page.incidentsLink')}
         </span>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
@@ -159,7 +160,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
       <Modal
         isOpen={adding || correcting !== null}
         onClose={() => { setAdding(false); setCorrecting(null); }}
-        title={correcting ? 'Correct record' : `Add ${CATEGORY_LABEL[category].toLowerCase()} record`}
+        title={correcting ? t('detail.correctRecord') : t(`detail.addRecord.${category}`)}
         maxWidth="max-w-lg"
       >
         <EvidenceRecordForm

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Clock3, Coins } from 'lucide-react';
 import { SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
@@ -11,12 +12,12 @@ import {
   apiListMyEquipmentClasses, apiListPlants, apiSetCurrency, apiSetParameter,
 } from '../lib/api';
 
-const SCOPE_LABEL: Record<ParameterScope, string> = {
-  client: 'Whole account', site: 'One site', equipment_class: 'One equipment class', equipment: 'One machine',
-};
+// The order the scope picker lists them in; labels are cost.json's scope.* keys.
+const SCOPES: ParameterScope[] = ['client', 'site', 'equipment_class', 'equipment'];
 
 export const CostAdministrationPage: React.FC = () => {
-  usePageHeader({ title: 'Cost Administration', subtitle: 'Operational Parameters' });
+  const { t } = useTranslation('cost');
+  usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
 
   const [catalog, setCatalog] = useState<ParameterCatalogEntry[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -41,7 +42,7 @@ export const CostAdministrationPage: React.FC = () => {
     apiListEquipment().then((eq) => { if (live) setEquipment(eq); }).catch(() => {});
     apiGetParameterCatalog()
       .then((c) => { if (live) setCatalog(c); })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : 'Could not load parameters.'); });
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('page.loadFailed')); });
     return () => { live = false; };
   }, []);
 
@@ -53,7 +54,7 @@ export const CostAdministrationPage: React.FC = () => {
       setEffective(await apiGetEffectiveParameters({ scope, scopeRef: scopeRef ?? undefined }));
       setError(undefined);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load effective values.');
+      setError(err instanceof ApiError ? err.message : t('page.loadEffectiveFailed'));
     } finally {
       setLoading(false);
     }
@@ -64,30 +65,30 @@ export const CostAdministrationPage: React.FC = () => {
   const currency = effective.find((p) => p.name === 'currency');
 
   async function changeCurrency() {
-    const entered = window.prompt('New 3-letter currency code (e.g. INR, USD):', (currency?.value as string) ?? '');
+    const entered = window.prompt(t('currency.prompt'), (currency?.value as string) ?? '');
     if (!entered?.trim()) return;
     try {
       const result = await apiSetCurrency(entered.trim().toUpperCase());
-      if (!result.changed) window.alert('Currency unchanged.');
+      if (!result.changed) window.alert(t('currency.unchanged'));
       await refreshEffective();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not change the currency.');
+      window.alert(err instanceof ApiError ? err.message : t('currency.failed'));
     }
   }
 
   async function setValue(entry: ParameterCatalogEntry) {
     const current = effective.find((p) => p.name === entry.name);
-    const entered = window.prompt(`${entry.name} (${entry.unit ?? 'number'}):`, current?.value != null ? String(current.value) : '');
+    const entered = window.prompt(`${entry.name} (${entry.unit ?? t('value.number')}):`, current?.value != null ? String(current.value) : '');
     if (entered === null) return;
     const trimmed = entered.trim();
     const value = trimmed === '' ? null : Number(trimmed);
-    if (value !== null && Number.isNaN(value)) { window.alert('Enter a number, or leave blank to clear.'); return; }
+    if (value !== null && Number.isNaN(value)) { window.alert(t('value.notANumber')); return; }
     setBusyName(entry.name);
     try {
       await apiSetParameter({ scope, scopeRef: scopeRef ?? undefined, name: entry.name, value });
       await refreshEffective();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not save this value.');
+      window.alert(err instanceof ApiError ? err.message : t('value.saveFailed'));
     } finally {
       setBusyName(null);
     }
@@ -98,7 +99,7 @@ export const CostAdministrationPage: React.FC = () => {
     try {
       setHistoryRows(await apiGetParameterHistory(name, { scope, scopeRef: scopeRef ?? undefined }));
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : 'Could not load history.');
+      window.alert(err instanceof ApiError ? err.message : t('history.loadFailed'));
       setHistoryName(null);
     }
   }
@@ -113,8 +114,8 @@ export const CostAdministrationPage: React.FC = () => {
   return (
     <div id="cost-administration-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">Cost Administration</h2>
-        <p className="text-sm text-sky-100">Client-owned operational parameters. No platform default is ever assumed.</p>
+        <h2 className="text-xl font-bold">{t('page.title')}</h2>
+        <p className="text-sm text-sky-100">{t('page.intro')}</p>
       </div>
 
       {error && (
@@ -128,21 +129,21 @@ export const CostAdministrationPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <Coins className="w-5 h-5 text-slate-400" />
           <div>
-            <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide">Account currency</p>
-            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currency?.value ? String(currency.value) : 'Not set'}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('currency.label')}</p>
+            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currency?.value ? String(currency.value) : t('currency.notSet')}</p>
           </div>
         </div>
         <button onClick={changeCurrency} className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer">
-          Change currency
+          {t('currency.change')}
         </button>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
           <div className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Scope</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('scope.label')}</span>
             <SelectPicker
-              data={(Object.keys(SCOPE_LABEL) as ParameterScope[]).map((s) => ({ label: SCOPE_LABEL[s], value: s }))}
+              data={SCOPES.map((s) => ({ label: t(`scope.${s}`), value: s }))}
               value={scope}
               onChange={(value) => { setScope((value ?? 'client') as ParameterScope); setScopeRef(null); }}
               block
@@ -152,7 +153,7 @@ export const CostAdministrationPage: React.FC = () => {
           </div>
           {scope !== 'client' && (
             <div className="block space-y-1">
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Applies to</span>
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('scope.appliesTo')}</span>
               <SelectPicker
                 data={scopeRefOptions}
                 value={scopeRef}
@@ -160,16 +161,16 @@ export const CostAdministrationPage: React.FC = () => {
                 block
                 searchable
                 cleanable={false}
-                placeholder="Select…"
+                placeholder={t('scope.select')}
               />
             </div>
           )}
         </div>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-slate-500">{t('page.loading')}</p>
         ) : scope !== 'client' && !scopeRef ? (
-          <p className="text-sm text-slate-400">Pick what this applies to.</p>
+          <p className="text-sm text-slate-400">{t('scope.pick')}</p>
         ) : (
           <div className="space-y-2">
             {catalog.map((entry) => {
@@ -180,13 +181,13 @@ export const CostAdministrationPage: React.FC = () => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{entry.name}</h4>
-                      {entry.costTyped && <Chip tone="amber">cost</Chip>}
-                      {entry.source === 'formula' && <Chip tone="slate">formula-required</Chip>}
+                      {entry.costTyped && <Chip tone="amber">{t('param.cost')}</Chip>}
+                      {entry.source === 'formula' && <Chip tone="slate">{t('param.formulaRequired')}</Chip>}
                     </div>
                     {entry.description && <p className="text-xs text-slate-400 dark:text-slate-500">{entry.description}</p>}
                     {entry.requiredBy.length > 0 && (
                       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                        Needed by: {entry.requiredBy.map((r) => `${r.classSlug}/${r.formulaKey}`).join(', ')}
+                        {t('param.neededBy')} {entry.requiredBy.map((r) => `${r.classSlug}/${r.formulaKey}`).join(', ')}
                       </p>
                     )}
                   </div>
@@ -195,7 +196,7 @@ export const CostAdministrationPage: React.FC = () => {
                       {eff?.value != null ? `${eff.value} ${entry.unit ?? ''}` : '—'}
                     </div>
                     <p className="text-[10px] text-slate-400">
-                      {eff?.source ? (setHere ? 'set here' : `inherited: ${SCOPE_LABEL[eff.source.scope]}`) : 'not configured'}
+                      {eff?.source ? (setHere ? t('param.setHere') : t('param.inherited', { scope: t(`scope.${eff.source.scope}`) })) : t('param.notConfigured')}
                     </p>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
@@ -204,10 +205,10 @@ export const CostAdministrationPage: React.FC = () => {
                       onClick={() => setValue(entry)}
                       className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-40 cursor-pointer"
                     >
-                      Set
+                      {t('param.set')}
                     </button>
                     <button onClick={() => openHistory(entry.name)} className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer">
-                      History
+                      {t('param.history')}
                     </button>
                   </div>
                 </div>
@@ -217,14 +218,14 @@ export const CostAdministrationPage: React.FC = () => {
         )}
       </div>
 
-      <Modal isOpen={historyName !== null} onClose={() => setHistoryName(null)} title={`History: ${historyName ?? ''}`} subtitle="Effective-dated, newest first" maxWidth="max-w-lg">
+      <Modal isOpen={historyName !== null} onClose={() => setHistoryName(null)} title={t('history.title', { name: historyName ?? '' })} subtitle={t('history.subtitle')} maxWidth="max-w-lg">
         {historyRows.length === 0 ? (
-          <p className="text-sm text-slate-400">No recorded values at this scope.</p>
+          <p className="text-sm text-slate-400">{t('history.empty')}</p>
         ) : (
           <div className="space-y-2">
             {historyRows.map((row) => (
               <div key={row.id} className="flex items-center justify-between border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-sm">
-                <span className="font-mono">{row.value != null ? `${row.value} ${row.unit ?? ''}` : 'cleared'}</span>
+                <span className="font-mono">{row.value != null ? `${row.value} ${row.unit ?? ''}` : t('history.cleared')}</span>
                 <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{new Date(row.effectiveFrom).toLocaleString()}</span>
               </div>
             ))}

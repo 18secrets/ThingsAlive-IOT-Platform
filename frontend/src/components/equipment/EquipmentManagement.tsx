@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, ChevronLeft, ChevronRight, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import {
   ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile, EquipmentPlacementEvent,
   ImportResult, MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
@@ -9,10 +10,7 @@ import {
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
 
-const STATUS_OPTIONS = [
-  { label: 'Active', value: 'active' },
-  { label: 'Retired', value: 'retired' },
-];
+const STATUS_VALUES = ['active', 'retired'];
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value: n }));
 
@@ -80,6 +78,8 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   onGetEquipmentRecommendations,
   onImportEquipmentFromMirror,
 }) => {
+  const { t } = useTranslation('equipment');
+  const statusOptions = STATUS_VALUES.map((value) => ({ label: t(`status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -131,20 +131,20 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   };
 
   const handleMove = async (sourceSystem: string, externalId: string, toPlantId: string | null) => {
-    const reason = window.prompt('Why is this machine moving site?');
+    const reason = window.prompt(t('equipmentList.moveReasonPrompt'));
     if (reason === null) throw new Error('cancelled');
     if (!reason.trim()) {
-      window.alert('A reason is required to move equipment.');
+      window.alert(t('equipmentList.moveReasonRequired'));
       throw new Error('cancelled');
     }
     await onMoveEquipment(sourceSystem, externalId, toPlantId, reason.trim());
   };
 
   const handleRetire = async (item: EquipmentProfile) => {
-    const reason = window.prompt(`Why is "${item.name ?? item.externalId}" being retired?`);
+    const reason = window.prompt(t('equipmentList.retireReasonPrompt', { name: item.name ?? item.externalId }));
     if (reason === null) return;
     if (!reason.trim()) {
-      window.alert('A reason is required to retire a machine.');
+      window.alert(t('equipmentList.retireReasonRequired'));
       return;
     }
     setRetiringId(item.id);
@@ -152,7 +152,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     try {
       await onRetireEquipment(item.sourceSystem, item.externalId, reason.trim());
     } catch (err) {
-      setRetireError(err instanceof ApiError ? err.message : 'Could not retire this machine.');
+      setRetireError(err instanceof ApiError ? err.message : t('equipmentList.retireFailed'));
     } finally {
       setRetiringId(null);
     }
@@ -160,7 +160,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
 
   const handleImport = async () => {
     const sourceSystem = window.prompt(
-      'Source system to adopt machines from (the existing platform this account already uses)?',
+      t('equipmentList.importPrompt'),
       'iot-platform-1',
     );
     if (!sourceSystem?.trim()) return;
@@ -169,12 +169,12 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     try {
       const result = await onImportEquipmentFromMirror(sourceSystem.trim());
       window.alert(
-        `Imported ${result.imported} machine${result.imported === 1 ? '' : 's'}.\n`
-        + `${result.alreadyKnown} already known.\n`
-        + `${result.unplaced} imported with no site — their upstream site isn't registered here yet.`,
+        `${t('equipmentList.imported', { count: result.imported })}\n`
+        + `${t('equipmentList.alreadyKnown', { count: result.alreadyKnown })}\n`
+        + t('equipmentList.importedUnplaced', { count: result.unplaced }),
       );
     } catch (err) {
-      setImportError(err instanceof ApiError ? err.message : 'Could not import from that source system.');
+      setImportError(err instanceof ApiError ? err.message : t('equipmentList.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -196,7 +196,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                 setSearchTerm(value);
                 setCurrentPage(1);
               }}
-              placeholder="Search Equipment Details..."
+              placeholder={t('equipmentList.searchPlaceholder')}
               size="sm"
               className="w-full pl-9! pr-4"
             />
@@ -204,13 +204,13 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
 
           {/* Status Filter */}
           <SelectPicker
-            data={STATUS_OPTIONS}
+            data={statusOptions}
             value={selectedStatus === 'All' ? null : selectedStatus}
             onChange={(value) => {
               setSelectedStatus(value ?? 'All');
               setCurrentPage(1);
             }}
-            placeholder="Select Status (All)"
+            placeholder={t('common.selectStatusAll')}
             searchable={false}
             cleanable={selectedStatus !== 'All'}
             size="sm"
@@ -222,11 +222,11 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             id="import-equipment-btn"
             disabled={importing}
             onClick={handleImport}
-            title="Adopt the machines the existing platform already knows about"
+            title={t('equipmentList.importTitle')}
             className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>{importing ? 'Importing…' : 'Import from Legacy'}</span>
+            <span>{importing ? t('equipmentList.importing') : t('equipmentList.importFromLegacy')}</span>
           </button>
 
           {/* Add Equipment Button */}
@@ -236,7 +236,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Equipment</span>
+            <span>{t('equipmentList.addEquipment')}</span>
           </button>
         </div>
       </div>
@@ -254,15 +254,15 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-3.5">Code</th>
-                <th className="py-3 px-4">Equipment Name</th>
-                <th className="py-3 px-4">Equipment Class</th>
-                <th className="py-3 px-4">Plant</th>
-                <th className="py-3 px-4">Manufacturer</th>
-                <th className="py-3 px-4">Model #</th>
-                <th className="py-3 px-4">Serial #</th>
-                <th className="py-3 px-4">Tier</th>
-                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-3.5">{t('equipmentList.col.code')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.name')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.class')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.plant')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.manufacturer')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.model')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.serial')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.tier')}</th>
+                <th className="py-3 px-4">{t('equipmentList.col.status')}</th>
                 <th className="py-3 px-4"></th>
               </tr>
             </thead>
@@ -277,7 +277,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                       {item.externalId}
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      {item.name ?? <span className="text-slate-400 italic">Unnamed</span>}
+                      {item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}
                     </td>
                     <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
                       {item.equipmentClassSlug ? (
@@ -285,11 +285,11 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                           {classBySlug.get(item.equipmentClassSlug)?.name ?? item.equipmentClassSlug}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-slate-400 italic">Unclassified</span>
+                        <span className="text-[11px] text-slate-400 italic">{t('common.unclassified')}</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-sans">
-                      {item.plantId ? (plantById.get(item.plantId)?.name ?? '—') : <span className="text-slate-400 italic">Unassigned</span>}
+                      {item.plantId ? (plantById.get(item.plantId)?.name ?? '—') : <span className="text-slate-400 italic">{t('common.unassigned')}</span>}
                     </td>
                     <td className="py-3 px-4">
                       {item.manufacturer ?? '—'}
@@ -301,7 +301,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                       {item.serialNumber ?? '—'}
                     </td>
                     <td className="py-3 px-4 capitalize text-slate-600 dark:text-slate-400">
-                      {item.tier}
+                      {t(`tier.${item.tier}`, { defaultValue: item.tier })}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
@@ -309,7 +309,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                           ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                           : 'bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                       }`}>
-                        {item.status}
+                        {t(`status.${item.status}`, { defaultValue: item.status })}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -317,14 +317,14 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                         <button
                           onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title="Edit"
+                          title={t('common.edit')}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setBindingsEquipment(item)}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title="Signal bindings"
+                          title={t('bindings.title')}
                         >
                           <Radio className="w-3.5 h-3.5" />
                         </button>
@@ -333,7 +333,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                             onClick={() => handleRetire(item)}
                             disabled={retiringId === item.id}
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                            title="Retire"
+                            title={t('equipmentList.retire')}
                           >
                             <Ban className="w-3.5 h-3.5" />
                           </button>
@@ -345,7 +345,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-slate-400 font-sans">
-                    No equipment found matching criteria.
+                    {t('equipmentList.empty')}
                   </td>
                 </tr>
               )}
@@ -356,12 +356,12 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         {/* Pagination */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
           <div>
-            Total Rows: <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
+              <span>{t('common.rowsPerPage')}</span>
               <SelectPicker
                 data={ROWS_PER_PAGE_OPTIONS}
                 value={rowsPerPage}

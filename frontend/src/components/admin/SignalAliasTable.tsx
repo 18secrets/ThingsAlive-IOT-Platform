@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, Edit3, Trash2, AlertCircle } from 'lucide-react';
 import { Input } from 'rsuite';
+import { Trans, useTranslation } from 'react-i18next';
 import { SignalAlias, SignalAliasInput } from '../../lib/api';
 import { AddSignalAliasModal } from './AddSignalAliasModal';
 
@@ -14,6 +15,7 @@ interface SignalAliasTableProps {
 export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
   aliases, error, onUpsertAlias, onDeleteAlias,
 }) => {
+  const { t } = useTranslation('catalog');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAlias, setEditingAlias] = useState<SignalAlias | null>(null);
@@ -29,12 +31,12 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
 
   async function remove(a: SignalAlias) {
     const key = `${a.sourceSystem}|${a.alias}`;
-    if (!window.confirm(`Delete the alias "${a.alias}" (${a.sourceSystem})? This cannot be undone.`)) return;
+    if (!window.confirm(t('aliases.confirmDelete', { alias: a.alias, source: a.sourceSystem }))) return;
     setBusyKey(key);
     try {
       await onDeleteAlias(a.sourceSystem, a.alias);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not delete this alias.');
+      window.alert(err instanceof Error ? err.message : t('aliases.deleteFailed'));
     } finally {
       setBusyKey(null);
     }
@@ -49,7 +51,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder="Search Alias, Canonical Name, or Source..."
+              placeholder={t('aliases.searchPlaceholder')}
               size="sm"
               className="w-full pl-9!"
             />
@@ -62,7 +64,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Signal Alias</span>
+          <span>{t('aliases.add')}</span>
         </button>
       </div>
 
@@ -78,12 +80,12 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-4">Source System</th>
-                <th className="py-3 px-4">Upstream Spelling</th>
-                <th className="py-3 px-4">Canonical Name</th>
-                <th className="py-3 px-4">Unit</th>
-                <th className="py-3 px-4">Note</th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className="py-3 px-4">{t('aliases.sourceSystem')}</th>
+                <th className="py-3 px-4">{t('aliases.upstreamSpelling')}</th>
+                <th className="py-3 px-4">{t('aliases.canonicalName')}</th>
+                <th className="py-3 px-4">{t('sensorModal.unit')}</th>
+                <th className="py-3 px-4">{t('aliases.note')}</th>
+                <th className="py-3 px-4 text-center">{t('common.action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
@@ -111,7 +113,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
                         <button
                           onClick={() => { setEditingAlias(a); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title="Edit Alias"
+                          title={t('aliases.edit')}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
@@ -119,7 +121,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
                           disabled={busyKey === key}
                           onClick={() => remove(a)}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-rose-600 hover:border-rose-300 disabled:opacity-50 transition-colors cursor-pointer"
-                          title="Delete Alias"
+                          title={t('aliases.delete')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -132,7 +134,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
               {filteredAliases.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-10 text-center text-slate-400 text-sm">
-                    No signal aliases found.
+                    {t('aliases.none')}
                   </td>
                 </tr>
               )}
@@ -141,9 +143,9 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
         </div>
 
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div>Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredAliases.length}</span> Signal Aliases</div>
+          <div><Trans t={t} i18nKey="aliases.showing" count={filteredAliases.length} components={{ b: <span className="font-semibold text-slate-800 dark:text-slate-200" /> }} /></div>
           <div className="text-[11px] text-slate-400 font-sans">
-            A scenario expecting the canonical name fires for every source spelling mapped to it
+            {t('aliases.footer')}
           </div>
         </div>
       </div>

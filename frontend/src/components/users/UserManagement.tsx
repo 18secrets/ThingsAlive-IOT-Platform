@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { PlatformUserItem, PlatformUserRole } from '../../types';
 import { AddUserModal } from './AddUserModal';
 
@@ -43,6 +44,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   onDeleteUser,
   onToggleUserStatus,
 }) => {
+  const { t } = useTranslation('users');
+  const roleLabel = (r: string) => t(`platformRole.${r}`, { defaultValue: r });
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'All' | PlatformUserRole>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -96,15 +99,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   const handleExportCsv = () => {
-    const header = ['ID', 'Employee ID', 'Username', 'Email Id', 'Role', 'Phone No', 'Status'];
+    const header = [
+      t('platformUsers.id'), t('platformUsers.employeeId'), t('col.username'), t('platformUsers.emailId'),
+      t('col.role'), t('platformUsers.phoneNo'), t('col.status'),
+    ];
     const rows = filteredUsers.map((u) => [
       u.id,
       u.employeeId,
       u.username,
       u.email,
-      u.role,
+      roleLabel(u.role),
       u.phone,
-      u.active ? 'Active' : 'Inactive',
+      u.active ? t('status.active') : t('status.inactive'),
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
@@ -139,10 +145,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     <div id="user-management-view" className="space-y-3">
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={BarChart3} label="Total Users" value={stats.total} tone="blue" />
-        <StatCard icon={UserCheck2} label="Active Users" value={stats.active} tone="orange" />
-        <StatCard icon={ShieldCheck} label="Admin Users" value={stats.admin} tone="green" />
-        <StatCard icon={Crown} label="Super Admin" value={stats.superAdmin} tone="amber" />
+        <StatCard icon={BarChart3} label={t('platformUsers.totalUsers')} value={stats.total} tone="blue" />
+        <StatCard icon={UserCheck2} label={t('platformUsers.activeUsers')} value={stats.active} tone="orange" />
+        <StatCard icon={ShieldCheck} label={t('platformUsers.adminUsers')} value={stats.admin} tone="green" />
+        <StatCard icon={Crown} label={t('common.superAdmin')} value={stats.superAdmin} tone="amber" />
       </div>
 
       {/* Toolbar */}
@@ -153,14 +159,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder="Search User Details"
+              placeholder={t('platformUsers.searchPlaceholder')}
               className="pl-9!"
               size="sm"
             />
           </div>
 
           <SelectPicker
-            data={[{ label: 'Select Role', value: 'All' }, ...roles.map((r) => ({ label: r, value: r }))]}
+            data={[{ label: t('platformUsers.selectRole'), value: 'All' }, ...roles.map((r) => ({ label: roleLabel(r), value: r }))]}
             value={roleFilter}
             onChange={(value) => setRoleFilter((value ?? 'All') as 'All' | PlatformUserRole)}
             searchable={false}
@@ -179,21 +185,21 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New User</span>
+            <span>{t('platformUsers.add')}</span>
           </button>
           <button
             className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-2"
-            title="Bulk user upload isn't wired to a backend yet"
+            title={t('platformUsers.bulkUploadTitle')}
           >
             <Upload className="w-4 h-4" />
-            <span>Upload Bulk Users</span>
+            <span>{t('platformUsers.bulkUpload')}</span>
           </button>
           <button
             onClick={handleExportCsv}
             className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
-            <span>Export CSV</span>
+            <span>{t('platformUsers.exportCsv')}</span>
           </button>
         </div>
       </div>
@@ -204,14 +210,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
-                <th className="px-4 py-3 text-left font-semibold">ID</th>
-                <SortableHeader column="employeeId">Employee ID</SortableHeader>
-                <SortableHeader column="username">Username</SortableHeader>
-                <SortableHeader column="email">Email Id</SortableHeader>
-                <th className="px-4 py-3 text-left font-semibold">Role</th>
-                <SortableHeader column="phone">Phone No</SortableHeader>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold">Action</th>
+                <th className="px-4 py-3 text-left font-semibold">{t('platformUsers.id')}</th>
+                <SortableHeader column="employeeId">{t('platformUsers.employeeId')}</SortableHeader>
+                <SortableHeader column="username">{t('col.username')}</SortableHeader>
+                <SortableHeader column="email">{t('platformUsers.emailId')}</SortableHeader>
+                <th className="px-4 py-3 text-left font-semibold">{t('col.role')}</th>
+                <SortableHeader column="phone">{t('platformUsers.phoneNo')}</SortableHeader>
+                <th className="px-4 py-3 text-left font-semibold">{t('col.status')}</th>
+                <th className="px-4 py-3 text-left font-semibold">{t('platformUsers.action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -223,7 +229,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase border ${ROLE_BADGE_STYLES[u.role]}`}>
-                      {u.role}
+                      {roleLabel(u.role)}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">{u.phone}</td>
@@ -233,7 +239,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
                         u.active ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
                       }`}
-                      title={u.active ? 'Deactivate user' : 'Activate user'}
+                      title={u.active ? t('platformUsers.deactivate') : t('platformUsers.activate')}
                     >
                       <span
                         className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
@@ -250,14 +256,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           setIsModalOpen(true);
                         }}
                         className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                        title="Edit User"
+                        title={t('platformUsers.edit')}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onDeleteUser(u.id)}
                         className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer"
-                        title="Delete User"
+                        title={t('platformUsers.delete')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -271,7 +277,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <td colSpan={8} className="px-4 py-10">
                     <div className="flex flex-col items-center gap-2 text-slate-400 text-sm">
                       <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                      <span>No users found.</span>
+                      <span>{t('clientUsers.empty')}</span>
                     </div>
                   </td>
                 </tr>

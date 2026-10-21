@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Info, Plus, Trash2 } from 'lucide-react';
 import { Input } from 'rsuite';
+import { useTranslation } from 'react-i18next';
 import { ApiError, GeoJsonPolygon, Plant } from '../../lib/api';
 
 interface EditPlantBoundaryModalProps {
@@ -28,6 +29,7 @@ function ringToRows(boundary: GeoJsonPolygon | null): CoordRow[] {
 export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
   isOpen, onClose, plant, onSave,
 }) => {
+  const { t } = useTranslation('equipment');
   const [rows, setRows] = useState<CoordRow[]>([emptyRow(), emptyRow(), emptyRow()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -69,21 +71,21 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
       await onSave(plant.id, { type: 'Polygon', coordinates: [outerRing] });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save this boundary.');
+      setError(err instanceof ApiError ? err.message : t('boundary.saveFailed'));
     } finally {
       setBusy(false);
     }
   };
 
   const handleClear = async () => {
-    if (!window.confirm(`Remove ${plant.name}'s boundary?`)) return;
+    if (!window.confirm(t('boundary.removeConfirm', { name: plant.name }))) return;
     setBusy(true);
     setError(undefined);
     try {
       await onSave(plant.id, null);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not clear this boundary.');
+      setError(err instanceof ApiError ? err.message : t('boundary.clearFailed'));
     } finally {
       setBusy(false);
     }
@@ -100,7 +102,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
-              <h3 className="font-bold text-slate-800 dark:text-white text-base">Site Boundary</h3>
+              <h3 className="font-bold text-slate-800 dark:text-white text-base">{t('boundary.title')}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-400">{plant.name}</p>
             </div>
           </div>
@@ -114,7 +116,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
 
         <form onSubmit={handleSubmit} className="px-7 py-6 overflow-y-auto max-h-[calc(85vh-130px)] space-y-4">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            The corners of the site, in order, as latitude / longitude. At least three points — the shape closes itself.
+            {t('boundary.intro')}
           </p>
 
           <div className="space-y-2">
@@ -124,20 +126,20 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
                   size="sm"
                   value={r.lat}
                   onChange={(value) => updateRow(i, 'lat', value)}
-                  placeholder="latitude, e.g. 17.6868"
+                  placeholder={t('boundary.latPlaceholder', { example: '17.6868' })}
                 />
                 <Input
                   size="sm"
                   value={r.lng}
                   onChange={(value) => updateRow(i, 'lng', value)}
-                  placeholder="longitude, e.g. 83.2185"
+                  placeholder={t('boundary.lngPlaceholder', { example: '83.2185' })}
                 />
                 <button
                   type="button"
                   onClick={() => removeRow(i)}
                   disabled={rows.length <= 3}
                   className="p-1.5 text-slate-400 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                  title="Remove point"
+                  title={t('boundary.removePoint')}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -151,7 +153,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
             className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add point</span>
+            <span>{t('boundary.addPoint')}</span>
           </button>
 
           {error && (
@@ -163,7 +165,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              At least 3 valid points needed
+              {t('boundary.minPoints')}
             </span>
             <div className="flex items-center gap-3">
               {plant.boundary && (
@@ -173,7 +175,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
                   onClick={handleClear}
                   className="px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-300 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-60"
                 >
-                  Clear
+                  {t('boundary.clear')}
                 </button>
               )}
               <button
@@ -182,7 +184,7 @@ export const EditPlantBoundaryModal: React.FC<EditPlantBoundaryModalProps> = ({
                 className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{busy ? 'Saving…' : 'Save Boundary'}</span>
+                <span>{busy ? t('common.saving') : t('boundary.save')}</span>
               </button>
             </div>
           </div>

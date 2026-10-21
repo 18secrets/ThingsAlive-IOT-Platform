@@ -1,0 +1,260 @@
+{
+  "common": {
+    "backToSignIn": "ସାଇନ୍ ଇନ୍‌କୁ ଫେରନ୍ତୁ",
+    "email": "ଇମେଲ୍",
+    "password": "ପାସୱାର୍ଡ",
+    "active": "ସକ୍ରିୟ",
+    "client": "କ୍ଲାଏଣ୍ଟ",
+    "language": "ଭାଷା",
+    "restoringSession": "ଆପଣଙ୍କ ସେସନ୍ ପୁନରୁଦ୍ଧାର ହେଉଛି…"
+  },
+  "sidebar": {
+    "dashboard": "ଡ୍ୟାସବୋର୍ଡ",
+    "thingsCare": "ThingsCare",
+    "thingsShield": "ThingsShield",
+    "incidentManagement": "ଘଟଣା ପରିଚାଳନା",
+    "productionMonitoring": "ଉତ୍ପାଦନ ତଦାରଖ",
+    "aiOnboarding": "AI ଅନବୋର୍ଡିଂ",
+    "alerts": "ସତର୍କତା",
+    "livePredictions": "ଲାଇଭ୍ ପୂର୍ବାନୁମାନ",
+    "scenarios": "ପରିସ୍ଥିତି",
+    "workOrders": "କାର୍ଯ୍ୟ ଆଦେଶ",
+    "costAdministration": "ଖର୍ଚ୍ଚ ପ୍ରଶାସନ",
+    "administration": "ପ୍ରଶାସନ",
+    "clients": "କ୍ଲାଏଣ୍ଟ",
+    "staff": "କର୍ମଚାରୀ",
+    "devices": "ଡିଭାଇସ୍",
+    "equipment": "ଉପକରଣ",
+    "clientUsers": "କ୍ଲାଏଣ୍ଟ ଉପଯୋଗକର୍ତ୍ତା",
+    "roles": "ଭୂମିକା ଓ ଅନୁମତି",
+    "users": "ଉପଯୋଗକର୍ତ୍ତା",
+    "settings": "ସେଟିଂସ୍",
+    "expand": "ସାଇଡବାର୍ ବିସ୍ତାର କରନ୍ତୁ",
+    "collapse": "ସାଇଡବାର୍ ସଙ୍କୁଚିତ କରନ୍ତୁ",
+    "version": "ସଂସ୍କରଣ: {{version}}",
+    "openMenu": "ମେନୁ ଖୋଲନ୍ତୁ",
+    "closeMenu": "ମେନୁ ବନ୍ଦ କରନ୍ତୁ"
+  },
+  "header": {
+    "goBack": "ପଛକୁ ଯାଆନ୍ତୁ",
+    "notifications": "ବିଜ୍ଞପ୍ତି",
+    "telemetryNotifications": "ଟେଲିମେଟ୍ରି ବିଜ୍ଞପ୍ତି",
+    "newCount": "{{count}} ନୂଆ",
+    "lightMode": "ଲାଇଟ୍ ମୋଡ୍",
+    "darkMode": "ଡାର୍କ ମୋଡ୍",
+    "profile": "ପ୍ରୋଫାଇଲ୍ ଓ ସେଟିଂସ୍",
+    "signOut": "ସାଇନ୍ ଆଉଟ୍"
+  },
+  "login": {
+    "title": "ସାଇନ୍ ଇନ୍",
+    "identifier": "ଉପଯୋଗକର୍ତ୍ତା ନାମ ବା ଇମେଲ୍",
+    "forgot": "ପାସୱାର୍ଡ ଭୁଲିଗଲେ କି?",
+    "submit": "ସାଇନ୍ ଇନ୍ କରନ୍ତୁ",
+    "submitting": "ସାଇନ୍ ଇନ୍ ହେଉଛି…",
+    "failed": "ସାଇନ୍ ଇନ୍ ବିଫଳ ହେଲା।",
+    "haveToken": "ଆମନ୍ତ୍ରଣ ଟୋକେନ୍ ଅଛି କି? ଆପଣଙ୍କ ପାସୱାର୍ଡ ସେଟ୍ କରନ୍ତୁ",
+    "identifierPlaceholder": "ଆପଣଙ୍କ ଉପଯୋଗକର୍ତ୍ତା ନାମ ବା ଇମେଲ୍ ଦିଅନ୍ତୁ"
+  },
+  "forgot": {
+    "title": "ଆପଣଙ୍କ ପାସୱାର୍ଡ ଭୁଲିଗଲେ କି?",
+    "intro": "ଆପଣଙ୍କ ସାଇନ୍-ଇନ୍ ଇମେଲ୍ ଦିଅନ୍ତୁ, ଆମେ ରିସେଟ୍ ଲିଙ୍କ ପଠାଇବୁ।",
+    "submit": "ରିସେଟ୍ ଲିଙ୍କ ପଠାନ୍ତୁ",
+    "submitting": "ପଠାଯାଉଛି…",
+    "failed": "ରିସେଟ୍ ଲିଙ୍କ ପଠାଯାଇପାରିଲା ନାହିଁ।",
+    "sentTitle": "ଆପଣଙ୍କ ଇମେଲ୍ ଯାଞ୍ଚ କରନ୍ତୁ",
+    "sentBody": "ଯଦି <1>{{email}}</1> ପାଇଁ ଖାତା ଅଛି, ତେବେ ରିସେଟ୍ ଲିଙ୍କ ପଠାଯାଉଛି।",
+    "emailPlaceholder": "ଆପଣଙ୍କ ଇମେଲ୍ ଦିଅନ୍ତୁ"
+  },
+  "invite": {
+    "titleReset": "ନୂଆ ପାସୱାର୍ଡ ବାଛନ୍ତୁ",
+    "titleAccept": "ଆପଣଙ୍କ ଆମନ୍ତ୍ରଣ ଗ୍ରହଣ କରନ୍ତୁ",
+    "introReset": "ଆପଣଙ୍କ ରିସେଟ୍ ଲିଙ୍କ ତଳେ ଟୋକେନ୍ ଭରିଦେଇଛି। ନୂଆ ପାସୱାର୍ଡ ବାଛନ୍ତୁ; ଲିଙ୍କ କେବଳ ଥରେ କାମ କରେ।",
+    "introAccept": "Things Alive ଦେଇଥିବା ଆମନ୍ତ୍ରଣ ଟୋକେନ୍ ପେଷ୍ଟ କରନ୍ତୁ, ତାପରେ ପାସୱାର୍ଡ ବାଛନ୍ତୁ। ଟୋକେନ୍ କେବଳ ଏହି ଥରକ ଦରକାର — ଏହା ପରେ କେବଳ ଆପଣଙ୍କ ଇମେଲ୍‌ରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ।",
+    "token": "ଆମନ୍ତ୍ରଣ ଟୋକେନ୍",
+    "tokenPlaceholder": "ଟୋକେନ୍ ଏଠାରେ ପେଷ୍ଟ କରନ୍ତୁ",
+    "newPassword": "ନୂଆ ପାସୱାର୍ଡ",
+    "newPasswordPlaceholder": "Aa1! ଏବଂ ଅତି କମରେ 8 ଅକ୍ଷର",
+    "confirmPassword": "ପାସୱାର୍ଡ ନିଶ୍ଚିତ କରନ୍ତୁ",
+    "confirmPlaceholder": "ନୂଆ ପାସୱାର୍ଡ ପୁଣି ଦିଅନ୍ତୁ",
+    "submit": "ପାସୱାର୍ଡ ସେଟ୍ କରି ସାଇନ୍ ଇନ୍ କରନ୍ତୁ",
+    "submitting": "ପାସୱାର୍ଡ ସେଟ୍ ହେଉଛି…",
+    "weak": "ପାସୱାର୍ଡରେ ଏକ ବଡ଼ ଅକ୍ଷର, ଏକ ଛୋଟ ଅକ୍ଷର, ଏକ ସଂଖ୍ୟା ଏବଂ ଏକ ବିଶେଷ ଚିହ୍ନ ରହିବା ଆବଶ୍ୟକ।",
+    "mismatch": "ପାସୱାର୍ଡ ମେଳ ଖାଉନାହିଁ।",
+    "failedReset": "ପାସୱାର୍ଡ ରିସେଟ୍ ହୋଇପାରିଲା ନାହିଁ।",
+    "failedAccept": "ଆମନ୍ତ୍ରଣ ଗ୍ରହଣ ହୋଇପାରିଲା ନାହିଁ।"
+  },
+  "settings": {
+    "title": "ଖାତା ସେଟିଂସ୍",
+    "subtitle": "ଆପଣଙ୍କ ପ୍ରୋଫାଇଲ୍ ସୂଚନା ଏବଂ ଖାତା ସୁରକ୍ଷା ପରିଚାଳନା କରନ୍ତୁ।",
+    "masterAdmin": "ThingsAlive ମାଷ୍ଟର ଆଡମିନ୍",
+    "role": "ଭୂମିକା",
+    "username": "ଉପଯୋଗକର୍ତ୍ତା ନାମ",
+    "clientOrganization": "କ୍ଲାଏଣ୍ଟ ସଂସ୍ଥା",
+    "accountStatus": "ଖାତା ସ୍ଥିତି",
+    "accessLevel": "ପ୍ରବେଶ ସ୍ତର",
+    "clientSince": "କ୍ଲାଏଣ୍ଟ ହେବା ତାରିଖ",
+    "allPlantsAndClients": "ସମସ୍ତ ପ୍ଲାଣ୍ଟ ଓ କ୍ଲାଏଣ୍ଟ",
+    "changePassword": "ପାସୱାର୍ଡ ବଦଳାନ୍ତୁ",
+    "changePasswordHint": "ସାଇନ୍ ଇନ୍ ପାଇଁ ବ୍ୟବହୃତ ପାସୱାର୍ଡ ଅପଡେଟ୍ କରନ୍ତୁ",
+    "currentPassword": "ବର୍ତ୍ତମାନର ପାସୱାର୍ଡ",
+    "currentPasswordPlaceholder": "ଆପଣଙ୍କ ବର୍ତ୍ତମାନର ପାସୱାର୍ଡ ଦିଅନ୍ତୁ",
+    "newPassword": "ନୂଆ ପାସୱାର୍ଡ",
+    "newPasswordPlaceholder": "ବଡ଼, ଛୋଟ ଅକ୍ଷର, ସଂଖ୍ୟା ଓ ଚିହ୍ନ",
+    "confirmNewPassword": "ନୂଆ ପାସୱାର୍ଡ ନିଶ୍ଚିତ କରନ୍ତୁ",
+    "confirmPlaceholder": "ନୂଆ ପାସୱାର୍ଡ ପୁଣି ଦିଅନ୍ତୁ",
+    "update": "ପାସୱାର୍ଡ ଅପଡେଟ୍ କରନ୍ତୁ",
+    "updating": "ଅପଡେଟ୍ ହେଉଛି…",
+    "tooShort": "ନୂଆ ପାସୱାର୍ଡ ଅତି କମରେ 8 ଅକ୍ଷର ହେବା ଆବଶ୍ୟକ।",
+    "sameAsCurrent": "ନୂଆ ପାସୱାର୍ଡ ବର୍ତ୍ତମାନର ପାସୱାର୍ଡଠାରୁ ଭିନ୍ନ ହେବା ଆବଶ୍ୟକ।",
+    "mismatch": "ନୂଆ ପାସୱାର୍ଡ ଏବଂ ନିଶ୍ଚିତକରଣ ମେଳ ଖାଉନାହିଁ।",
+    "updated": "ଆପଣଙ୍କ ପାସୱାର୍ଡ ଅପଡେଟ୍ ହେଲା। ପୁଣି ସାଇନ୍ ଇନ୍ ପାଇଁ ଆପଣଙ୍କୁ ସାଇନ୍ ଆଉଟ୍ କରାଯାଉଛି…"
+  },
+  "passwordField": {
+    "show": "ପାସୱାର୍ଡ ଦେଖାନ୍ତୁ",
+    "hide": "ପାସୱାର୍ଡ ଲୁଚାନ୍ତୁ"
+  },
+  "pages": {
+    "admin": {
+      "title": "ପ୍ରଶାସନ",
+      "subtitle": "ମାଷ୍ଟର କନଫିଗରେସନ୍"
+    },
+    "clients": {
+      "title": "କ୍ଲାଏଣ୍ଟ",
+      "subtitle": "ଖାତା ଓ ଅଧିକାର"
+    },
+    "staff": {
+      "title": "କର୍ମଚାରୀ",
+      "subtitle": "Things Alive ଦଳ"
+    },
+    "devices": {
+      "title": "ଡିଭାଇସ୍",
+      "subtitle": "ଷ୍ଟକ୍ ଓ ଆବଣ୍ଟନ"
+    },
+    "equipment": {
+      "title": "ଉପକରଣ",
+      "subtitle": "ଫ୍ଲିଟ୍ ରେଜିଷ୍ଟର"
+    },
+    "thingsCare": {
+      "title": "ThingsCare",
+      "subtitle": "ସ୍ୱାସ୍ଥ୍ୟ ଓ ପୂର୍ବାନୁମାନ"
+    },
+    "thingsShield": {
+      "title": "ThingsShield",
+      "subtitle": "ସୁରକ୍ଷା, ଅନୁପାଳନ ଓ ବିପଦ"
+    },
+    "incidentManagement": {
+      "title": "ଘଟଣା ପରିଚାଳନା",
+      "subtitle": "ଲୋକ, ମେସିନ୍ ସୁସ୍ଥତା ଓ ସୁରକ୍ଷା"
+    },
+    "productionMonitoring": {
+      "title": "ଉତ୍ପାଦନ ତଦାରଖ",
+      "subtitle": "ଉତ୍ପାଦନ ଓ କାର୍ଯ୍ୟଦକ୍ଷତା"
+    },
+    "aiOnboarding": {
+      "title": "AI ଅନବୋର୍ଡିଂ",
+      "subtitle": "ମାର୍ଗଦର୍ଶିତ ସେଟଅପ୍ ସେସନ୍"
+    },
+    "alertAgent": {
+      "title": "ସତର୍କତା ଏଜେଣ୍ଟ",
+      "subtitle": "ସ୍ୱୟଂଚାଳିତ ପ୍ରେରଣ"
+    },
+    "alerts": {
+      "title": "ସତର୍କତା",
+      "subtitle": "ଫ୍ଲିଟ୍ ଧ୍ୟାନ ଫିଡ୍"
+    },
+    "predictions": {
+      "title": "ଲାଇଭ୍ ପୂର୍ବାନୁମାନ",
+      "subtitle": "ସ୍ୱୟଂଚାଳିତ ପ୍ରେରଣ"
+    },
+    "scenarios": {
+      "title": "ପରିସ୍ଥିତି",
+      "subtitle": "ତଦାରଖ କାର୍ଯ୍ୟପ୍ରବାହ"
+    },
+    "workOrders": {
+      "title": "କାର୍ଯ୍ୟ ଆଦେଶ",
+      "subtitle": "ରକ୍ଷଣାବେକ୍ଷଣ କାର୍ଯ୍ୟ"
+    },
+    "costAdministration": {
+      "title": "ଖର୍ଚ୍ଚ ପ୍ରଶାସନ",
+      "subtitle": "ଇନ୍ଧନ ଓ ରକ୍ଷଣାବେକ୍ଷଣ ଦର"
+    },
+    "users": {
+      "title": "ଉପଯୋଗକର୍ତ୍ତା ପରିଚାଳନା",
+      "subtitle": "ପ୍ରବେଶ ଓ ଅନୁମତି"
+    },
+    "clientUsers": {
+      "title": "କ୍ଲାଏଣ୍ଟ ଉପଯୋଗକର୍ତ୍ତା",
+      "subtitle": "ଲୋକ ଓ ପ୍ରବେଶ"
+    },
+    "roles": {
+      "title": "ଭୂମିକା ଓ ଅନୁମତି",
+      "subtitle": "ପୃଷ୍ଠା ପ୍ରବେଶ ନିୟନ୍ତ୍ରଣ"
+    },
+    "settings": {
+      "title": "ସେଟିଂସ୍",
+      "subtitle": "ସିଷ୍ଟମ୍ ପାରାମିଟର"
+    },
+    "dashboard": {
+      "title": "ଡ୍ୟାସବୋର୍ଡ",
+      "subtitle": "ଫ୍ଲିଟ୍ ଟେଲିମାଟିକ୍ସ"
+    },
+    "dashboardPlatform": {
+      "title": "ଡ୍ୟାସବୋର୍ଡ",
+      "subtitle": "ପ୍ଲାଟଫର୍ମ ସମୀକ୍ଷା"
+    }
+  },
+  "rsuite": {
+    "loading": "ଲୋଡ୍ ହେଉଛି...",
+    "emptyMessage": "କୌଣସି ତଥ୍ୟ ମିଳିଲା ନାହିଁ",
+    "remove": "ହଟାନ୍ତୁ",
+    "clear": "ସଫା କରନ୍ତୁ",
+    "noResultsText": "କୌଣସି ଫଳାଫଳ ମିଳିଲା ନାହିଁ",
+    "placeholder": "ବାଛନ୍ତୁ",
+    "searchPlaceholder": "ଖୋଜନ୍ତୁ",
+    "checkAll": "ସମସ୍ତ",
+    "newItem": "ନୂଆ ଆଇଟମ୍",
+    "createOption": "\"{0}\" ବିକଳ୍ପ ତିଆରି କରନ୍ତୁ",
+    "su": "ରବି",
+    "mo": "ସୋମ",
+    "tu": "ମଙ୍ଗଳ",
+    "we": "ବୁଧ",
+    "th": "ଗୁରୁ",
+    "fr": "ଶୁକ୍ର",
+    "sa": "ଶନି",
+    "ok": "ଠିକ୍ ଅଛି",
+    "today": "ଆଜି",
+    "yesterday": "ଗତକାଲି",
+    "now": "ବର୍ତ୍ତମାନ",
+    "hours": "ଘଣ୍ଟା",
+    "minutes": "ମିନିଟ୍",
+    "seconds": "ସେକେଣ୍ଡ",
+    "last7Days": "ଗତ 7 ଦିନ",
+    "more": "ଅଧିକ",
+    "prev": "ପୂର୍ବବର୍ତ୍ତୀ",
+    "next": "ପରବର୍ତ୍ତୀ",
+    "first": "ପ୍ରଥମ",
+    "last": "ଶେଷ",
+    "limit": "{0} / ପୃଷ୍ଠା",
+    "total": "ମୋଟ ଧାଡ଼ି: {0}",
+    "skip": "ଯାଆନ୍ତୁ{0}",
+    "close": "ବନ୍ଦ କରନ୍ତୁ",
+    "showPath": "ପଥ ଦେଖାନ୍ତୁ",
+    "on": "ଚାଲୁ",
+    "off": "ବନ୍ଦ",
+    "alert": "ସତର୍କତା",
+    "confirm": "ନିଶ୍ଚିତ କରନ୍ତୁ",
+    "cancel": "ବାତିଲ୍ କରନ୍ତୁ",
+    "upload": "ଅପଲୋଡ୍ କରନ୍ତୁ",
+    "uploading": "ଅପଲୋଡ୍ ହେଉଛି",
+    "uploadError": "ତ୍ରୁଟି",
+    "uploadDone": "ସମାପ୍ତ",
+    "removeFile": "ଫାଇଲ୍ ହଟାନ୍ତୁ",
+    "unfilled": "ପୂରଣ ହୋଇନାହିଁ",
+    "notSelected": "ବଛାଯାଇନାହିଁ"
+  },
+  "prompts": {
+    "suspendReason": "{{name}} କୁ କାହିଁକି ନିଲମ୍ବିତ କରାଯାଉଛି?",
+    "takeBackReason": "{{imei}} କୁ କାହିଁକି ପୁଣି ଷ୍ଟକକୁ ନିଆଯାଉଛି?",
+    "retireReason": "{{imei}} କୁ କାହିଁକି ଅବସର ଦିଆଯାଉଛି?"
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Plus, ShieldAlert, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { FleetThing, findThing } from '../../data/fleetMockData';
 import { ShieldIncident } from '../../data/shieldMockData';
 import { IncidentCard, IncidentForm, IncidentFormValues } from './IncidentRecord';
@@ -28,6 +29,7 @@ export const IncidentManagementSection: React.FC<{
   hideHeading?: boolean;
 }> = ({ things, visibleIncidents, setIncidents, defaultThingId, hideHeading }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('incidents');
   const [editing, setEditing] = useState<ShieldIncident | 'new' | null>(null);
 
   function save(values: IncidentFormValues) {
@@ -36,7 +38,7 @@ export const IncidentManagementSection: React.FC<{
       setIncidents((current) => current.map((i) => (i.id === editing.id ? { ...i, ...values, equipmentName: thing?.name ?? i.equipmentName } : i)));
     } else {
       setIncidents((current) => [
-        { ...values, id: crypto.randomUUID(), equipmentName: thing?.name ?? values.equipmentCode, workOrderStatus: 'Open', note: 'Illustrative incident for workflow demonstration; no actual event asserted.', createdAt: new Date().toISOString() },
+        { ...values, id: crypto.randomUUID(), equipmentName: thing?.name ?? values.equipmentCode, workOrderStatus: 'Open', note: t('mock.illustrativeNote'), createdAt: new Date().toISOString() },
         ...current,
       ]);
     }
@@ -47,8 +49,8 @@ export const IncidentManagementSection: React.FC<{
     <div className="space-y-4">
       {!hideHeading && (
         <div className="flex items-center gap-1.5">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">Incident Management</h3>
-          <span title="People, machine wellbeing and security · browser-local records · review identities are self-declared in this demo.">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.title')}</h3>
+          <span title={t('mock.sectionInfo')}>
             <Info className="w-4 h-4 text-slate-400" />
           </span>
         </div>
@@ -56,17 +58,17 @@ export const IncidentManagementSection: React.FC<{
 
       <div className="flex items-center gap-2">
         <button onClick={() => setEditing('new')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700">
-          <Plus className="w-4 h-4" /> Report incident
+          <Plus className="w-4 h-4" /> {t('mock.report')}
         </button>
         <button onClick={() => exportCsv(visibleIncidents)} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300">
-          <Download className="w-4 h-4" /> Export filtered records
+          <Download className="w-4 h-4" /> {t('mock.export')}
         </button>
       </div>
 
       <Modal
         isOpen={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing !== 'new' && editing ? 'Edit incident' : 'Report incident'}
+        title={editing !== 'new' && editing ? t('mock.editTitle') : t('mock.report')}
         maxWidth="max-w-lg"
       >
         <IncidentForm
@@ -81,7 +83,7 @@ export const IncidentManagementSection: React.FC<{
       {visibleIncidents.length === 0 ? (
         <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
           <ShieldAlert className="w-6 h-6" />
-          No incidents for this selection.
+          {t('page.empty')}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
