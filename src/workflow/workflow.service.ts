@@ -60,6 +60,20 @@ export interface AssembleInput {
   combine?: 'allOf' | 'anyOf';
 }
 
+/**
+ * Where a condition node's parameters came from: the account's copy of a published
+ * alert template, pinned by version. A generated workflow records every one, so each
+ * threshold it materialises traces to a template version rather than to its author.
+ */
+export interface AssembledSource {
+  nodeId: string;
+  ruleId: string;
+  templateSlug: string;
+  templateVersion: number | null;
+  templateChecksum: string | null;
+  signal: string | null;
+}
+
 export interface Unresolved {
   signal?: string;
   templateSlug?: string;
@@ -127,9 +141,22 @@ export class WorkflowService {
   async create(
     scope: RequestScope, input: { slug: string; name: string; description?: string | null; spec: WorkflowSpec },
   ) {
+    return withTenantSession(this.ds, scope, (m) => this.createIn(m, scope, input));
+  }
+
+  /**
+   * `create`, inside a transaction the caller already holds. A generated workflow
+   * (QGEN3) is created here inside the proposal's approval, so it meets the same checks
+   * as one a person draws and is written or not together with the approval.
+   */
+  async createIn(
+    m: EntityManager, scope: RequestScope,
+    input: { slug: string; name: string; description?: string | null; spec: WorkflowSpec },
+    provenance: { source: 'manual' | 'generated'; proposalId: string | null } = { source: 'manual', proposalId: null },
+  ) {
     if (!SLUG_PATTERN.test(input.slug ?? '')) throw new BadRequestException('A workflow needs a slug of lower-case letters, digits and hyphens.');
     if (!input.name?.trim()) throw new BadRequestException('A workflow needs a name.');
-    return withTenantSession(this.ds, scope, async (m) => {
+    {
       const compiled = await this.validate(m, scope, input.spec);
       const defs = m.getRepository(WorkflowDefinition);
       if (await defs.findOne({ where: { tenantId: scope.tenantId, slug: input.slug } })) {
@@ -137,15 +164,15 @@ export class WorkflowService {
       }
       const def = await defs.save(defs.create({
         tenantId: scope.tenantId, slug: input.slug, name: input.name.trim(), description: input.description ?? null,
-        kind: 'alert', createdBy: scope.userId,
+        kind: (input.spec.kind ?? 'alert') as any, createdBy: scope.userId,
       }));
       const versions = m.getRepository(WorkflowVersion);
       await versions.save(versions.create({
         tenantId: scope.tenantId, workflowId: def.id, version: 1, spec: input.spec, graphHash: compiled.graphHash,
-        status: 'draft', source: 'manual', proposalId: null, createdBy: scope.userId,
+        status: 'draft', source: provenance.source, proposalId: provenance.proposalId, createdBy: scope.userId,
       }));
       return this.describe(m, scope, def);
-    });
+    }
   }
 
   async replaceSpec(scope: RequestScope, id: string, version: number, spec: WorkflowSpec) {
@@ -200,13 +227,39 @@ export class WorkflowService {
   }
 
   /**
+   * The dry run for a spec that is not stored yet: what publish would write and whether
+   * each machine can fire. QGEN3's compile step, so a generated draft is judged by the
+   * same plan its publish will use.
+   */
+  async compileSpec(m: EntityManager, scope: RequestScope, spec: WorkflowSpec, slugBase: string, at = new Date()): Promise<CompileResult> {
+    return this.planSpec(m, scope, spec, slugBase, at);
+  }
+
+  /** The plain-English reading of a spec, in the words the workflow screens use. */
+  async renderSpec(m: EntityManager, scope: RequestScope, spec: WorkflowSpec): Promise<string[]> {
+    const compiled = safeCompile(spec);
+    if (!compiled) return [];
+    const namer = await this.namerFor(m, scope, spec.scope);
+    return compiled.rules.map((r) => describeRule(r, namer));
+  }
+
+  /**
    * Compile and write, in one transaction, under the workflow row's lock — the lesson
    * of the import batch: two overlapping publishes must not both supersede the old
    * version and both insert rules. Idempotent: a version already published returns its
    * rules and writes nothing.
    */
   async publish(scope: RequestScope, id: string, version: number, at = new Date()) {
-    return withTenantSession(this.ds, scope, async (m) => {
+    return withTenantSession(this.ds, scope, (m) => this.publishIn(m, scope, id, version, at));
+  }
+
+  /**
+   * `publish`, inside a transaction the caller already holds, with the same lock. A
+   * draft generated without enough history to replay publishes its rules switched off
+   * (`enabled: false`, D28); the database refuses them on otherwise.
+   */
+  async publishIn(m: EntityManager, scope: RequestScope, id: string, version: number, at = new Date(), opts: { enabled?: boolean } = {}) {
+    {
       const def = await this.definition(m, scope, id, true);
       const v = await this.version(m, scope, def, version);
       const rules = m.getRepository(AlertRule);
@@ -235,12 +288,12 @@ export class WorkflowService {
         appliesTo: compiled.scope.appliesTo, plantId: compiled.scope.plantId ?? null,
         sourceSystem: compiled.scope.sourceSystem ?? null, externalId: compiled.scope.externalId ?? null,
         equipmentClassSlug: compiled.scope.equipmentClassSlug ?? null,
-        enabled: true, compiledFromWorkflowId: def.id, compiledFromVersionId: v.id, graphHash: compiled.graphHash,
+        enabled: opts.enabled ?? true, compiledFromWorkflowId: def.id, compiledFromVersionId: v.id, graphHash: compiled.graphHash,
         createdBy: scope.userId, updatedBy: scope.userId,
       })));
       await m.getRepository(WorkflowVersion).update({ id: v.id }, { status: 'published', publishedBy: scope.userId, publishedAt: at });
       return { version: v.version, status: 'published', alreadyPublished: false, rules: written, readiness: plan.readiness };
-    });
+    }
   }
 
   /** Every compiled rule off, and the published version retired. The rules stay, off. */
@@ -266,7 +319,12 @@ export class WorkflowService {
    * template is returned as unresolved — never given a threshold invented here (G07).
    */
   async assemble(scope: RequestScope, input: AssembleInput) {
-    return withTenantSession(this.ds, scope, async (m) => {
+    return withTenantSession(this.ds, scope, (m) => this.assembleIn(m, scope, input));
+  }
+
+  /** `assemble`, inside a transaction the caller already holds (QGEN3's emitter). */
+  async assembleIn(m: EntityManager, scope: RequestScope, input: AssembleInput) {
+    {
       const target = input.target;
       const unresolved: Unresolved[] = [];
       const classSlug = await this.classOf(m, scope, target);
@@ -326,8 +384,13 @@ export class WorkflowService {
       const spec: WorkflowSpec = { kind: 'alert', scope: target, nodes, edges };
       const compiled = nodes.length ? safeCompile(spec) : null;
       const namer = await this.namerFor(m, scope, target);
-      return { spec, rendering: compiled ? compiled.rules.map((r) => describeRule(r, namer)) : [], unresolved };
-    });
+      const sources: AssembledSource[] = chosen.map((rule, i) => ({
+        nodeId: conditions[i], ruleId: rule.id, templateSlug: rule.templateSlug!, templateVersion: rule.templateVersion ?? null,
+        templateChecksum: rule.templateChecksum ?? null,
+        signal: rule.trigger === 'signal-threshold' ? (rule.params as SignalThresholdParams).signal : null,
+      }));
+      return { spec, rendering: compiled ? compiled.rules.map((r) => describeRule(r, namer)) : [], unresolved, sources };
+    }
   }
 
   // ---------------------------------------------------------------- internals
@@ -363,9 +426,12 @@ export class WorkflowService {
   private async plan(
     m: EntityManager, scope: RequestScope, def: WorkflowDefinition, v: WorkflowVersion, at: Date,
   ): Promise<CompileResult> {
-    const compiled = await this.validate(m, scope, v.spec);
+    return this.planSpec(m, scope, v.spec, `wf-${def.slug.slice(0, 40)}-v${v.version}`, at);
+  }
+
+  private async planSpec(m: EntityManager, scope: RequestScope, spec: WorkflowSpec, base: string, at: Date): Promise<CompileResult> {
+    const compiled = await this.validate(m, scope, spec);
     const namer = await this.namerFor(m, scope, compiled.scope);
-    const base = `wf-${def.slug.slice(0, 40)}-v${v.version}`;
     const rules: PlannedRule[] = compiled.rules.map((r, i) => ({
       slug: `${base}-${i + 1}`, name: r.name, trigger: r.trigger, params: r.params, severity: r.severity,
       description: r.description, rendering: describeRule(r, namer),

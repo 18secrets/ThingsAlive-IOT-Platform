@@ -1,16 +1,33 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
+import { KpiModule } from '../kpi/kpi.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 import { EmitterRegistry } from './emitter';
+import { KpiEmitter } from './kpi-emitter';
+import { KpiProposalController } from './kpi-proposal.controller';
 import { ProposalController } from './proposal.controller';
 import { ProposalService } from './proposal.service';
 import { ReplayService } from './replay.service';
+import { WorkflowEmitter } from './workflow-emitter';
+import { WorkflowProposalController } from './workflow-proposal.controller';
 
 /**
- * The proposal substrate. Ships no emitter: QGEN2 (KPI) and QGEN3 (workflow) import this
- * module and register theirs with `EmitterRegistry` when their module starts.
+ * The proposal substrate, KPI emitter, and workflow emitter (tasks QGEN1, QGEN2, and QGEN3).
  */
 @Module({
-  controllers: [ProposalController],
-  providers: [EmitterRegistry, ReplayService, ProposalService],
-  exports: [EmitterRegistry, ReplayService, ProposalService],
+  imports: [KpiModule, WorkflowModule],
+  controllers: [ProposalController, KpiProposalController, WorkflowProposalController],
+  providers: [EmitterRegistry, ReplayService, ProposalService, KpiEmitter, WorkflowEmitter],
+  exports: [EmitterRegistry, ReplayService, ProposalService, KpiEmitter, WorkflowEmitter],
 })
-export class ProposalModule {}
+export class ProposalModule implements OnModuleInit {
+  constructor(
+    private readonly registry: EmitterRegistry,
+    private readonly kpiEmitter: KpiEmitter,
+    private readonly workflowEmitter: WorkflowEmitter,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register(this.kpiEmitter);
+    this.registry.register(this.workflowEmitter);
+  }
+}

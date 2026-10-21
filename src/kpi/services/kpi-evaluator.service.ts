@@ -129,6 +129,24 @@ export class KpiEvaluatorService {
     return withTenantSession(this.ds, scope, (m) => this.loadOperatingGate(m, scope.tenantId, equipment, from, to));
   }
 
+  /**
+   * Evaluate a candidate formula once, read-only, for informational gate feedback (task QGEN2).
+   * Not a live formula; attaches to gate_detail so an approver sees unbound/stale before approval.
+   */
+  async evaluateCandidate(
+    m: EntityManager,
+    tenantId: string,
+    equipment: EquipmentRef,
+    candidate: ClientFormula,
+    at: Date = new Date(),
+  ): Promise<KpiEnvelope> {
+    const { formulas, profile } = await this.loadFormulas(m, tenantId, equipment);
+    const siblings = formulas.filter((f) => f.formulaKey !== candidate.formulaKey);
+    siblings.push(candidate);
+    const [envelope] = await this.evaluateBatch(m, tenantId, equipment, profile, siblings, [candidate], at);
+    return envelope;
+  }
+
   private async loadFormulas(
     m: EntityManager, tenantId: string, equipment: EquipmentRef,
   ): Promise<{ formulas: ClientFormula[]; profile: EquipmentProfile }> {
