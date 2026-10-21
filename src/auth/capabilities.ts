@@ -10,6 +10,8 @@ import { RequestScope } from './types/request-scope';
 export type Capability =
   | 'tenant.manage'
   | 'user.manage'
+  | 'role.manage'
+  | 'tenant.provision'
   | 'equipment.write'
   | 'scenario.activate'
   | 'scenario.author'
@@ -19,6 +21,9 @@ export type Capability =
   | 'catalog.write'
   | 'client-catalog.read'
   | 'client-catalog.write'
+  | 'device.manage'
+  | 'device.read'
+  | 'device.claim'
   | 'prediction.read'
   | 'prediction.run'
   | 'entitlement.grant'
@@ -27,7 +32,16 @@ export type Capability =
 /** The four consumer roles, plus the Things Alive roles that act across tenants. */
 const GRANTS: Record<Capability, readonly string[]> = {
   'tenant.manage': ['super admin', 'master-admin'],
-  'user.manage': ['super admin', 'master-admin'],
+  // The account's own users. Super admin alone: a master admin adding a user to a
+  // client account would be Things Alive deciding who works for a customer, which is
+  // the same boundary that keeps them out of the client's catalog copies.
+  'user.manage': ['super admin'],
+  // The account's own roles. Roles are rows rather than code, so a client can add the
+  // ones they need — composed from the capability list below, which they cannot add to.
+  'role.manage': ['super admin'],
+  // Creating an account and seeding its first super admin. The one user-shaped thing
+  // Things Alive does do, because somebody has to exist before anybody can be invited.
+  'tenant.provision': ['master-admin'],
   'equipment.write': ['super admin', 'admin', 'master-admin'],
   'scenario.activate': ['super admin', 'admin'],
   'scenario.author': ['super admin', 'admin'],
@@ -52,6 +66,19 @@ const GRANTS: Record<Capability, readonly string[]> = {
   // appears in this list and why adding one later would be a change of model rather
   // than a change of permission.
   'client-catalog.write': ['super admin'],
+  // The pool is Things Alive's stock ledger. Registering, assigning, releasing and
+  // retiring are commercial acts, and none of them are a customer's to perform on
+  // hardware they are renting.
+  'device.manage': ['master-admin'],
+  // Seeing the devices in your own account. Every role inside the tenant, because
+  // "which loggers do we have" is not a privileged question about your own kit.
+  'device.read': [
+    'super admin', 'admin', 'operational', 'support',
+    'master-admin', 'platform-support',
+  ],
+  // Fitting a device to a machine and taking it off again. The customer's act, not
+  // ours — nobody at Things Alive knows which generator the logger ended up on.
+  'device.claim': ['super admin', 'admin'],
   // Predictions are the product the customer bought, so every role inside the tenant
   // reads them. Support is included because the first question on any ticket is what
   // the platform actually said about the machine, and asking the customer to read it
@@ -74,8 +101,25 @@ const GRANTS: Record<Capability, readonly string[]> = {
  * customer hits it.
  */
 export function capabilitiesFor(scope: RequestScope): Record<Capability, boolean> {
-  const roles = new Set(scope.roles);
   const out = {} as Record<Capability, boolean>;
+
+  // A client user's capabilities come from their account's own role row, because a
+  // client can now define roles Things Alive has never heard of. The table below is
+  // still the authority for platform roles, which are ours and are not rows.
+  //
+  // The two cannot drift into disagreement, because they are never consulted for the
+  // same caller: a resolved role wins outright rather than being merged with the
+  // table. Merging would mean a client could not take a capability away, since the
+  // static grant would keep handing it back.
+  if (scope.capabilities) {
+    const held = new Set<string>(scope.capabilities);
+    for (const capability of Object.keys(GRANTS) as Capability[]) {
+      out[capability] = held.has(capability);
+    }
+    return out;
+  }
+
+  const roles = new Set(scope.roles);
   for (const [capability, granted] of Object.entries(GRANTS) as [Capability, string[]][]) {
     out[capability] = granted.some((r) => roles.has(r));
   }
