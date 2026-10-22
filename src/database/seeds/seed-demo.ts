@@ -460,7 +460,7 @@ async function seedSiteAndMachines(ds: DataSource, now: Date): Promise<void> {
 // ======================================================================== telemetry
 
 /** Deterministic, so a reseed draws the same demo — and a test can assert on it. */
-function prng(seed: number): () => number {
+export function prng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -471,14 +471,15 @@ function prng(seed: number): () => number {
   };
 }
 
-const local = (t: number) => {
+export const local = (t: number) => {
   const d = new Date(t + TZ_OFFSET_MS);
   return { hour: d.getUTCHours() + d.getUTCMinutes() / 60, dow: d.getUTCDay(), day: Math.floor((t + TZ_OFFSET_MS) / DAY_MS) };
 };
 
 /** In shift, minus a two-hour stop every Wednesday afternoon — so availability is high,
  * not a suspicious 100%. */
-const running = (t: number) => {
+export const running = (t: number) => {
+  if (process.env.DEMO_FORCE_RUNNING === 'true') return true;
   const { hour, dow } = local(t);
   if (dow < 1 || dow > 5 || hour < 8 || hour >= 18) return false;
   return !(dow === 3 && hour >= 13 && hour < 15);
