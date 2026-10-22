@@ -207,6 +207,7 @@
       "unbound": "a needed signal is not bound",
       "stale": "readings are stale"
     },
+    "equipmentDetail": "Equipment detail",
     "equipmentPage": "Equipment page",
     "production": "Production",
     "predictions": "Predictions",
