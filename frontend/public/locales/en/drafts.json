@@ -85,6 +85,7 @@
     "numerator": "Numerator KPI",
     "denominator": "Denominator KPI",
     "needTwoKpis": "This machine needs at least two KPIs for a ratio.",
+    "sameKpiWarning": "Numerator and denominator must be different KPIs to form a ratio.",
     "failed": "Could not propose this KPI.",
     "proposing": "Proposing…",
     "submit": "Propose"

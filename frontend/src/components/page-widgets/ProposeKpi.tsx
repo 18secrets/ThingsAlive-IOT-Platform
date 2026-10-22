@@ -124,6 +124,11 @@ export const ProposeKpi: React.FC<{ sourceSystem: string; externalId: string; cl
             <SelectPicker data={pick(kpiKeys)} value={denominator} onChange={setDenominator} block size="sm" />
           </div>
           {kpiKeys.length < 2 && <p className="sm:col-span-2 text-slate-400">{t('propose.needTwoKpis')}</p>}
+          {numerator && denominator && numerator === denominator && (
+            <p className="sm:col-span-2 text-amber-600 dark:text-amber-400 font-medium">
+              {t('propose.sameKpiWarning', { defaultValue: 'Numerator and denominator must be different KPIs to form a ratio.' })}
+            </p>
+          )}
         </div>
       )}
 
