@@ -279,6 +279,15 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
       values.push(parseFloat(val.toFixed(2)));
       units.push(s.unit);
     }
+
+    // Fuel consumption (rate in L/h) for productive quality tracking in OEE
+    const noiseFuel = prng(Number(machine.externalId.slice(-2)) * 313 + tickIndex * 6271)();
+    const isEngineRunning = running(nowMs);
+    const fuelRate = isEngineRunning ? parseFloat((12.4 + noiseFuel * 1.5).toFixed(2)) : 0;
+    imeis.push(imei);
+    signals.push('fuel_consumption');
+    values.push(fuelRate);
+    units.push('L/h');
   }
 
   // Single bulk unnest insert across all machines & signals simultaneously
