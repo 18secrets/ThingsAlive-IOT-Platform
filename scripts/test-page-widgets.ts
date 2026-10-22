@@ -11,9 +11,10 @@ import { AlertService } from '../src/alert/services/alert.service';
 import { WorkOrderService } from '../src/work/services/work-order.service';
 import { ServiceForecastService } from '../src/service/services/service-forecast.service';
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:CdhlqhgUKSBzboKMRAItBDaYHJiMgYsI@crossover.proxy.rlwy.net:47609/railway';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required.');
+}
 
 async function main() {
   process.env.DATABASE_URL = connectionString;

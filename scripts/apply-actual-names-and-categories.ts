@@ -1,8 +1,9 @@
 import { Pool } from 'pg';
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:CdhlqhgUKSBzboKMRAItBDaYHJiMgYsI@crossover.proxy.rlwy.net:47609/railway';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required.');
+}
 
 async function main() {
   const pool = new Pool({ connectionString });

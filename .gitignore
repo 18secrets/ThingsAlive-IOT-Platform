@@ -23,3 +23,6 @@ equipment-library-template.xlsx
 # instructions that were changed a month ago. Deleted from git at 26758c3; ignored
 # here so it can't be committed back by accident.
 AGENTS.md
+.claude/
+ci-combined/
+

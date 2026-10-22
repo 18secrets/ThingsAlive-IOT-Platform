@@ -109,41 +109,61 @@ export class GeminiModel implements AssistantModel {
   }
 
   async generate(input: { system: string; turns: AssistantTurn[]; tools: ToolDeclaration[] }): Promise<ModelReply> {
-    const res = await this.ai.models.generateContent({
-      model: this.name,
-      contents: input.turns.map((t) => {
-        if (t.role === 'tool') {
-          return {
-            role: 'user',
-            parts: t.results.map((r) => ({ functionResponse: { name: r.name, response: { result: r.result } } })),
-          };
-        }
-        if ('calls' in t) {
-          return {
-            role: 'model',
-            parts: t.calls.map((c) => ({
-              functionCall: { name: c.name, args: c.args },
-              ...(c.signature ? { thoughtSignature: c.signature } : {}),
-            })),
-          };
-        }
-        return { role: t.role, parts: [{ text: t.text }] };
-      }),
-      config: {
-        systemInstruction: input.system,
-        // Low, not zero: the answers are read off tool results, and a creative model
-        // is one that rounds a reading or invents a machine name.
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-        ...(input.tools.length ? {
-          tools: [{
-            functionDeclarations: input.tools.map((d) => ({
-              name: d.name, description: d.description, parametersJsonSchema: d.parameters,
-            })),
-          }],
-        } : {}),
-      },
-    });
+    const callModel = async (modelName: string) => {
+      return this.ai.models.generateContent({
+        model: modelName,
+        contents: input.turns.map((t) => {
+          if (t.role === 'tool') {
+            return {
+              role: 'user',
+              parts: t.results.map((r) => ({ functionResponse: { name: r.name, response: { result: r.result } } })),
+            };
+          }
+          if ('calls' in t) {
+            return {
+              role: 'model',
+              parts: t.calls.map((c) => ({
+                functionCall: { name: c.name, args: c.args },
+                ...(c.signature ? { thoughtSignature: c.signature } : {}),
+              })),
+            };
+          }
+          return { role: t.role, parts: [{ text: t.text }] };
+        }),
+        config: {
+          systemInstruction: input.system,
+          // Low, not zero: the answers are read off tool results, and a creative model
+          // is one that rounds a reading or invents a machine name.
+          temperature: 0.2,
+          maxOutputTokens: 1024,
+          ...(input.tools.length ? {
+            tools: [{
+              functionDeclarations: input.tools.map((d) => ({
+                name: d.name, description: d.description, parametersJsonSchema: d.parameters,
+              })),
+            }],
+          } : {}),
+        },
+      });
+    };
+
+    let res: any;
+    try {
+      res = await callModel(this.name);
+    } catch (err: any) {
+      const msg = `${err?.message || ''} ${JSON.stringify(err || {})}`;
+      const isCapacityOrNotFound =
+        err?.status === 503 ||
+        err?.status === 404 ||
+        err?.status === 429 ||
+        err?.code === 503 ||
+        /503|404|UNAVAILABLE|high demand|not found/i.test(msg);
+      if (isCapacityOrNotFound && this.name !== 'gemini-3.5-flash-lite') {
+        res = await callModel('gemini-3.5-flash-lite');
+      } else {
+        throw err;
+      }
+    }
     // Read off the parts rather than `res.text` / `res.functionCalls`: the signature
     // sits on the part, beside the call, and the shortcuts drop it.
     const parts = res.candidates?.[0]?.content?.parts ?? [];

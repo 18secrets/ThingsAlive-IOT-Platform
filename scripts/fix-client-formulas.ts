@@ -3,9 +3,10 @@ import { dataSourceOptions } from '../src/database/data-source';
 import { SignalBindingService } from '../src/signal-binding/services/signal-binding.service';
 import { KpiEvaluatorService } from '../src/kpi/services/kpi-evaluator.service';
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:CdhlqhgUKSBzboKMRAItBDaYHJiMgYsI@crossover.proxy.rlwy.net:47609/railway';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required.');
+}
 
 async function main() {
   process.env.DATABASE_URL = connectionString;
