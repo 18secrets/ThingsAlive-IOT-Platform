@@ -2,7 +2,7 @@ import React, { Suspense, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { NavigationTab, UserRole } from '../types';
+import { NavigationTab, UserRole, firstAdminSubTab } from '../types';
 import { useAuth } from '../lib/AuthProvider';
 import { PageHeaderConfig, usePageHeaderValue } from '../lib/PageHeaderContext';
 import { Sidebar } from '../components/Sidebar';
@@ -144,10 +144,8 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
     if (tab === 'admin') {
-      // Master Admin's default landing sub-tab — see AdminIndexRedirect's own
-      // comment in App.tsx, which this must match. Not 'clients'/'staff' etc.
-      // any more: those are promoted to their own sidebar entries below.
-      navigate(`/admin/${authUser.role === 'client' ? 'plant' : 'category'}`);
+      // Always the first tab of the bar, never the last one visited.
+      navigate(`/admin/${firstAdminSubTab(authUser.role === 'client')}`);
     } else if (ADMIN_PROMOTED_SUBTABS.includes(tab)) {
       navigate(`/admin/${tab}`);
     } else {

@@ -63,7 +63,7 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
           <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
+            <span className="w-2.5 h-2.5 shrink-0 rounded-full bg-sky-600 ring-4 ring-sky-100 dark:ring-sky-950"></span>
             <div>
               <h3 className="font-bold text-slate-800 dark:text-white text-base">
                 {existingIndustryType ? t('industry.edit') : t('industry.add')}
@@ -126,8 +126,8 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
           </div>
 
           {/* Status toggle */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/30">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-4 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/30">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs">
                 <Check className="w-4 h-4" />
               </div>
@@ -139,8 +139,12 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
 
             <button
               type="button"
+              role="switch"
+              aria-checked={statusActive}
               onClick={() => setStatusActive(!statusActive)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+              // shrink-0: the hint beside it wraps to two lines and would otherwise
+              // squeeze the track narrower than the knob's travel.
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
                 statusActive ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
               }`}
             >
@@ -153,23 +157,23 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
           </div>
 
           {/* Modal Footer Buttons */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              <Trans i18nKey="common.mandatoryNote" t={t}>Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory</Trans>
+              <span><Trans i18nKey="common.mandatoryNote" t={t}>Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory</Trans></span>
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                className="px-5 py-2.5 whitespace-nowrap rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors cursor-pointer"
               >
                 {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={!canSave}
-                className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 whitespace-nowrap rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-semibold transition-colors shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>{busy ? t('common.saving') : t('industry.save')}</span>
