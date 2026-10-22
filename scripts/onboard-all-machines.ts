@@ -109,14 +109,15 @@ async function run() {
       }
     }
 
-    // Step 4: Shift Schedules (for OEE & Availability)
+    // Step 4: Shift Schedules (24/7 continuous operations for OEE, Availability & Baselines)
     await client.query(`
       INSERT INTO equipment_shift (
         id, tenant_id, source_system, external_id, name, start_minute, end_minute, days, time_zone, status, scored_through, arrivals_through, created_by, updated_by
       ) VALUES (
-        gen_random_uuid(), $1, $2, $3, 'Day shift', 480, 1080, ARRAY[1,2,3,4,5,6], 'Asia/Kolkata', 'active', NOW(), NOW(), 'system', 'system'
+        gen_random_uuid(), $1, $2, $3, 'Day shift', 0, 1440, ARRAY[0,1,2,3,4,5,6], 'Asia/Kolkata', 'active', NOW(), NOW(), 'system', 'system'
       )
-      ON CONFLICT (tenant_id, source_system, external_id, name) DO NOTHING
+      ON CONFLICT (tenant_id, source_system, external_id, name) DO UPDATE
+        SET start_minute = 0, end_minute = 1440, days = ARRAY[0,1,2,3,4,5,6], scored_through = NOW(), arrivals_through = NOW()
     `, [TENANT_ID, m.source, m.id]);
 
     // Step 5: Activate Scenarios

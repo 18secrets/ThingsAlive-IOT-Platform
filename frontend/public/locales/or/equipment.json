@@ -58,7 +58,9 @@
     "forecast_not_declared": "ଏହି ସିଗ୍ନାଲ୍ ପାଇଁ କୌଣସି ପୂର୍ବାନୁମାନ ଘୋଷିତ ନାହିଁ",
     "no_forecast_model": "ପୂର୍ବାନୁମାନ ଏପର୍ଯ୍ୟନ୍ତ ଉପଲବ୍ଧ ନାହିଁ",
     "window_not_resolved": "ଫର୍ମୁଲାର ନିଜ ଅବଧି ଏବେ ସ୍ଥିର ହୋଇପାରୁନାହିଁ — ଏକ ପରିସର ବାଛନ୍ତୁ",
-    "formula_not_compiled": "ଫର୍ମୁଲା କମ୍ପାଇଲ୍ ହୋଇନାହିଁ"
+    "formula_not_compiled": "ଫର୍ମୁଲା କମ୍ପାଇଲ୍ ହୋଇନାହିଁ",
+    "not_operating": "ଉପକରଣ ଚାଲୁନାହିଁ",
+    "no_shift_schedule": "କୌଣସି ଶିଫ୍ଟ ସୂଚୀ ନାହିଁ"
   },
   "severity": {
     "critical": "ଗୁରୁତର",

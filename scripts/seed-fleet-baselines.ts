@@ -13,6 +13,7 @@ import { SignalBindingService } from '../src/signal-binding/services/signal-bind
 import { BaselineService } from '../src/prediction/services/baseline.service';
 
 const NEW_MACHINES = [
+  { id: 'EX-05', source: 'seed-demo', imei: '358000000000500' },
   { id: 'EX-08', source: 'ta-2.0', imei: '356938035643825' },
   { id: 'EX-09', source: 'ta-2.0', imei: '356938035643833' },
   { id: 'EX-10', source: 'ta-2.0', imei: '356938035643841' },

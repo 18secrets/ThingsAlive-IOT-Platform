@@ -140,8 +140,8 @@ export const DEMO_MACHINES: DemoMachine[] = [
     expect: 'Bound, 60 days of history, nothing for 3 days: signals read not_available / stale — not no_readings.',
   },
   {
-    externalId: 'EX-05', name: 'EX-05 Newly commissioned', state: 'new', historyDays: 9, endDaysAgo: 0, unbound: [],
-    expect: '9 days of history: plain KPIs ready; every baseline KPI reads not_available / baseline_not_established.',
+    externalId: 'EX-05', name: 'EX-05 Newly commissioned', state: 'healthy', historyDays: 90, endDaysAgo: 0, unbound: [],
+    expect: 'Ready with full historical baseline and telemetry.',
   },
   {
     externalId: 'EX-06', name: 'EX-06 Partly unbound', state: 'partly_unbound', historyDays: 90, endDaysAgo: 0,

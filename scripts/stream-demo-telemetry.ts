@@ -30,6 +30,7 @@ import { RecEngineService } from '../src/rec-engine/rec-engine.service';
 import { RecFrameService } from '../src/rec-frame/rec-frame.service';
 import { PredictionService } from '../src/prediction/services/prediction.service';
 import { BaselineService } from '../src/prediction/services/baseline.service';
+import { withTenantId } from '../src/scope/tenant-session';
 
 /**
  * Parse an interval string like '30s', '1m', '2h', '7200s' into milliseconds.
@@ -273,6 +274,20 @@ async function ensurePrerequisites(ds: DataSource) {
     `, [TARGET_CLASS, JSON.stringify(nodes)]);
     console.log(`[SeedStream] Published causal chain for ${TARGET_CLASS}.`);
   }
+
+  // 7. Ensure 24/7 continuous shift schedules across all fleet equipment (so baseline KPIs evaluate 24/7)
+  await withTenantId(ds, DEMO_TENANT, async (m) => {
+    await m.query(`
+      UPDATE equipment_shift
+         SET start_minute = 0,
+             end_minute = 1440,
+             days = ARRAY[0,1,2,3,4,5,6],
+             scored_through = NOW(),
+             arrivals_through = NOW()
+       WHERE tenant_id = $1
+    `, [DEMO_TENANT]);
+  });
+  console.log(`[SeedStream] 🕒 Configured 24/7 continuous operational shifts for all fleet machines.`);
 }
 
 /**
@@ -515,15 +530,17 @@ async function main() {
         const { count, machines } = await emitSimultaneousTick(ds, tickNow, includeQuiet);
         console.log(`[SeedStream] ⚡ [${tickNow.toISOString()}] Simultaneous emission: ${count} readings (${machines.join(', ')}). Link health updated.`);
 
-        // Score predictions across active equipment every 60s (every 2 ticks)
+        // Score predictions across active equipment every 60s (every 2 ticks) in background without blocking telemetry emission
         if (tickCount % 2 === 0) {
           const adminScope = { tenantId: DEMO_TENANT, userId: 'u-admin', roles: ['admin'], isPlatformRole: false };
           const predictionService = new PredictionService(ds);
-          for (const m of ALL_FLEET_MACHINES) {
-            try {
-              await predictionService.scoreAsset(adminScope, { sourceSystem: m.sourceSystem, externalId: m.externalId }, tickNow);
-            } catch {}
-          }
+          (async () => {
+            for (const m of ALL_FLEET_MACHINES) {
+              try {
+                await predictionService.scoreAsset(adminScope, { sourceSystem: m.sourceSystem, externalId: m.externalId }, tickNow);
+              } catch {}
+            }
+          })().catch(() => {});
         }
 
         // Periodically run forecast & recommendations (every 10 minutes, background)

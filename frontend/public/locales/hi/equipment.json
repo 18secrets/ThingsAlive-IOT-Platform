@@ -58,7 +58,9 @@
     "forecast_not_declared": "इस सिग्नल के लिए कोई पूर्वानुमान घोषित नहीं",
     "no_forecast_model": "पूर्वानुमान अभी उपलब्ध नहीं है",
     "window_not_resolved": "फ़ॉर्मूले की अपनी अवधि अभी तय नहीं हो सकती — कोई सीमा चुनें",
-    "formula_not_compiled": "फ़ॉर्मूला कंपाइल नहीं हुआ"
+    "formula_not_compiled": "फ़ॉर्मूला कंपाइल नहीं हुआ",
+    "not_operating": "उपकरण चालू नहीं है",
+    "no_shift_schedule": "कोई शिफ्ट शेड्यूल नहीं है"
   },
   "severity": {
     "critical": "गंभीर",

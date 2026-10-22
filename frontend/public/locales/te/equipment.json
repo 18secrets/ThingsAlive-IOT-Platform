@@ -58,7 +58,9 @@
     "forecast_not_declared": "ఈ సిగ్నల్‌కు అంచనా ప్రకటించలేదు",
     "no_forecast_model": "అంచనా ఇంకా అందుబాటులో లేదు",
     "window_not_resolved": "ఫార్ములా స్వంత వ్యవధిని ఇంకా నిర్ణయించలేము — ఒక పరిధిని ఎంచుకోండి",
-    "formula_not_compiled": "ఫార్ములా కంపైల్ కాలేదు"
+    "formula_not_compiled": "ఫార్ములా కంపైల్ కాలేదు",
+    "not_operating": "పరికరాలు పనిచేయడం లేదు",
+    "no_shift_schedule": "షిఫ్ట్ షెడ్యూల్ లేదు"
   },
   "severity": {
     "critical": "తీవ్రమైనది",
