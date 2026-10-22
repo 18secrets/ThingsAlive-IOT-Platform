@@ -8,6 +8,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import { Sparkline } from '../components/dashboard/Sparkline';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import {
   ApiError, EquipmentProfile, Prediction, PredictionBaseline, PredictionSeverity, WorkOrder,
   apiGetLatestPredictions, apiGetPredictionBaselines, apiGetPredictionHistory, apiListEquipment, apiListWorkOrders,
@@ -111,12 +112,12 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
                   {baselines.map((b) => (
                     <tr key={b.signal}>
                       <td className="py-1.5 pr-3 font-sans text-slate-700 dark:text-slate-200">{b.signal}</td>
-                      <td className="py-1.5 pr-3">{b.mean.toFixed(2)}</td>
-                      <td className="py-1.5 pr-3">{b.stddev.toFixed(2)}</td>
-                      <td className="py-1.5 pr-3">{b.sampleCount}</td>
-                      <td className="py-1.5 pr-3">{(b.coverageRatio * 100).toFixed(0)}%</td>
-                      <td className="py-1.5 pr-3 font-sans">{b.source}</td>
-                      <td className="py-1.5 font-sans text-slate-400">{new Date(b.computedAt).toLocaleString()}</td>
+                      <td className="py-1.5 pr-3">{typeof b.mean === 'number' ? b.mean.toFixed(2) : (b.mean ?? '—')}</td>
+                      <td className="py-1.5 pr-3">{typeof b.stddev === 'number' ? b.stddev.toFixed(2) : (b.stddev ?? '—')}</td>
+                      <td className="py-1.5 pr-3">{b.sampleCount ?? '—'}</td>
+                      <td className="py-1.5 pr-3">{typeof b.coverageRatio === 'number' ? `${(b.coverageRatio * 100).toFixed(0)}%` : '—'}</td>
+                      <td className="py-1.5 pr-3 font-sans">{b.source ?? '—'}</td>
+                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString() : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -231,10 +232,20 @@ export const ThingsCareDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {sourceSystem && externalId && <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} />}
-      {sourceSystem && externalId && <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />}
       {sourceSystem && externalId && (
-        <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+        <ErrorBoundary fallbackTitle={t('rec.title')}>
+          <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} />
+        </ErrorBoundary>
+      )}
+      {sourceSystem && externalId && (
+        <ErrorBoundary fallbackTitle={t('baselines.title')}>
+          <BaselinesPanel sourceSystem={sourceSystem} externalId={externalId} />
+        </ErrorBoundary>
+      )}
+      {sourceSystem && externalId && (
+        <ErrorBoundary fallbackTitle={t('chain.title')}>
+          <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+        </ErrorBoundary>
       )}
 
       <div>
@@ -246,30 +257,44 @@ export const ThingsCareDetailPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {predictions.map((p) => {
-              const trend = (history.get(p.clientScenarioSlug) ?? []).slice().reverse().map((h) => h.riskScore);
+              const trend = (history.get(p.clientScenarioSlug) ?? [])
+                .slice()
+                .reverse()
+                .map((h) => (typeof h.riskScore === 'number' ? h.riskScore : null))
+                .filter((score): score is number => score !== null);
+              const computedDate = p.computedAt ? new Date(p.computedAt) : null;
+              const formattedDate = computedDate && !isNaN(computedDate.getTime()) ? computedDate.toLocaleString() : '—';
+              const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE[p.severity] : 'slate';
+
               return (
                 <div key={p.clientScenarioSlug} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
                   <div className="flex items-center gap-3">
-                    <RingGauge value={p.riskScore} size={56} colorClass={p.severity === 'high' || p.severity === 'critical' ? 'text-rose-500 dark:text-rose-400' : p.severity === 'medium' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} />
+                    <RingGauge value={typeof p.riskScore === 'number' ? p.riskScore : null} size={56} colorClass={p.severity === 'high' || p.severity === 'critical' ? 'text-rose-500 dark:text-rose-400' : p.severity === 'medium' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} />
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{p.clientScenarioSlug}</h4>
                       <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                        <Chip tone={SEVERITY_TONE[p.severity]}>{t(`severity.${p.severity}`, { defaultValue: p.severity })}</Chip>
+                        <Chip tone={severityTone}>{t(`severity.${p.severity}`, { defaultValue: p.severity })}</Chip>
                         <Chip title={t('card.confidenceTitle')}>{t(`confidence.${p.confidence}`, { defaultValue: p.confidence })}</Chip>
                         <Chip icon={Bell} tone={p.abnormalCount > 0 ? 'amber' : 'slate'}>{t('detail.abnormal', { count: p.abnormalCount })}</Chip>
                       </div>
                     </div>
                     {trend.length >= 2 && <Sparkline values={trend} colorClass="text-sky-600 dark:text-sky-400" />}
                   </div>
-                  <p className="text-[11px] text-slate-400">{t('detail.window', { count: p.windowDays })} · {p.modelRef} · {new Date(p.computedAt).toLocaleString()}</p>
-                  {p.signals.length > 0 && (
+                  <p className="text-[11px] text-slate-400">{t('detail.window', { count: p.windowDays })} · {p.modelRef} · {formattedDate}</p>
+                  {p.signals && p.signals.length > 0 && (
                     <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800">
                       {p.signals.map((s) => (
                         <div key={s.signal} className="flex items-center justify-between text-xs">
                           <span className="text-slate-600 dark:text-slate-300">{s.signal}</span>
                           <div className="flex items-center gap-2">
-                            {s.value != null && <span className="font-mono text-slate-400">{s.value.toFixed(2)}</span>}
-                            <Chip tone={SIGNAL_STATE_TONE[s.state]}>{t(`signalState.${s.state}`, { defaultValue: s.state })}</Chip>
+                            {s.value != null && (
+                              <span className="font-mono text-slate-400">
+                                {typeof s.value === 'number' ? s.value.toFixed(2) : String(s.value)}
+                              </span>
+                            )}
+                            <Chip tone={(s.state && s.state in SIGNAL_STATE_TONE) ? SIGNAL_STATE_TONE[s.state] : 'slate'}>
+                              {t(`signalState.${s.state}`, { defaultValue: s.state })}
+                            </Chip>
                           </div>
                         </div>
                       ))}

@@ -17,7 +17,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     const res = ctx.getResponse<Response>();
     const req = ctx.getRequest<Request>();
 
-    const status =
+    let status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -38,11 +38,18 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
         if (b.code) code = b.code;
       }
     } else {
-      // Never leak an internal message or stack to the caller.
-      this.logger.error(
-        `Unhandled error on ${req.method} ${req.url}`,
-        exception instanceof Error ? exception.stack : String(exception),
-      );
+      const err = exception as any;
+      if (err?.code === '23505' || err?.code === '23P01') {
+        status = HttpStatus.CONFLICT;
+        code = 'conflict';
+        message = err?.detail ?? 'A conflicting record already exists.';
+      } else {
+        // Never leak an internal message or stack to the caller.
+        this.logger.error(
+          `Unhandled error on ${req.method} ${req.url}`,
+          exception instanceof Error ? exception.stack : String(exception),
+        );
+      }
     }
 
     res.status(status).json({ error: { code, message, details } });

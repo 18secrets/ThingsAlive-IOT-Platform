@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
@@ -399,17 +399,54 @@ export class SignalBindingService {
 
       const repo = m.getRepository(SignalBindingVersion);
       const now = new Date();
-      return repo.save(repo.create({
-        tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
-        signalKey: input.signalKey, measurementRole: input.measurementRole,
-        componentId: input.componentId ?? '', origin: input.origin,
-        imei: input.imei ?? null, channel: input.channel ?? null, sensorInstanceId: input.sensorInstanceId ?? null,
-        canonicalUnit: input.canonicalUnit, sourceUnit: input.sourceUnit ?? null,
-        validFrom: input.validFrom, validTo: input.validTo ?? null,
-        isPrimary: true, status: 'active',
-        discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
-        approvedBy: scope.userId, approvedAt: now,
-      }));
+
+      // Check if an existing active primary binding already exists for the same signal & component
+      const existing = await repo.findOne({
+        where: {
+          tenantId: scope.tenantId,
+          sourceSystem: equipment.sourceSystem,
+          externalId: equipment.externalId,
+          signalKey: input.signalKey,
+          componentId: input.componentId ?? '',
+          isPrimary: true,
+          status: 'active',
+        },
+      });
+
+      if (existing) {
+        // If it is already active with the same device/channel, it is already satisfied
+        if (
+          existing.imei === (input.imei ?? null) &&
+          existing.channel === (input.channel ?? null) &&
+          existing.sensorInstanceId === (input.sensorInstanceId ?? null)
+        ) {
+          return existing;
+        }
+        // If replacing with a new primary binding, retire the previous one by setting its validTo
+        existing.validTo = input.validFrom && input.validFrom > existing.validFrom ? input.validFrom : now;
+        existing.status = 'superseded';
+        existing.isPrimary = false;
+        await repo.save(existing);
+      }
+
+      try {
+        return await repo.save(repo.create({
+          tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+          signalKey: input.signalKey, measurementRole: input.measurementRole,
+          componentId: input.componentId ?? '', origin: input.origin,
+          imei: input.imei ?? null, channel: input.channel ?? null, sensorInstanceId: input.sensorInstanceId ?? null,
+          canonicalUnit: input.canonicalUnit, sourceUnit: input.sourceUnit ?? null,
+          validFrom: input.validFrom, validTo: input.validTo ?? null,
+          isPrimary: true, status: 'active',
+          discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
+          approvedBy: scope.userId, approvedAt: now,
+        }));
+      } catch (err: any) {
+        if (err?.message?.includes('ex_signal_binding_primary') || err?.code === '23P01') {
+          throw new ConflictException('An active primary binding already exists for this signal on this equipment.');
+        }
+        throw err;
+      }
     });
   }
 

@@ -48,6 +48,7 @@ import { ProductionMonitoringDetailPage } from './pages/ProductionMonitoringDeta
 import { LivePredictionsPage } from './pages/LivePredictionsPage';
 import { ThingDetailLivePage } from './pages/ThingDetailLivePage';
 import { ScenariosPage } from './pages/ScenariosPage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
 import { CostAdministrationPage } from './pages/CostAdministrationPage';
 import { ClientUsersPage } from './pages/ClientUsersPage';
@@ -1575,8 +1576,8 @@ function AppData() {
             element={<AiOnboardingPage />}
           />
 
-          <Route path="things-care" element={<ThingsCarePage />} />
-          <Route path="things-care/:sourceSystem/:externalId" element={<ThingsCareDetailPage />} />
+          <Route path="things-care" element={<ErrorBoundary fallbackTitle="ThingsCare"><ThingsCarePage /></ErrorBoundary>} />
+          <Route path="things-care/:sourceSystem/:externalId" element={<ErrorBoundary fallbackTitle="ThingsCare"><ThingsCareDetailPage /></ErrorBoundary>} />
           <Route path="things-shield" element={<ThingsShieldPage />} />
           <Route path="things-shield/:sourceSystem/:externalId" element={<ThingsShieldDetailPage />} />
           <Route path="incident-management" element={<IncidentManagementPage />} />
@@ -1585,8 +1586,8 @@ function AppData() {
           <Route path="alert-agent" element={<AlertAgentPage />} />
           <Route path="drafts" element={<DraftsPage />} />
           <Route path="alerts" element={<AlertsPage />} />
-          <Route path="predictions" element={<LivePredictionsPage />} />
-          <Route path="scenarios" element={<ScenariosPage />} />
+          <Route path="predictions" element={<ErrorBoundary fallbackTitle="Predictions"><LivePredictionsPage /></ErrorBoundary>} />
+          <Route path="scenarios" element={<ErrorBoundary fallbackTitle="Scenarios"><ScenariosPage /></ErrorBoundary>} />
           <Route path="work-orders" element={<WorkOrdersPage />} />
           <Route path="cost-administration" element={<CostAdministrationPage />} />
 

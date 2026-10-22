@@ -12,8 +12,12 @@ const VERDICT_TONE: Record<StageVerdict, 'emerald' | 'rose' | 'amber' | 'slate'>
   normal: 'emerald', origin: 'rose', additional: 'amber', unevaluated: 'slate',
 };
 
-const num = (v: number | undefined) => (v == null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: 2 }));
-const minutes = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
+const num = (v: number | undefined | null) => (v == null || isNaN(Number(v)) ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+const minutes = (s: number | undefined | null) => {
+  if (s == null || isNaN(Number(s))) return '—';
+  const val = Number(s);
+  return val < 60 ? `${Math.round(val)} s` : `${Math.round(val / 60)} min`;
+};
 
 /**
  * The machine's causal chains, read against its telemetry (P4-01). Each stage is
@@ -149,12 +153,17 @@ const StageTable: React.FC<{ stages: ChainStageResult[] }> = ({ stages }) => {
 const WhatIf: React.FC<{ chain: CausalChain; observed?: { stages: ChainStageResult[] } }> = ({ chain, observed }) => {
   const { t } = useTranslation('care');
   const inputs = useMemo(() => {
-    const stageSignals = new Set(chain.nodes.map((n) => n.signal));
-    return [...new Set(chain.nodes.flatMap((n) => n.drivers.map((d) => d.signal)).filter((s) => !stageSignals.has(s)))];
+    const nodes = chain.nodes ?? [];
+    const stageSignals = new Set(nodes.map((n) => n.signal));
+    return [...new Set(nodes.flatMap((n) => (n.drivers ?? []).map((d) => d.signal)).filter((s) => !stageSignals.has(s)))];
   }, [chain]);
   const current = useMemo(() => {
     const seen: Record<string, number> = {};
-    for (const s of observed?.stages ?? []) for (const [k, v] of Object.entries(s.drivers ?? {})) seen[k] = v;
+    for (const s of observed?.stages ?? []) {
+      for (const [k, v] of Object.entries(s.drivers ?? {})) {
+        if (typeof v === 'number') seen[k] = v;
+      }
+    }
     return seen;
   }, [observed]);
   const [values, setValues] = useState<Record<string, number | null>>({});
@@ -209,18 +218,18 @@ const WhatIf: React.FC<{ chain: CausalChain; observed?: { stages: ChainStageResu
               {t('chain.firstBreach', {
                 name: result.firstBreach.label ?? result.firstBreach.signal,
                 breach: result.firstBreach.breach ? t(`chain.breach.${result.firstBreach.breach}`, { defaultValue: result.firstBreach.breach }) : '',
-                time: minutes(result.firstBreach.leadSeconds),
+                time: minutes(result.firstBreach.leadSeconds ?? 0),
               })}
             </p>
           ) : (
             <p className="text-emerald-600 dark:text-emerald-400">{t('chain.noBreach')}</p>
           )}
-          {result.stages.map((st) => (
+          {(result.stages ?? []).map((st) => (
             <div key={st.signal} className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-1">
               <span className="text-slate-700 dark:text-slate-200">{st.label ?? st.signal}</span>
               <span className="flex items-center gap-2 text-slate-400">
                 <span className="font-mono">{num(st.expected)}</span>
-                <span>{t('chain.after', { time: minutes(st.leadSeconds) })}</span>
+                <span>{t('chain.after', { time: minutes(st.leadSeconds ?? 0) })}</span>
                 <Chip tone={st.breach === 'critical' ? 'rose' : st.breach === 'warning' ? 'amber' : st.breach === 'none' ? 'emerald' : 'slate'}>
                   {st.breach ? t(`chain.breach.${st.breach}`, { defaultValue: st.breach }) : t('chain.noRating')}
                 </Chip>

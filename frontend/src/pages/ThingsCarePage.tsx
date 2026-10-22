@@ -23,11 +23,14 @@ const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gau
 };
 const NO_PREDICTION_STYLE = { ring: 'border-slate-200 dark:border-slate-800', bg: 'bg-slate-50/60 dark:bg-slate-900/40', gauge: 'text-slate-400' };
 
+const rankOf = (severity: PredictionSeverity | string | undefined | null) =>
+  severity && severity in SEVERITY_RANK ? SEVERITY_RANK[severity as PredictionSeverity] : 0;
+
 /** Worst-of across a machine's active scenarios, the same pattern the composed page
  *  uses for its own "worst readiness" summaries. */
 function worstOf(predictions: Prediction[]): Prediction | null {
   if (!predictions.length) return null;
-  return predictions.reduce((worst, p) => (SEVERITY_RANK[p.severity] > SEVERITY_RANK[worst.severity] ? p : worst));
+  return predictions.reduce((worst, p) => (rankOf(p.severity) > rankOf(worst.severity) ? p : worst));
 }
 
 export const ThingsCarePage: React.FC = () => {
@@ -203,7 +206,9 @@ const ThingsCareCard: React.FC<{
   name: string; externalId: string; prediction: Prediction | null; connection: 'online' | 'offline' | null; onOpen: () => void;
 }> = ({ name, externalId, prediction, connection, onOpen }) => {
   const { t } = useTranslation('care');
-  const style = prediction ? SEVERITY_STYLE[prediction.severity] : NO_PREDICTION_STYLE;
+  const style = prediction && prediction.severity in SEVERITY_STYLE
+    ? SEVERITY_STYLE[prediction.severity]
+    : NO_PREDICTION_STYLE;
   return (
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">

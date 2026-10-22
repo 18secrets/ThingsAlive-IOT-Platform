@@ -82,7 +82,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
 
   const chip = !bundle ? null
     : bundle.status === 'ready' && bundle.outcome
-      ? <Chip tone={OUTCOME_TONE[bundle.outcome]}>{t(`rec.outcome.${bundle.outcome}`)}</Chip>
+      ? <Chip tone={(bundle.outcome && bundle.outcome in OUTCOME_TONE) ? OUTCOME_TONE[bundle.outcome] : 'slate'}>{t(`rec.outcome.${bundle.outcome}`, { defaultValue: bundle.outcome })}</Chip>
       : <Chip tone="slate">{t(`rec.reason.${bundle.reason}`, { defaultValue: bundle.reason ?? bundle.status })}</Chip>;
 
   return (
@@ -107,7 +107,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-slate-500 dark:text-slate-400">
               {!loaded ? t('rec.loading')
-                : bundle ? t('rec.asOf', { at: new Date(bundle.asOf).toLocaleString() })
+                : bundle ? t('rec.asOf', { at: bundle.asOf && !isNaN(new Date(bundle.asOf).getTime()) ? new Date(bundle.asOf).toLocaleString() : '—' })
                   : t('rec.notYet')}
               {bundle && expected > 0 && <> · {t('rec.coverage', { observed, expected })}</>}
             </p>
@@ -181,11 +181,13 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
                 </Block>
               )}
 
-              <p className="text-[11px] text-slate-400">
-                {frame!.provenance.renderer === 'model'
-                  ? t('rec.byModel', { model: frame!.provenance.modelId ?? '' })
-                  : t('rec.byTemplate', { version: frame!.provenance.rendererVersion })}
-              </p>
+              {frame?.provenance && (
+                <p className="text-[11px] text-slate-400">
+                  {frame.provenance.renderer === 'model'
+                    ? t('rec.byModel', { model: frame.provenance.modelId ?? '' })
+                    : t('rec.byTemplate', { version: frame.provenance.rendererVersion ?? '' })}
+                </p>
+              )}
             </>
           )}
         </div>
