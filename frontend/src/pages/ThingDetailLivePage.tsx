@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Activity, Bell, ClipboardList, ExternalLink, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
+import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
+import { MachineLinks } from '../components/common/MachineLinks';
 import {
   AlertEvent, EffectiveParameter, EquipmentAvailability, EquipmentOee, EquipmentProfile, FleetLinkRow, Plant, Prediction,
   ShieldSummary, WorkOrder,
@@ -62,7 +63,6 @@ export const ThingDetailLivePage: React.FC = () => {
   const shieldCells = shield.state === 'ok'
     ? shield.data.machines.find((m) => m.machine.sourceSystem === sourceSystem && m.machine.externalId === externalId)?.categories
     : undefined;
-  const enc = (s: string) => encodeURIComponent(s);
 
   return (
     <div className="space-y-3">
@@ -91,11 +91,8 @@ export const ThingDetailLivePage: React.FC = () => {
           {oee.state === 'ok' && oee.data.oee.readiness !== 'ready' && (
             <p className="text-slate-400">{t('thingLive.oeeUnavailable', { reason: oee.data.oee.reason ? t(`thingLive.oeeReason.${oee.data.oee.reason}`, { defaultValue: oee.data.oee.reason }) : oee.data.oee.readiness })}</p>
           )}
-          <div className="flex items-center gap-2 flex-wrap pt-1">
-            <LinkButton label={t('thingLive.equipmentPage')} onClick={() => navigate(`/admin/equipment/${enc(sourceSystem)}/${enc(externalId)}/page`)} />
-            <LinkButton label="ThingsCare" onClick={() => navigate(`/things-care/${enc(sourceSystem)}/${enc(externalId)}`)} />
-            <LinkButton label={t('thingLive.production')} onClick={() => navigate(`/production-monitoring/${enc(sourceSystem)}/${enc(externalId)}`)} />
-            <LinkButton label="ThingsShield" onClick={() => navigate(`/things-shield/${enc(sourceSystem)}/${enc(externalId)}`)} />
+          <div className="pt-1">
+            <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="detail" />
           </div>
         </div>
       </div>
@@ -161,12 +158,6 @@ export const ThingDetailLivePage: React.FC = () => {
     </div>
   );
 };
-
-const LinkButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
-  <button onClick={onClick} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300 cursor-pointer">
-    <ExternalLink className="w-3 h-3" /> {label}
-  </button>
-);
 
 const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-xs text-slate-400">{children}</p>;
 

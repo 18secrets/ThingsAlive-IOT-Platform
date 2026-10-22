@@ -10,6 +10,7 @@ import {
   apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift, apiUpdateShift,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
+import { MachineLinks } from '../components/common/MachineLinks';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
@@ -459,6 +460,9 @@ export const EquipmentPagePage: React.FC = () => {
               </button>
             </div>
           )}
+        </div>
+        <div className="pt-2">
+          <MachineLinks sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} current="equipment" inverse />
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/EvidenceRecord';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { MachineLinks } from '../components/common/MachineLinks';
 import {
   ApiError, SHIELD_CATEGORIES, ShieldCategory, ShieldEvidence, ShieldEvidenceInput, ShieldMachine, ShieldStatus,
   apiGetShieldSummary, apiListShieldRecords, apiRecordShieldEvidence, apiReviseShieldEvidence,
@@ -88,6 +89,8 @@ export const ThingsShieldDetailPage: React.FC = () => {
         <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('page.eyebrow')}</span>
         <h2 className="text-xl font-bold">{t('page.heading')}</h2>
       </div>
+
+      {sourceSystem && externalId && <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="shield" />}
 
       {error && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">

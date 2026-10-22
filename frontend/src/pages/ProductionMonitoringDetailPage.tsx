@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Clock3, ExternalLink, Plus } from 'lucide-react';
+import { AlertCircle, Clock3, Plus } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
+import { MachineLinks } from '../components/common/MachineLinks';
 import { Chip } from '../components/common/Chip';
 import {
   ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
@@ -222,14 +223,7 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
           <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
             <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
           </button>
-          {sourceSystem && externalId && (
-            <button
-              onClick={() => navigate(`/admin/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-sky-300 cursor-pointer"
-            >
-              <ExternalLink className="w-4 h-4" /> {t('common.viewEquipmentPage')}
-            </button>
-          )}
+          {sourceSystem && externalId && <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="production" />}
         </div>
       </div>
 
