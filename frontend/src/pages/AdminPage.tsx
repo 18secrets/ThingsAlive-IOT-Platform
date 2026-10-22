@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem,
   ClientAccount,
+  firstAdminSubTab,
 } from '../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
@@ -161,7 +162,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
   const restrictToClientAdmin = authUser.role === 'client';
   // Clients/Staff/Devices/Equipment moved to the sidebar for Master Admin —
   // see AdminIndexRedirect's own comment in App.tsx, which this must match.
-  const activeSubTab = (subTab ?? (restrictToClientAdmin ? 'plant' : 'category')) as AdminSubTab;
+  const activeSubTab = (subTab ?? firstAdminSubTab(!!restrictToClientAdmin)) as AdminSubTab;
 
   const visiblePlants = restrictToClientAdmin ? props.plants.filter((p) => p.clientId === authUser.clientId) : props.plants;
   const modalClients = restrictToClientAdmin ? props.clients.filter((c) => c.id === authUser.clientId) : props.clients;

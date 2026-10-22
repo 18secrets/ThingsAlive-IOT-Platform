@@ -123,6 +123,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
       {/* Search / Add Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Filters stay together on the left; actions sit on the right. */}
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
@@ -142,6 +144,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           size="sm"
           className="w-full sm:w-52"
         />
+        </div>
 
         <button
           id="add-client-btn"

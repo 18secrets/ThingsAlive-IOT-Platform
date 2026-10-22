@@ -11,6 +11,7 @@ import {
   CategoryItem,
   PlantItem,
   ClientAccount,
+  firstAdminSubTab,
 } from './types';
 import {
   INITIAL_SENSORS,
@@ -127,8 +128,7 @@ function AdminIndexRedirect() {
   // Clients/Staff/Devices/Equipment moved to their own sidebar entries
   // (2026-10-10, Shell.tsx's ADMIN_PROMOTED_SUBTABS) — landing on bare
   // /admin now defaults to a tab that's actually still in the sub-tab bar.
-  const subTab = authUser?.role === 'client' ? 'plant' : 'category';
-  return <Navigate to={`/admin/${subTab}`} replace />;
+  return <Navigate to={`/admin/${firstAdminSubTab(authUser?.role === 'client')}`} replace />;
 }
 
 function AppData() {

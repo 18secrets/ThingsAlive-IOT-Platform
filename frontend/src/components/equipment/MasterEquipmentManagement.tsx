@@ -141,23 +141,26 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
               className="w-full pl-9!"
             />
           </div>
-          <SelectPicker
-            data={clientOptions}
-            value={selectedClientId}
-            onChange={(value) => setSelectedClientId(value ?? 'All')}
-            searchable={clientOptions.length > 6}
-            cleanable={false}
-            size="sm"
-            className="min-w-[180px]"
-          />
-          <SelectPicker
-            data={[{ label: t('equipment.allStatuses'), value: 'All' }, ...STATUS_OPTIONS]}
-            value={selectedStatus}
-            onChange={(value) => setSelectedStatus((value ?? 'All') as typeof selectedStatus)}
-            searchable={false}
-            cleanable={false}
-            size="sm"
-          />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <SelectPicker
+              data={clientOptions}
+              value={selectedClientId}
+              onChange={(value) => setSelectedClientId(value ?? 'All')}
+              searchable={clientOptions.length > 6}
+              cleanable={false}
+              size="sm"
+              block
+              className="w-full sm:w-48"
+            />
+            <SelectPicker
+              data={[{ label: t('equipment.allStatuses'), value: 'All' }, ...STATUS_OPTIONS]}
+              value={selectedStatus}
+              onChange={(value) => setSelectedStatus((value ?? 'All') as typeof selectedStatus)}
+              searchable={false}
+              cleanable={false}
+              size="sm"
+            />
+          </div>
         </div>
 
         <button

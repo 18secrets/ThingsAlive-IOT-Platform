@@ -129,6 +129,14 @@ export type AdminSubTab =
   | 'staff'
   | 'telemetry-archive';
 
+/**
+ * The tab Administration opens on: the first one in each role's tab bar
+ * (AdminManagement's allSubTabs order). The sidebar, bare /admin and the page's
+ * own fallback all read this, so clicking Administration always lands on the
+ * first tab — master admin's bar starts with Industry Type, a client's with Plant.
+ */
+export const firstAdminSubTab = (isClient: boolean): AdminSubTab => (isClient ? 'plant' : 'industry');
+
 export interface SensorParameterSpec {
   parameter: string;
   unit: string;

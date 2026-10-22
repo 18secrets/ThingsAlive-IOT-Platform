@@ -105,6 +105,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
 
       {/* Search & Add Action Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        {/* Filters stay together on the left; actions sit on the right. */}
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
@@ -115,18 +117,19 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
             className="w-full pl-9!"
           />
         </div>
+        <SelectPicker
+          data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' },
+            { label: t('common.statusLabel.published'), value: 'published' }, { label: t('common.statusLabel.retired'), value: 'retired' }]}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-40"
+        />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          <SelectPicker
-            data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' },
-              { label: t('common.statusLabel.published'), value: 'published' }, { label: t('common.statusLabel.retired'), value: 'retired' }]}
-            value={statusFilter}
-            onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
-            searchable={false}
-            cleanable={false}
-            size="sm"
-            className="w-full xs:w-36"
-          />
           <button
             onClick={onOpenBulkImport}
             className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"

@@ -74,6 +74,8 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   return (
     <div id="named-formula-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        {/* Filters stay together on the left; actions sit on the right. */}
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder={t('formulas.searchPlaceholder')} className="w-full pl-9!" />
@@ -87,6 +89,8 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           size="sm"
           className="w-full sm:w-36"
         />
+        </div>
+
         <button
           onClick={() => { setEditingFormula(null); setIsModalOpen(true); }}
           className="px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
