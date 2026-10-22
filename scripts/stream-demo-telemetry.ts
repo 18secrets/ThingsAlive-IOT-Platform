@@ -18,6 +18,7 @@ import {
   topUpDemo,
   BREACH_TAIL,
   DemoMachine,
+  MachineState,
 } from '../src/database/seeds/seed-demo';
 
 const TARGET_CLASS = 'hydraulic-excavator';
@@ -47,6 +48,30 @@ export function parseIntervalMs(raw?: string, fallbackMs = 30_000): number {
     default: return fallbackMs;
   }
 }
+
+export interface FleetMachine {
+  externalId: string;
+  sourceSystem: string;
+  imei: string;
+  state: MachineState;
+}
+
+export const ALL_FLEET_MACHINES: FleetMachine[] = [
+  { externalId: 'EX-01', sourceSystem: 'seed-demo', imei: '358000000000100', state: 'healthy' },
+  { externalId: 'EX-02', sourceSystem: 'seed-demo', imei: '358000000000200', state: 'trending' },
+  { externalId: 'EX-03', sourceSystem: 'seed-demo', imei: '358000000000300', state: 'breaching' },
+  { externalId: 'EX-04', sourceSystem: 'seed-demo', imei: '358000000000400', state: 'healthy' },
+  { externalId: 'EX-05', sourceSystem: 'seed-demo', imei: '358000000000500', state: 'healthy' },
+  { externalId: 'EX-06', sourceSystem: 'seed-demo', imei: '358000000000600', state: 'healthy' },
+  { externalId: 'EX-08', sourceSystem: 'ta-2.0', imei: '356938035643825', state: 'healthy' },
+  { externalId: 'EX-09', sourceSystem: 'ta-2.0', imei: '356938035643833', state: 'healthy' },
+  { externalId: 'EX-10', sourceSystem: 'ta-2.0', imei: '356938035643841', state: 'healthy' },
+  { externalId: 'EX-11', sourceSystem: 'ta-2.0', imei: '356938035643858', state: 'healthy' },
+  { externalId: 'EX-12', sourceSystem: 'ta-2.0', imei: '356938035643866', state: 'healthy' },
+  { externalId: 'EX-13', sourceSystem: 'ta-2.0', imei: '356938035643874', state: 'healthy' },
+  { externalId: 'EX-14', sourceSystem: 'ta-2.0', imei: '356938035643882', state: 'healthy' },
+  { externalId: 'EXC-001', sourceSystem: 'ta-2.0', imei: '356938035643809', state: 'healthy' },
+];
 
 /**
  * Configure worker command for ForecastService.
@@ -153,57 +178,66 @@ async function ensurePrerequisites(ds: DataSource) {
       runId = id;
     }
 
-    const demoMachines = ['EX-01', 'EX-02', 'EX-03', 'EX-05', 'EX-06'];
+    const residualMachines = ALL_FLEET_MACHINES;
     const demoSignals = ['engine_coolant_temperature', 'engine_oil_pressure'];
 
-    for (const machine of demoMachines) {
+    const resTenantIds: string[] = [];
+    const resSources: string[] = [];
+    const resExternals: string[] = [];
+    const resSignals: string[] = [];
+    const resModels: string[] = [];
+    const resRuns: string[] = [];
+    const resSteps: Date[] = [];
+    const resPreds: number[] = [];
+    const resActuals: number[] = [];
+    const resResiduals: number[] = [];
+
+    for (const machine of residualMachines) {
       for (const signal of demoSignals) {
         const [{ count: daysCount }] = await ds.query(
           `SELECT count(DISTINCT (step_at at time zone 'UTC')::date)::int AS count
              FROM forecast_residual
             WHERE tenant_id = $1 AND external_id = $2 AND signal = $3 AND model_id = $4`,
-          [DEMO_TENANT, machine, signal, modelId]
+          [DEMO_TENANT, machine.externalId, signal, modelId]
         );
 
         if (daysCount < 30) {
           const now = Date.now();
           const DAY_MS = 24 * 3600 * 1000;
           const HOUR_MS = 3600 * 1000;
-          const rowsToInsert = [];
 
           for (let d = 40; d >= 1; d--) {
             const dayBase = Math.floor((now - d * DAY_MS) / DAY_MS) * DAY_MS + 10 * HOUR_MS;
             const predBase = signal === 'engine_coolant_temperature' ? 65.0 : 380.0;
-            const noise = parseFloat((Math.sin(d + (machine === 'EX-03' ? 2 : 0)) * 0.8).toFixed(4));
+            const noise = parseFloat((Math.sin(d + (machine.externalId === 'EX-03' ? 2 : 0)) * 0.8).toFixed(4));
             const actual = predBase + noise;
             const res = actual - predBase;
 
-            rowsToInsert.push({
-              tenant_id: DEMO_TENANT,
-              source_system: DEMO_SOURCE,
-              external_id: machine,
-              signal,
-              model_id: modelId,
-              run_id: runId,
-              step_at: new Date(dayBase),
-              lead_steps: 1,
-              predicted: predBase,
-              actual,
-              residual: res,
-              operating: true,
-            });
-          }
-
-          if (rowsToInsert.length > 0) {
-            await ds.createQueryBuilder()
-              .insert()
-              .into('forecast_residual')
-              .values(rowsToInsert)
-              .orIgnore()
-              .execute();
+            resTenantIds.push(DEMO_TENANT);
+            resSources.push(machine.sourceSystem);
+            resExternals.push(machine.externalId);
+            resSignals.push(signal);
+            resModels.push(modelId);
+            resRuns.push(runId);
+            resSteps.push(new Date(dayBase));
+            resPreds.push(predBase);
+            resActuals.push(actual);
+            resResiduals.push(res);
           }
         }
       }
+    }
+
+    if (resTenantIds.length > 0) {
+      await ds.query(`
+        INSERT INTO forecast_residual (
+          id, tenant_id, source_system, external_id, signal, model_id, run_id, step_at, lead_steps, predicted, actual, residual, operating
+        )
+        SELECT gen_random_uuid(), u.tenant_id, u.source_system, u.external_id, u.signal, u.model_id::uuid, u.run_id::uuid, u.step_at, 1, u.predicted, u.actual, u.residual, true
+          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::timestamptz[], $8::double precision[], $9::double precision[], $10::double precision[])
+            AS u(tenant_id, source_system, external_id, signal, model_id, run_id, step_at, predicted, actual, residual)
+        ON CONFLICT DO NOTHING
+      `, [resTenantIds, resSources, resExternals, resSignals, resModels, resRuns, resSteps, resPreds, resActuals, resResiduals]);
     }
   }
 
@@ -250,7 +284,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
   const tickStep = 30 * 1000;
   const tickIndex = Math.floor(nowMs / tickStep);
 
-  const activeMachines = DEMO_MACHINES.filter((m) => m.endDaysAgo === 0 || includeQuiet);
+  const activeMachines = ALL_FLEET_MACHINES.filter((m) => m.state !== 'quiet' || includeQuiet);
 
   const currentMonth = now.toISOString().slice(0, 7);
   if (lastEnsuredMonth !== currentMonth) {
@@ -264,14 +298,23 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
   const units: string[] = [];
 
   for (const machine of activeMachines) {
-    const imei = imeiOf(machine);
+    const imei = machine.imei;
+    const numId = Number(machine.externalId.replace(/[^0-9]/g, '')) || 7;
     for (const [index, s] of DEMO_SIGNALS.entries()) {
       let val: number;
       if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(nowMs)) {
         val = BREACH_TAIL[tickIndex % BREACH_TAIL.length];
       } else {
-        const noise = prng(Number(machine.externalId.slice(-2)) * 101 + index + tickIndex * 7919);
-        val = demoValue(machine, s.signal, nowMs, nowMs, noise);
+        const noise = prng(numId * 101 + index + tickIndex * 7919);
+        val = demoValue({
+          externalId: machine.externalId,
+          name: machine.externalId,
+          state: machine.state,
+          historyDays: 90,
+          endDaysAgo: 0,
+          unbound: [],
+          expect: '',
+        }, s.signal, nowMs, nowMs, noise);
       }
 
       imeis.push(imei);
@@ -281,7 +324,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
     }
 
     // Fuel consumption (rate in L/h) for productive quality tracking in OEE
-    const noiseFuel = prng(Number(machine.externalId.slice(-2)) * 313 + tickIndex * 6271)();
+    const noiseFuel = prng(numId * 313 + tickIndex * 6271)();
     const isEngineRunning = running(nowMs);
     const fuelRate = isEngineRunning ? parseFloat((12.4 + noiseFuel * 1.5).toFixed(2)) : 0;
     imeis.push(imei);
@@ -302,17 +345,9 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
 
   // Update link health for all equipment
   const windowStart = new Date(Math.floor(nowMs / (3600 * 1000)) * (3600 * 1000));
-  const demoImeis = [
-    { imei: '358000000000100', id: 'EX-01', state: 'healthy' },
-    { imei: '358000000000200', id: 'EX-02', state: 'healthy' },
-    { imei: '358000000000300', id: 'EX-03', state: 'healthy' },
-    { imei: '358000000000400', id: 'EX-04', state: includeQuiet ? 'healthy' : 'dark' },
-    { imei: '358000000000500', id: 'EX-05', state: 'healthy' },
-    { imei: '358000000000600', id: 'EX-06', state: 'healthy' },
-  ];
 
-  for (const m of demoImeis) {
-    const isOnline = m.state === 'healthy';
+  for (const m of ALL_FLEET_MACHINES) {
+    const isOnline = m.state !== 'quiet' || includeQuiet;
     await ds.query(`
       INSERT INTO device_link_health (
         tenant_id, imei, source_system, external_id, local_date,
@@ -321,9 +356,9 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
       ON CONFLICT ("tenant_id", "imei", "window_start") DO UPDATE
         SET window_end = EXCLUDED.window_end, state = EXCLUDED.state, detail = EXCLUDED.detail, computed_at = EXCLUDED.computed_at
     `, [
-      DEMO_TENANT, m.imei, DEMO_SOURCE, m.id, now.toISOString().slice(0, 10),
-      windowStart, now, m.state, isOnline ? 'Healthy link (live streaming)' : 'No readings received (offline)',
-      isOnline ? ['engine_coolant_temperature', 'engine_oil_pressure', 'engine_speed', 'hydraulic_oil_temperature', 'fuel_level', 'engine_running_status'] : [],
+      DEMO_TENANT, m.imei, m.sourceSystem, m.externalId, now.toISOString().slice(0, 10),
+      windowStart, now, isOnline ? 'healthy' : 'dark', isOnline ? 'Healthy link (live streaming)' : 'No readings received (offline)',
+      isOnline ? ['engine_coolant_temperature', 'engine_oil_pressure', 'engine_speed', 'hydraulic_oil_temperature', 'fuel_level', 'engine_running_status', 'fuel_consumption'] : [],
       isOnline ? [] : ['engine_coolant_temperature', 'engine_oil_pressure', 'engine_speed', 'hydraulic_oil_temperature', 'fuel_level', 'engine_running_status'],
       isOnline ? 120 : 0, now
     ]);
@@ -340,24 +375,23 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
   const adminScope = { tenantId: DEMO_TENANT, userId: 'u-admin', roles: ['admin'], isPlatformRole: false };
 
   // 1. Baselines & Scenario risk scoring
-  const demoMachines = ['EX-01', 'EX-02', 'EX-03', 'EX-04', 'EX-05', 'EX-06'];
   const [{ count: baselineCount }] = await ds.query(
     `SELECT count(*)::int AS count FROM prediction_baseline WHERE tenant_id = $1`, [DEMO_TENANT]
   );
   if (baselineCount === 0) {
     const baselineService = new BaselineService(ds);
-    for (const machine of demoMachines) {
+    for (const machine of ALL_FLEET_MACHINES) {
       try {
-        await baselineService.refresh(adminScope, { sourceSystem: DEMO_SOURCE, externalId: machine });
+        await baselineService.refresh(adminScope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId });
       } catch {}
     }
   }
 
   const predictionService = new PredictionService(ds);
   let scoredCount = 0;
-  for (const machine of demoMachines) {
+  for (const machine of ALL_FLEET_MACHINES) {
     try {
-      const res = await predictionService.scoreAsset(adminScope, { sourceSystem: DEMO_SOURCE, externalId: machine }, now);
+      const res = await predictionService.scoreAsset(adminScope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, now);
       scoredCount += res.written.length;
     } catch {
       // Best effort scoring
@@ -445,8 +479,10 @@ async function main() {
     const firstTick = await emitSimultaneousTick(ds, initialNow, includeQuiet);
     console.log(`[SeedStream] ⚡ Initial simultaneous emission: ${firstTick.count} readings across [${firstTick.machines.join(', ')}]`);
 
-    // 3. Initial forecast and recommendation pass
-    await runForecastAndRecommendations(ds, initialNow, true);
+    // 3. Initial forecast and recommendation pass (background, non-blocking)
+    runForecastAndRecommendations(ds, initialNow, true).catch((err) => {
+      console.warn('[SeedStream] Background forecast notice:', err?.message || err);
+    });
 
     if (once) {
       console.log(`[SeedStream] ✅ Completed execution (--once). Exiting.`);
@@ -483,17 +519,19 @@ async function main() {
         if (tickCount % 2 === 0) {
           const adminScope = { tenantId: DEMO_TENANT, userId: 'u-admin', roles: ['admin'], isPlatformRole: false };
           const predictionService = new PredictionService(ds);
-          for (const m of DEMO_MACHINES) {
+          for (const m of ALL_FLEET_MACHINES) {
             try {
-              await predictionService.scoreAsset(adminScope, { sourceSystem: DEMO_SOURCE, externalId: m.externalId }, tickNow);
+              await predictionService.scoreAsset(adminScope, { sourceSystem: m.sourceSystem, externalId: m.externalId }, tickNow);
             } catch {}
           }
         }
 
-        // Periodically run forecast & recommendations (every 10 minutes)
+        // Periodically run forecast & recommendations (every 10 minutes, background)
         if (tickNow.getTime() - lastForecastTime >= forecastIntervalMs) {
           lastForecastTime = tickNow.getTime();
-          await runForecastAndRecommendations(ds, tickNow, true);
+          runForecastAndRecommendations(ds, tickNow, true).catch((err) => {
+            console.warn('[SeedStream] Periodic forecast notice:', err?.message || err);
+          });
         }
       } catch (err: any) {
         console.error(`[SeedStream] ❌ Error during tick at ${tickNow.toISOString()}:`, err?.message || err);
