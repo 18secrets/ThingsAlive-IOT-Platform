@@ -79,6 +79,37 @@ describeDb('onboarding assistant: the new-machine proposal takes every field', (
     )).toEqual([{ serial_number: null, tier: 'basic', commissioned_at: null, service_interval_hours: null }]);
   });
 
+  describe('a person limited to some sites', () => {
+    // Their scope as the guard resolves it per request: the sites they were given.
+    const siteScoped = async (): Promise<RequestScope> => {
+      const [{ id }] = await owner.query(`SELECT id FROM plant WHERE tenant_id = 'acme' AND code = 'NORTH'`);
+      return { ...acme, plantIds: [id] };
+    };
+
+    beforeEach(async () => {
+      await owner.query(`INSERT INTO plant (tenant_id, code, name, status) VALUES ('acme', 'SOUTH', 'South yard', 'active')`);
+    });
+
+    it('cannot propose a machine with no site: it would be hidden from them', async () => {
+      await expect(proposals.propose(await siteScoped(), 'create_equipment', { code: 'GEN-10', name: 'Generator 10' }))
+        .rejects.toThrow(/siteCode is required: you can only see machines at your sites \(NORTH\)/);
+    });
+
+    it('cannot propose a machine at a site that is not theirs', async () => {
+      await expect(proposals.propose(await siteScoped(), 'create_equipment', { code: 'GEN-11', name: 'Generator 11', siteCode: 'SOUTH' }))
+        .rejects.toThrow(/"SOUTH" is not one of your sites \(NORTH\)/);
+    });
+
+    it('proposes at their own site, and confirming puts the machine there', async () => {
+      const scope = await siteScoped();
+      const p = await proposals.propose(scope, 'create_equipment', { code: 'GEN-12', name: 'Generator 12', siteCode: 'north' });
+      expect(await proposals.confirm(scope, p.id)).toMatchObject({ status: 'applied' });
+      expect(await owner.query(
+        `SELECT pl.code FROM equipment_profile e JOIN plant pl ON pl.id = e.plant_id WHERE e.external_id = 'GEN-12'`,
+      )).toEqual([{ code: 'NORTH' }]);
+    });
+  });
+
   it.each([
     ['a tier that does not exist', { tier: 'gold' }, /tier must be one of/],
     ['a date not written YYYY-MM-DD', { commissionedAt: '15/03/2025' }, /YYYY-MM-DD/],

@@ -56,6 +56,7 @@ export class AssistantProposalService {
       throw new ForbiddenException(`This role cannot ${kind.replace('_', ' ')}.`);
     }
     const { payload, summary } = shape(kind, args);
+    if (kind === 'create_equipment') await this.requireOwnSite(scope, payload.siteCode as string | null);
     return withTenantSession(this.ds, scope, (m) => {
       const repo = m.getRepository(AssistantProposal);
       return repo.save(repo.create({
@@ -63,6 +64,25 @@ export class AssistantProposalService {
         proposedAt: now, expiresAt: new Date(now.getTime() + PROPOSAL_LIFETIME_MS),
       }));
     });
+  }
+
+  /**
+   * A person limited to some sites sees only the machines at those sites, so a machine
+   * they add with no site, or at a site that is not theirs, disappears from every
+   * screen they have the moment it is created (TC_128). Refused at proposal, naming
+   * the sites they can use, so the assistant asks again instead of proposing it.
+   * Unlimited roles (plantIds undefined) may still add a machine with no site yet.
+   */
+  private async requireOwnSite(scope: RequestScope, siteCode: string | null): Promise<void> {
+    if (scope.plantIds === undefined) return;
+    const mine = (await this.plants.list(scope)).filter((p) => scope.plantIds!.includes(p.id));
+    const names = mine.map((p) => p.code).join(', ') || 'none';
+    if (!siteCode) {
+      throw new BadRequestException(`siteCode is required: you can only see machines at your sites (${names}).`);
+    }
+    if (!mine.some((p) => p.code.toLowerCase() === siteCode.toLowerCase())) {
+      throw new BadRequestException(`Site "${siteCode}" is not one of your sites (${names}); a machine there would be hidden from you.`);
+    }
   }
 
   async list(scope: RequestScope, status?: ProposalStatus): Promise<AssistantProposal[]> {
