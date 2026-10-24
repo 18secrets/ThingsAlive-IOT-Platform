@@ -302,6 +302,13 @@ export class CatalogImportApplyService {
       // reusing a version would mean updating rows in place with no way to remove
       // one the new content dropped. Always minting a fresh version number instead
       // needs no delete at all: nothing has ever been written under it before.
+      //
+      // An unpublished draft the new version replaces is retired first, here, so a
+      // slug never holds two drafts (uq_equipment_class_profile_one_draft). Left as a
+      // draft, it outlived the publish of its replacement and was what the Equipment
+      // Classes card showed — with a Publish button that would retire the newer
+      // version (tester bug TC_127). Before the insert, or the index refuses it.
+      await classRepo.update({ slug, status: 'draft' }, { status: 'retired' });
       targetClass = await classRepo.save(classRepo.create({
         slug, version: current.version + 1, status: 'draft', publishedAt: null, ...classFields,
       }));
