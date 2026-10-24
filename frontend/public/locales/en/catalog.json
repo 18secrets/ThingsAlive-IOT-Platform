@@ -535,7 +535,17 @@
     "capabilitiesSummaryWithParams_one": "Sensor capabilities: {{created}} created, {{skipped}} skipped, {{count}} sensor parameter added.",
     "capabilitiesSummaryWithParams_other": "Sensor capabilities: {{created}} created, {{skipped}} skipped, {{count}} sensor parameters added.",
     "approve": "Approve",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "rejectedApplyNote_one": "{{count}} row was rejected and will not be applied. Fix it in the workbook and upload it again, or apply the valid rows now.",
+    "rejectedApplyNote_other": "{{count}} rows were rejected and will not be applied. Fix them in the workbook and upload it again, or apply the valid rows now.",
+    "skipRejectedConfirm_one": "Apply the valid rows and skip the {{count}} rejected row",
+    "skipRejectedConfirm_other": "Apply the valid rows and skip the {{count}} rejected rows",
+    "warningsNote": "Applying this batch needs your confirmation:",
+    "warning": {
+      "incomplete_class": "some of its signal rows were rejected, so the new version would be missing signals",
+      "content_regression": "the new version would have less content than the published one"
+    },
+    "ackWarnings": "I have read these warnings — apply anyway"
   },
   "model": {
     "title": "3-D model",

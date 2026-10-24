@@ -1303,8 +1303,8 @@ function AppData() {
 
   const handleLoadCatalogImportDiff = (id: string) => apiGetCatalogImportDiff(id);
 
-  const handleApplyCatalogImport = async (id: string) => {
-    const summary = await apiApplyCatalogImport(id);
+  const handleApplyCatalogImport = async (id: string, acknowledgeWarnings = false) => {
+    const summary = await apiApplyCatalogImport(id, acknowledgeWarnings);
     // The workbook can create or version classes, scenarios and alert templates —
     // every screen that already lists those needs to see the result without a reload.
     await Promise.all([

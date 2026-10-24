@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,7 +17,7 @@ interface CatalogImportPageProps {
   onDownloadTemplate: () => Promise<void>;
   onUpload: (file: File) => Promise<{ id: string }>;
   onLoadDiff: (id: string) => Promise<CatalogImportDiff>;
-  onApply: (id: string) => Promise<CatalogImportApplySummary>;
+  onApply: (id: string, acknowledgeWarnings?: boolean) => Promise<CatalogImportApplySummary>;
   onDiscard: (id: string) => Promise<void>;
   onReviewSensors: (id: string, selection: SensorReviewSelection) => Promise<CatalogImportDiff>;
 }
@@ -56,6 +56,10 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [skipRejected, setSkipRejected] = useState(false);
+  const [ackWarnings, setAckWarnings] = useState(false);
+  // A choice made for one batch is never carried to the next one selected.
+  useEffect(() => { setSkipRejected(false); setAckWarnings(false); }, [selectedBatchId]);
   const [discarding, setDiscarding] = useState(false);
 
   const [sensorDecisions, setSensorDecisions] = useState<Record<string, ReviewDecision>>({});
@@ -113,12 +117,14 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
     }
   };
 
+  const warned = (diff?.classes ?? []).filter((c) => c.warnings?.length);
+
   const handleApply = async () => {
     if (!selectedBatchId) return;
     setApplying(true);
     setDiffError(undefined);
     try {
-      const summary = await onApply(selectedBatchId);
+      const summary = await onApply(selectedBatchId, ackWarnings);
       setApplySummary(summary);
     } catch (err) {
       setDiffError(err instanceof ApiError ? err.message : t('import.applyFailed'));
@@ -369,6 +375,33 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
 
                 {selectedBatch?.status === 'validated' && !applySummary && (
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                    {/* Rejected rows are skipped by design, but Apply looked like it would
+                        take them too (TC_125): it now waits for an explicit choice. */}
+                    {diff.rejectedRows.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
+                        <p className="text-xs text-amber-800 dark:text-amber-300">{t('import.rejectedApplyNote', { count: diff.rejectedRows.length })}</p>
+                        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                          <input type="checkbox" checked={skipRejected} onChange={(e) => setSkipRejected(e.target.checked)} />
+                          {t('import.skipRejectedConfirm', { count: diff.rejectedRows.length })}
+                        </label>
+                      </div>
+                    )}
+                    {/* Without a way to acknowledge these, Apply failed with the server's
+                        raw "Refused …" and there was nothing to do about it. */}
+                    {warned.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
+                        <p className="text-xs text-amber-800 dark:text-amber-300">{t('import.warningsNote')}</p>
+                        <ul className="text-xs text-amber-800 dark:text-amber-300 list-disc pl-4">
+                          {warned.map((c) => c.warnings!.map((w) => (
+                            <li key={`${c.slug}-${w}`}><span className="font-mono">{c.slug}</span>: {t(`import.warning.${w}`)}</li>
+                          )))}
+                        </ul>
+                        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                          <input type="checkbox" checked={ackWarnings} onChange={(e) => setAckWarnings(e.target.checked)} />
+                          {t('import.ackWarnings')}
+                        </label>
+                      </div>
+                    )}
                     {hasOutstandingProposals && (
                       <p className="text-[11px] text-amber-600 dark:text-amber-400">
                         {t('import.resolveFirstNote')}
@@ -377,7 +410,8 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                     <div className="flex justify-end">
                       <button
                         onClick={handleApply}
-                        disabled={applying || hasOutstandingProposals}
+                        disabled={applying || hasOutstandingProposals
+                          || (diff.rejectedRows.length > 0 && !skipRejected) || (warned.length > 0 && !ackWarnings)}
                         title={hasOutstandingProposals ? t('import.resolveFirstHint') : undefined}
                         className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                       >
