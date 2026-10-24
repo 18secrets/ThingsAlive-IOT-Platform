@@ -146,7 +146,7 @@ export const ProductionMonitoringPage: React.FC = () => {
         <>
           <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>
             <KpiTile label={t('kpi.machinesMeasured')} value={String(availability?.machinesMeasured ?? 0)} />
-            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${availability.availability.toFixed(0)}%` : '—'} />
+            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${(availability.availability * 100).toFixed(0)}%` : '—'} />
             <KpiTile label={t('kpi.uptime')} value={availability?.uptimeHours != null ? `${availability.uptimeHours.toFixed(0)}h` : '—'} />
             <KpiTile label={t('kpi.downtime')} value={availability?.downtimeHours != null ? `${availability.downtimeHours.toFixed(0)}h` : '—'} tone="warn" />
             {selectedSiteOee && (
@@ -224,7 +224,8 @@ const ProductionCard: React.FC<{
 }> = ({ machine, name, oee, connection, onOpen }) => {
   const { t } = useTranslation('production');
   const style = READINESS_STYLE[machine.readiness];
-  const gaugeValue = machine.readiness === 'ready' ? machine.availability : null;
+  // availability is a 0–1 ratio; the gauge draws a percentage.
+  const gaugeValue = machine.readiness === 'ready' && machine.availability != null ? machine.availability * 100 : null;
   return (
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">
