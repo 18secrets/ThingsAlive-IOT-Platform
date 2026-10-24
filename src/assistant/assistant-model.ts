@@ -93,19 +93,27 @@ export function geminiConfigFrom(env: Record<string, string | undefined>): Gemin
   return null;
 }
 
+const MODEL_CALL_TIMEOUT_MS = 20_000;
+const FALLBACK_HOLD_MS = 5 * 60_000;
+
 /** Gemini, on Vertex AI or with an API key. */
 export class GeminiModel implements AssistantModel {
   private readonly ai: GoogleGenAI;
   readonly name: string;
+  /** Until when the fallback model answers instead (see generate). */
+  private fallbackUntil = 0;
 
   constructor(config: GeminiConfig) {
     this.name = config.model;
+    // A turn can take five calls in a row; one that hangs held the whole chat open with
+    // no answer (TC_128). Long enough for a slow answer, short enough to fail.
+    const httpOptions = { timeout: MODEL_CALL_TIMEOUT_MS };
     this.ai = config.mode === 'vertex'
       ? new GoogleGenAI({
-        vertexai: true, project: config.project, location: config.location,
+        vertexai: true, project: config.project, location: config.location, httpOptions,
         ...(config.credentials ? { googleAuthOptions: { credentials: config.credentials } } : {}),
       })
-      : new GoogleGenAI({ apiKey: config.apiKey });
+      : new GoogleGenAI({ apiKey: config.apiKey, httpOptions });
   }
 
   async generate(input: { system: string; turns: AssistantTurn[]; tools: ToolDeclaration[] }): Promise<ModelReply> {
@@ -135,7 +143,12 @@ export class GeminiModel implements AssistantModel {
           // Low, not zero: the answers are read off tool results, and a creative model
           // is one that rounds a reading or invents a machine name.
           temperature: 0.2,
-          maxOutputTokens: 1024,
+          // Thinking off on Flash: the answers are lookups read back, and thinking added
+          // seconds to every one of up to five calls a turn (TC_128: ~48 s an answer).
+          // It also spent maxOutputTokens, leaving some answers empty. Pro cannot turn
+          // it off, so it keeps its default.
+          ...(/flash/i.test(modelName) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          maxOutputTokens: 2048,
           ...(input.tools.length ? {
             tools: [{
               functionDeclarations: input.tools.map((d) => ({
@@ -148,8 +161,11 @@ export class GeminiModel implements AssistantModel {
     };
 
     let res: any;
+    const fallback = 'gemini-3.5-flash-lite';
     try {
-      res = await callModel(this.name);
+      // While the primary is known to be overloaded, go straight to the fallback rather
+      // than waiting for the primary to fail again on every round of every turn.
+      res = await callModel(Date.now() < this.fallbackUntil ? fallback : this.name);
     } catch (err: any) {
       const msg = `${err?.message || ''} ${JSON.stringify(err || {})}`;
       const isCapacityOrNotFound =
@@ -158,8 +174,9 @@ export class GeminiModel implements AssistantModel {
         err?.status === 429 ||
         err?.code === 503 ||
         /503|404|UNAVAILABLE|high demand|not found/i.test(msg);
-      if (isCapacityOrNotFound && this.name !== 'gemini-3.5-flash-lite') {
-        res = await callModel('gemini-3.5-flash-lite');
+      if (isCapacityOrNotFound && this.name !== fallback) {
+        this.fallbackUntil = Date.now() + FALLBACK_HOLD_MS;
+        res = await callModel(fallback);
       } else {
         throw err;
       }

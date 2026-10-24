@@ -159,6 +159,14 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
       {/* Main Chat Column */}
       <div className="flex-1 min-w-0 max-w-3xl mx-auto flex flex-col h-full min-h-0">
 
+        {/* Below lg the side column is hidden, and the panel with it (TC_128): above the
+            chat instead, held short so the conversation still has the room. */}
+        {showStatus && (
+          <div className="lg:hidden shrink-0 max-h-64 overflow-y-auto mb-3">
+            <OnboardingStatusPanel focus={statusFocus} refreshKey={statusTick} onClearFocus={() => setStatusFocus(null)} />
+          </div>
+        )}
+
         {/* Scrollable: intro, chat thread, quick cards */}
         <div className="flex-1 min-h-0 overflow-y-auto pr-1">
           {!hasStarted && (
