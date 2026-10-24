@@ -199,5 +199,13 @@
     },
     "missingBinding": "{{signal}}: ఈ మెషిన్‌పై సెన్సార్ జోడించలేదు",
     "missingParameter": "ఖర్చు పరామితి సెట్ కాలేదు: {{name}}"
+  },
+  "listCol": {
+    "machine": "యంత్రం",
+    "connection": "కనెక్షన్",
+    "severity": "తీవ్రత",
+    "risk": "ప్రమాదం",
+    "confidence": "విశ్వసనీయత",
+    "abnormal": "బేస్‌లైన్ వెలుపల సిగ్నల్స్"
   }
 }

@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
 import { TablePagination, usePagination } from '../common/TablePagination';
 import { AddCategoryModal } from './AddCategoryModal';
+import { representativeOf } from '../../lib/classVersion';
 
 interface CategoryViewProps {
   classes: EquipmentClass[];
@@ -47,10 +48,7 @@ function representativePerSlug(rows: EquipmentClass[]): EquipmentClass[] {
     list.push(row);
     bySlug.set(row.slug, list);
   }
-  return Array.from(bySlug.values()).map((versions) =>
-    versions.find((v) => v.status === 'draft')
-      ?? versions.find((v) => v.status === 'published')
-      ?? versions[0]);
+  return Array.from(bySlug.values()).map(representativeOf);
 }
 
 export const CategoryView: React.FC<CategoryViewProps> = ({
@@ -262,7 +260,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
           </div>
         )}
       </div>
-      {filtered.length > 0 && <TablePagination bare {...pager} />}
+      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       {/* No delete — retiring is the API's only way to stop offering a class;
           accounts that already copied it keep running theirs. */}

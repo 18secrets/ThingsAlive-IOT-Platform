@@ -193,8 +193,10 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
                           <span className="text-[11px] text-slate-500">{s.machines.done}/{s.machines.total}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-1">
+                      {/* The seven chips wrap: on one line they pushed Status and View off a
+                          1440px screen. */}
+                      <td className="py-3 px-4 whitespace-normal">
+                        <div className="flex flex-wrap gap-1 min-w-[220px] max-w-[360px]">
                           {ONBOARDING_STEPS.map((step) => {
                             const c = s.steps[step];
                             const allDone = s.machines.total > 0 && c.done === s.machines.total;

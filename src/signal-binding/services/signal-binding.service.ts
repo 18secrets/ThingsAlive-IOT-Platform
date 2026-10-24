@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
@@ -79,7 +79,16 @@ export interface DiscoveryCandidate {
   imei: string | null;
   sensorName: string | null;
   sensorId: string | null;
+  /**
+   * The binding already in force or awaiting review for this signal from this logger,
+   * if any. Without it the panel offered Propose and Activate again after either had
+   * worked, and the tester read a successful call as a broken button (TC_129).
+   */
+  bindingStatus: 'proposed' | 'active' | null;
 }
+
+/** A candidate before its binding state is looked up. */
+type RawCandidate = Omit<DiscoveryCandidate, 'bindingStatus'>;
 
 export interface DiscoveryResult {
   equipment: EquipmentRef;
@@ -262,8 +271,8 @@ export class SignalBindingService {
       const expectedByKey = new Map(expected.map((c) => [c.signalKey, c]));
       const actualByKey = new Map(actual.map((c) => [c.signalKey, c]));
 
-      const matched: DiscoveryCandidate[] = [];
-      const expectedNotMapped: DiscoveryCandidate[] = [];
+      const matched: RawCandidate[] = [];
+      const expectedNotMapped: RawCandidate[] = [];
       for (const candidate of expected) {
         const found = actualByKey.get(candidate.signalKey);
         if (found) matched.push({ ...candidate, imei: found.imei, sensorName: found.sensorName });
@@ -272,13 +281,32 @@ export class SignalBindingService {
 
       const mappedNotExpected = actual.filter((c) => !expectedByKey.has(c.signalKey));
 
-      return { equipment, matched, expectedNotMapped, mappedNotExpected };
+      // Open versions only: a superseded or rejected one is history, not state.
+      const open = await m.getRepository(SignalBindingVersion).find({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+          validTo: IsNull(), status: In(['proposed', 'discovered_unreviewed', 'active']),
+        },
+      });
+      const statusOf = (c: RawCandidate): DiscoveryCandidate['bindingStatus'] => {
+        const mine = open.filter((b) => b.signalKey === c.signalKey && (c.imei === null || b.imei === c.imei));
+        if (mine.some((b) => b.status === 'active')) return 'active';
+        return mine.length ? 'proposed' : null;
+      };
+      const annotate = (list: RawCandidate[]): DiscoveryCandidate[] => list.map((c) => ({ ...c, bindingStatus: statusOf(c) }));
+
+      return {
+        equipment,
+        matched: annotate(matched),
+        expectedNotMapped: annotate(expectedNotMapped),
+        mappedNotExpected: annotate(mappedNotExpected),
+      };
     });
   }
 
   private async expectedFromToolMapping(
     m: EntityManager, devices: DeviceInventory[],
-  ): Promise<DiscoveryCandidate[]> {
+  ): Promise<RawCandidate[]> {
     const toolMappingIds = [...new Set(devices.map((d) => d.toolMappingId).filter((id): id is string => !!id))];
     if (!toolMappingIds.length) return [];
 
@@ -290,7 +318,7 @@ export class SignalBindingService {
     const sensorNameById = new Map(sensors.map((s) => [s.id, s.sensorName]));
     const capabilities = await m.getRepository(SensorRoleCapability).find({ where: { sensorId: In(sensorIds) } });
 
-    const out: DiscoveryCandidate[] = [];
+    const out: RawCandidate[] = [];
     const seen = new Set<string>();
     for (const device of devices) {
       if (!device.toolMappingId) continue;
@@ -319,7 +347,7 @@ export class SignalBindingService {
 
   private async actualFromSensorMap(
     m: EntityManager, tenantId: string, devices: DeviceInventory[],
-  ): Promise<DiscoveryCandidate[]> {
+  ): Promise<RawCandidate[]> {
     const imeis = [...new Set(devices.map((d) => d.imei))];
     if (!imeis.length) return [];
 

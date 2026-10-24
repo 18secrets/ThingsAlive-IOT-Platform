@@ -2,14 +2,17 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Bell, ChevronRight, ClipboardList, Cpu, Gauge, ShieldCheck, Siren, Sparkles, Wrench,
+  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, ShieldCheck,
+  Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
+import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { TablePagination, usePagination } from '../components/common/TablePagination';
 import {
-  AlertEvent, AssetForecast, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, OnboardingSummary,
+  AlertEvent, AssetForecast, EquipmentAvailability, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, OnboardingSummary,
   Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetOnboardingSummary, apiGetServiceForecast, apiGetShieldSummary,
   apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListPlants, apiListWorkOrders,
@@ -104,7 +107,7 @@ export const LiveDashboardPage: React.FC = () => {
         <Panel title={t('live.availabilityTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')}>
           {availability.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex items-center gap-4">
-              <RingGauge value={availability.data.availability} size={72} colorClass="text-sky-500 dark:text-sky-400" />
+              <RingGauge value={availability.data.availability != null ? availability.data.availability * 100 : null} size={72} colorClass="text-sky-500 dark:text-sky-400" />
               <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5">
                 <p>{t('live.machinesMeasured', { count: availability.data.machinesMeasured })}</p>
                 {availability.data.uptimeHours != null && <p>{t('live.upDown', { up: availability.data.uptimeHours.toFixed(0), down: (availability.data.downtimeHours ?? 0).toFixed(0) })}</p>}
@@ -140,19 +143,42 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
       </div>
 
-      <Panel title={t('live.machines')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/admin/equipment')}>
-        <List slot={equipment} empty={t('live.noMachines')} render={(d) => (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            {d.map((m) => (
-              <Row key={m.id} onClick={() => openMachine(m.sourceSystem, m.externalId)} left={m.name ?? m.externalId}
-                right={<span className="text-slate-400">{plantName(m.plantId)}{m.equipmentClassSlug ? ` · ${m.equipmentClassSlug}` : ''}</span>} />
-            ))}
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('live.machines')}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('live.machinesHint')}</p>
           </div>
-        )} />
-      </Panel>
+          <button onClick={() => navigate('/admin/equipment')} className="inline-flex items-center gap-1 text-sm text-slate-400 dark:text-slate-500 hover:text-sky-600 cursor-pointer shrink-0">
+            {equipment.state === 'ok' ? t('live.machinesCount', { count: equipment.data.length }) : ''}
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        {equipment.state !== 'ok' || equipment.data.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+            <Muted>{equipment.state === 'loading' ? t('common.loading') : equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>
+          </div>
+        ) : (
+          <MachineCards
+            machines={equipment.data}
+            plantName={plantName}
+            // Same reading as Production Monitoring: `dark` is offline, any other recorded
+            // link state is reporting; no row at all is "no link data", not either.
+            connectionOf={(externalId) => {
+              if (health.state !== 'ok') return null;
+              const row = health.data.find((r) => r.externalId === externalId);
+              return row ? (row.state === 'dark' ? 'offline' : 'online') : null;
+            }}
+            availabilityOf={(m) => availability.state === 'ok'
+              ? availability.data.machines.find((a) => a.sourceSystem === m.sourceSystem && a.externalId === m.externalId)
+              : undefined}
+            onOpen={(m) => openMachine(m.sourceSystem, m.externalId)}
+          />
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Panel title="ThingsShield" icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
+        <Panel title={t('translation:sidebar.thingsShield')} icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
           {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex flex-wrap gap-1.5">
               <Chip tone="rose">{t('live.shieldCount.action_required', { count: shield.data.counts.action_required })}</Chip>
@@ -177,6 +203,58 @@ export const LiveDashboardPage: React.FC = () => {
           })()}
         </Panel>
       </div>
+    </div>
+  );
+};
+
+/**
+ * The equipment cards of the original dashboard, over live data. The original showed
+ * an illustrative OEE; per-machine OEE would cost one request per card, so the first
+ * chip is 7-day availability, which the fleet availability call already carries.
+ */
+const MachineCards: React.FC<{
+  machines: EquipmentProfile[];
+  plantName: (id: string | null) => string;
+  connectionOf: (externalId: string) => 'online' | 'offline' | null;
+  availabilityOf: (m: EquipmentProfile) => EquipmentAvailability | undefined;
+  onOpen: (m: EquipmentProfile) => void;
+}> = ({ machines, plantName, connectionOf, availabilityOf, onOpen }) => {
+  const { t } = useTranslation('dashboard');
+  const { pageItems, ...pager } = usePagination(machines, 12);
+  const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
+  // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {pageItems.map((m) => {
+          const a = availabilityOf(m);
+          const ready = a?.readiness === 'ready';
+          return (
+            <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
+                <ConnectionBadge state={connectionOf(m.externalId)} />
+              </div>
+              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
+              <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{plantName(m.plantId)}</span></p>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Chip icon={Activity} title={ready ? t('common.availability') : t('live.availabilityNotReady')} size="md">
+                    {ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—'}
+                  </Chip>
+                  <Chip icon={Clock3} title={t('common.uptimeHours')} size="md">{hours(ready ? a?.uptimeHours : null)}</Chip>
+                  <Chip icon={AlertTriangle} tone={ready && Math.round(a?.downtimeHours ?? 0) > 0 ? 'rose' : 'slate'} title={t('common.downtimeHours')} size="md">{hours(ready ? a?.downtimeHours : null)}</Chip>
+                </div>
+                <span className="inline-flex items-center text-xs font-medium text-sky-600 dark:text-sky-400 shrink-0">
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {pager.totalPages > 1 && <TablePagination bare compact {...pager} />}
     </div>
   );
 };

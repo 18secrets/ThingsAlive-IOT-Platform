@@ -308,6 +308,8 @@
     "proposing": "Proposing…",
     "activate": "Activate",
     "activating": "Activating…",
+    "statusActive": "Active",
+    "statusProposed": "Proposed",
     "pause": "Pause",
     "pausing": "Pausing…",
     "resume": "Resume",

@@ -11,6 +11,7 @@ import { ClassAlertTemplatesPanel } from '../components/admin/class-detail/Class
 import { ClassCausalChainsPanel } from '../components/admin/class-detail/ClassCausalChainsPanel';
 import { ClassVisualPanel } from '../components/admin/class-detail/ClassVisualPanel';
 import { ClassModelPanel } from '../components/admin/class-detail/ClassModelPanel';
+import { representativeOf } from '../lib/classVersion';
 
 type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual';
 
@@ -36,9 +37,7 @@ interface EquipmentClassDetailPageProps {
 /** The draft in progress if any, else the latest published version, else whatever's left. */
 function representativeForSlug(rows: EquipmentClass[], slug: string): EquipmentClass | undefined {
   const versions = rows.filter((c) => c.slug === slug);
-  return versions.find((v) => v.status === 'draft')
-    ?? versions.find((v) => v.status === 'published')
-    ?? versions[0];
+  return versions.length ? representativeOf(versions) : undefined;
 }
 
 export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> = ({

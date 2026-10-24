@@ -199,5 +199,13 @@
     },
     "missingBinding": "{{signal}}: इस मशीन पर कोई सेंसर नहीं जुड़ा",
     "missingParameter": "लागत पैरामीटर तय नहीं: {{name}}"
+  },
+  "listCol": {
+    "machine": "मशीन",
+    "connection": "कनेक्शन",
+    "severity": "गंभीरता",
+    "risk": "जोखिम",
+    "confidence": "विश्वास",
+    "abnormal": "आधार-रेखा से बाहर सिग्नल"
   }
 }

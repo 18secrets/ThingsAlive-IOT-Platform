@@ -104,5 +104,15 @@
     "by": "{{name}} ద్వారా",
     "to": "{{name}}కు",
     "from": "{{name}} నుండి"
+  },
+  "listCol": {
+    "reference": "సూచన",
+    "title": "పని",
+    "machine": "యంత్రం",
+    "status": "స్థితి",
+    "assignee": "కేటాయించినవారు",
+    "priority": "ప్రాధాన్యం",
+    "due": "గడువు",
+    "actions": "చర్యలు"
   }
 }

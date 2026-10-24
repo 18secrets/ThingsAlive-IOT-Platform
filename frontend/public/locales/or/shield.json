@@ -91,5 +91,8 @@
     "saving": "ସେଭ୍ ହେଉଛି…",
     "saveCorrection": "ସଂଶୋଧନ ସେଭ୍ କରନ୍ତୁ",
     "saveRecord": "ରେକର୍ଡ ସେଭ୍ କରନ୍ତୁ"
+  },
+  "listCol": {
+    "machine": "ମେସିନ୍"
   }
 }

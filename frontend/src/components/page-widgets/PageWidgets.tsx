@@ -50,10 +50,18 @@ const ExploreLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
   );
 };
 
+/** A layout may leave a KPI widget untitled; a number with no name says nothing, so fall
+ *  back to the formula key read as words ("avg_coolant_temp" -> "Avg coolant temp"). */
+const kpiTitle = (widget: PageWidget, formulaKey?: string): string => {
+  if (widget.title) return widget.title;
+  const words = (formulaKey ?? widget.widgetKey).replace(/[_-]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
 function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (formulaKey: string) => void }) {
   const { t } = useTranslation('equipment');
   if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
+    return <WidgetShell title={kpiTitle(widget)}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const data = widget.data as PageKpiWidgetData;
   const explore = onExplore ? <ExploreLink onClick={() => onExplore(data.formulaKey)} /> : null;
@@ -61,7 +69,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
     const points = (data.value as { t: string; v: number | null }[] ?? []).map((p) => p.v).filter((v): v is number => v != null);
     const latest = points[points.length - 1];
     return (
-      <WidgetShell title={widget.title}>
+      <WidgetShell title={kpiTitle(widget, data.formulaKey)}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
@@ -78,7 +86,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
   const value = data.value as number | null;
   const showGauge = widget.widgetType === 'kpi_gauge' && data.unit === '%';
   return (
-    <WidgetShell title={widget.title}>
+    <WidgetShell title={kpiTitle(widget, data.formulaKey)}>
       <div className="flex items-center gap-4">
         {showGauge && <RingGauge value={value} />}
         <div>

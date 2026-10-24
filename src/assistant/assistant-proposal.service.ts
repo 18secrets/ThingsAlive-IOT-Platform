@@ -2,7 +2,9 @@ import { BadRequestException, ForbiddenException, HttpException, Injectable, Not
 import { DataSource } from 'typeorm';
 import { Capability, can } from '../auth/capabilities';
 import { RequestScope } from '../auth/types/request-scope';
-import { CLIENT_SOURCE_SYSTEM } from '../equipment/equipment-profile.entity';
+import { CLIENT_SOURCE_SYSTEM, ServiceTier } from '../equipment/equipment-profile.entity';
+
+const SERVICE_TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
 import { CODE_PATTERN as EQUIPMENT_CODE, EquipmentService } from '../equipment/services/equipment.service';
 import { PlantService } from '../equipment/services/plant.service';
 import { InventoryService } from '../inventory/services/inventory.service';
@@ -54,6 +56,7 @@ export class AssistantProposalService {
       throw new ForbiddenException(`This role cannot ${kind.replace('_', ' ')}.`);
     }
     const { payload, summary } = shape(kind, args);
+    if (kind === 'create_equipment') await this.requireOwnSite(scope, payload.siteCode as string | null);
     return withTenantSession(this.ds, scope, (m) => {
       const repo = m.getRepository(AssistantProposal);
       return repo.save(repo.create({
@@ -61,6 +64,25 @@ export class AssistantProposalService {
         proposedAt: now, expiresAt: new Date(now.getTime() + PROPOSAL_LIFETIME_MS),
       }));
     });
+  }
+
+  /**
+   * A person limited to some sites sees only the machines at those sites, so a machine
+   * they add with no site, or at a site that is not theirs, disappears from every
+   * screen they have the moment it is created (TC_128). Refused at proposal, naming
+   * the sites they can use, so the assistant asks again instead of proposing it.
+   * Unlimited roles (plantIds undefined) may still add a machine with no site yet.
+   */
+  private async requireOwnSite(scope: RequestScope, siteCode: string | null): Promise<void> {
+    if (scope.plantIds === undefined) return;
+    const mine = (await this.plants.list(scope)).filter((p) => scope.plantIds!.includes(p.id));
+    const names = mine.map((p) => p.code).join(', ') || 'none';
+    if (!siteCode) {
+      throw new BadRequestException(`siteCode is required: you can only see machines at your sites (${names}).`);
+    }
+    if (!mine.some((p) => p.code.toLowerCase() === siteCode.toLowerCase())) {
+      throw new BadRequestException(`Site "${siteCode}" is not one of your sites (${names}); a machine there would be hidden from you.`);
+    }
   }
 
   async list(scope: RequestScope, status?: ProposalStatus): Promise<AssistantProposal[]> {
@@ -126,6 +148,7 @@ export class AssistantProposalService {
 
   private async apply(scope: RequestScope, p: AssistantProposal): Promise<Record<string, unknown>> {
     const v = p.payload as Record<string, string | null>;
+    const n = p.payload as Record<string, number | null>;
     switch (p.kind) {
       case 'create_site': {
         const site = await this.plants.create(scope, { code: v.code!, name: v.name! });
@@ -141,6 +164,10 @@ export class AssistantProposalService {
         const machine = await this.equipment.create(scope, {
           code: v.code!, name: v.name!, plantId, manufacturer: v.manufacturer ?? null,
           modelNumber: v.modelNumber ?? null, equipmentClassSlug: v.classSlug ?? null,
+          serialNumber: v.serialNumber ?? null, description: v.description ?? null,
+          ...(v.tier ? { tier: v.tier as ServiceTier } : {}),
+          commissionedAt: v.commissionedAt ? new Date(`${v.commissionedAt}T00:00:00Z`) : null,
+          serviceIntervalHours: n.serviceIntervalHours ?? null,
         });
         return { sourceSystem: machine.sourceSystem, code: machine.externalId };
       }
@@ -178,13 +205,36 @@ function shape(kind: ProposalKind, args: Record<string, unknown>): { payload: Re
       if (!EQUIPMENT_CODE.test(code)) throw new BadRequestException(`Machine code "${code}" is not valid: letters, digits, dots, hyphens or underscores.`);
       const name = need('name');
       const siteCode = text('siteCode', 40);
+      const tier = text('tier', 16);
+      if (tier && !SERVICE_TIERS.includes(tier as ServiceTier)) {
+        throw new BadRequestException(`tier must be one of ${SERVICE_TIERS.join(', ')}.`);
+      }
+      const commissionedAt = text('commissionedAt', 10);
+      if (commissionedAt && (!/^\d{4}-\d{2}-\d{2}$/.test(commissionedAt) || Number.isNaN(Date.parse(commissionedAt)))) {
+        throw new BadRequestException(`commissionedAt must be a date written YYYY-MM-DD.`);
+      }
+      const interval = args.serviceIntervalHours;
+      if (interval !== undefined && interval !== null && interval !== ''
+        && !(Number.isInteger(Number(interval)) && Number(interval) > 0)) {
+        throw new BadRequestException('serviceIntervalHours must be a whole number of hours above 0.');
+      }
       const payload = {
         code, name, siteCode, manufacturer: text('manufacturer'), modelNumber: text('modelNumber'), classSlug: text('classSlug'),
+        serialNumber: text('serialNumber'), description: text('description', 500), tier, commissionedAt,
+        serviceIntervalHours: interval === undefined || interval === null || interval === '' ? null : Number(interval),
       };
-      const extras = [payload.manufacturer, payload.modelNumber].filter(Boolean).join(' ');
+      // The person approves this sentence, so every field that will be written is in it.
+      const details = [
+        payload.classSlug && `type ${payload.classSlug}`,
+        [payload.manufacturer, payload.modelNumber].filter(Boolean).join(' '),
+        payload.serialNumber && `serial ${payload.serialNumber}`,
+        tier && `${tier} tier`,
+        commissionedAt && `commissioned ${commissionedAt}`,
+        payload.serviceIntervalHours && `service every ${payload.serviceIntervalHours} h`,
+      ].filter(Boolean).join(', ');
       return {
         payload,
-        summary: `Add the machine "${name}" (code ${code})${extras ? `, ${extras}` : ''}${siteCode ? ` at site ${siteCode}` : ', with no site yet'}.`,
+        summary: `Add the machine "${name}" (code ${code})${details ? `, ${details}` : ''}${siteCode ? ` at site ${siteCode}` : ', with no site yet'}.`,
       };
     }
     case 'fit_logger': {

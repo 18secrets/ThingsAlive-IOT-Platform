@@ -59,12 +59,20 @@ const ONBOARDING_SYSTEM = [
   'and the loggers fitted to them. The seven onboarding steps are equipment, device, mapping, validation,',
   'activation, alerts and access; onboarding_status says where each site stands.',
   'Rules:',
-  '- Every fact you state comes from a tool result in this conversation. Check what exists (list_sites,',
-  '  list_equipment, my_loggers) before proposing, so you never propose something that is already there.',
+  '- Every fact you state comes from a tool result in this conversation. Before proposing, check what',
+  '  exists with the one list the proposal needs (list_sites for a site, list_equipment for a machine,',
+  '  my_loggers for a logger) — not all three every time: each lookup is another round trip.',
   '- You cannot do anything yourself. The propose_* tools create proposals the person confirms or rejects;',
   '  say "I have proposed ..." and never "I have added ..." or "done".',
-  '- Only propose what the person asked for or clearly agreed to. When a code, name or site is missing,',
-  '  ask for it instead of inventing one.',
+  '- Only propose what the person asked for or clearly agreed to. Never invent a value you were not given.',
+  '- To add a machine, first call list_equipment_classes and list_sites together. Then ask in ONE message,',
+  '  as a short list naming every field: code, name, site (list the sites you found); machine type (list',
+  '  the type names you found); manufacturer;',
+  '  model; serial number; description; service tier (basic, standard, advanced or full); commissioning',
+  '  date; service interval in hours. Say the optional ones may be skipped. Never ask for only code, name',
+  '  and site. A machine with no type cannot be onboarded further, so ask again for the type if skipped.',
+  '- When the person asks how far onboarding has got, call onboarding_status (or machine_onboarding for',
+  '  one machine) and answer from it; never from memory of an earlier answer.',
   '- A logger can only be fitted if my_loggers lists it as this account\'s. If it is not there, say that',
   '  Things Alive assigns loggers and you cannot.',
   '- Mapping signals, activating scenarios, alert rules and user access are done on their own screens;',
@@ -155,11 +163,15 @@ export class AssistantService {
         if (out.calls.length && !final) {
           const calls = out.calls.slice(0, MAX_CALLS_PER_ROUND);
           turns.push({ role: 'model', calls });
-          const results = [];
-          for (const c of calls) {
-            used.add(c.name);
-            results.push({ name: c.name, result: await this.tools.run(scope, c.name, c.args, ctx) });
-          }
+          for (const c of calls) used.add(c.name);
+          // Lookups in one round run together; one after another they added each
+          // query's time to the answer's (TC_128). A round that proposes stays in order:
+          // proposals count against a per-answer limit, checked as each one is made.
+          const proposes = calls.some((c) => c.name.startsWith('propose_'));
+          const results = proposes
+            ? await calls.reduce<Promise<{ name: string; result: unknown }[]>>(async (acc, c) =>
+              [...await acc, { name: c.name, result: await this.tools.run(scope, c.name, c.args, ctx) }], Promise.resolve([]))
+            : await Promise.all(calls.map(async (c) => ({ name: c.name, result: await this.tools.run(scope, c.name, c.args, ctx) })));
           turns.push({ role: 'tool', results });
           continue;
         }

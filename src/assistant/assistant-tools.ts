@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { Capability, can } from '../auth/capabilities';
 import { RequestScope } from '../auth/types/request-scope';
 import { AlertService } from '../alert/services/alert.service';
@@ -12,6 +13,8 @@ import { InventoryService } from '../inventory/services/inventory.service';
 import { OnboardingStatusService } from '../onboarding/onboarding-status.service';
 import { PageService } from '../page/page.service';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
+import { withTenantSession } from '../scope/tenant-session';
 import { ToolDeclaration } from './assistant-model';
 import { AssistantProposal, ProposalKind } from './assistant-proposal.entity';
 import { AssistantProposalService, PROPOSAL_CAPABILITY } from './assistant-proposal.service';
@@ -75,6 +78,7 @@ export class AssistantTools {
     plants: PlantService,
     inventory: InventoryService,
     proposals: AssistantProposalService,
+    ds: DataSource,
   ) {
     const BOTH: AssistantProfile[] = ['ask', 'onboarding'];
     const ASK: AssistantProfile[] = ['ask'];
@@ -143,12 +147,31 @@ export class AssistantTools {
       proposer('create_site', 'Propose adding a site.', {
         code: { type: 'string', description: 'Short code, letters/digits/.-_ only.' }, name: { type: 'string' },
       }, ['code', 'name']),
+      // Every field the Add Equipment form takes (TC_128): with only code, name, site,
+      // maker and model the assistant created machines with no class, so every later
+      // onboarding step showed blocked.
       proposer('create_equipment', 'Propose adding a machine to the register.', {
         code: { type: 'string', description: 'The machine code, letters/digits/.-_ only; it cannot change later.' },
         name: { type: 'string' },
         siteCode: { type: 'string', description: 'An existing site code, or one proposed in this answer.' },
+        classSlug: { type: 'string', description: 'The machine type: a slug from list_equipment_classes.' },
         manufacturer: { type: 'string' }, modelNumber: { type: 'string' },
+        serialNumber: { type: 'string' },
+        description: { type: 'string' },
+        tier: { type: 'string', enum: ['basic', 'standard', 'advanced', 'full'], description: 'Service tier; basic when not given.' },
+        commissionedAt: { type: 'string', description: 'Commissioning date, YYYY-MM-DD.' },
+        serviceIntervalHours: { type: 'integer', description: 'Running hours between services.' },
       }, ['code', 'name']),
+      {
+        name: 'list_equipment_classes',
+        description: 'The machine types this account can use: slug, name and description.',
+        parameters: { type: 'object', properties: {} },
+        capability: 'catalog.read',
+        profiles: ONBOARDING,
+        run: (scope) => withTenantSession(ds, scope, async (m) => (await m.getRepository(ClientEquipmentClass).find({
+          where: { tenantId: scope.tenantId }, order: { name: 'ASC' },
+        })).filter((c) => c.status === 'active').map((c) => ({ slug: c.slug, name: c.name, description: c.description }))),
+      },
       proposer('fit_logger', 'Propose fitting a logger already in this account (from my_loggers) to a machine.', {
         imei: { type: 'string' },
         equipmentCode: { type: 'string' },

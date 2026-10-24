@@ -5,6 +5,8 @@ import { AlertCircle, ChevronLeft, ChevronRight, ShieldCheck, ShieldAlert, Info,
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   ApiError, Plant, SHIELD_CATEGORIES, ShieldMachine, ShieldStatus, ShieldSummary,
   apiGetShieldSummary, apiListPlants,
@@ -21,6 +23,7 @@ const needsAttention = (m: ShieldMachine) =>
 
 export const ThingsShieldPage: React.FC = () => {
   const { t } = useTranslation('shield');
+  const [viewMode, setViewMode] = useViewMode('things-shield');
   usePageHeader({ title: 'ThingsShield', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [summary, setSummary] = useState<ShieldSummary | null>(null);
@@ -94,6 +97,7 @@ export const ThingsShieldPage: React.FC = () => {
       )}
 
       <EquipmentFilters
+        showConnection={false}
         scope={scope}
         onChange={(next) => { setScope(next); setPage(1); }}
         plants={plants}
@@ -115,7 +119,10 @@ export const ThingsShieldPage: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.machines')}</h3>
-          <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+          </div>
         </div>
 
         {loading ? (
@@ -124,6 +131,25 @@ export const ThingsShieldPage: React.FC = () => {
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
             {t('page.noMatch')}
           </div>
+        ) : viewMode === 'list' ? (
+          <ListTable
+            columns={[{ label: t('listCol.machine') }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`) }))]}
+            rows={pageItems}
+            rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
+            cells={(m) => [
+              <span className="inline-flex items-center gap-2">
+                {needsAttention(m)
+                  ? <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  : <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                <span className="font-medium">{m.machine.name ?? m.machine.externalId}</span>
+                <span className="text-slate-400">{m.machine.externalId}</span>
+              </span>,
+              ...SHIELD_CATEGORIES.map((c) => (
+                <Chip tone={STATUS_TONE[m.categories[c].status]}>{t(`status.${m.categories[c].status}`)}</Chip>
+              )),
+            ]}
+            onOpen={open}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {pageItems.map((m) => (

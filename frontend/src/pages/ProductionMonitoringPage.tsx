@@ -6,6 +6,8 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
@@ -23,6 +25,7 @@ function periodLastNDays(days: number): { from: string; to: string } {
 
 export const ProductionMonitoringPage: React.FC = () => {
   const { t } = useTranslation('production');
+  const [viewMode, setViewMode] = useViewMode('production-monitoring');
   usePageHeader({ title: t('translation:pages.productionMonitoring.title'), subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -146,7 +149,7 @@ export const ProductionMonitoringPage: React.FC = () => {
         <>
           <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>
             <KpiTile label={t('kpi.machinesMeasured')} value={String(availability?.machinesMeasured ?? 0)} />
-            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${availability.availability.toFixed(0)}%` : '—'} />
+            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${(availability.availability * 100).toFixed(0)}%` : '—'} />
             <KpiTile label={t('kpi.uptime')} value={availability?.uptimeHours != null ? `${availability.uptimeHours.toFixed(0)}h` : '—'} />
             <KpiTile label={t('kpi.downtime')} value={availability?.downtimeHours != null ? `${availability.downtimeHours.toFixed(0)}h` : '—'} tone="warn" />
             {selectedSiteOee && (
@@ -165,13 +168,41 @@ export const ProductionMonitoringPage: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
-              <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
+                <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+              </div>
             </div>
 
             {pageItems.length === 0 ? (
               <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
                 {t('list.empty')}
               </div>
+            ) : viewMode === 'list' ? (
+              <ListTable
+                columns={[
+                  { label: t('listCol.machine') }, { label: t('listCol.connection') },
+                  { label: t('listCol.availability'), align: 'right' }, { label: t('listCol.oeeWeek'), align: 'right' },
+                  { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right' },
+                ]}
+                rows={pageItems}
+                rowKey={(m) => `${m.sourceSystem}/${m.externalId}`}
+                cells={(m) => {
+                  const oee = machineOee.get(`${m.sourceSystem}|${m.externalId}`)?.oee;
+                  const ready = m.readiness === 'ready';
+                  return [
+                    <span><span className="font-medium">{name(m.sourceSystem, m.externalId)}</span> <span className="text-slate-400">{m.externalId}</span></span>,
+                    <ConnectionBadge state={connectionOf(m.externalId)} />,
+                    // A ratio; and a reason in place of a number, as on the card.
+                    ready && m.availability != null ? `${(m.availability * 100).toFixed(0)}%`
+                      : <span className="text-slate-400">{m.reason ? t(`reason.${m.reason}`, { defaultValue: m.reason }) : '—'}</span>,
+                    oee?.readiness === 'ready' && oee.value != null ? `${(oee.value * 100).toFixed(0)}%` : '—',
+                    ready ? `${(m.uptimeHours ?? 0).toFixed(0)} h` : '—',
+                    ready ? `${(m.downtimeHours ?? 0).toFixed(0)} h` : '—',
+                  ];
+                }}
+                onOpen={(m) => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pageItems.map((m) => (
@@ -224,7 +255,8 @@ const ProductionCard: React.FC<{
 }> = ({ machine, name, oee, connection, onOpen }) => {
   const { t } = useTranslation('production');
   const style = READINESS_STYLE[machine.readiness];
-  const gaugeValue = machine.readiness === 'ready' ? machine.availability : null;
+  // availability is a 0–1 ratio; the gauge draws a percentage.
+  const gaugeValue = machine.readiness === 'ready' && machine.availability != null ? machine.availability * 100 : null;
   return (
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">

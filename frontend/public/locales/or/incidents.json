@@ -147,5 +147,14 @@
       "Investigating": "ତଦନ୍ତ ଚାଲିଛି",
       "Resolved": "ସମାଧାନିତ"
     }
+  },
+  "listCol": {
+    "machine": "ମେସିନ୍",
+    "severity": "ଗମ୍ଭୀରତା",
+    "status": "ସ୍ଥିତି",
+    "owner": "ମାଲିକ",
+    "ack": "ପ୍ରତିକ୍ରିୟା",
+    "resolve": "ସମାଧାନ",
+    "opened": "ଖୋଲା"
   }
 }

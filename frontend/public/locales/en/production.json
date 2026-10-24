@@ -118,5 +118,13 @@
     "loadAvailability": "Could not load availability.",
     "loadOee": "Could not load OEE.",
     "loadMachine": "Could not load this machine."
+  },
+  "listCol": {
+    "machine": "Machine",
+    "connection": "Connection",
+    "availability": "Availability",
+    "oeeWeek": "OEE this week",
+    "up": "Up",
+    "down": "Down"
   }
 }

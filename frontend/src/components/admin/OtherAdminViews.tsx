@@ -239,7 +239,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
           </div>
         )}
       </div>
-      {filteredItems.length > 0 && <TablePagination bare {...pager} />}
+      {filteredItems.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddIndustryTypeModal
         key={modalKey}
@@ -413,7 +413,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
           </div>
         )}
       </div>
-      {filteredItems.length > 0 && <TablePagination bare {...pager} />}
+      {filteredItems.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       {/* No delete here — the API only ever retires a site, since anything
           that once stood there (work orders, alerts) still needs it to exist. */}

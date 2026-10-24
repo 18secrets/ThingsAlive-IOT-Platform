@@ -91,5 +91,8 @@
     "saving": "सहेजा जा रहा है…",
     "saveCorrection": "सुधार सहेजें",
     "saveRecord": "रिकॉर्ड सहेजें"
+  },
+  "listCol": {
+    "machine": "मशीन"
   }
 }

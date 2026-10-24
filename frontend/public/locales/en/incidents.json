@@ -147,5 +147,14 @@
       "Investigating": "Investigating",
       "Resolved": "Resolved"
     }
+  },
+  "listCol": {
+    "machine": "Machine",
+    "severity": "Severity",
+    "status": "Status",
+    "owner": "Owner",
+    "ack": "Response",
+    "resolve": "Fix",
+    "opened": "Opened"
   }
 }

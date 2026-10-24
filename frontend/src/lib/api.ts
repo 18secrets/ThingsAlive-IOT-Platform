@@ -1254,6 +1254,8 @@ export interface ClassDiffEntry {
   slug: string;
   action: ClassDiffAction;
   countsBySheet: Record<string, number>;
+  /** Apply refuses a class carrying these unless acknowledgeWarnings is sent. */
+  warnings?: ('incomplete_class' | 'content_regression')[];
 }
 
 export interface RejectedImportRow {
@@ -1295,6 +1297,8 @@ export interface ClassApplyResult {
   action: ClassDiffAction;
   version: number;
   created: Record<string, number>;
+  /** Draft alert templates made from the signal sheet's limits. */
+  draftedAlertTemplates?: number;
 }
 
 export interface CatalogImportApplySummary {
@@ -1334,10 +1338,11 @@ export function apiGetCatalogImportDiff(
 
 export function apiApplyCatalogImport(
   id: string,
+  acknowledgeWarnings = false,
 ): Promise<CatalogImportApplySummary> {
   return authFetch(
     `/platform/catalog/imports/${encodeURIComponent(id)}/apply`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ acknowledgeWarnings }) },
   );
 }
 
@@ -1870,6 +1875,8 @@ export interface DiscoveryCandidate {
   imei: string | null;
   sensorName: string | null;
   sensorId: string | null;
+  /** The open binding for this signal from this logger, if any. */
+  bindingStatus: 'proposed' | 'active' | null;
 }
 
 export interface DiscoveryResult {

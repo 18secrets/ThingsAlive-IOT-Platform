@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { Modal } from '../components/common/Modal';
 import {
   ApiError, EquipmentProfile, INCIDENT_SEVERITIES, IncidentDetail, IncidentMachineView,
@@ -35,6 +37,7 @@ type StatusFilter = 'live' | IncidentStatus;
 
 export const IncidentManagementPage: React.FC = () => {
   const { t } = useTranslation('incidents');
+  const [viewMode, setViewMode] = useViewMode('incident-management');
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [records, setRecords] = useState<IncidentRecord[]>([]);
   const [view, setView] = useState<IncidentMachineView[]>([]);
@@ -141,6 +144,7 @@ export const IncidentManagementPage: React.FC = () => {
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <EquipmentFilters
+        showConnection={false}
           scope={scope}
           onChange={setScope}
           plants={plants}
@@ -171,6 +175,10 @@ export const IncidentManagementPage: React.FC = () => {
         <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" />
       </div>
 
+      <div className="flex justify-end">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+
       {loading ? (
         <p className="text-sm text-slate-500">{t('page.loading')}</p>
       ) : visible.length === 0 ? (
@@ -178,6 +186,28 @@ export const IncidentManagementPage: React.FC = () => {
           <Siren className="w-6 h-6" />
           {t('page.empty')}
         </div>
+      ) : viewMode === 'list' ? (
+        <ListTable
+          columns={[
+            { label: t('listCol.machine') }, { label: t('listCol.severity') }, { label: t('listCol.status') },
+            { label: t('listCol.owner') }, { label: t('listCol.ack') }, { label: t('listCol.resolve') }, { label: t('listCol.opened') },
+          ]}
+          rows={visible}
+          rowKey={(r) => r.id}
+          cells={(r) => [
+            <span className="font-medium">{machineName(r.machine)}</span>,
+            <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>,
+            <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>,
+            <span>
+              {personName(r.ownerUserId) ?? <span className="text-slate-400">{t('page.unassigned')}</span>}
+              {r.escalationLevel > 0 && <span className="text-rose-500 font-semibold"> · {t('page.escalated', { level: r.escalationLevel })}</span>}
+            </span>,
+            <Chip tone={SLA_TONE[r.sla.acknowledge.state]}>{t(`sla.state.${r.sla.acknowledge.state}`)}</Chip>,
+            <Chip tone={SLA_TONE[r.sla.resolve.state]}>{t(`sla.state.${r.sla.resolve.state}`)}</Chip>,
+            <span className="text-slate-500 whitespace-nowrap">{new Date(r.openedAt).toLocaleString()}</span>,
+          ]}
+          onOpen={(r) => setOpenId(r.id)}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visible.map((r) => (

@@ -25,9 +25,9 @@ export const MachineLinks: React.FC<{
   const links: { view: MachineView; label: string; to: string }[] = [
     { view: 'detail', label: t('thingLive.equipmentDetail'), to: `/dashboard/${id}` },
     { view: 'equipment', label: t('thingLive.equipmentPage'), to: `/admin/equipment/${id}/page` },
-    { view: 'care', label: 'ThingsCare', to: `/things-care/${id}` },
+    { view: 'care', label: t('translation:sidebar.thingsCare'), to: `/things-care/${id}` },
     { view: 'production', label: t('thingLive.production'), to: `/production-monitoring/${id}` },
-    { view: 'shield', label: 'ThingsShield', to: `/things-shield/${id}` },
+    { view: 'shield', label: t('translation:sidebar.thingsShield'), to: `/things-shield/${id}` },
   ];
 
   const tone = inverse

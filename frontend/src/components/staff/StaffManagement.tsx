@@ -261,7 +261,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           </div>
         )}
       </div>
-      {filtered.length > 0 && <TablePagination bare {...pager} />}
+      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
 

@@ -104,5 +104,15 @@
     "by": "by {{name}}",
     "to": "to {{name}}",
     "from": "from {{name}}"
+  },
+  "listCol": {
+    "reference": "Reference",
+    "title": "Task",
+    "machine": "Machine",
+    "status": "Status",
+    "assignee": "Assigned to",
+    "priority": "Priority",
+    "due": "Due",
+    "actions": "Actions"
   }
 }
