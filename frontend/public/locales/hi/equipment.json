@@ -308,6 +308,8 @@
     "proposing": "प्रस्तावित हो रहा है…",
     "activate": "सक्रिय करें",
     "activating": "सक्रिय हो रहा है…",
+    "statusActive": "सक्रिय",
+    "statusProposed": "प्रस्तावित",
     "pause": "रोकें",
     "pausing": "रोका जा रहा है…",
     "resume": "फिर शुरू करें",

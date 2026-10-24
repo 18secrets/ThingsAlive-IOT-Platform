@@ -1870,6 +1870,8 @@ export interface DiscoveryCandidate {
   imei: string | null;
   sensorName: string | null;
   sensorId: string | null;
+  /** The open binding for this signal from this logger, if any. */
+  bindingStatus: 'proposed' | 'active' | null;
 }
 
 export interface DiscoveryResult {

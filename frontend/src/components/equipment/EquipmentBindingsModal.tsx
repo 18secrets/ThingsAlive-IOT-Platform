@@ -298,20 +298,32 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
+          {/* The binding's state, so a Propose or Activate that worked shows it did
+              (TC_129); an active one needs neither button again. */}
+          {candidate.bindingStatus === 'active' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900">
+              <CheckCircle2 className="w-3 h-3" /> {t('bindings.statusActive')}
+            </span>
+          )}
+          {candidate.bindingStatus === 'proposed' && (
+            <span className="px-2 py-0.5 rounded-md border text-[11px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900">
+              {t('bindings.statusProposed')}
+            </span>
+          )}
+          {!candidate.bindingStatus && <button
             onClick={() => handleBind('propose', candidate, discoveredBy)}
             disabled={busyKey === proposeKey || !candidate.imei}
             className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-sky-300 hover:text-sky-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busyKey === proposeKey ? t('bindings.proposing') : t('bindings.propose')}
-          </button>
-          <button
+          </button>}
+          {candidate.bindingStatus !== 'active' && <button
             onClick={() => handleBind('activate', candidate, discoveredBy)}
             disabled={busyKey === activateKey || !candidate.imei}
             className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busyKey === activateKey ? t('bindings.activating') : t('bindings.activate')}
-          </button>
+          </button>}
         </div>
       </li>
     );
