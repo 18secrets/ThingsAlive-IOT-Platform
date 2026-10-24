@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   SensorItem,
   ToolMappingItem,
@@ -135,6 +135,7 @@ function AdminIndexRedirect() {
 function AppData() {
   const { authUser, restoringSession, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Real accounts (Clients admin screen) — fetched from the API, never
   // cached locally. Everything below this is still mock data.
@@ -675,6 +676,41 @@ function AppData() {
       setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
     }
   };
+
+  // Every list below is fetched once at sign-in, so a tab showed whatever was true
+  // then until the next sign-in, however long ago that was (TC_134). Opening an admin
+  // page or tab now fetches that page's lists again. Per role, because each role can
+  // read only its own: a master-admin list asked for by a client is a 403, not data.
+  useEffect(() => {
+    if (restoringSession || !authUser) return;
+    const master = authUser.role === 'master-admin';
+    const path = location.pathname;
+    const sub = path.startsWith('/admin/') ? path.split('/')[2] : path.split('/')[1];
+    const forMaster: Record<string, (() => Promise<void>)[]> = {
+      industry: [refreshIndustryTypes],
+      sensor: [() => refreshSensorCatalog()],
+      category: [refreshEquipmentClasses, refreshScenarios, refreshAlertTemplates, refreshCausalChains],
+      'tool-mapping': [refreshToolMappings, refreshIndustryTypes, () => refreshSensorCatalog()],
+      'signal-alias': [refreshSignalAliases],
+      'signal-state': [refreshSignalStates],
+      'named-formula': [refreshNamedFormulas],
+      'catalog-import': [refreshCatalogImports, refreshEquipmentClasses],
+      clients: [refreshAccounts, refreshEntitlements, refreshEquipmentClasses],
+      staff: [refreshPlatformStaff],
+      devices: [refreshDevicePool, refreshAccounts, refreshToolMappings],
+      equipment: [refreshAllEquipment, refreshAccounts],
+    };
+    const forClient: Record<string, (() => Promise<void>)[]> = {
+      plant: [refreshPlants],
+      devices: [refreshMyDevices, refreshEquipment],
+      equipment: [refreshEquipment, refreshMyDevices, refreshPlants],
+      'client-users': [refreshTenantUsers, refreshRoles, refreshPlants],
+      roles: [refreshRoles],
+    };
+    // Each refresher records its own failure on its own screen; none may stop another.
+    void Promise.allSettled(((master ? forMaster : forClient)[sub] ?? []).map((refresh) => refresh()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, restoringSession, authUser?.role]);
 
   // Sensors and their categories — reference data both roles read
   // (`device-catalog.read`, granted to every tenant role). Tool mappings and the
