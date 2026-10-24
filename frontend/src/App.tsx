@@ -101,7 +101,6 @@ import {
   TenantRole, RoleInput, RolePatchInput, TenantUser, InviteUserInput, SetUserAccessInput,
 } from './lib/api';
 
-
 // A real account, as the existing ClientAccount-shaped UI displays it.
 // Contact info is the account's ceo-manager, not a separate "contact person" —
 // the API has no such concept, only the super admin it actually created. There
@@ -238,26 +237,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    // Wait for the session-resume check: `authUser` can be a cached, optimistic
-    // value from sessionStorage before the real access token is confirmed to
-    // still work, and firing early sends an authenticated call with no token
-    // at all — surfaced to the user as a raw "Bearer token required." error.
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const accounts = await apiListAccounts();
-        if (!live) return;
-        setClients(accounts.map(accountToClient));
-        setAccountsError(undefined);
-      } catch (err) {
-        if (live) setAccountsError(err instanceof ApiError ? err.message : 'Could not load accounts.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshPlants = async () => {
     try {
       setRealPlants(await apiListPlants());
@@ -266,22 +245,6 @@ function AppData() {
       setPlantsError(err instanceof ApiError ? err.message : 'Could not load plants.');
     }
   };
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'client') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListPlants();
-        if (!live) return;
-        setRealPlants(list);
-        setPlantsError(undefined);
-      } catch (err) {
-        if (live) setPlantsError(err instanceof ApiError ? err.message : 'Could not load plants.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
 
   const refreshRoles = async () => {
     try {
@@ -301,26 +264,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'client') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListRoles();
-        if (live) { setTenantRoles(list); setRolesError(undefined); }
-      } catch (err) {
-        if (live) setRolesError(err instanceof ApiError ? err.message : 'Could not load roles.');
-      }
-      try {
-        const list = await apiListTenantUsers();
-        if (live) { setTenantUsers(list); setUsersError(undefined); }
-      } catch (err) {
-        if (live) setUsersError(err instanceof ApiError ? err.message : 'Could not load users.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshEquipmentClasses = async () => {
     try {
       setEquipmentClasses(await apiListEquipmentClasses());
@@ -329,26 +272,6 @@ function AppData() {
       setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
     }
   };
-
-  useEffect(() => {
-    // Wait for the session-resume check: `authUser` can be a cached, optimistic
-    // value from sessionStorage before the real access token is confirmed to
-    // still work, and firing early sends an authenticated call with no token
-    // at all — surfaced to the user as a raw "Bearer token required." error.
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListEquipmentClasses();
-        if (!live) return;
-        setEquipmentClasses(list);
-        setEquipmentClassesError(undefined);
-      } catch (err) {
-        if (live) setEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
 
   const refreshNamedFormulas = async () => {
     try {
@@ -359,22 +282,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListNamedFormulas();
-        if (!live) return;
-        setNamedFormulas(list);
-        setNamedFormulasError(undefined);
-      } catch (err) {
-        if (live) setNamedFormulasError(err instanceof ApiError ? err.message : 'Could not load named formulas.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshEntitlements = async () => {
     try {
       setEntitlements(await apiListEntitlements());
@@ -383,22 +290,6 @@ function AppData() {
       setEntitlementsError(err instanceof ApiError ? err.message : 'Could not load entitlements.');
     }
   };
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListEntitlements();
-        if (!live) return;
-        setEntitlements(list);
-        setEntitlementsError(undefined);
-      } catch (err) {
-        if (live) setEntitlementsError(err instanceof ApiError ? err.message : 'Could not load entitlements.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
 
   const refreshEquipment = async () => {
     try {
@@ -418,54 +309,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'client') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListEquipment();
-        if (!live) return;
-        setRealEquipment(list);
-        setRealEquipmentError(undefined);
-      } catch (err) {
-        if (live) setRealEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListAllEquipment();
-        if (!live) return;
-        setAllEquipment(list);
-        setAllEquipmentError(undefined);
-      } catch (err) {
-        if (live) setAllEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'client') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListMyEquipmentClasses();
-        if (!live) return;
-        setMyEquipmentClasses(list);
-        setMyEquipmentClassesError(undefined);
-      } catch (err) {
-        if (live) setMyEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshMyDevices = async () => {
     try {
       setMyDevices(await apiListMyDevices());
@@ -475,22 +318,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'client') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListMyDevices();
-        if (!live) return;
-        setMyDevices(list);
-        setMyDevicesError(undefined);
-      } catch (err) {
-        if (live) setMyDevicesError(err instanceof ApiError ? err.message : 'Could not load devices.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshScenarios = async () => {
     try {
       setScenarios(await apiListAuthoringScenarios());
@@ -499,22 +326,6 @@ function AppData() {
       setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
     }
   };
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListAuthoringScenarios();
-        if (!live) return;
-        setScenarios(list);
-        setScenariosError(undefined);
-      } catch (err) {
-        if (live) setScenariosError(err instanceof ApiError ? err.message : 'Could not load prediction scenarios.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
 
   const refreshAlertTemplates = async () => {
     try {
@@ -534,31 +345,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListAuthoringAlertTemplates();
-        if (!live) return;
-        setAlertTemplates(list);
-        setAlertTemplatesError(undefined);
-      } catch (err) {
-        if (live) setAlertTemplatesError(err instanceof ApiError ? err.message : 'Could not load alert rule templates.');
-      }
-
-      try {
-        const chains = await apiListAuthoringCausalChains();
-        if (!live) return;
-        setCausalChains(chains);
-        setCausalChainsError(undefined);
-      } catch (err) {
-        if (live) setCausalChainsError(err instanceof ApiError ? err.message : 'Could not load causal chains.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshCatalogImports = async () => {
     try {
       setCatalogImportBatches(await apiListCatalogImports());
@@ -568,22 +354,6 @@ function AppData() {
     }
   };
 
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListCatalogImports();
-        if (!live) return;
-        setCatalogImportBatches(list);
-        setCatalogImportBatchesError(undefined);
-      } catch (err) {
-        if (live) setCatalogImportBatchesError(err instanceof ApiError ? err.message : 'Could not load recent uploads.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
   const refreshPlatformStaff = async () => {
     try {
       setPlatformStaff(await apiListPlatformStaff());
@@ -592,22 +362,6 @@ function AppData() {
       setPlatformStaffError(err instanceof ApiError ? err.message : 'Could not load staff.');
     }
   };
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const list = await apiListPlatformStaff();
-        if (!live) return;
-        setPlatformStaff(list);
-        setPlatformStaffError(undefined);
-      } catch (err) {
-        if (live) setPlatformStaffError(err instanceof ApiError ? err.message : 'Could not load staff.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
 
   const refreshSensorCatalog = async (includeRetired = showRetiredSensors) => {
     try {
@@ -668,6 +422,15 @@ function AppData() {
     }
   };
 
+  const refreshMyEquipmentClasses = async () => {
+    try {
+      setMyEquipmentClasses(await apiListMyEquipmentClasses());
+      setMyEquipmentClassesError(undefined);
+    } catch (err) {
+      setMyEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
+    }
+  };
+
   const refreshDevicePool = async () => {
     try {
       setDevicePool(await apiListDevicePool());
@@ -677,23 +440,30 @@ function AppData() {
     }
   };
 
-  // Every list below is fetched once at sign-in, so a tab showed whatever was true
-  // then until the next sign-in, however long ago that was (TC_134). Opening an admin
-  // page or tab now fetches that page's lists again. Per role, because each role can
-  // read only its own: a master-admin list asked for by a client is a 403, not data.
+  // Each page's lists are fetched when that page opens, and nothing at sign-in (TC_134).
+  // Fetching every admin list at sign-in — 18 calls for Things Alive, 8 for a client —
+  // slowed the first screen for pages most people never opened that visit, and left
+  // each tab showing what was true at sign-in until the next one. Per role, because
+  // each role can read only its own lists: a master-admin list asked for by a client
+  // is a 403, not data. A page that fetches for itself (the machine and site pages,
+  // the Telemetry Archive) is left to do so.
   useEffect(() => {
     if (restoringSession || !authUser) return;
     const master = authUser.role === 'master-admin';
     const path = location.pathname;
+    if (/^\/admin\/(equipment|sites)\/.+\/page$/.test(path)) return;
     const sub = path.startsWith('/admin/') ? path.split('/')[2] : path.split('/')[1];
+    const sensors = () => refreshSensorCatalog();
     const forMaster: Record<string, (() => Promise<void>)[]> = {
+      dashboard: [refreshAccounts],
+      settings: [refreshAccounts],
       industry: [refreshIndustryTypes],
-      sensor: [() => refreshSensorCatalog()],
-      category: [refreshEquipmentClasses, refreshScenarios, refreshAlertTemplates, refreshCausalChains],
-      'tool-mapping': [refreshToolMappings, refreshIndustryTypes, () => refreshSensorCatalog()],
+      sensor: [sensors],
+      category: [refreshEquipmentClasses, refreshScenarios, refreshAlertTemplates, refreshCausalChains, sensors],
+      'tool-mapping': [refreshToolMappings, refreshIndustryTypes, sensors],
       'signal-alias': [refreshSignalAliases],
       'signal-state': [refreshSignalStates],
-      'named-formula': [refreshNamedFormulas],
+      'named-formula': [refreshNamedFormulas, refreshEquipmentClasses],
       'catalog-import': [refreshCatalogImports, refreshEquipmentClasses],
       clients: [refreshAccounts, refreshEntitlements, refreshEquipmentClasses],
       staff: [refreshPlatformStaff],
@@ -703,79 +473,14 @@ function AppData() {
     const forClient: Record<string, (() => Promise<void>)[]> = {
       plant: [refreshPlants],
       devices: [refreshMyDevices, refreshEquipment],
-      equipment: [refreshEquipment, refreshMyDevices, refreshPlants],
-      'client-users': [refreshTenantUsers, refreshRoles, refreshPlants],
-      roles: [refreshRoles],
+      equipment: [refreshEquipment, refreshMyDevices, refreshPlants, refreshMyEquipmentClasses, sensors],
+      'client-users': [refreshTenantUsers, refreshRoles, refreshPlants, refreshEquipment],
+      roles: [refreshRoles, refreshTenantUsers],
     };
     // Each refresher records its own failure on its own screen; none may stop another.
     void Promise.allSettled(((master ? forMaster : forClient)[sub] ?? []).map((refresh) => refresh()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, restoringSession, authUser?.role]);
-
-  // Sensors and their categories — reference data both roles read
-  // (`device-catalog.read`, granted to every tenant role). Tool mappings and the
-  // device pool stay master-admin only below — clients have no capability for either.
-  useEffect(() => {
-    // Wait for the session-resume check: `authUser` can be a cached, optimistic
-    // value from sessionStorage before the real access token is confirmed to
-    // still work, and firing early sends an authenticated call with no token
-    // at all — surfaced to the user as a raw "Bearer token required." error.
-    if (restoringSession || !authUser) return;
-    let live = true;
-    (async () => {
-      const [cats, list] = await Promise.all([apiListSensorCategories(), apiListSensors()])
-        .catch((err) => {
-          if (live) setSensorsError(err instanceof ApiError ? err.message : 'Could not load sensors.');
-          return [null, null] as const;
-        });
-      if (live && cats && list) { setSensorCategories(cats); setRealSensors(list); setSensorsError(undefined); }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
-  useEffect(() => {
-    if (restoringSession || authUser?.role !== 'master-admin') return;
-    let live = true;
-    (async () => {
-      try {
-        const mappings = await apiListToolMappings();
-        if (live) { setRealToolMappings(mappings); setToolMappingsError(undefined); }
-      } catch (err) {
-        if (live) setToolMappingsError(err instanceof ApiError ? err.message : 'Could not load tool mappings.');
-      }
-
-      try {
-        const pool = await apiListDevicePool();
-        if (live) { setDevicePool(pool); setDevicePoolError(undefined); }
-      } catch (err) {
-        if (live) setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
-      }
-
-      try {
-        const [types, unmatched] = await Promise.all([apiListIndustryTypes(), apiListUnmatchedIndustries()]);
-        if (live) { setIndustryTypes(types); setUnmatchedIndustries(unmatched); setIndustryTypesError(undefined); }
-      } catch (err) {
-        if (live) setIndustryTypesError(err instanceof ApiError ? err.message : 'Could not load industry types.');
-      }
-
-      try {
-        const aliases = await apiListSignalAliases();
-        if (live) { setSignalAliases(aliases); setSignalAliasesError(undefined); }
-      } catch (err) {
-        if (live) setSignalAliasesError(err instanceof ApiError ? err.message : 'Could not load signal aliases.');
-      }
-
-      try {
-        const vocab = await apiListSignalStates();
-        if (live) { setSignalStates(vocab); setSignalStatesError(undefined); }
-      } catch (err) {
-        if (live) setSignalStatesError(err instanceof ApiError ? err.message : 'Could not load signal states.');
-      }
-    })();
-    return () => { live = false; };
-  }, [authUser, restoringSession]);
-
-
 
   // Self-service password change from Settings, for either role — POST
   // /me/change-password, for real. Returns an error message on failure, or null
