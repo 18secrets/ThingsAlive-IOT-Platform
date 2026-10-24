@@ -85,7 +85,7 @@ export const ThingDetailLivePage: React.FC = () => {
               : <Chip tone="slate">{t('thingLive.noLoggerHealth')}</Chip>)}
             <Chip tone="slate">{t('thingLive.oeeThisWeek', { value: oee.state === 'ok' && oee.data.oee.readiness === 'ready' ? pct(oee.data.oee.value) : '—' })}</Chip>
             <Chip tone="slate">
-              {t('thingLive.availability7d', { value: availability.state === 'ok' && availability.data.availability != null ? `${availability.data.availability.toFixed(0)}%` : '—' })}
+              {t('thingLive.availability7d', { value: availability.state === 'ok' && availability.data.availability != null ? `${(availability.data.availability * 100).toFixed(0)}%` : '—' })}
             </Chip>
           </div>
           {oee.state === 'ok' && oee.data.oee.readiness !== 'ready' && (
