@@ -118,5 +118,13 @@
     "loadAvailability": "లభ్యతను లోడ్ చేయలేకపోయాం.",
     "loadOee": "OEE లోడ్ చేయలేకపోయాం.",
     "loadMachine": "ఈ యంత్రాన్ని లోడ్ చేయలేకపోయాం."
+  },
+  "listCol": {
+    "machine": "యంత్రం",
+    "connection": "కనెక్షన్",
+    "availability": "లభ్యత",
+    "oeeWeek": "ఈ వారం OEE",
+    "up": "నడిచిన",
+    "down": "ఆగిన"
   }
 }

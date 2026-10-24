@@ -199,5 +199,13 @@
     },
     "missingBinding": "{{signal}}: no sensor bound on this machine",
     "missingParameter": "Cost parameter not set: {{name}}"
+  },
+  "listCol": {
+    "machine": "Machine",
+    "connection": "Connection",
+    "severity": "Severity",
+    "risk": "Risk",
+    "confidence": "Confidence",
+    "abnormal": "Signals outside baseline"
   }
 }

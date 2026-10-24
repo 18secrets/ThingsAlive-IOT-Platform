@@ -91,5 +91,8 @@
     "saving": "Saving…",
     "saveCorrection": "Save correction",
     "saveRecord": "Save record"
+  },
+  "listCol": {
+    "machine": "Machine"
   }
 }

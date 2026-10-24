@@ -101,5 +101,9 @@
     "rowsPerPage": "Rows per page:",
     "previous": "Previous page",
     "next": "Next page"
+  },
+  "viewMode": {
+    "cards": "Card view",
+    "list": "List view"
   }
 }

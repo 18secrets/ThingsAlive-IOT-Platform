@@ -7,6 +7,8 @@ import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   ApiError, EquipmentProfile, FleetLinkRow, Plant, Prediction, PredictionSeverity,
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
@@ -35,6 +37,7 @@ function worstOf(predictions: Prediction[]): Prediction | null {
 
 export const ThingsCarePage: React.FC = () => {
   const { t } = useTranslation('care');
+  const [viewMode, setViewMode] = useViewMode('things-care');
   usePageHeader({ title: 'ThingsCare', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -150,15 +153,37 @@ export const ThingsCarePage: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
-              <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
+                <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+              </div>
             </div>
 
             {pageItems.length === 0 ? (
               <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
                 {t('list.noMatch')}
               </div>
+            ) : viewMode === 'list' ? (
+              <ListTable
+                columns={[
+                  { label: t('listCol.machine') }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
+                  { label: t('listCol.risk'), align: 'right' }, { label: t('listCol.confidence') },
+                  { label: t('listCol.abnormal'), align: 'right' },
+                ]}
+                rows={pageItems}
+                rowKey={({ equipment: e }) => `${e.sourceSystem}/${e.externalId}`}
+                cells={({ equipment: e, worst }) => [
+                  <span><span className="font-medium">{e.name ?? e.externalId}</span> <span className="text-slate-400">{e.externalId}</span></span>,
+                  <ConnectionBadge state={connectionOf(e.externalId)} />,
+                  worst ? t(`severity.${worst.severity}`, { defaultValue: worst.severity }) : t('card.noScenario'),
+                  worst ? worst.riskScore : '—',
+                  worst ? t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) : t('card.na'),
+                  worst ? worst.abnormalCount : '—',
+                ]}
+                onOpen={({ equipment: e }) => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pageItems.map(({ equipment: e, worst }) => (

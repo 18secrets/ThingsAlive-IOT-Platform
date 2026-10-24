@@ -104,5 +104,15 @@
     "by": "{{name}} द्वारा",
     "to": "{{name}} को",
     "from": "{{name}} से"
+  },
+  "listCol": {
+    "reference": "संदर्भ",
+    "title": "कार्य",
+    "machine": "मशीन",
+    "status": "स्थिति",
+    "assignee": "सौंपा गया",
+    "priority": "प्राथमिकता",
+    "due": "नियत तिथि",
+    "actions": "कार्रवाई"
   }
 }

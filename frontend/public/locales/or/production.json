@@ -118,5 +118,13 @@
     "loadAvailability": "ଉପଲବ୍ଧତା ଲୋଡ୍ କରିହେଲା ନାହିଁ।",
     "loadOee": "OEE ଲୋଡ୍ କରିହେଲା ନାହିଁ।",
     "loadMachine": "ଏହି ମେସିନ୍ ଲୋଡ୍ କରିହେଲା ନାହିଁ।"
+  },
+  "listCol": {
+    "machine": "ମେସିନ୍",
+    "connection": "ସଂଯୋଗ",
+    "availability": "ଉପଲବ୍ଧତା",
+    "oeeWeek": "ଏହି ସପ୍ତାହ OEE",
+    "up": "ଚାଲୁ",
+    "down": "ବନ୍ଦ"
   }
 }

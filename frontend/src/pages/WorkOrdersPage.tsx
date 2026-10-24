@@ -6,6 +6,8 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus,
@@ -29,6 +31,7 @@ const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'
 
 export const WorkOrdersPage: React.FC = () => {
   const { t } = useTranslation('workOrders');
+  const [viewMode, setViewMode] = useViewMode('work-orders');
   usePageHeader({ title: t('translation:pages.workOrders.title'), subtitle: t('translation:pages.workOrders.subtitle') });
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -180,6 +183,45 @@ export const WorkOrdersPage: React.FC = () => {
     }
   }
 
+  // One set of buttons for both views: a job is worked the same way from a card or a row.
+  const renderActions = (o: WorkOrder) => (
+    <>
+      {(o.status === 'created' || o.status === 'in-progress') && (
+        <>
+          {o.status === 'created' && (
+            <button disabled={busyId === o.id} onClick={() => act(o, 'start')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+              {t('actions.start')}
+            </button>
+          )}
+          <button disabled={busyId === o.id} onClick={() => act(o, 'complete')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
+            {t('actions.complete')}
+          </button>
+          <button disabled={busyId === o.id} onClick={() => act(o, 'cancel')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-rose-300 disabled:opacity-50 cursor-pointer">
+            {t('actions.cancel')}
+          </button>
+        </>
+      )}
+      {(o.status === 'completed' || o.status === 'cancelled') && (
+        <button disabled={busyId === o.id} onClick={() => act(o, 'reopen')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+          {t('actions.reopen')}
+        </button>
+      )}
+      {(o.status === 'created' || o.status === 'in-progress') && (
+        <>
+          <button disabled={busyId === o.id} onClick={() => setEditing(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+            {t('actions.edit')}
+          </button>
+          <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+            {o.assignedToUserId ? t('actions.reassign') : t('actions.assign')}
+          </button>
+        </>
+      )}
+      <button onClick={() => setHistoryOf(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+        {t('actions.history')}
+      </button>
+    </>
+  );
+
   return (
     <div id="work-orders-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
@@ -254,6 +296,10 @@ export const WorkOrdersPage: React.FC = () => {
         />
       </div>
 
+      <div className="flex justify-end">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+
       {loading ? (
         <p className="text-sm text-slate-500">{t('loading')}</p>
       ) : visible.length === 0 ? (
@@ -261,6 +307,28 @@ export const WorkOrdersPage: React.FC = () => {
           <ClipboardList className="w-6 h-6" />
           {t('empty')}
         </div>
+      ) : viewMode === 'list' ? (
+        <ListTable
+          columns={[
+            { label: t('listCol.reference') }, { label: t('listCol.title') }, { label: t('listCol.machine') },
+            { label: t('listCol.status') }, { label: t('listCol.assignee') }, { label: t('listCol.priority') },
+            { label: t('listCol.due') }, { label: t('listCol.actions') },
+          ]}
+          rows={visible}
+          rowKey={(o) => o.id}
+          cells={(o) => [
+            <span className="font-mono text-slate-400">{o.reference}</span>,
+            <span className="font-medium">{o.title}</span>,
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{equipmentName(o.sourceSystem, o.externalId)} <ConnectionBadge state={connectionOf(o.externalId)} /></span>,
+            <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+              {t(`status.${o.status}`, { defaultValue: o.status })}
+            </Chip>,
+            o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
+            <span className="capitalize">{t(`priority.${o.priority}`, { defaultValue: o.priority })}</span>,
+            o.dueAt ? new Date(o.dueAt).toLocaleDateString() : '—',
+            <div className="flex flex-wrap items-center gap-1.5">{renderActions(o)}</div>,
+          ]}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visible.map((o) => (
@@ -289,39 +357,7 @@ export const WorkOrdersPage: React.FC = () => {
                 {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}
               </small>
               <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {(o.status === 'created' || o.status === 'in-progress') && (
-                  <>
-                    {o.status === 'created' && (
-                      <button disabled={busyId === o.id} onClick={() => act(o, 'start')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                        {t('actions.start')}
-                      </button>
-                    )}
-                    <button disabled={busyId === o.id} onClick={() => act(o, 'complete')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
-                      {t('actions.complete')}
-                    </button>
-                    <button disabled={busyId === o.id} onClick={() => act(o, 'cancel')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-rose-300 disabled:opacity-50 cursor-pointer">
-                      {t('actions.cancel')}
-                    </button>
-                  </>
-                )}
-                {(o.status === 'completed' || o.status === 'cancelled') && (
-                  <button disabled={busyId === o.id} onClick={() => act(o, 'reopen')} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                    {t('actions.reopen')}
-                  </button>
-                )}
-                {(o.status === 'created' || o.status === 'in-progress') && (
-                  <>
-                    <button disabled={busyId === o.id} onClick={() => setEditing(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                      {t('actions.edit')}
-                    </button>
-                    <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                      {o.assignedToUserId ? t('actions.reassign') : t('actions.assign')}
-                    </button>
-                  </>
-                )}
-                <button onClick={() => setHistoryOf(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                  {t('actions.history')}
-                </button>
+                {renderActions(o)}
               </div>
             </div>
           ))}

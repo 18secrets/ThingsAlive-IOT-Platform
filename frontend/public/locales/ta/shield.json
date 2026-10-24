@@ -91,5 +91,8 @@
     "saving": "சேமிக்கிறது…",
     "saveCorrection": "திருத்தத்தைச் சேமி",
     "saveRecord": "பதிவைச் சேமி"
+  },
+  "listCol": {
+    "machine": "இயந்திரம்"
   }
 }

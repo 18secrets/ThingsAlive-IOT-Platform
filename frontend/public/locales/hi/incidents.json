@@ -147,5 +147,14 @@
       "Investigating": "जाँच जारी",
       "Resolved": "सुलझी"
     }
+  },
+  "listCol": {
+    "machine": "मशीन",
+    "severity": "गंभीरता",
+    "status": "स्थिति",
+    "owner": "स्वामी",
+    "ack": "प्रतिक्रिया",
+    "resolve": "समाधान",
+    "opened": "खुला"
   }
 }

@@ -118,5 +118,13 @@
     "loadAvailability": "उपलब्धता लोड नहीं हो सकी।",
     "loadOee": "OEE लोड नहीं हो सका।",
     "loadMachine": "यह मशीन लोड नहीं हो सकी।"
+  },
+  "listCol": {
+    "machine": "मशीन",
+    "connection": "कनेक्शन",
+    "availability": "उपलब्धता",
+    "oeeWeek": "इस सप्ताह OEE",
+    "up": "चालू",
+    "down": "बंद"
   }
 }

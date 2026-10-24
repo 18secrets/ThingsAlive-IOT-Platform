@@ -199,5 +199,13 @@
     },
     "missingBinding": "{{signal}}: ଏହି ମେସିନରେ କୌଣସି ସେନ୍ସର୍ ଯୋଡ଼ା ନାହିଁ",
     "missingParameter": "ଖର୍ଚ୍ଚ ପାରାମିଟର ସେଟ୍ ହୋଇନାହିଁ: {{name}}"
+  },
+  "listCol": {
+    "machine": "ମେସିନ୍",
+    "connection": "ସଂଯୋଗ",
+    "severity": "ଗମ୍ଭୀରତା",
+    "risk": "ବିପଦ",
+    "confidence": "ବିଶ୍ୱାସ",
+    "abnormal": "ବେସଲାଇନ ବାହାରେ ସିଗନାଲ"
   }
 }
