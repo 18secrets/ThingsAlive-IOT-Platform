@@ -8,7 +8,9 @@ import React from 'react';
  * cover more, but would be a new dependency for a chat bubble.
  */
 
-const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
+// Underscores mark emphasis only at word edges, as in CommonMark: signal names such as
+// engine_coolant_temperature are snake_case, and read as "engine*coolant*temperature".
+const INLINE = /(\*\*[^*]+\*\*|(?<![A-Za-z0-9])__[^_]+__(?![A-Za-z0-9])|`[^`]+`|\*[^*\s][^*]*\*|(?<![A-Za-z0-9])_[^_\s][^_]*_(?![A-Za-z0-9]))/g;
 
 function inline(text: string, key: string): React.ReactNode[] {
   return text.split(INLINE).filter(Boolean).map((part, i) => {
