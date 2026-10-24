@@ -1297,6 +1297,8 @@ export interface ClassApplyResult {
   action: ClassDiffAction;
   version: number;
   created: Record<string, number>;
+  /** Draft alert templates made from the signal sheet's limits. */
+  draftedAlertTemplates?: number;
 }
 
 export interface CatalogImportApplySummary {

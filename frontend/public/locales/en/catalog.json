@@ -545,7 +545,9 @@
       "incomplete_class": "some of its signal rows were rejected, so the new version would be missing signals",
       "content_regression": "the new version would have less content than the published one"
     },
-    "ackWarnings": "I have read these warnings — apply anyway"
+    "ackWarnings": "I have read these warnings — apply anyway",
+    "draftedAlerts_one": "{{count}} draft alert rule was made from the signal limits of #{{slug}}. Review and publish it on the class's Alert Rules tab.",
+    "draftedAlerts_other": "{{count}} draft alert rules were made from the signal limits of #{{slug}}. Review and publish them on the class's Alert Rules tab."
   },
   "model": {
     "title": "3-D model",

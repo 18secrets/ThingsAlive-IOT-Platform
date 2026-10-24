@@ -511,6 +511,13 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                         </span>
                       </div>
                     ))}
+                    {/* The signal sheet's limits, now drafts on the class's Alert Rules tab
+                        (TC_116) — said here, or nobody knows to review and publish them. */}
+                    {Object.entries(applySummary.classes).filter(([, r]) => r.draftedAlertTemplates).map(([slug, r]) => (
+                      <p key={`${slug}-alerts`} className="text-xs text-sky-700 dark:text-sky-400">
+                        {t('import.draftedAlerts', { count: r.draftedAlertTemplates, slug })}
+                      </p>
+                    ))}
                   </div>
                   <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {applySummary.sensorCapabilities.parametersAdded
