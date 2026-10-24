@@ -97,6 +97,7 @@ export const LivePredictionsPage: React.FC = () => {
       )}
 
       <EquipmentFilters
+        showConnection={false}
         scope={scope}
         onChange={setScope}
         plants={plants}

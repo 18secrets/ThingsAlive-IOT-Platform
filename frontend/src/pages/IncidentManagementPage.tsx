@@ -141,6 +141,7 @@ export const IncidentManagementPage: React.FC = () => {
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <EquipmentFilters
+        showConnection={false}
           scope={scope}
           onChange={setScope}
           plants={plants}

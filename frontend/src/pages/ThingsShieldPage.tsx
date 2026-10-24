@@ -94,6 +94,7 @@ export const ThingsShieldPage: React.FC = () => {
       )}
 
       <EquipmentFilters
+        showConnection={false}
         scope={scope}
         onChange={(next) => { setScope(next); setPage(1); }}
         plants={plants}
