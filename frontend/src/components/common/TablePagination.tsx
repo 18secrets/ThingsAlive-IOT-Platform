@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,41 @@ function pageList(current: number, totalPages: number): (number | 'gap')[] {
   return out;
 }
 
+/**
+ * Space above the footer that takes up whatever the page leaves empty below it, so the
+ * footer sits at the foot of the screen on a short list and right after the list on a
+ * long one (TC_132: on a page of two cards it floated halfway up). Measured against the
+ * scrolling <main>, re-measured whenever it or its content resizes. Only for a footer
+ * that is the last thing on its page; anything after it would be pushed down too.
+ */
+function usePinToBottom(enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [gap, setGap] = useState(0);
+  const applied = useRef(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const scroller = el?.closest('main');
+    if (!enabled || !el || !scroller) return;
+    const measure = () => {
+      // What the page would leave empty without the space already added. Measured from
+      // the content, not scrollHeight: that never reads less than the visible height.
+      const content = scroller.firstElementChild as HTMLElement | null;
+      if (!content) return;
+      const pad = getComputedStyle(scroller);
+      const inner = scroller.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+      const free = Math.max(0, Math.floor(inner - (content.offsetHeight - applied.current)));
+      applied.current = free;
+      setGap(free);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    if (scroller.firstElementChild) observer.observe(scroller.firstElementChild);
+    return () => observer.disconnect();
+  }, [enabled]);
+  return { ref, gap };
+}
+
 /** The footer the paged tables share, in the look Equipment and Alert Agent already used. */
 export const TablePagination: React.FC<{
   page: number;
@@ -54,11 +89,18 @@ export const TablePagination: React.FC<{
   bare?: boolean;
   /** For a narrow side column: stacked, and no page-size picker. */
   compact?: boolean;
-}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact }) => {
+  /** Keep the footer at the foot of the screen when the list is short (see usePinToBottom). */
+  pinToBottom?: boolean;
+}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact, pinToBottom = false }) => {
   const { t } = useTranslation('shared');
+  const pin = usePinToBottom(pinToBottom);
   const navClass = 'p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
   return (
-    <div className={`flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans ${
+    <div
+      ref={pin.ref}
+      // On top of the gap the parent's spacing already gives it, never instead of it.
+      style={pinToBottom && pin.gap ? { marginTop: `calc(0.75rem + ${pin.gap}px)` } : undefined}
+      className={`flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans ${
       compact ? 'flex-col pt-2' : 'px-4 sm:px-6 py-3.5 flex-col sm:flex-row'
     } ${
       compact ? '' : bare ? 'border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900' : 'border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30'

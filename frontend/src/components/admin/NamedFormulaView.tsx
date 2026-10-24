@@ -175,7 +175,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           </div>
         )}
       </div>
-      {filtered.length > 0 && <TablePagination bare {...pager} />}
+      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddNamedFormulaModal
         isOpen={isModalOpen}

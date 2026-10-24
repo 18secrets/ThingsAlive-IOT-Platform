@@ -144,7 +144,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
           </div>
         )}
       </div>
-      {roles.length > 0 && <TablePagination bare {...pager} />}
+      {roles.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddRoleModal
         isOpen={isModalOpen}

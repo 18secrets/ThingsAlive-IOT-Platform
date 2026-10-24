@@ -313,7 +313,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
           </div>
         )}
       </div>
-      {filteredClients.length > 0 && <TablePagination bare {...pager} />}
+      {filteredClients.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddClientModal
         isOpen={isModalOpen}

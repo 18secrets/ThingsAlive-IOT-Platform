@@ -260,7 +260,7 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
           </div>
         )}
       </div>
-      {filtered.length > 0 && <TablePagination bare {...pager} />}
+      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       {/* No delete — retiring is the API's only way to stop offering a class;
           accounts that already copied it keep running theirs. */}
