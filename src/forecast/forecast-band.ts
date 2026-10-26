@@ -77,24 +77,40 @@ export interface ResidualPoint {
 
 const HOUR_MS = 3_600_000;
 
+/** Hourly buckets at the start of each run that are neither learned from nor judged. */
+export const WARM_UP_HOURS = 2;
+
 /**
- * The first hour of each run: operating, with the hour before it recorded as parked.
- * TTM reads only the signal's own history, so it cannot see an engine about to start
- * and forecasts that hour between parked and running. Measured on an uploaded excavator
- * history: the shift's first hour missed by +18 °C on coolant every working day, against
- * +3 to +12 °C for the rest of the shift. Learned from, that hour stretches the band for
- * every other hour; judged, it reads anomalous every morning. So it is neither: the band
- * is for steady running, and so is the verdict. An hour whose predecessor has no residual
- * is not counted as a start, because nobody knows it was.
+ * The first `WARM_UP_HOURS` hourly buckets of each run: operating, with a parked bucket
+ * within that many hours before. TTM reads only the signal's own history, so it cannot
+ * see an engine about to start and forecasts the start between parked and running.
+ *
+ * Two, not one, because buckets are UTC hours and a shift need not start on one: an
+ * 08:00 IST start is 02:30 UTC, so the 02:00 bucket is half parked and the 03:00 bucket
+ * is the first full running hour, forecast from a parked context. Measured on an uploaded
+ * excavator history (real TTM, 22 days): those two buckets missed coolant by +5.7 and
+ * +18.1 °C on average, against +2.9 to +12.1 for the rest of the shift. With one hour
+ * excluded, the second still read anomalous every morning on all three sensors, and the
+ * recommendation engine said to stop a healthy engine. Learned from, these hours stretch
+ * the band; judged, they cry wolf. So they are neither. A bucket whose predecessors have
+ * no residual is not counted as a start, because nobody knows it was.
  */
 export function runStartHours(residuals: ResidualPoint[]): Set<number> {
   const parked = new Set(residuals.filter((r) => r.operating === false).map((r) => r.stepAt.getTime()));
-  return new Set(residuals
-    .filter((r) => r.operating === true && parked.has(r.stepAt.getTime() - HOUR_MS))
-    .map((r) => r.stepAt.getTime()));
+  const operating = new Set(residuals.filter((r) => r.operating === true).map((r) => r.stepAt.getTime()));
+  return new Set(residuals.filter((r) => {
+    if (r.operating !== true) return false;
+    const t = r.stepAt.getTime();
+    // Parked k hours ago, and operating every hour between: within the run's first buckets.
+    for (let k = 1; k <= WARM_UP_HOURS; k++) {
+      if (parked.has(t - k * HOUR_MS)) return true;
+      if (!operating.has(t - k * HOUR_MS)) return false;
+    }
+    return false;
+  }).map((r) => r.stepAt.getTime()));
 }
 
-/** Operating and past its run's first hour: what the band learns from and what is judged. */
+/** Operating and past its run's warm-up: what the band learns from and what is judged. */
 export const steadyHours = (residuals: ResidualPoint[]): ((r: ResidualPoint) => boolean) => {
   const starts = runStartHours(residuals);
   return (r) => r.operating === true && !starts.has(r.stepAt.getTime());
