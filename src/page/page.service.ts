@@ -36,7 +36,7 @@ import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { failureModeStatus } from '../rec-engine/attribute';
-import { presentEnvelope, roundTo, MAX_DISPLAY_DECIMALS } from '../kpi/kpi-presentation';
+import { presentEnvelope } from '../kpi/kpi-presentation';
 import { isUnobserved, observeSignals } from '../rec-engine/observe';
 import {
   AlertRow, FailureModeRow, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
@@ -685,8 +685,7 @@ function siteKpiWidget(
         : w.aggregate === 'max' ? Math.max(...values)
           : values.length;
   const data: SiteKpiData = {
-    // Aggregated from the machines' full-precision values, rounded once, here, as shown.
-    value: roundTo(value, MAX_DISPLAY_DECIMALS), unit: w.aggregate === 'count' ? null : [...byUnit.keys()][0], aggregate: w.aggregate!,
+    value, unit: w.aggregate === 'count' ? null : [...byUnit.keys()][0], aggregate: w.aggregate!,
     machinesIncluded: ready.length, machinesExcluded: notDeclared + notReady,
     excluded: { notDeclared, notReady },
   };
