@@ -699,31 +699,8 @@ export async function topUpDemo(
     }
 
     for (const [index, s] of DEMO_CONTINUED_SIGNALS.entries()) {
-      // From this signal's own last reading, not the machine's: the gap since its other
-      // source stopped is filled, and a machine that never reported it gets none.
-      const [{ since }] = await runTenantSpanning(ds, 'seed:demo top-up last continued reading', (m) => m.query(
-        `SELECT max(source_timestamp) AS since FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2 AND signal = $3`,
-        [DEMO_TENANT, imei, s.signal],
-      ));
-      if (!since) continue;
-      const own: number[] = [];
-      for (let t = new Date(since).getTime() + STEP_MS; t <= nowMs; t += STEP_MS) own.push(t);
-      for (const month of new Set(own.map((t) => new Date(t).toISOString().slice(0, 7)))) {
-        await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
-      }
-      const values = own.map((t) => demoValue(
-        machine, s.signal, t, nowMs,
-        prng(Number(machine.externalId.slice(-2)) * 101 + DEMO_SIGNALS.length + index + Math.floor(t / STEP_MS) * 7919),
-      ));
-      const rows: unknown[] = await runTenantSpanning(ds, 'seed:demo top-up continued telemetry', (m) => m.query(
-        `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
-           SELECT $1, $2, $3, v, $4, ts, ts, 'simulated'
-             FROM unnest($5::timestamptz[], $6::double precision[]) AS r(ts, v)
-         ON CONFLICT DO NOTHING
-         RETURNING 1`,
-        [DEMO_TENANT, imei, s.signal, s.unit, own.map((t) => new Date(t).toISOString()), values],
-      ));
-      count += rows.length;
+      count += await continueSignal(ds, machine, imei, s.signal, nowMs,
+        Number(machine.externalId.slice(-2)) * 101 + DEMO_SIGNALS.length + index);
     }
     written[machine.externalId] = count;
 
@@ -735,8 +712,73 @@ export async function topUpDemo(
       trimmed += Array.isArray(result) ? Number(result[1] ?? 0) : 0;
     }
   }
+  for (const [externalId, n] of Object.entries(await topUpFleet(ds, nowMs))) written[externalId] = n;
   await analyzeTelemetry(ds);
   return { written, trimmed };
+}
+
+/**
+ * One signal on one logger, carried on from that signal's own last reading to now, in
+ * that reading's unit. From its own last reading, not the machine's: the gap since
+ * another source stopped is filled, and a logger that never reported it gets none.
+ */
+async function continueSignal(
+  ds: DataSource, machine: DemoMachine, imei: string, signal: string, nowMs: number, seed: number,
+): Promise<number> {
+  const [last] = await runTenantSpanning(ds, 'seed:demo top-up last continued reading', (m) => m.query(
+    `SELECT source_timestamp AS since, unit FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2 AND signal = $3
+      ORDER BY source_timestamp DESC LIMIT 1`,
+    [DEMO_TENANT, imei, signal],
+  )) as { since: Date; unit: string }[];
+  if (!last) return 0;
+  const times: number[] = [];
+  for (let t = new Date(last.since).getTime() + STEP_MS; t <= nowMs; t += STEP_MS) times.push(t);
+  if (!times.length) return 0;
+  for (const month of new Set(times.map((t) => new Date(t).toISOString().slice(0, 7)))) {
+    await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
+  }
+  const values = times.map((t) => demoValue(machine, signal, t, nowMs, prng(seed + Math.floor(t / STEP_MS) * 7919)));
+  const rows: unknown[] = await runTenantSpanning(ds, 'seed:demo top-up continued telemetry', (m) => m.query(
+    `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
+       SELECT $1, $2, $3, v, $4, ts, ts, 'simulated'
+         FROM unnest($5::timestamptz[], $6::double precision[]) AS r(ts, v)
+     ON CONFLICT DO NOTHING
+     RETURNING 1`,
+    [DEMO_TENANT, imei, signal, last.unit, times.map((t) => new Date(t).toISOString()), values],
+  ));
+  return rows.length;
+}
+
+/**
+ * The demo tenant's other machines, the ones the seed did not create (on dev, EX-08..14
+ * and EXC-001, registered by fleet onboarding). Their readings came from the same laptop
+ * stream as the demo's fuel rate and stopped with it on 23 Oct. Each active primary
+ * binding on one is carried on as a healthy machine — the stream's own model for them —
+ * where the seed has a model for the signal and the logger has reported it before. Read
+ * from the bindings, not a list, so a machine onboarded later is streamed without a
+ * deploy, and a retired binding stops being written.
+ */
+async function topUpFleet(ds: DataSource, nowMs: number): Promise<Record<string, number>> {
+  const modelled = [...DEMO_SIGNALS, ...DEMO_CONTINUED_SIGNALS].map((s) => s.signal);
+  const bindings: { external_id: string; imei: string; signal_key: string }[] = await runTenantSpanning(
+    ds, 'seed:demo top-up fleet bindings', (m) => m.query(
+      `SELECT DISTINCT external_id, imei, signal_key FROM signal_binding_version
+        WHERE tenant_id = $1 AND source_system <> $2 AND status = 'active' AND is_primary AND valid_to IS NULL
+          AND imei IS NOT NULL AND signal_key = ANY($3)
+        ORDER BY external_id, signal_key`,
+      [DEMO_TENANT, DEMO_SOURCE, modelled],
+    ),
+  );
+  const written: Record<string, number> = {};
+  for (const b of bindings) {
+    const machine: DemoMachine = {
+      externalId: b.external_id, name: b.external_id, state: 'healthy', historyDays: 0, endDaysAgo: 0, unbound: [], expect: '',
+    };
+    // Seeded by logger, so two fleet machines never share a series, nor one share the demo's.
+    const seed = Number(b.imei.slice(-6)) * 13 + modelled.indexOf(b.signal_key);
+    written[b.external_id] = (written[b.external_id] ?? 0) + await continueSignal(ds, machine, b.imei, b.signal_key, nowMs, seed);
+  }
+  return written;
 }
 
 /**
