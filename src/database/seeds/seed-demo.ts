@@ -96,6 +96,18 @@ export const DEMO_SIGNALS: DemoSignal[] = [
 ];
 
 /**
+ * Signals the seed does not write but the top-up keeps going where a machine already
+ * reports them. On dev, `fuel_consumption` came from `scripts/stream-demo-telemetry.ts`
+ * run by cron on a laptop; when that stopped on 23 Oct, OEE Quality, which needs a fuel
+ * rate in its period, read `stale` on every demo machine while the other six signals were
+ * fresh. Continued rather than seeded, so a fresh demo is unchanged and a machine is
+ * never handed a signal it has no binding for.
+ */
+export const DEMO_CONTINUED_SIGNALS: { signal: string; unit: string }[] = [
+  { signal: 'fuel_consumption', unit: 'L/h' },
+];
+
+/**
  * Cadence and staleness from one number. The platform has no class-level cadence field:
  * cadence lives on each binding (`expected_period_seconds`), staleness on each requirement
  * (`stale_after_seconds`, else the 900 s default) — two columns that nothing ties
@@ -506,6 +518,8 @@ export function demoValue(machine: DemoMachine, signal: string, t: number, now: 
     case 'engine_oil_pressure': return on ? 390 + 15 * cycle + n(6) : Math.abs(n(2));
     case 'hydraulic_oil_temperature': return on ? 62 + 5 * cycle + n(1.5) : 33 + 2 * Math.sin((2 * Math.PI * hour) / 24) + n(0.6);
     case 'fuel_level': return Math.min(98, Math.max(5, 55 + 30 * Math.sin((2 * Math.PI * t) / (3.2 * DAY_MS)) + n(0.8)));
+    // The laptop stream's model, so the series does not step where one source hands to the other.
+    case 'fuel_consumption': return on ? 12.4 + noise() * 1.5 : 0;
     case 'engine_coolant_temperature': {
       if (!on) return 34 + 3 * Math.sin((2 * Math.PI * hour) / 24) + n(0.8);
       // Trending: up to +14 °C across the last ten days — 98 °C or so by now, under the
@@ -680,6 +694,34 @@ export async function topUpDemo(
          ON CONFLICT DO NOTHING
          RETURNING 1`,
         [DEMO_TENANT, imei, s.signal, s.unit, times.map((t) => new Date(t).toISOString()), values],
+      ));
+      count += rows.length;
+    }
+
+    for (const [index, s] of DEMO_CONTINUED_SIGNALS.entries()) {
+      // From this signal's own last reading, not the machine's: the gap since its other
+      // source stopped is filled, and a machine that never reported it gets none.
+      const [{ since }] = await runTenantSpanning(ds, 'seed:demo top-up last continued reading', (m) => m.query(
+        `SELECT max(source_timestamp) AS since FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2 AND signal = $3`,
+        [DEMO_TENANT, imei, s.signal],
+      ));
+      if (!since) continue;
+      const own: number[] = [];
+      for (let t = new Date(since).getTime() + STEP_MS; t <= nowMs; t += STEP_MS) own.push(t);
+      for (const month of new Set(own.map((t) => new Date(t).toISOString().slice(0, 7)))) {
+        await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
+      }
+      const values = own.map((t) => demoValue(
+        machine, s.signal, t, nowMs,
+        prng(Number(machine.externalId.slice(-2)) * 101 + DEMO_SIGNALS.length + index + Math.floor(t / STEP_MS) * 7919),
+      ));
+      const rows: unknown[] = await runTenantSpanning(ds, 'seed:demo top-up continued telemetry', (m) => m.query(
+        `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
+           SELECT $1, $2, $3, v, $4, ts, ts, 'simulated'
+             FROM unnest($5::timestamptz[], $6::double precision[]) AS r(ts, v)
+         ON CONFLICT DO NOTHING
+         RETURNING 1`,
+        [DEMO_TENANT, imei, s.signal, s.unit, own.map((t) => new Date(t).toISOString()), values],
       ));
       count += rows.length;
     }
