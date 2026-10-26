@@ -139,6 +139,9 @@ export class PlatformCredentialService {
           );
           await this.record(m, 'session.reuse-detected', { userId: user.id, ctx });
         }
+        // Suspending staff revokes their sessions as it happens, so a reload after it
+        // lands here, and the console can only say why if this does (tester bug TC_136).
+        if (user.status === 'suspended') return refuse('This account has been suspended.');
         return refuse('Please sign in again.');
       }
 
@@ -362,6 +365,14 @@ export class PlatformCredentialService {
    * counterpart to `CredentialService.changeOwnPassword`. Every session dies
    * afterward, same reasoning as there.
    */
+  /** The caller's own name and address, for the screens that show who is signed in. */
+  async ownIdentity(platformUserId: string): Promise<{ email: string; fullName: string } | null> {
+    return runTenantSpanning(this.ds, 'platform own identity', async (m) => {
+      const user = await m.getRepository(PlatformUser).findOne({ where: { id: platformUserId } });
+      return user ? { email: user.email, fullName: user.fullName } : null;
+    });
+  }
+
   async changeOwnPassword(
     platformUserId: string, currentPassword: string, newPassword: string, ctx: RequestContext = {}, now = new Date(),
   ): Promise<void> {
