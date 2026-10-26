@@ -147,6 +147,14 @@ export class KpiEvaluatorService {
     return envelope;
   }
 
+  /** Each active formula's `display_format`, by key, for the routes that show its value. */
+  async displayFormats(scope: RequestScope, equipment: EquipmentRef): Promise<Map<string, string>> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const { formulas } = await this.loadFormulas(m, scope.tenantId, equipment);
+      return new Map(formulas.map((f) => [f.formulaKey, f.displayFormat]));
+    });
+  }
+
   private async loadFormulas(
     m: EntityManager, tenantId: string, equipment: EquipmentRef,
   ): Promise<{ formulas: ClientFormula[]; profile: EquipmentProfile }> {

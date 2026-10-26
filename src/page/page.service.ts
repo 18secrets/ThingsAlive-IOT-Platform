@@ -36,6 +36,7 @@ import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { failureModeStatus } from '../rec-engine/attribute';
+import { presentEnvelope, roundTo, MAX_DISPLAY_DECIMALS } from '../kpi/kpi-presentation';
 import { isUnobserved, observeSignals } from '../rec-engine/observe';
 import {
   AlertRow, FailureModeRow, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
@@ -282,7 +283,7 @@ export class PageService {
     if (env.readiness !== 'ready') return unfilled(h, env.readiness, env.reason ?? 'not_ready');
     const f = formulas.get(env.formulaKey);
     const data: KpiWidgetData = {
-      ...env,
+      ...presentEnvelope(env, f?.displayFormat),
       target: f?.targetValue ?? null, targetMin: f?.targetMin ?? null, targetMax: f?.targetMax ?? null,
       targetDirection: f?.targetDirection ?? 'none',
     };
@@ -684,7 +685,8 @@ function siteKpiWidget(
         : w.aggregate === 'max' ? Math.max(...values)
           : values.length;
   const data: SiteKpiData = {
-    value, unit: w.aggregate === 'count' ? null : [...byUnit.keys()][0], aggregate: w.aggregate!,
+    // Aggregated from the machines' full-precision values, rounded once, here, as shown.
+    value: roundTo(value, MAX_DISPLAY_DECIMALS), unit: w.aggregate === 'count' ? null : [...byUnit.keys()][0], aggregate: w.aggregate!,
     machinesIncluded: ready.length, machinesExcluded: notDeclared + notReady,
     excluded: { notDeclared, notReady },
   };
