@@ -67,7 +67,7 @@
     "no_device_claimed": "No device is fitted to the machine",
     "unbound": "A required signal is not bound",
     "mapping_required": "A required signal needs mapping",
-    "no_requirements": "The class declares no required signals",
+    "no_requirements": "This machine type has no required signals yet. Things Alive needs to add them",
     "stale": "Readings are stale",
     "no_readings": "No readings yet",
     "no_active_scenario": "No scenario is active on the machine",
