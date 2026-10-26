@@ -191,8 +191,9 @@ function residualsFor(
   return m.getRepository(ForecastResidual).find({
     where: {
       tenantId, sourceSystem: profile.sourceSystem, externalId: profile.externalId, signal, modelId,
-      // Bounded above too, so a verdict as of a past moment cannot read what came after it.
-      stepAt: Between(new Date(at.getTime() - FORECAST_RETENTION_DAYS * 86_400_000 + 1), at),
+      // Bounded above too, so a verdict as of a past moment cannot read what came after it:
+      // an hourly bucket's actual is known only once its hour is over.
+      stepAt: Between(new Date(at.getTime() - FORECAST_RETENTION_DAYS * 86_400_000 + 1), new Date(at.getTime() - 3_600_000)),
     },
     order: { stepAt: 'ASC' },
   });

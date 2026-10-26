@@ -191,12 +191,14 @@ describeDb('rec engine: a forecast band breach is a fault, as an open alert is',
     expect(residualSource(b)).toEqual({ kind: 'residual', readiness: 'not_available', reason: 'baseline_not_established' });
   });
 
-  it('6. a replay of an earlier moment does not see the fault that came after it', async () => {
-    await residuals([[7, 0, false], [8, 18, true], [9, 0.2, true], [10, 6, true]]);
-    const earlier = new Date(MIDNIGHT + 9 * HOUR + 30 * 60_000);
+  it('6. a replay sees a bucket only once its hour is over: the 11:00 fault is invisible at 11:30, visible at 12:00', async () => {
+    await residuals([[7, 0, false], [8, 18, true], [9, 0.2, true], [10, 0.1, true], [11, 6, true]]);
     const profile = await owner.getRepository(EquipmentProfile).findOneByOrFail({ externalId: 'DG-1' });
-    const b = await runTenantSpanning(owner, 'replay', (m) => engine.computeAsOf(m, 'acme', profile, earlier)) as unknown as Bundle;
-    expect(b.detect.entries.find((e) => e.signal === 'coolant_temp')!.sources.find((s) => s.kind === 'residual'))
-      .toMatchObject({ state: 'normal', at: new Date(MIDNIGHT + 9 * HOUR).toISOString() });
+    const asOf = async (at: Date) => ((await runTenantSpanning(owner, 'replay', (m) => engine.computeAsOf(m, 'acme', profile, at))) as unknown as Bundle)
+      .detect.entries.find((e) => e.signal === 'coolant_temp')!.sources.find((s) => s.kind === 'residual');
+    expect(await asOf(new Date(MIDNIGHT + 11 * HOUR + 30 * 60_000)))
+      .toMatchObject({ state: 'normal', at: new Date(MIDNIGHT + 10 * HOUR).toISOString() });
+    expect(await asOf(new Date(MIDNIGHT + 12 * HOUR)))
+      .toMatchObject({ state: 'anomalous', at: new Date(MIDNIGHT + 11 * HOUR).toISOString() });
   });
 });
