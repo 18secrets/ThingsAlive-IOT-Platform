@@ -36,6 +36,7 @@ import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { failureModeStatus } from '../rec-engine/attribute';
+import { presentEnvelope } from '../kpi/kpi-presentation';
 import { isUnobserved, observeSignals } from '../rec-engine/observe';
 import {
   AlertRow, FailureModeRow, filled, KpiWidgetData, MachineRow, PageReadiness, PageWidget,
@@ -290,7 +291,7 @@ export class PageService {
     if (env.readiness !== 'ready') return unfilled(h, env.readiness, env.reason ?? 'not_ready');
     const f = formulas.get(env.formulaKey);
     const data: KpiWidgetData = {
-      ...env,
+      ...presentEnvelope(env, f?.displayFormat),
       target: f?.targetValue ?? null, targetMin: f?.targetMin ?? null, targetMax: f?.targetMax ?? null,
       targetDirection: f?.targetDirection ?? 'none',
     };
