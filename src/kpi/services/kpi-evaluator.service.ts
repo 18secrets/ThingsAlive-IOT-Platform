@@ -20,6 +20,8 @@ import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
 import { BucketAggregate, TelemetrySegment, TelemetryWindowReader } from './telemetry-window-reader';
 import { loadOperatingGate } from './operating-gate';
+import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
+import { scheduledIntervals } from '../../utilization/services/availability';
 import { MAX_BUCKETS_OVERRIDE, pickBucketSeconds } from './bucketing';
 
 const HOUR = 3_600_000;
@@ -184,8 +186,16 @@ export class KpiEvaluatorService {
     // window they render — see collectSignalLookback).
     const perTargetWindow = new Map<string, Window | null>();
     const signalLookbackHours = new Map<string, number>();
+    // A `shift` window is the machine's own shift, so it needs the machine's schedule:
+    // read once for the batch, and only when some formula asks for it.
+    const shift = !explicitWindow && targets.some((t) => t.aggregationWindow === 'shift')
+      ? shiftWindow(await m.getRepository(EquipmentShift).find({
+        where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, status: 'active' },
+      }), at)
+      : null;
     for (const target of targets) {
-      const display = explicitWindow ?? resolveWindow(target.aggregationWindow, at);
+      const display = explicitWindow
+        ?? (target.aggregationWindow === 'shift' ? shift : resolveWindow(target.aggregationWindow, at));
       perTargetWindow.set(target.formulaKey, display);
       if (!target.compiledPlan) continue;
       collectSignalLookback(target.compiledPlan, signalLookbackHours);
@@ -418,8 +428,9 @@ export class KpiEvaluatorService {
       };
     }
     if (!window) {
-      // aggregation_window: 'shift' — no shift-schedule resolution built here. An
-      // explicit from/to still answers, so the reason says which half is missing.
+      // A `shift` formula on a machine with no shift schedule (or none in the last
+      // eight days): nothing to resolve the window from. An explicit from/to still
+      // answers, so the reason says which half is missing.
       return { ...base, value: null, readiness: 'not_configured', reason: 'window_not_resolved', coverage: zeroCoverage() };
     }
     if (!formula.compiledPlan) {
@@ -635,7 +646,7 @@ function resolveWindow(aggWindow: string, at: Date): Window | null {
     case 'today': return { from: new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())), to: at };
     case 'mtd': return { from: new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1)), to: at };
     case 'ytd': return { from: new Date(Date.UTC(at.getUTCFullYear(), 0, 1)), to: at };
-    case 'shift': return null;
+    case 'shift': return null; // resolved from the machine's schedule: see shiftWindow
     default: return { from: new Date(at.getTime() - DAY), to: at };
   }
 }
@@ -883,4 +894,20 @@ function evalBucketNode(
     default:
       return null;
   }
+}
+
+/**
+ * A `shift` aggregation window: the machine's current shift up to `at` while one is
+ * running, else the most recent shift that ended. Availability's own arithmetic
+ * (`scheduledIntervals`) over the last eight days, enough for a weekly schedule with a
+ * long weekend. No schedule, or none scheduled in that span: no window, and the
+ * envelope says `window_not_resolved` as it always has.
+ */
+export function shiftWindow(shifts: EquipmentShift[], at: Date): Window | null {
+  if (!shifts.length) return null;
+  const intervals = scheduledIntervals(shifts, { from: new Date(at.getTime() - 8 * DAY), to: at })
+    .filter((i) => i.end > i.start)
+    .sort((a, b) => a.end - b.end);
+  const last = intervals[intervals.length - 1];
+  return last ? { from: new Date(last.start), to: new Date(last.end) } : null;
 }
