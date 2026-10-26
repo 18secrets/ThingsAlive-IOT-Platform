@@ -37,12 +37,20 @@ export type UnscoredReason =
   | 'no-reading'
   | 'no-baseline'
   | 'too-few-samples'
-  | 'no-variance';
+  | 'no-variance'
+  | 'not-operating';
 
 export interface SignalObservation {
   signal: string;
   value: number;
   at: Date;
+  /**
+   * Whether the machine was operating (in shift, engine on) when this was read. False
+   * for a parked reading, which the operating-hours baseline cannot judge: a parked
+   * engine's coolant against a running one's mean reads about -25σ. Absent or null when
+   * the machine has no shift schedule, and the reading is scored as before.
+   */
+  operating?: boolean | null;
 }
 
 export interface SignalBaseline {
@@ -142,6 +150,7 @@ export function scoreTier1(input: Tier1Input): Tier1Outcome {
     });
 
     if (!o) return unscored('no-reading');
+    if (o.operating === false) return unscored('not-operating');
     if (!b) return unscored('no-baseline');
     if (b.sampleCount < minimumSamples) return unscored('too-few-samples');
 

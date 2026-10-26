@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Ip, Optional, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, isUUID } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { RequestScope } from '../auth/types/request-scope';
 import { capabilitiesFor } from '../auth/capabilities';
@@ -34,10 +34,20 @@ export class MeController {
 
   @Get()
   @ApiOperation({ summary: 'The resolved scope for this token' })
-  me(@CurrentScope() scope: RequestScope) {
+  async me(@CurrentScope() scope: RequestScope) {
+    // A name a person recognises beside the id (tester bug TC_135). A token minted by
+    // the CLI names an address, not a row, so only an id is looked up; anything else,
+    // or no database, leaves both null rather than failing the whole read.
+    const identity = isUUID(scope.userId)
+      ? await (scope.isPlatformRole
+        ? this.platformCredentials?.ownIdentity(scope.userId)
+        : this.credentials?.ownIdentity(scope))
+      : null;
     return {
       tenantId: scope.tenantId,
       userId: scope.userId,
+      email: identity?.email ?? null,
+      fullName: identity?.fullName ?? null,
       roles: scope.roles,
       isPlatformRole: scope.isPlatformRole,
       scope: {

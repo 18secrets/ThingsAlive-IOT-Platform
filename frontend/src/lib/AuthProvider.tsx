@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthUser, NavigationTab } from '../types';
 import {
-  apiAcceptInvitation, apiMyPermissions, apiResume, apiSignIn, apiSignOut, hasStoredSession,
-  setSessionDeadHandler, SignedInUser,
+  ApiError, apiAcceptInvitation, apiMyPermissions, apiResume, apiSignIn, apiSignOut, hasStoredSession,
+  setSessionDeadHandler, SignedInUser, takeSessionEndReason,
 } from './api';
 
 const SESSION_KEY = 'ta_session';
@@ -56,6 +56,9 @@ interface AuthContextValue {
   /** True only while resuming a session on a cold load — the router shows a
    *  loading screen instead of bouncing to /sign-in and back. */
   restoringSession: boolean;
+  /** Why the last session ended without the person signing out — a suspension, say —
+   *  for the sign-in screen to show; null after an ordinary sign-out. */
+  sessionEndedReason: string | null;
   signIn: (identifier: string, password: string) => Promise<void>;
   acceptInvitation: (token: string, password: string) => Promise<void>;
   signOut: () => void;
@@ -66,6 +69,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(loadSession);
   const [restoringSession, setRestoringSession] = useState(() => hasStoredSession());
+  const [sessionEndedReason, setSessionEndedReason] = useState<string | null>(null);
 
   // Resume a real session on a cold load. The cached AuthUser in
   // sessionStorage is what lets the shell render immediately without a flash
@@ -75,11 +79,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!restoringSession) return;
     let live = true;
     (async () => {
-      const user = await apiResume();
-      if (!live) return;
-      // A dead refresh token means the cached session was a lie.
-      setAuthUser(user ? await authUserFromApi(user) : null);
-      if (live) setRestoringSession(false);
+      try {
+        const user = await apiResume();
+        if (!live) return;
+        // A dead refresh token means the cached session was a lie.
+        if (!user) setSessionEndedReason(takeSessionEndReason());
+        setAuthUser(user ? await authUserFromApi(user) : null);
+      } catch (err) {
+        // The refresh worked but the first real call was refused. Before this, the
+        // error escaped, restoringSession stayed true and the page read "Restoring
+        // your session…" for good (tester bug TC_137). Whatever fails, it ends signed out.
+        if (!live) return;
+        void apiSignOut();
+        setSessionEndedReason(err instanceof ApiError ? err.message : null);
+        setAuthUser(null);
+      } finally {
+        if (live) setRestoringSession(false);
+      }
     })();
     return () => { live = false; };
     // Runs once, on mount only.
@@ -99,7 +115,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // suspended) has to bounce this back to null, or every screen keeps
   // rendering as signed in while no request it makes will ever work again.
   useEffect(() => {
-    setSessionDeadHandler(() => setAuthUser(null));
+    setSessionDeadHandler(() => {
+      setSessionEndedReason(takeSessionEndReason());
+      setAuthUser(null);
+    });
     return () => setSessionDeadHandler(null);
   }, []);
 
@@ -107,6 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // whether this is a Things Alive staff credential (platform_user) or a
   // tenant account (app_user) and returns the same shape either way.
   const signIn = async (identifier: string, password: string) => {
+    setSessionEndedReason(null);
     const user = await apiSignIn(identifier, password);
     setAuthUser(await authUserFromApi(user));
   };
@@ -120,11 +140,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Best-effort and fire-and-forget: the local session is cleared either
     // way, so a dead or unreachable server can't trap someone signed in.
     if (authUser) void apiSignOut();
+    setSessionEndedReason(null);
     setAuthUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ authUser, restoringSession, signIn, acceptInvitation, signOut }}>
+    <AuthContext.Provider value={{ authUser, restoringSession, sessionEndedReason, signIn, acceptInvitation, signOut }}>
       {children}
     </AuthContext.Provider>
   );

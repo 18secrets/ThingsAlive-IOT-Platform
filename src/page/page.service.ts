@@ -169,6 +169,14 @@ export class PageService {
       ? await withTenantSession(this.ds, scope, (m) => observeSignals(m, scope.tenantId, profile, modeSignals, at))
       : new Map();
     const unobserved = modeSignals.filter((sig) => isUnobserved(observed.get(sig)));
+    // Past the forecast band on a signal that can be seen: the engine's Detect counts it
+    // as an open alert would, so this widget does too, from the same verdict.
+    const bandBreached = modeSignals.length && has('failure_modes')
+      ? [...(await withTenantSession(this.ds, scope, (m) =>
+        this.forecasts.residualVerdicts(m, scope.tenantId, profile, modeSignals, at))).entries()]
+        .filter(([sig, v]) => !unobserved.includes(sig) && v.readiness === 'ready' && v.state === 'anomalous')
+        .map(([sig]) => sig)
+      : [];
 
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
     const formulaByKey = new Map<string, ClientFormula>((formulas as ClientFormula[]).map((f) => [f.formulaKey, f]));
@@ -210,7 +218,7 @@ export class PageService {
           if (!classSlug) return unfilled(h, 'not_configured', 'unclassified');
           const rows: FailureModeRow[] = (modes as ClientEquipmentClassFailureMode[]).map((f) => ({
             code: f.code, name: f.name, symptom: f.symptom, severity: f.severity, signals: f.signals,
-            status: failureModeStatus(f.signals, openAlerts!.signals, unobserved),
+            status: failureModeStatus(f.signals, [...openAlerts!.signals, ...bandBreached], unobserved),
           }));
           return filled(h, rows);
         }
