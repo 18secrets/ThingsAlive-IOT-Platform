@@ -93,7 +93,11 @@ export function geminiConfigFrom(env: Record<string, string | undefined>): Gemin
   return null;
 }
 
-const MODEL_CALL_TIMEOUT_MS = 20_000;
+// 60 s, not 20: gemini-3.5-flash-lite took 10-13 s for a one-line question on
+// 26 Oct, and an onboarding call (system prompt, every tool, their results) went past
+// 20 s every time, so Gemini answered DEADLINE_EXCEEDED and the chat said the
+// assistant was unavailable. Still a bound: a hung call fails inside a minute.
+const MODEL_CALL_TIMEOUT_MS = 60_000;
 const FALLBACK_HOLD_MS = 5 * 60_000;
 
 /** Gemini, on Vertex AI or with an API key. */
