@@ -16,7 +16,7 @@ import { createTestDataSource, describeDb } from './db';
 const SEEDED = new Date('2026-10-06T07:00:00.000Z');
 /** Three hours on, still mid-shift: long past the hour after which an un-topped demo goes stale. */
 const LATER = new Date(SEEDED.getTime() + 3 * 3_600_000);
-/** Ten days on, a Friday at 12:30: past the point where EX-05 would cross the baseline's coverage threshold. */
+/** Ten days on, a Friday at 12:30: long enough for a nine-day machine to have crossed the baseline's coverage threshold. */
 const MUCH_LATER = new Date(SEEDED.getTime() + 10 * 86_400_000);
 const ENABLED = { SEED_DEMO_ENABLED: 'true' } as NodeJS.ProcessEnv;
 const demo: RequestScope = { tenantId: DEMO_TENANT, userId: 'u-demo', roles: ['ceo-manager'], isPlatformRole: false };
@@ -153,12 +153,10 @@ describeDb('seed:demo top-up', () => {
     expect(rows.every((r) => r.reason === 'stale')).toBe(true);
   });
 
-  it('EX-05 newly commissioned: plain KPIs ready, every baseline KPI baseline_not_established', async () => {
+  it('EX-05: ninety days of history, so its baseline KPIs are ready as well as the plain ones', async () => {
     const envelopes = await kpis('EX-05', LATER);
     expect(envelopes.get('avg_coolant_temp')!.readiness).toBe('ready');
-    for (const key of ['coolant_vs_baseline', 'hydraulic_vs_baseline']) {
-      expect(envelopes.get(key)).toMatchObject({ readiness: 'not_available', reason: 'baseline_not_established' });
-    }
+    for (const key of ['coolant_vs_baseline', 'hydraulic_vs_baseline']) expect(envelopes.get(key)!.readiness).toBe('ready');
   });
 
   it('EX-06 partly unbound: the two unbound signals read not_configured / unbound, the rest ready', async () => {
@@ -171,17 +169,23 @@ describeDb('seed:demo top-up', () => {
   });
 
   // ==================================================================== ten days on
-  it('ten days on, EX-05 is still newly commissioned: its history is trimmed to nine days, not grown past the baseline threshold', async () => {
-    const result = await topUpDemo(owner, { now: MUCH_LATER, env: ENABLED });
-    expect(result.trimmed).toBeGreaterThan(0);
-    const [{ first }] = await owner.query(
+  // The trim is for a machine in the 'new' state, and since 8b90917 the demo has none: a
+  // top-up that trimmed anyway would be eating a healthy machine's baseline.
+  it('ten days on, nothing is trimmed and EX-05 keeps its history and its ready baseline', async () => {
+    const before = await owner.query(
       `SELECT min(source_timestamp) AS first FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2`,
       [DEMO_TENANT, imeiOf(machine('EX-05'))],
     );
-    expect(new Date(first).getTime()).toBeGreaterThanOrEqual(MUCH_LATER.getTime() - 9 * 86_400_000);
+    const result = await topUpDemo(owner, { now: MUCH_LATER, env: ENABLED });
+    expect(result.trimmed).toBe(0);
+    const after = await owner.query(
+      `SELECT min(source_timestamp) AS first FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2`,
+      [DEMO_TENANT, imeiOf(machine('EX-05'))],
+    );
+    expect(new Date(after[0].first).getTime()).toBe(new Date(before[0].first).getTime());
     const envelopes = await kpis('EX-05', MUCH_LATER);
     expect(envelopes.get('avg_coolant_temp')!.readiness).toBe('ready');
-    expect(envelopes.get('coolant_vs_baseline')).toMatchObject({ readiness: 'not_available', reason: 'baseline_not_established' });
+    expect(envelopes.get('coolant_vs_baseline')!.readiness).toBe('ready');
     // And the healthy machine is still entirely ready, ten days after it was seeded.
     expect(await notReady('EX-01', MUCH_LATER)).toEqual([]);
   });
