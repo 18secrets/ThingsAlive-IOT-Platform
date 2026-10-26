@@ -35,6 +35,7 @@ import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { ForecastModule } from './forecast/forecast.module';
+import { ReadingsImportModule } from './readings-import/readings-import.module';
 import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
@@ -115,6 +116,7 @@ export class AppModule {
               WorkModule,
               ShiftModule,
               ForecastModule,
+              ReadingsImportModule,
               ForecastSchedulingModule,
               EvaluationModule,
               TelemetryPartitionModule,
