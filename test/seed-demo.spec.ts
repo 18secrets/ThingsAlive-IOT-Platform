@@ -170,12 +170,12 @@ describeDb('seed:demo', () => {
     expect([...rows.values()].some((r) => r.reason === 'no_readings')).toBe(false);
   });
 
-  it('EX-05 newly commissioned: plain KPIs ready, every baseline KPI baseline_not_established', async () => {
+  // EX-05 was the demo's newly commissioned machine until 8b90917 gave it ninety days, so
+  // that every demo machine shows its baseline KPIs. Its baseline is now as ready as its plain KPIs.
+  it('EX-05: ninety days of history, so its baseline KPIs are ready as well as the plain ones', async () => {
     const envelopes = await kpis('EX-05');
     expect(envelopes.get('avg_coolant_temp')!.readiness).toBe('ready');
-    for (const key of BASELINE_KPIS) {
-      expect(envelopes.get(key)).toMatchObject({ readiness: 'not_available', reason: 'baseline_not_established' });
-    }
+    for (const key of BASELINE_KPIS) expect(envelopes.get(key)!.readiness).toBe('ready');
   });
 
   it('EX-06 partly unbound: the two unbound signals and their KPIs read not_configured / unbound, the rest ready', async () => {

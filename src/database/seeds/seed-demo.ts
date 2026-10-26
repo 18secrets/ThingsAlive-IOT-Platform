@@ -614,7 +614,7 @@ async function raiseAlerts(ds: DataSource, alerts: AlertService, now: Date): Pro
 export interface TopUpResult {
   /** Readings written, per machine. */
   written: Record<string, number>;
-  /** EX-05 readings removed from beyond its history window, so it stays newly commissioned. */
+  /** Readings removed from a 'new' machine beyond its history window, so it stays newly commissioned (none in the demo today). */
   trimmed: number;
 }
 
@@ -629,9 +629,10 @@ export interface TopUpResult {
  * shift calendar. EX-04 is not topped up — being quiet is its state. EX-03 keeps
  * breaching: while running, its coolant cycles through `BREACH_TAIL` by tick number, so
  * any ten consecutive running readings carry exactly six past the bound, and the open
- * alert stays true (a second is suppressed by the open one). EX-05's oldest readings are
- * trimmed to its nine days; otherwise it crosses the baseline's coverage threshold a week
- * after seeding and stops being newly commissioned.
+ * alert stays true (a second is suppressed by the open one). A machine in the 'new' state
+ * has its oldest readings trimmed to its history days; otherwise it crosses the baseline's
+ * coverage threshold a week after seeding and stops being newly commissioned. Since
+ * 8b90917 no demo machine is 'new' (EX-05 has ninety days), so nothing is trimmed.
  *
  * Safe to run on a timer and twice at once: `uq_telemetry_reading_dedupe` refuses a
  * duplicate reading, and the insert skips it rather than failing.
