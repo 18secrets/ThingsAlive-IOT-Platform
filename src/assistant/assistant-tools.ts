@@ -44,6 +44,23 @@ export const MAX_PROPOSALS_PER_CHAT = 10;
 const MAX_LIST_ITEMS = 50;
 const MAX_RESULT_CHARS = 12_000;
 
+/** What each onboarding reason code means to the person onboarding, and who acts on it. */
+const STEP_REASON_MEANING: Record<string, string> = {
+  unclassified: 'The machine has no machine type. Set one by editing the machine on Administration > Equipment.',
+  no_device_claimed: 'No logger is fitted. Fit one of this account\'s loggers (my_loggers).',
+  no_requirements: 'The machine type lists no required signals, so there is nothing to map. The customer '
+    + 'cannot fix this: Things Alive has to add required signals to the machine type and publish it. '
+    + 'Readings, scenario and later steps wait on it.',
+  unbound: 'A required signal is not bound yet. Bind it on Administration > Equipment > Signal Bindings.',
+  mapping_required: 'A required signal needs mapping. Map it on Administration > Equipment > Signal Bindings.',
+  stale: 'The signals are bound but readings stopped arriving. Check the logger is powered and online.',
+  no_readings: 'The signals are bound but no readings have arrived yet. Check the logger is powered and online.',
+  no_active_scenario: 'No prediction scenario is switched on. Switch one on from the Scenarios page.',
+  no_alert_rule: 'No enabled alert rule covers the machine. Add one on the Alerts page.',
+  no_user_access: 'Only super admins can see the machine. Give people access on Client Users.',
+  blocked_by_step: 'Waiting on an earlier step (blockedBy); that step\'s meaning says what to do.',
+};
+
 /**
  * What the assistant may look at: read-only, in-process, and only through the
  * services the screens already use (D10).
@@ -116,15 +133,35 @@ export class AssistantTools {
       },
       {
         name: 'machine_onboarding',
-        description: 'One machine\'s seven onboarding steps: state, the reason code, and the step it waits on.',
+        description: 'One machine\'s seven onboarding steps: state, the reason code, what it means, and the '
+          + 'step it waits on.',
         parameters: {
           type: 'object',
-          properties: { sourceSystem: { type: 'string' }, code: { type: 'string' } },
-          required: ['sourceSystem', 'code'],
+          properties: {
+            code: { type: 'string' },
+            sourceSystem: { type: 'string', description: 'From list_equipment. Leave out to find the machine by code.' },
+          },
+          required: ['code'],
         },
         capability: 'equipment.write',
         profiles: ONBOARDING,
-        run: (scope, a) => onboarding.machine(scope, str(a.sourceSystem) ?? '', str(a.code) ?? ''),
+        run: async (scope, a) => {
+          const code = str(a.code) ?? '';
+          // The model guessed the source system when it had to give one, and a wrong
+          // guess reads as "no such machine". By code alone, the one machine with it.
+          const sourceSystem = str(a.sourceSystem)
+            ?? (await equipment.list(scope, {})).find((e) => e.externalId === code)?.sourceSystem
+            ?? '';
+          const result = await onboarding.machine(scope, sourceSystem, code);
+          // The reason codes alone let the model guess, and it guessed wrong (TC_131): a
+          // class with no required signals came back as "complete the mapping on the
+          // mapping screen", where there was nothing to map. Each step carries what its
+          // reason means and who can act on it.
+          return {
+            ...result,
+            steps: result.steps.map((s) => ({ ...s, meaning: s.reason ? STEP_REASON_MEANING[s.reason] ?? null : null })),
+          };
+        },
       },
       {
         name: 'list_sites',
