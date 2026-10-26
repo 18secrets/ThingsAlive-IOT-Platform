@@ -5,7 +5,7 @@ import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { WorkOrder } from '../work/entities/work-order.entity';
 import {
-  Band, FORECAST_CADENCE_MS, FORECAST_RETENTION_DAYS, learnBand, ResidualPoint,
+  Band, FORECAST_CADENCE_MS, FORECAST_RETENTION_DAYS, learnBand, ResidualPoint, steadyHours,
 } from './forecast-band';
 import { ForecastLatest, ForecastModel, ForecastResidual, HorizonPoint } from './forecast.entities';
 import { forecastDeclarations, signalInputs } from './forecast-inputs';
@@ -85,13 +85,22 @@ export class ForecastReader {
     };
   }
 
-  /** The newest step with an actual, judged against a band learned from the steps before it (D20). */
+  /**
+   * The newest steady running hour, judged against a band learned from the steps before
+   * it (D20). Not simply the newest step: the band is learned from steady running only,
+   * so a parked hour (every night) or a run's first hour (every morning) judged against
+   * it would read anomalous on a healthy machine. `at` says which hour was judged.
+   */
   async anomaly(
     m: EntityManager, tenantId: string, profile: EquipmentProfile, signal: string, modelId: string, at: Date,
   ): Promise<ForecastChartData['anomaly']> {
     const rows = await residualsFor(m, tenantId, profile, signal, modelId, at);
-    const newest = rows.length ? rows[rows.length - 1] : null;
-    const band = learnBand(rows.slice(0, -1).map(toPoint), await this.dirtyRanges(m, tenantId, profile, signal, at));
+    const points = rows.map(toPoint);
+    const steady = steadyHours(points);
+    const judged = [...rows].reverse().find((_, i) => steady(points[rows.length - 1 - i])) ?? null;
+    const before = judged ? points.filter((p) => p.stepAt < judged.stepAt) : points;
+    const band = learnBand(before, await this.dirtyRanges(m, tenantId, profile, signal, at));
+    const newest = judged;
     const base = {
       at: newest?.stepAt.toISOString() ?? null, actual: newest?.actual ?? null,
       predicted: newest?.predicted ?? null, residual: newest?.residual ?? null,
