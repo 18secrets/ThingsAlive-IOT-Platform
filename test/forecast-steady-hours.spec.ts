@@ -13,15 +13,17 @@ const DAY = 24 * HOUR;
 const MIDNIGHT = Date.UTC(2026, 9, 19);
 
 /**
- * A working day as the uploaded excavator history showed it (hours UTC): parked until 08,
- * the first running hour missing by about +18, steady running after missing by about ±0.5,
- * parked again from 17. Twenty such days before MIDNIGHT.
+ * A working day as the uploaded excavator history showed it, in UTC buckets for a shift
+ * starting on the half hour (08:00 IST = 02:30 UTC, here 08:30): the 08 bucket is half
+ * parked and misses by about +6, the 09 bucket is the first full running hour and misses
+ * by about +18, steady running after misses by about ±0.5, parked again from 17. Twenty
+ * such days before MIDNIGHT.
  */
-const day = (d: number, startMiss = 18): ResidualPoint[] => {
+const day = (d: number): ResidualPoint[] => {
   const out: ResidualPoint[] = [];
   for (let h = 6; h <= 18; h++) {
     const operating = h >= 8 && h < 17;
-    const residual = !operating ? 0 : h === 8 ? startMiss : ((d * 7 + h * 3) % 11) / 10 - 0.5;
+    const residual = !operating ? 0 : h === 8 ? 6 : h === 9 ? 18 : ((d * 7 + h * 3) % 11) / 10 - 0.5;
     out.push({ stepAt: new Date(MIDNIGHT - d * DAY + h * HOUR), lead: 1, residual, operating });
   }
   return out;
@@ -29,7 +31,7 @@ const day = (d: number, startMiss = 18): ResidualPoint[] => {
 const days = (n: number) => Array.from({ length: n }, (_, i) => day(n - i)).flat();
 
 describe('the forecast band learns from steady running only', () => {
-  it('a run\'s first hour is the operating hour after a parked one; an hour after a gap is not', () => {
+  it('a run\'s first two buckets are warm-up; a bucket after a gap is not', () => {
     const at = (h: number) => new Date(MIDNIGHT + h * HOUR);
     const points: ResidualPoint[] = [
       { stepAt: at(7), lead: 1, residual: 0, operating: false },
@@ -37,17 +39,17 @@ describe('the forecast band learns from steady running only', () => {
       { stepAt: at(9), lead: 1, residual: 1, operating: true },
       { stepAt: at(12), lead: 1, residual: 1, operating: true }, // 11 has no residual
     ];
-    expect([...runStartHours(points)]).toEqual([at(8).getTime()]);
+    expect([...runStartHours(points)].sort()).toEqual([at(8).getTime(), at(9).getTime()]);
   });
 
-  it('the first hour\'s +18 does not widen the band: it stays the steady ±0.5', () => {
+  it('neither the half-parked +6 nor the first full hour\'s +18 widens the band: it stays the steady ±0.5', () => {
     const band = learnBand(days(20), []);
     expect(band.established).toBe(true);
     if (!band.established) return;
     expect(band.hi).toBeLessThanOrEqual(0.5);
     expect(band.lo).toBeGreaterThanOrEqual(-0.5);
-    // Twenty days, steady hours 09–16: eight a day, the first hour of each left out.
-    expect(band.n).toBe(20 * 8);
+    // Twenty days, steady buckets 10–16: seven a day, the run's first two left out.
+    expect(band.n).toBe(20 * 7);
   });
 
   it('fourteen days still means fourteen days of steady hours, not of any operating hour', () => {
@@ -103,9 +105,9 @@ describeDb('forecast anomaly: the newest steady hour is judged', () => {
     return reader.anomaly(m, 'acme', profile, 'coolant', modelId, at);
   });
 
-  it('1. the morning\'s first hour, +18 like every morning, is not judged: yesterday\'s last steady hour is, and it is normal', async () => {
-    await store([...days(20), ...day(0).filter((p) => p.stepAt.getTime() <= MIDNIGHT + 8 * HOUR)]);
-    const a = await anomaly(new Date(MIDNIGHT + 9 * HOUR));
+  it('1. this morning\'s warm-up, +6 then +18 like every morning, is not judged: yesterday\'s last steady hour is, and it is normal', async () => {
+    await store([...days(20), ...day(0).filter((p) => p.stepAt.getTime() <= MIDNIGHT + 9 * HOUR)]);
+    const a = await anomaly(new Date(MIDNIGHT + 10 * HOUR));
     expect(a).toMatchObject({ state: 'normal', at: new Date(MIDNIGHT - DAY + 16 * HOUR).toISOString() });
   });
 
