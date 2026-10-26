@@ -83,6 +83,9 @@ export interface DemoSignal {
 
 /** Canonical names from `common/signals.ts`, so Availability and the duty cycle read
  * them without an alias. */
+/** Forecast by the TTM pass (QML1): the signals the demo's failure modes name. */
+export const DEMO_FORECAST_SIGNALS = ['engine_coolant_temperature', 'hydraulic_oil_temperature', 'engine_oil_pressure'];
+
 export const DEMO_SIGNALS: DemoSignal[] = [
   { signal: 'engine_running_status', unit: 'state', criticality: 'required', description: 'Engine running (1) or stopped (0).' },
   { signal: 'engine_coolant_temperature', unit: 'degC', criticality: 'required', description: 'Engine coolant temperature.' },
@@ -271,6 +274,10 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
       classSlug: DEMO_CLASS, classVersion: 1, measurementRole: s.signal, componentScope: '',
       criticality: s.criticality, minCount: 1, canonicalUnit: s.unit, enables: [], notes: null,
       staleAfterSeconds: STALE_AFTER_SECONDS,
+      // The three the failure modes watch, so the forecast pass has something to do and
+      // the recommendation engine a band to read (D20, D21). Fuel, load and running
+      // status are not: nothing in the library judges them by a forecast.
+      ...(DEMO_FORECAST_SIGNALS.includes(s.signal) ? { forecastEnabled: true, forecastHorizonHours: 24 } : {}),
     })));
 
     const formula = (formulaKey: string, expression: string, extra: Partial<EquipmentClassFormula> = {}) => ({
