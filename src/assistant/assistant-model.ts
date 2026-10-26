@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 /**
  * The answer model, behind the smallest interface the chat loop needs.
@@ -97,6 +97,17 @@ const MODEL_CALL_TIMEOUT_MS = 20_000;
 const FALLBACK_HOLD_MS = 5 * 60_000;
 
 /** Gemini, on Vertex AI or with an API key. */
+/**
+ * How a Flash model is told not to think. Gemini 2.x takes a budget of zero; 3.x refuses
+ * that outright ("Request contains an invalid argument") and takes a level instead, the
+ * lowest being minimal — while 2.x refuses a level. Dev runs gemini-3.5-flash-lite, also
+ * the fallback below, and every assistant answer there failed until this followed the
+ * model's generation.
+ */
+export function thinkingOff(modelName: string): { thinkingBudget: number } | { thinkingLevel: ThinkingLevel } {
+  return /gemini-([3-9]|\d{2,})/i.test(modelName) ? { thinkingLevel: ThinkingLevel.MINIMAL } : { thinkingBudget: 0 };
+}
+
 export class GeminiModel implements AssistantModel {
   private readonly ai: GoogleGenAI;
   readonly name: string;
@@ -147,7 +158,7 @@ export class GeminiModel implements AssistantModel {
           // seconds to every one of up to five calls a turn (TC_128: ~48 s an answer).
           // It also spent maxOutputTokens, leaving some answers empty. Pro cannot turn
           // it off, so it keeps its default.
-          ...(/flash/i.test(modelName) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          ...(/flash/i.test(modelName) ? { thinkingConfig: thinkingOff(modelName) } : {}),
           maxOutputTokens: 2048,
           ...(input.tools.length ? {
             tools: [{
