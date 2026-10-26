@@ -43,6 +43,9 @@ export interface OperatingGate {
   /** False when the machine has no shift schedule — there is nothing to gate on. */
   scheduled: boolean;
   periods: ExcludedRange[];
+  /** Whether any engine-state reading fell in the window. Scheduled but unobserved, the
+   * periods are empty because nobody knows, not because the machine never ran. */
+  observed?: boolean;
 }
 
 /**
