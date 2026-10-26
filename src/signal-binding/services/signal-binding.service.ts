@@ -116,6 +116,8 @@ export interface ProposeBindingInput {
   validTo?: Date | null;
   discoveredBy?: SignalBindingDiscoveredBy;
   discoveredFrom?: string | null;
+  /** How often the sensor reports. Omitted: inherited, see `inheritedPeriod`. */
+  expectedPeriodSeconds?: number | null;
 }
 
 /**
@@ -410,6 +412,7 @@ export class SignalBindingService {
         isPrimary: false,
         status: input.discoveredBy && input.discoveredBy !== 'manual' ? 'discovered_unreviewed' : 'proposed',
         discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
+        expectedPeriodSeconds: await inheritedPeriod(m, scope.tenantId, equipment, input, null),
       }));
     });
   }
@@ -441,6 +444,8 @@ export class SignalBindingService {
         },
       });
 
+      const expectedPeriodSeconds = await inheritedPeriod(m, scope.tenantId, equipment, input, existing);
+
       if (existing) {
         // If it is already active with the same device/channel, it is already satisfied
         if (
@@ -467,7 +472,7 @@ export class SignalBindingService {
           validFrom: input.validFrom, validTo: input.validTo ?? null,
           isPrimary: true, status: 'active',
           discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
-          approvedBy: scope.userId, approvedAt: now,
+          approvedBy: scope.userId, approvedAt: now, expectedPeriodSeconds,
         }));
       } catch (err: any) {
         if (err?.message?.includes('ex_signal_binding_primary') || err?.code === '23P01') {
@@ -663,4 +668,32 @@ async function latestParameterRows(m: EntityManager, tenantId: string, name: str
     [tenantId, name, at],
   );
   return raw.map((r) => ({ ...r, effectiveFrom: new Date(r.effectiveFrom) }));
+}
+
+/**
+ * The reporting period a binding is created with when the caller gives none. Without
+ * one the KPI evaluator assumes 300 s, so a sensor reporting every 600 s reads half
+ * covered and every KPI on it `insufficient_coverage` (EX-01's fuel_level on dev, bound
+ * from sensor-map discovery on 22 Oct, beside six siblings declaring 600 s).
+ *
+ * In order: what the caller said; the binding this one replaces, which was the same
+ * sensor; otherwise the period the same device's other active bindings on this machine
+ * agree on, since a logger reports its channels at one cadence. Disagreement or none
+ * leaves it null, as before: a guess would be worse than the evaluator's default.
+ */
+async function inheritedPeriod(
+  m: EntityManager, tenantId: string, equipment: EquipmentRef, input: ProposeBindingInput,
+  replaced: SignalBindingVersion | null,
+): Promise<number | null> {
+  if (input.expectedPeriodSeconds) return input.expectedPeriodSeconds;
+  if (replaced?.expectedPeriodSeconds) return replaced.expectedPeriodSeconds;
+  if (!input.imei) return null;
+  const siblings = await m.getRepository(SignalBindingVersion).find({
+    where: {
+      tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+      imei: input.imei, isPrimary: true, status: 'active',
+    },
+  });
+  const periods = new Set(siblings.map((b) => b.expectedPeriodSeconds).filter((p): p is number => p !== null));
+  return periods.size === 1 ? [...periods][0] : null;
 }
