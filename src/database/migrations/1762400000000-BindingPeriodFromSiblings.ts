@@ -21,9 +21,8 @@ export class BindingPeriodFromSiblings1762400000000 implements MigrationInterfac
   name = 'BindingPeriodFromSiblings1762400000000';
 
   public async up(q: QueryRunner): Promise<void> {
-    // Every tenant's rows: the table's RLS is forced, and a login that is not a superuser
-    // would otherwise see none of them and update nothing, silently. Transaction-local.
-    await q.query(`SELECT set_config('ta.bypass', 'on', true)`);
+    // Every tenant's rows, as the migration login sees them (the owner, as for every data
+    // migration here). The tenant bypass is only ever set by tenant-session.ts; CI holds that.
     await q.query(`
       UPDATE "signal_binding_version" b
          SET "expected_period_seconds" = s.period
