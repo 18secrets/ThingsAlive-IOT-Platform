@@ -52,7 +52,11 @@ export const SessionDiagnostics: React.FC = () => {
           {data && (
             <div className="space-y-2.5 font-mono text-xs">
               <Row label={t('diagnostics.tenant')} value={data.tenantId} />
-              <Row label={t('diagnostics.user')} value={data.userId} />
+              {/* The name first, the id after it (tester bug TC_135): a person reads
+                  the name, support still asks for the id. */}
+              <Row label={t('diagnostics.user')} value={data.fullName ?? data.email ?? data.userId} />
+              {data.email && <Row label={t('diagnostics.email')} value={data.email} />}
+              <Row label={t('diagnostics.userId')} value={data.userId} />
               <Row label={t('diagnostics.roles')} value={data.roles.join(', ') || '—'} />
               <Row label={t('diagnostics.platformRole')} value={data.isPlatformRole ? t('diagnostics.yes') : t('diagnostics.no')} />
               <Row label={t('diagnostics.plants')} value={formatScope(data.scope.plants, t)} />

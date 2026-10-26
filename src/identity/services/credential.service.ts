@@ -316,12 +316,31 @@ export class CredentialService {
           );
           await this.record(m, 'session.reuse-detected', { user, ctx, detail: session.family });
         }
+        // Suspending somebody revokes their sessions as it happens, so a reload after
+        // it lands here, and the console can only say why if this does (TC_136). It
+        // tells the token's holder nothing they could not see the hour before.
+        if (user.status === 'suspended') {
+          return refuse('This account has been suspended. Your administrator can restore it.');
+        }
         return refuse('Please sign in again.');
+      }
+
+      // The same refusal sign-in gives, or a reload after the account was suspended
+      // kept the person signed in (tester bugs TC_136, TC_137): sign-in checked the
+      // organisation, refresh did not, so refresh issued tokens every other endpoint
+      // then refused, and the console waited on its first call for good. The
+      // sessions go too: a suspension is not undone by presenting an older token.
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId: user.tenantId } });
+      if (tenant && tenant.status === 'suspended') {
+        await this.revokeAll(m, user, 'tenant suspended', now);
+        return refuse('This organisation\'s account is suspended. Please contact Things Alive.');
       }
 
       if (user.status !== 'active') {
         await this.revokeAll(m, user, `status ${user.status}`, now);
-        return refuse('This account can no longer sign in.');
+        return refuse(user.status === 'suspended'
+          ? 'This account has been suspended. Your administrator can restore it.'
+          : 'This account can no longer sign in.');
       }
 
       session.rotatedAt = now;
@@ -388,6 +407,14 @@ export class CredentialService {
       await repo.save(user);
       await this.revokeAll(m, user, 'password changed', now);
       await this.record(m, 'password.set', { user, ctx, detail: 'self-service change' });
+    });
+  }
+
+  /** The caller's own name and address, for the screens that show who is signed in. */
+  async ownIdentity(scope: RequestScope): Promise<{ email: string; fullName: string } | null> {
+    return withTenantId(this.ds, scope.tenantId, async (m) => {
+      const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId } });
+      return user ? { email: user.email, fullName: user.fullName } : null;
     });
   }
 
