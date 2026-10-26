@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsISO8601, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -31,6 +31,9 @@ export class ProposeOrActivateBindingDto {
   @IsOptional() @IsIn(['tool-mapping', 'sensor-map', 'both', 'manual', 'model'])
   discoveredBy?: 'tool-mapping' | 'sensor-map' | 'both' | 'manual' | 'model';
   @IsOptional() @IsString() discoveredFrom?: string;
+
+  /** How often the sensor reports, in seconds. Omitted: inherited (see `SignalBindingService.activate`). */
+  @IsOptional() @IsInt() @Min(1) expectedPeriodSeconds?: number;
 }
 
 /**
@@ -86,6 +89,7 @@ export class SignalBindingController {
       canonicalUnit: body.canonicalUnit, sourceUnit: body.sourceUnit,
       validFrom: new Date(body.validFrom), validTo: body.validTo ? new Date(body.validTo) : null,
       discoveredBy: body.discoveredBy, discoveredFrom: body.discoveredFrom,
+      expectedPeriodSeconds: body.expectedPeriodSeconds,
     };
     const equipment = { sourceSystem, externalId };
     return body.action === 'activate'
