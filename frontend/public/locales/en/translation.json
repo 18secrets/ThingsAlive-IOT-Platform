@@ -256,5 +256,12 @@
     "suspendReason": "Why is {{name}} being suspended?",
     "takeBackReason": "Why is {{imei}} being taken back into stock?",
     "retireReason": "Why is {{imei}} being retired?"
+  },
+  "toast": {
+    "saved": "Saved successfully",
+    "deleted": "Deleted successfully",
+    "saveFailed": "Could not save",
+    "deleteFailed": "Could not delete",
+    "noReason": "The server could not be reached. Please try again."
   }
 }
