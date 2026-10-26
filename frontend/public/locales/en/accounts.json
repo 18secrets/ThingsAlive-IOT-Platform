@@ -159,6 +159,8 @@
     "none": "None",
     "tenant": "Tenant",
     "user": "User",
+    "email": "Email",
+    "userId": "User ID",
     "roles": "Roles",
     "platformRole": "Platform role",
     "plants": "Plants",

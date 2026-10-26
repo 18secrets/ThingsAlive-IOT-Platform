@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { canGate, loadOperatingGate } from '../../kpi/services/operating-gate';
 import { withTenantSession } from '../../scope/tenant-session';
 import { boundImeis } from '../../signal-binding/services/signal-binding.service';
 import { BaselineSource, PredictionBaseline } from '../entities/prediction-baseline.entity';
@@ -37,6 +38,15 @@ interface AggregateRow {
  * Idempotent by construction. Recomputing the same window writes the same numbers to
  * the same row, so a refresh that runs twice — or a replay that triggers one — leaves
  * the same state as running it once.
+ *
+ * Operating hours only, when the machine has a shift schedule (QFIX-BASELINE, carried
+ * to Tier 1): in shift with the engine on, the KPI baseline's own gate. A running
+ * engine and a parked one are two populations; averaging them put coolant's mean
+ * between ~34 and ~84 °C with σ ≈ 22, so every healthy machine read ±2σ through each
+ * shift and a hydraulic-heat scenario scored HIGH on normal running. A machine with no
+ * schedule, or no engine-state reading in the window, cannot tell the two apart and is
+ * baselined over every reading, as before: unlike a KPI, which refuses, Tier 1 keeps
+ * scoring a machine whose logger has no ignition or running channel.
  */
 @Injectable()
 export class BaselineService {
@@ -58,6 +68,9 @@ export class BaselineService {
         this.logger.debug(`No device on ${target.externalId}; nothing to baseline.`);
         return [];
       }
+
+      const gate = await loadOperatingGate(m, scope.tenantId, target, from, now);
+      const periods = canGate(gate) ? gate.periods : null;
 
       const rows: AggregateRow[] = await m.query(
         `SELECT "signal",
@@ -83,9 +96,26 @@ export class BaselineService {
                  AND b."is_primary" AND b."status" = 'active'
                  AND r."source_timestamp" >= b."valid_from"
                  AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to"))
+            -- Inside an operating period, when there is a schedule to say what that is.
+            AND ($7::timestamptz[] IS NULL OR EXISTS (
+              SELECT 1 FROM unnest($7::timestamptz[], $8::timestamptz[]) AS p(s, e)
+               WHERE r."source_timestamp" >= p.s AND r."source_timestamp" < p.e))
           GROUP BY "signal"`,
-        [scope.tenantId, imeis, from, now, target.sourceSystem, target.externalId],
+        [scope.tenantId, imeis, from, now, target.sourceSystem, target.externalId,
+          periods && periods.map((p) => p.start), periods && periods.map((p) => p.end)],
       );
+
+      // A signal with no operating reading in the window has no baseline. Left in place,
+      // last refresh's row — perhaps learned over every hour, before this rule — would go
+      // on judging it; removed, the scorer says no-baseline, which is the truth.
+      if (periods) {
+        await m.query(
+          `DELETE FROM "prediction_baseline"
+            WHERE "tenant_id" = $1 AND "source_system" = $2 AND "external_id" = $3 AND "window_days" = $4
+              AND NOT ("signal" = ANY($5::text[]))`,
+          [scope.tenantId, target.sourceSystem, target.externalId, windowDays, rows.map((r) => r.signal)],
+        );
+      }
 
       const written: PredictionBaseline[] = [];
       for (const r of rows) {

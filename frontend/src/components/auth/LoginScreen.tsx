@@ -10,7 +10,7 @@ import { ApiError } from '../../lib/api';
 import logoFull from '../../../assets/logo-icon.png';
 
 export const LoginScreen: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, sessionEndedReason } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
@@ -18,6 +18,9 @@ export const LoginScreen: React.FC = () => {
   const [showHints, setShowHints] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Landing here because the server ended the session (a suspension, say) says so,
+  // rather than looking like an ordinary sign-out (tester bugs TC_136, TC_137).
+  const shownError = error ?? sessionEndedReason ?? undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,10 +93,10 @@ export const LoginScreen: React.FC = () => {
               </button>
             </div>
 
-            {error && (
+            {shownError && (
               <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{error}</span>
+                <span>{shownError}</span>
               </div>
             )}
 

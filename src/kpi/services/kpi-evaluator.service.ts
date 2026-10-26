@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
-import { WindowReading } from '../../alert/services/alert-rules';
 import {
   alertExcludedRanges, ExcludedRange, OperatingGate, openWorkOrderExcludedRanges, Reading,
 } from '../../catalog/formula/baseline-operators';
@@ -15,13 +14,12 @@ import { Plant } from '../../equipment/entities/plant.entity';
 import { SiteBoundary } from '../../catalog/formula/geofence';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantSession } from '../../scope/tenant-session';
-import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { BindingSegment, bindingSegments, overlapping, SignalBindingService } from '../../signal-binding/services/signal-binding.service';
 import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
-import { AVAILABILITY_SIGNALS, operatingIntervals } from '../../utilization/services/availability';
 import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
 import { BucketAggregate, TelemetrySegment, TelemetryWindowReader } from './telemetry-window-reader';
+import { loadOperatingGate } from './operating-gate';
 import { MAX_BUCKETS_OVERRIDE, pickBucketSeconds } from './bucketing';
 
 const HOUR = 3_600_000;
@@ -328,41 +326,11 @@ export class KpiEvaluatorService {
     )));
   }
 
-  /**
-   * The machine's operating periods across the read window (task QFIX-BASELINE) —
-   * Availability's own definition, `operatingIntervals`, over the same shift schedule
-   * and engine-state signals. The engine-state readings come through the bindings like
-   * every other signal this evaluator reads (task QFIX-DEVICES), not through
-   * `device_projection`. Shifts are applied across the whole lookback as they stand
-   * today, as Availability applies them to a period.
-   */
-  /** Public for the forecast band (QML1 Q12): one operating gate, not a second. */
+  /** Public for the forecast band (QML1 Q12): one operating gate, not a second (`operating-gate.ts`). */
   async loadOperatingGate(
     m: EntityManager, tenantId: string, equipment: EquipmentRef, from: Date, to: Date,
   ): Promise<OperatingGate> {
-    const shifts = await m.getRepository(EquipmentShift).find({
-      where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, status: 'active' },
-    });
-    if (!shifts.length) return { scheduled: false, periods: [] };
-
-    const segments = await bindingSegments(
-      m, tenantId, equipment, [...AVAILABILITY_SIGNALS], { by: 'signalKey', componentId: '' },
-    );
-    const bySignal = await this.reader.readSegments(
-      m, tenantId,
-      overlapping(segments, from, to).map(({ signal, imei, from: f, to: t }) => ({ signal, imei, from: f, to: t })),
-      from, to,
-    );
-    const readings: WindowReading[] = [];
-    for (const [signal, rows] of bySignal) {
-      for (const r of rows) readings.push({ signal, value: r.value, sourceTimestamp: r.at.toISOString() });
-    }
-    // A millisecond past `to`: the KPI window includes its end instant and the interval
-    // arithmetic is half-open, so a reading taken exactly at evaluation time — the one a
-    // z-score judges — would otherwise always fall just outside every operating period.
-    const periods = operatingIntervals(shifts, readings, { from, to: new Date(to.getTime() + 1) })
-      .map((i) => ({ start: new Date(i.start), end: new Date(i.end) }));
-    return { scheduled: true, periods };
+    return loadOperatingGate(m, tenantId, equipment, from, to, this.reader);
   }
 
   /** Condition (a) of task QCE2.1 §5 — the same four-branch `appliesTo`
