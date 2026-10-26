@@ -7,6 +7,8 @@
 // sign-out against Platform 2.0's actual /auth routes. Every other screen in
 // this app still reads and writes mock data — see App.tsx.
 
+import { mutationKind, reportMutation } from "./mutationNotice";
+
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
 
@@ -75,6 +77,16 @@ export function hasStoredSession(): boolean {
 let onSessionDead: (() => void) | null = null;
 export function setSessionDeadHandler(handler: (() => void) | null): void {
   onSessionDead = handler;
+}
+
+// Why the server last refused to renew the session ("This account has been
+// suspended."), so the sign-in screen can say it instead of appearing for no reason
+// (tester bugs TC_136, TC_137). Read once: it explains one sign-out, not the next.
+let sessionEndReason: string | null = null;
+export function takeSessionEndReason(): string | null {
+  const reason = sessionEndReason;
+  sessionEndReason = null;
+  return reason;
 }
 
 export async function apiSignIn(
@@ -150,8 +162,10 @@ export async function apiResume(): Promise<SignedInUser | null> {
     const body: SessionTokens = await parse(res);
     store(body);
     return body.user;
-  } catch {
+  } catch (err) {
     clear();
+    // Only the server's own refusal; a network failure says nothing about the account.
+    sessionEndReason = err instanceof ApiError && err.status === 401 ? err.message : null;
     return null;
   }
 }
@@ -185,14 +199,21 @@ async function authFetch(
   init: RequestInit = {},
   retried = false,
 ): Promise<any> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...init.headers,
-    },
-  });
+  const kind = mutationKind(path, init.method);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (err) {
+    if (kind) reportMutation({ ok: false, kind, message: null });
+    throw err;
+  }
   if (res.status === 401 && !retried) {
     const resumed = await apiResume();
     if (resumed) return authFetch(path, init, true);
@@ -202,7 +223,17 @@ async function authFetch(
     // exists.
     onSessionDead?.();
   }
-  return parse(res);
+  // Only the final answer is reported: a 401 that a refresh then retried is not a
+  // failure, and one that ends the session is the sign-in screen's to explain.
+  if (!kind || res.status === 401) return parse(res);
+  try {
+    const body = await parse(res);
+    reportMutation({ ok: true, kind });
+    return body;
+  } catch (err) {
+    reportMutation({ ok: false, kind, message: err instanceof ApiError ? err.message : null });
+    throw err;
+  }
 }
 
 /**
@@ -227,6 +258,12 @@ async function authFetchRaw(
     const resumed = await apiResume();
     if (resumed) return authFetchRaw(path, init, true);
     onSessionDead?.();
+  }
+  const kind = mutationKind(path, init.method);
+  if (kind && res.status !== 401) {
+    // A clone, so the caller still reads the body it expects.
+    const message = res.ok ? null : (await res.clone().json().catch(() => ({})))?.error?.message ?? `Request failed (${res.status}).`;
+    reportMutation(res.ok ? { ok: true, kind } : { ok: false, kind, message });
   }
   return res;
 }
@@ -3351,6 +3388,9 @@ export function apiSetCurrency(currency: string | null): Promise<CurrencyResult>
 export interface MeDiagnostics {
   tenantId: string;
   userId: string;
+  /** Null for a token that names no account row (one minted by the CLI). */
+  email: string | null;
+  fullName: string | null;
   roles: string[];
   isPlatformRole: boolean;
   scope: {

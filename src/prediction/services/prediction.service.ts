@@ -11,6 +11,7 @@ import { boundImeis } from '../../signal-binding/services/signal-binding.service
 import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { Prediction, PredictionSource } from '../entities/prediction.entity';
+import { loadOperatingGate, operatingAt } from '../../kpi/services/operating-gate';
 import { PredictionBaseline } from '../entities/prediction-baseline.entity';
 import { DEFAULT_WINDOW_DAYS } from './baseline.service';
 import {
@@ -153,10 +154,18 @@ export class PredictionService {
     // server clock would date the score to now and make a replay write duplicates.
     if (latest.length === 0) return null;
 
+    // Whether each reading was taken while operating: the baseline learns from operating
+    // hours only, so a parked reading has nothing to be judged against. The day before
+    // the oldest reading is read too, so a run that started then is seen as running.
+    const times = latest.map((r) => new Date(r.source_timestamp).getTime());
+    const gate = await loadOperatingGate(
+      m, scope.tenantId, target, new Date(Math.min(...times) - 86_400_000), new Date(Math.max(...times)),
+    );
     const observations: SignalObservation[] = latest.map((r) => ({
       signal: r.signal,
       value: Number(r.value),
       at: r.source_timestamp,
+      operating: operatingAt(gate, new Date(r.source_timestamp)),
     }));
 
     // Physics before history. A scenario that carries an influence model is asking a
