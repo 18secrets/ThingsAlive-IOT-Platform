@@ -1,25 +1,85 @@
-# The scheduler image (QML1, D46): the api's image plus Python and the forecaster.
+# Multi-stage, because the image that runs in production should not carry the
+# toolchain that built it. The runtime stage has no TypeScript compiler, no test
+# framework and no dev dependencies — less to patch, less to exploit, and a smaller
+# image to pull on every deploy.
+
+# glibc (Debian bookworm), not Alpine, since QML1 (D46): the scheduler image must carry
+# Python 3.11 for the forecaster, and Alpine now ships Python 3.14, which granite-tsfm
+# does not support (QML1-SIZE). The api moves too, so both services share one base to
+# patch; it costs the api +19 MB compressed and nothing else (QML1-SIZE variant C/E).
+# The api never carries Python or torch: those are only in the `scheduler` stage below.
+
+# Which image this build produces: `api` or `scheduler`. Railway's builder stopped
+# honouring a service's Dockerfile Path on 2026-10-26 — it builds `Dockerfile` whatever
+# the setting says — so the scheduler can no longer be told apart by filename alone. It
+# is told apart by this argument, set as a variable on the scheduler service (Railway
+# passes a service variable to the build when the Dockerfile declares it). BuildKit
+# builds only the stages the chosen image needs, so the api build never runs the Python
+# stage and the scheduler build never fetches the embedding model.
 #
-# Separate from Dockerfile so the api never carries torch (QML1-SIZE: variant D, 605 MB
-# compressed, against the api's 117 MB). Railway selects a Dockerfile per service, not
-# a build target, so the split is two files; railway.scheduler.json points here once
-# Deepak confirms the scheduler service reads that file (see the QML1 MR).
-#
-# Layer order is the point of this file: Python, torch and the weights sit below the
-# source copy, so a change under src/ rebuilds only the last layers (QML1-SIZE measured
-# a warm rebuild unchanged against the api's).
+# Dockerfile.scheduler is this file with the default flipped, so a builder that does
+# honour the path gets the scheduler without the variable. test/dockerfile-image-role
+# holds the two identical apart from that one line.
+ARG IMAGE_ROLE=scheduler
 
 # ---- build ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+
+# Dependencies first, so a change to src/ does not re-resolve the whole tree. The
+# lockfile is copied with package.json and `npm ci` is used rather than `npm install`:
+# ci installs exactly what the lockfile says and fails if the two disagree, which is
+# the difference between a reproducible build and one that resolves whatever was
+# newest that morning.
 COPY package.json package-lock.json* .npmrc ./
 RUN npm ci --no-audit --no-fund
+
 COPY tsconfig*.json ./
 COPY src ./src
 RUN npm run build
 
-# ---- runtime --------------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+# ---- embedding model (QEMB1, D47) -------------------------------------------
+# bge-small for the api's library search, fetched here at the profile's pinned revision
+# and refused if any file's sha256 differs, so the image never downloads at runtime and
+# never carries weights its embedding_profile row does not describe. Its own stage, so a
+# change to src/ does not fetch 130 MB again.
+FROM node:22-bookworm-slim AS model
+COPY scripts/embedding/fetch-model.js /fetch-model.js
+RUN node /fetch-model.js /models
+
+# ---- api ------------------------------------------------------------------
+FROM node:22-bookworm-slim AS api
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Production dependencies only. `npm ci --omit=dev` against the same lockfile, so the
+# runtime tree is a strict subset of what the build resolved rather than a second,
+# independent resolution.
+COPY package.json package-lock.json* .npmrc ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force \
+ && node -e "require('fs').accessSync('node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime.so.1')" \
+ && rm -rf node_modules/onnxruntime-web \
+           node_modules/onnxruntime-node/bin/napi-v6/darwin node_modules/onnxruntime-node/bin/napi-v6/win32
+# onnxruntime-node ships its native runtime for every OS, and @huggingface/transformers
+# brings the WebAssembly runtime as well; a Linux Node process loads neither. Removing
+# them takes about 370 MB out of the image. The access check above fails the build,
+# rather than the first search, if a future version moves the Linux binary.
+
+COPY --from=build /app/dist ./dist
+COPY --from=model /models /app/models
+
+# Not root. A container that does not need to write to its own filesystem should not be
+# able to, and the node image ships a `node` user for exactly this.
+USER node
+
+EXPOSE 8080
+CMD ["node", "dist/main.js"]
+
+# ---- scheduler (QML1, D46) --------------------------------------------------
+# The api's code plus Python and the forecaster. Layer order is the point: Python, torch
+# and the weights sit below the source copy, so a change under src/ rebuilds only the
+# last layers (QML1-SIZE measured a warm rebuild unchanged against the api's).
+FROM node:22-bookworm-slim AS scheduler
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -52,11 +112,15 @@ COPY package.json package-lock.json* .npmrc ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force \
  && rm -rf node_modules/onnxruntime-web \
            node_modules/onnxruntime-node/bin/napi-v6/darwin node_modules/onnxruntime-node/bin/napi-v6/win32
-# The same prune as the api's Dockerfile: the scheduler never embeds (QEMB1), and these
-# are runtimes for other operating systems and for browsers. The model is not copied here.
+# The same prune as the api's: the scheduler never embeds (QEMB1), and these are
+# runtimes for other operating systems and for browsers. The embedding model is not copied.
 COPY --from=build /app/dist ./dist
 COPY python/forecast/infer.py ./python/forecast/infer.py
 
 USER node
 EXPOSE 8080
 CMD ["node", "dist/main.js"]
+
+# ---- the image ------------------------------------------------------------
+# Last, so it is what a build with no --target produces: the stage IMAGE_ROLE names.
+FROM ${IMAGE_ROLE}
