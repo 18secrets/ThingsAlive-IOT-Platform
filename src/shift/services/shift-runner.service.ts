@@ -12,7 +12,7 @@ import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
 import { UtilizationService } from '../../utilization/services/utilization.service';
 import { alertWindow } from './alert-window';
-import { pullOwnTelemetry } from './own-telemetry';
+import { ownExpectedSignals, pullOwnTelemetry } from './own-telemetry';
 import { withTenantId } from '../../scope/tenant-session';
 import { ShiftRun } from '../entities/shift-run.entity';
 import { tryTakePassLock } from './pass-lock';
@@ -265,7 +265,7 @@ export class ShiftRunner {
         // to show. Skipping it here would leave a hole that reads as a gap in the data
         // rather than as a machine that was paid for and not used.
         await this.recordUtilization(window, readings);
-        await this.recordLinkHealth(window, readings);
+        await this.recordLinkHealth(window, readings, !!own);
         await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
         return { ...this.outcome(window, 'not-running', 'engine-never-ran'), readings: readings.length };
       }
@@ -294,7 +294,7 @@ export class ShiftRunner {
       );
 
       await this.recordUtilization(window, readings);
-      await this.recordLinkHealth(window, readings);
+      await this.recordLinkHealth(window, readings, !!own);
 
       // Last, and only now. Everything above either happened or threw.
       await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
@@ -413,9 +413,23 @@ export class ShiftRunner {
   private async recordLinkHealth(
     window: OwedWindow,
     readings: { imei?: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+    fromOwn = false,
   ): Promise<void> {
     try {
       const expected = await this.reader.expectedSignalsFor(window);
+      // Scored from 2.0's own readings, a logger commissioned here is judged too. Only
+      // then: a window pulled from the existing platform carries none of a 2.0 logger's
+      // readings, and judging it against that pull would call a reporting logger dark.
+      // A logger the sensor map already knows keeps the map's list, as before.
+      if (fromOwn) {
+        const own = await ownExpectedSignals(this.ds, {
+          tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+          from: window.start, to: window.end,
+        });
+        for (const [imei, signals] of own) {
+          if (!expected.has(imei)) expected.set(imei, signals);
+        }
+      }
       if (expected.size === 0) return;
 
       const arrivals = new Map(
