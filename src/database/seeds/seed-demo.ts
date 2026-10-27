@@ -323,25 +323,25 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
       formula('hydraulic_vs_baseline', 'zscore(hydraulic_oil_temperature, 30d)', { chartType: 'line', displayFormat: 'number:2' }),
     ].map((f) => m.getRepository(EquipmentClassFormula).create(f)));
 
-    const widgets: [string, string, string | null, 'small' | 'medium' | 'large' | 'full'][] = [
-      ['readiness_list', 'readiness', null, 'medium'],
-      ['kpi_number', 'avg_coolant_temp', 'avg_coolant_temp', 'small'],
-      ['kpi_chart', 'coolant_vs_baseline', 'coolant_vs_baseline', 'medium'],
-      ['kpi_number', 'avg_hydraulic_temp', 'avg_hydraulic_temp', 'small'],
-      ['kpi_chart', 'hydraulic_vs_baseline', 'hydraulic_vs_baseline', 'medium'],
-      ['kpi_number', 'avg_oil_pressure', 'avg_oil_pressure', 'small'],
-      ['kpi_number', 'avg_fuel_level', 'avg_fuel_level', 'small'],
-      ['kpi_chart', 'coolant_trace', 'coolant_trace', 'large'],
-      ['signal_chart', 'hydraulic_chart', 'hydraulic_oil_temperature', 'medium'],
-      ['alert_list', 'alerts', null, 'medium'],
-      ['work_order_list', 'work_orders', null, 'medium'],
-      ['failure_modes', 'failure_modes', null, 'medium'],
-      ['recommendations', 'recommendations', null, 'medium'],
+    const widgets: [string, string, string | null, string | null, 'small' | 'medium' | 'large' | 'full'][] = [
+      ['readiness_list', 'readiness', null, null, 'medium'],
+      ['kpi_number', 'avg_coolant_temp', 'avg_coolant_temp', 'Average Coolant Temperature', 'small'],
+      ['kpi_chart', 'coolant_vs_baseline', 'coolant_vs_baseline', 'Coolant vs Baseline', 'medium'],
+      ['kpi_number', 'avg_hydraulic_temp', 'avg_hydraulic_temp', 'Average Hydraulic Temperature', 'small'],
+      ['kpi_chart', 'hydraulic_vs_baseline', 'hydraulic_vs_baseline', 'Hydraulic vs Baseline', 'medium'],
+      ['kpi_number', 'avg_oil_pressure', 'avg_oil_pressure', 'Average Oil Pressure', 'small'],
+      ['kpi_number', 'avg_fuel_level', 'avg_fuel_level', 'Average Fuel Level', 'small'],
+      ['kpi_chart', 'coolant_trace', 'coolant_trace', 'Coolant Temperature Trace', 'large'],
+      ['signal_chart', 'hydraulic_chart', 'hydraulic_oil_temperature', 'Hydraulic Oil Temperature', 'medium'],
+      ['alert_list', 'alerts', null, null, 'medium'],
+      ['work_order_list', 'work_orders', null, null, 'medium'],
+      ['failure_modes', 'failure_modes', null, null, 'medium'],
+      ['recommendations', 'recommendations', null, null, 'medium'],
     ];
-    await m.getRepository(EquipmentClassLayout).save(widgets.map(([widgetType, widgetKey, boundTo, size], i) =>
+    await m.getRepository(EquipmentClassLayout).save(widgets.map(([widgetType, widgetKey, boundTo, title, size], i) =>
       m.getRepository(EquipmentClassLayout).create({
         classSlug: DEMO_CLASS, classVersion: 1, widgetType: widgetType as never, widgetKey, boundTo,
-        title: null, position: i + 1, size, source: 'manual', importBatchId: null,
+        title, position: i + 1, size, source: 'manual', importBatchId: null,
       })));
   });
 
