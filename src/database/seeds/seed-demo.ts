@@ -129,6 +129,13 @@ export interface DemoMachine {
   endDaysAgo: number;
   unbound: string[];
   expect: string;
+  /**
+   * Its class's normal burn while running, L/h, when the class states one. Without it the
+   * stream burns the demo's 12.4–13.9 L/h — right for the demo excavator, and thirty-fold
+   * wrong across a real fleet: a truck-mounted crane burns under 3 L/h and an excavator
+   * nearly 70, so a flat rate made every low-burn machine look like it was wasting fuel.
+   */
+  fuelPerHour?: number;
 }
 
 export const DEMO_MACHINES: DemoMachine[] = [
@@ -518,8 +525,12 @@ export function demoValue(machine: DemoMachine, signal: string, t: number, now: 
     case 'engine_oil_pressure': return on ? 390 + 15 * cycle + n(6) : Math.abs(n(2));
     case 'hydraulic_oil_temperature': return on ? 62 + 5 * cycle + n(1.5) : 33 + 2 * Math.sin((2 * Math.PI * hour) / 24) + n(0.6);
     case 'fuel_level': return Math.min(98, Math.max(5, 55 + 30 * Math.sin((2 * Math.PI * t) / (3.2 * DAY_MS)) + n(0.8)));
-    // The laptop stream's model, so the series does not step where one source hands to the other.
-    case 'fuel_consumption': return on ? 12.4 + noise() * 1.5 : 0;
+    // The laptop stream's model, so the series does not step where one source hands to the
+    // other: 12.4–13.9 L/h, which is 83–93% of the 15 L/h it was drawn around. A machine
+    // whose class states a norm burns the same share of that norm instead.
+    case 'fuel_consumption':
+      if (!on) return 0;
+      return machine.fuelPerHour ? machine.fuelPerHour * (0.83 + noise() * 0.1) : 12.4 + noise() * 1.5;
     case 'engine_coolant_temperature': {
       if (!on) return 34 + 3 * Math.sin((2 * Math.PI * hour) / 24) + n(0.8);
       // Trending: up to +14 °C across the last ten days — 98 °C or so by now, under the
@@ -769,10 +780,23 @@ async function topUpFleet(ds: DataSource, nowMs: number): Promise<Record<string,
       [DEMO_TENANT, DEMO_SOURCE, modelled],
     ),
   );
+  // Each machine's class norm, read at the class version the machine is on — the figure
+  // OEE judges its fuel against, so the stream and the KPI agree on what normal is.
+  const norms = new Map<string, number>((await runTenantSpanning(
+    ds, 'seed:demo top-up fleet fuel norms', (m) => m.query(
+      `SELECT p.external_id, c.nominal_fuel_per_hour AS norm
+         FROM equipment_profile p
+         JOIN equipment_class_profile c ON c.slug = p.equipment_class_slug AND c.version = p.class_version
+        WHERE p.tenant_id = $1 AND p.source_system <> $2
+          AND c.nominal_fuel_per_hour > 0 AND c.nominal_fuel_unit = 'L/h'`,
+      [DEMO_TENANT, DEMO_SOURCE],
+    ),
+  )).map((r: { external_id: string; norm: string }) => [r.external_id, Number(r.norm)]));
   const written: Record<string, number> = {};
   for (const b of bindings) {
     const machine: DemoMachine = {
       externalId: b.external_id, name: b.external_id, state: 'healthy', historyDays: 0, endDaysAgo: 0, unbound: [], expect: '',
+      fuelPerHour: norms.get(b.external_id),
     };
     // Seeded by logger, so two fleet machines never share a series, nor one share the demo's.
     const seed = Number(b.imei.slice(-6)) * 13 + modelled.indexOf(b.signal_key);
