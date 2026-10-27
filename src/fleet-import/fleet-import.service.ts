@@ -5,7 +5,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placement-event.entity';
 import { Plant } from '../equipment/entities/plant.entity';
 import { CLIENT_SOURCE_SYSTEM, EquipmentProfile } from '../equipment/equipment-profile.entity';
-import { CODE_PATTERN } from '../equipment/services/equipment.service';
+import { CODE_PATTERN, pinnedClassVersion } from '../equipment/services/equipment.service';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { withTenantId } from '../scope/tenant-session';
@@ -111,7 +111,7 @@ export class FleetImportService {
           tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: e.code, origin: 'client', status: 'active',
           name: e.name, manufacturer: e.manufacturer, modelNumber: e.modelNumber, serialNumber: e.serialNumber,
           description: e.description, plantId: e.plantId, equipmentClassSlug: e.equipmentClassSlug,
-          classVersion: null, tier: 'basic',
+          classVersion: await pinnedClassVersion(m, tenantId, e.equipmentClassSlug), tier: 'basic',
           commissionedAt: e.commissionedAt ? new Date(e.commissionedAt) : null,
           serviceIntervalHours: e.serviceIntervalHours, readiness: {},
           createdBy: scope.userId, updatedBy: scope.userId,
