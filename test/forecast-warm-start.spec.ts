@@ -18,6 +18,8 @@ const HOUR_END = new Date('2026-10-19T10:00:00.000Z');
 const FIRST_ORIGIN = new Date(HOUR_END.getTime() - WARM_START_DAYS * DAY);
 /** Every hour the replay can judge: from its first forecast up to the last finished hour. */
 const REPLAYED_HOURS = (HOUR_END.getTime() - FIRST_ORIGIN.getTime()) / HOUR;
+/** G-1's history: the replay window and the 512-hour context of its first forecast, and an hour more. */
+const HISTORY_FROM = new Date(FIRST_ORIGIN.getTime() - 520 * HOUR);
 const SS = 'ta-2.0';
 const STUB = join(__dirname, 'forecast', 'stub-worker.js');
 
@@ -57,6 +59,12 @@ describeDb('forecast warm start: the band from history', () => {
     reader = app.get(ForecastReader);
     kpi = app.get(KpiEvaluatorService);
     modelId = (await owner.getRepository(ForecastModel).findOneByOrFail({ status: 'active' })).id;
+    // The replay window and its context reach months behind NOW, further back than the
+    // partitions migrations create for a fresh database: made here, as an import into an
+    // older month would make them.
+    for (let t = HISTORY_FROM.getTime(); t <= NOW.getTime() + 31 * DAY; t += 28 * DAY) {
+      await owner.query(`SELECT ensure_telemetry_partition(date_trunc('month', $1::timestamptz)::date)`, [new Date(t)]);
+    }
   }, 60_000);
 
   afterAll(async () => { await app?.close(); await owner?.destroy(); });
@@ -103,7 +111,7 @@ describeDb('forecast warm start: the band from history', () => {
     await owner.query(`INSERT INTO equipment_class_sensor_requirement
         (class_slug, class_version, measurement_role, canonical_unit, forecast_enabled, forecast_horizon_hours, stale_after_seconds)
       VALUES ('genset', 1, 'coolant_temp_c', 'degC', true, 24, 3600), ('genset', 1, 'engine_running_status', 'state', false, NULL, 3600)`);
-    await machine('G-1', new Date(FIRST_ORIGIN.getTime() - 520 * HOUR));
+    await machine('G-1', HISTORY_FROM);
     await machine('G-2', new Date(NOW.getTime() - 5 * DAY));
   }, 120_000);
 
@@ -115,7 +123,7 @@ describeDb('forecast warm start: the band from history', () => {
     return reader.band(m, 'acme', profile, 'coolant_temp_c', modelId, NOW);
   });
 
-  it('1. three weeks of history become a band at once, every residual marked backtest, one per hour, leads 1–4', async () => {
+  it('1. the replay window of history becomes a band at once, every residual marked backtest, one per hour, leads 1–4', async () => {
     expect((await band('G-1')).established).toBe(false);
 
     const s = await warm().run(NOW);
