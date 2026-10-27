@@ -7,16 +7,27 @@ import { runTenantSpanning, withTenantId } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import { overlapping } from '../signal-binding/services/signal-binding.service';
 import {
-  buildContext, FORECAST_BUDGET_RATIO, FORECAST_CADENCE_MS, FORECAST_PASS_LOCK_KEY, FORECAST_STEP_SECONDS,
+  buildContext, FORECAST_BUDGET_RATIO, FORECAST_CADENCE_MS, FORECAST_PASS_LOCK_KEY, FORECAST_RETENTION_DAYS,
+  FORECAST_STEP_SECONDS,
 } from './forecast-band';
 import { ForecastModel, ForecastResidual, ForecastRun, ForecastRunOutcome, ForecastRunSkip } from './forecast.entities';
 import { forecastDeclarations, signalInputs } from './forecast-inputs';
 import { FORECAST_WORKER, ForecastRequest, ForecastResponse, runWorker, WorkerCommand } from './forecast-worker';
 
-/** How far back the replay starts. Twenty-one days leaves the band's fourteen after warm-up and parked days. */
-export const WARM_START_DAYS = 21;
-/** Signals replayed per run, so one run stays inside the pass's own budget beside the pass. */
-export const WARM_START_SERIES_PER_RUN = 20;
+/**
+ * How far back the replay starts: the band's whole hot window (FORECAST_RETENTION_DAYS),
+ * since residuals older than that are purged and never read. Not the fourteen days the
+ * band needs: a machine that runs on some days and not others finds its fourteen steady
+ * days over months, not weeks. On dev's fleet, 21 days gave 9 machines a fuel band and
+ * 90 gave 29. A signal whose history is shorter replays what it has.
+ */
+export const WARM_START_DAYS = FORECAST_RETENTION_DAYS;
+/**
+ * Signals replayed per run. Ten at 90 days is about 5,400 past forecasts, a couple of
+ * minutes of model time (TTM measured 14 ms a series in a batch on dev), so a run ends
+ * well inside the five-minute tick it follows.
+ */
+export const WARM_START_SERIES_PER_RUN = 10;
 /** Past forecasts per worker call: each is a 512-hour context, so a call stays far below the answer limit. */
 export const WARM_START_CHUNK = 1500;
 
