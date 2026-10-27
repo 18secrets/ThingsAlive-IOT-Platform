@@ -7,7 +7,20 @@
 # Python 3.11 for the forecaster, and Alpine now ships Python 3.14, which granite-tsfm
 # does not support (QML1-SIZE). The api moves too, so both services share one base to
 # patch; it costs the api +19 MB compressed and nothing else (QML1-SIZE variant C/E).
-# The api never carries Python or torch: those are only in Dockerfile.scheduler.
+# The api never carries Python or torch: those are only in the `scheduler` stage below.
+
+# Which image this build produces: `api` or `scheduler`. Railway's builder stopped
+# honouring a service's Dockerfile Path on 2026-10-26 — it builds `Dockerfile` whatever
+# the setting says — so the scheduler can no longer be told apart by filename alone. It
+# is told apart by this argument, set as a variable on the scheduler service (Railway
+# passes a service variable to the build when the Dockerfile declares it). BuildKit
+# builds only the stages the chosen image needs, so the api build never runs the Python
+# stage and the scheduler build never fetches the embedding model.
+#
+# Dockerfile.scheduler is this file with the default flipped, so a builder that does
+# honour the path gets the scheduler without the variable. test/dockerfile-image-role
+# holds the two identical apart from that one line.
+ARG IMAGE_ROLE=api
 
 # ---- build ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS build
@@ -34,8 +47,8 @@ FROM node:22-bookworm-slim AS model
 COPY scripts/embedding/fetch-model.js /fetch-model.js
 RUN node /fetch-model.js /models
 
-# ---- runtime --------------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+# ---- api ------------------------------------------------------------------
+FROM node:22-bookworm-slim AS api
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -61,3 +74,53 @@ USER node
 
 EXPOSE 8080
 CMD ["node", "dist/main.js"]
+
+# ---- scheduler (QML1, D46) --------------------------------------------------
+# The api's code plus Python and the forecaster. Layer order is the point: Python, torch
+# and the weights sit below the source copy, so a change under src/ rebuilds only the
+# last layers (QML1-SIZE measured a warm rebuild unchanged against the api's).
+FROM node:22-bookworm-slim AS scheduler
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv
+# The lock is the whole closure with hashes, so pip installs exactly it (--no-deps)
+# rather than re-resolving; hash mode refuses an extra such as transformers[torch] that
+# it resolves to a version the lock does not hold. `pip check` fails the build if the
+# lock is ever missing something a package needs. CPU torch only: no CUDA wheels.
+COPY python/forecast/requirements.txt /opt/forecast-requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir --no-deps --require-hashes -r /opt/forecast-requirements.txt \
+ && /opt/venv/bin/pip check
+
+# The weights, fetched once at build time at a pinned revision. At runtime the worker is
+# offline: a container that downloads its model on first start makes cold start depend
+# on Hugging Face. The revision and the file's sha256 must match the forecast_model row,
+# or the pass refuses to run (QML1 section 2).
+ARG TTM_MODEL=ibm-granite/granite-timeseries-ttm-r2
+ARG TTM_REVISION=d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f
+RUN /opt/venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('${TTM_MODEL}', revision='${TTM_REVISION}', local_dir='/opt/models/ttm-r2', allow_patterns=['config.json', 'generation_config.json', 'model.safetensors'])"
+ENV HF_HUB_OFFLINE=1 \
+    TTM_MODEL_NAME=granite-timeseries-ttm-r2 \
+    TTM_REVISION=d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f \
+    TTM_MODEL_DIR=/opt/models/ttm-r2 \
+    FORECAST_PYTHON=/opt/venv/bin/python
+
+COPY package.json package-lock.json* .npmrc ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force \
+ && rm -rf node_modules/onnxruntime-web \
+           node_modules/onnxruntime-node/bin/napi-v6/darwin node_modules/onnxruntime-node/bin/napi-v6/win32
+# The same prune as the api's: the scheduler never embeds (QEMB1), and these are
+# runtimes for other operating systems and for browsers. The embedding model is not copied.
+COPY --from=build /app/dist ./dist
+COPY python/forecast/infer.py ./python/forecast/infer.py
+
+USER node
+EXPOSE 8080
+CMD ["node", "dist/main.js"]
+
+# ---- the image ------------------------------------------------------------
+# Last, so it is what a build with no --target produces: the stage IMAGE_ROLE names.
+FROM ${IMAGE_ROLE}
