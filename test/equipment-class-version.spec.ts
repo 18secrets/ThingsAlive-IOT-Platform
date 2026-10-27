@@ -5,7 +5,9 @@ import { EquipmentProfile } from '../src/equipment/equipment-profile.entity';
 import { EquipmentService } from '../src/equipment/services/equipment.service';
 import { FleetImportService } from '../src/fleet-import/fleet-import.service';
 import { EQUIPMENT_COLUMNS } from '../src/fleet-import/fleet-workbook';
-import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { createAppDataSource, createTestDataSource, describeDb, undoMigrationNamed } from './db';
+
+const MIGRATION = 'EquipmentClassVersionBackfill1762500000000';
 
 /**
  * A machine classified through the register gets the class version its account holds.
@@ -118,5 +120,44 @@ describeDb('equipment class version', () => {
     expect(await versionOf('EX-10')).toBe(3);
     expect(await versionOf('DG-10')).toBe(1);
     expect(await versionOf('XX-10')).toBeNull();
+  });
+
+  it(`${MIGRATION} mends machines saved before the fix, by the same rule`, async () => {
+    await undoMigrationNamed(owner, MIGRATION);
+
+    // What the old create path left behind, plus one machine pinned by hand that the
+    // backfill must not move even though its account has since forked a newer copy.
+    const profile = (tenant: string, code: string, slug: string | null, version: number | null) => owner.query(
+      `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, origin, status, tier, readiness,
+         equipment_class_slug, class_version)
+       VALUES ($1, 'ta-2.0', $2, $2, 'client', 'active', 'basic', '{}'::jsonb, $3, $4)`,
+      [tenant, code, slug, version],
+    );
+    await profile('acme', 'OLD-EX', 'hydraulic-excavator', null);
+    await profile('acme', 'OLD-DG', 'prime-diesel-generator', null);
+    await profile('acme', 'OLD-XX', 'excavator', null);
+    await profile('acme', 'OLD-WL', 'my-loader', null);
+    await profile('acme', 'OLD-NONE', null, null);
+    await profile('acme', 'PINNED', 'hydraulic-excavator', 2);
+    await profile('globex', 'OLD-EX', 'hydraulic-excavator', null);
+
+    await owner.runMigrations({ transaction: 'all' });
+
+    expect(await versionOf('OLD-EX')).toBe(3);
+    expect(await versionOf('OLD-DG')).toBe(1);
+    expect(await versionOf('OLD-XX')).toBeNull();
+    expect(await versionOf('OLD-WL')).toBeNull();
+    expect(await versionOf('OLD-NONE')).toBeNull();
+    expect(await versionOf('PINNED')).toBe(2);
+    // Each machine reads its own account's copy, never the other account's.
+    const [globex] = await owner.query(
+      `SELECT class_version FROM equipment_profile WHERE tenant_id = 'globex' AND external_id = 'OLD-EX'`);
+    expect(globex.class_version).toBe(5);
+
+    // Down keeps what it filled: the null was the defect, and putting it back would
+    // stop these machines being forecast again.
+    await undoMigrationNamed(owner, MIGRATION);
+    expect(await versionOf('OLD-EX')).toBe(3);
+    await owner.runMigrations({ transaction: 'all' });
   });
 });
