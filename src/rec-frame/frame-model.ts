@@ -1,6 +1,6 @@
 import { BundleView, GroundedAnswer } from './grounded-answer';
 
-/** Injection token for the optional model renderer. Bound to null: there is no client yet (question 8). */
+/** Injection token for the optional model renderer: Gemini when configured (`gemini-frame-model.ts`), else null. */
 export const REC_FRAME_MODEL = Symbol('REC_FRAME_MODEL');
 
 /**
@@ -12,8 +12,7 @@ export const REC_FRAME_MODEL = Symbol('REC_FRAME_MODEL');
  * from this bundle's own list; it may not add an observation, a ref, a number or a step.
  * Anything it returns that the critic refuses is discarded whole.
  *
- * Only a fake implements it today. A real adapter is its own task, once QSPIKE1b has a
- * runtime to point it at and D08's provider configuration exists.
+ * Implemented by `GeminiFrameModel`, on the assistant's Gemini configuration.
  */
 export interface FrameModel {
   /** Recorded on the frame row, with `version`: a frame names the model that wrote it (D27). */
