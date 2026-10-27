@@ -51,3 +51,29 @@ export async function pullOwnTelemetry(ds: DataSource, request: PullRequest): Pr
     } as PullResult['envelope'],
   };
 }
+
+/**
+ * Which loggers this machine had during the window, and the signals each was bound to
+ * carry — the link check's list of what should have reported, for a window scored from
+ * 2.0's own readings.
+ *
+ * The existing platform's sensor map knows only the loggers it registered. A logger
+ * commissioned in 2.0 is known by its bindings alone, so without this its machine never
+ * got a link verdict at all — every card said "no link data" while the logger reported
+ * every ten minutes. Same rule as the readings above: primary, active, and bound to this
+ * machine at some point inside the window.
+ */
+export async function ownExpectedSignals(ds: DataSource, request: PullRequest): Promise<Map<string, string[]>> {
+  const rows: { imei: string; signal_key: string }[] = await withTenantId(ds, request.tenantId, (m) => m.query(
+    `SELECT DISTINCT b."imei", b."signal_key"
+       FROM "signal_binding_version" b
+      WHERE b."tenant_id" = $1 AND b."source_system" = $2 AND b."external_id" = $3
+        AND b."imei" IS NOT NULL AND b."is_primary" AND b."status" = 'active'
+        AND b."valid_from" < $5 AND (b."valid_to" IS NULL OR b."valid_to" > $4)
+      ORDER BY 1, 2`,
+    [request.tenantId, request.sourceSystem, request.externalId, request.from, request.to],
+  ));
+  const byImei = new Map<string, string[]>();
+  for (const r of rows) byImei.set(r.imei, [...(byImei.get(r.imei) ?? []), r.signal_key]);
+  return byImei;
+}
