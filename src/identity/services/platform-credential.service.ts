@@ -23,6 +23,9 @@ const MAX_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
 const INVITATION_DAYS = 14;
 
+/** Why a staff member's sessions ended when their role changed (TC_149); read back at refresh. */
+export const ROLE_CHANGED = 'role changed';
+
 /**
  * Sign-in for Things Alive staff — PlatformUser's counterpart to CredentialService.
  *
@@ -142,6 +145,7 @@ export class PlatformCredentialService {
         // Suspending staff revokes their sessions as it happens, so a reload after it
         // lands here, and the console can only say why if this does (tester bug TC_136).
         if (user.status === 'suspended') return refuse('This account has been suspended.');
+        if (session.revokedReason === ROLE_CHANGED) return refuse('Your role was changed. Please sign in again.');
         return refuse('Please sign in again.');
       }
 
