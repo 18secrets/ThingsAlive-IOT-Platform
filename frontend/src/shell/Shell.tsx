@@ -1,5 +1,5 @@
 import React, { Suspense, useRef, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { NavigationTab, UserRole, firstAdminSubTab } from '../types';
@@ -9,6 +9,7 @@ import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { AskAIWidget } from '../components/AskAIWidget';
 import { DESKTOP_QUERY, WIDE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { canOpenPath, canOpenTab, firstAllowedAdminSubTab, firstAllowedPath } from '../lib/pageAccess';
 
 interface ShellProps {
   /** Clears any cross-page drill-down state (Master Admin's "Manage Access"
@@ -86,6 +87,27 @@ function initialSidebarCollapsed(): boolean {
   }
 }
 
+/** Shown in place of a page this person's role does not open. */
+const NoAccess: React.FC<{ goTo: string | null }> = ({ goTo }) => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <div id="no-page-access" className="max-w-lg mx-auto mt-16 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{t('access.noPageTitle')}</h2>
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('access.noPageBody')}</p>
+      {goTo && (
+        <button
+          type="button"
+          onClick={() => navigate(goTo, { replace: true })}
+          className="mt-5 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium cursor-pointer"
+        >
+          {t('access.goBack')}
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const { authUser, signOut } = useAuth();
   const { t } = useTranslation();
@@ -139,13 +161,20 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   if (!authUser) return null; // RequireAuth guarantees this never renders signed out.
 
   const currentTab = tabFromPath(location.pathname, location.state, authUser.role);
+  // A page the role does not grant is refused here, not only left out of the menu:
+  // its address, a bookmark or a link from another page reached it all the same
+  // (tester report, 27 Oct 2026). The landing page quietly moves to the first page
+  // the person has; anything else says so.
+  const allowedHere = canOpenPath(authUser, location.pathname);
+  const landing = firstAllowedPath(authUser);
+  const isLanding = location.pathname === '/' || location.pathname === '/dashboard';
   const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin', t);
 
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
     if (tab === 'admin') {
-      // Always the first tab of the bar, never the last one visited.
-      navigate(`/admin/${firstAdminSubTab(authUser.role === 'client')}`);
+      // Always the first tab of the bar this person may open, never the last one visited.
+      navigate(`/admin/${firstAllowedAdminSubTab(authUser) ?? firstAdminSubTab(authUser.role === 'client')}`);
     } else if (ADMIN_PROMOTED_SUBTABS.includes(tab)) {
       navigate(`/admin/${tab}`);
     } else {
@@ -162,6 +191,7 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
           clientName={authUser.clientName}
           allowedTabs={authUser.allowedTabs}
           isSuperAdmin={authUser.isSuperAdmin}
+          canOpen={(tab) => canOpenTab(authUser, tab)}
           onSelectTab={goToTab}
           isCollapsed={collapsed}
           onToggleCollapsed={toggleCollapsed}
@@ -181,6 +211,7 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
               clientName={authUser.clientName}
               allowedTabs={authUser.allowedTabs}
               isSuperAdmin={authUser.isSuperAdmin}
+              canOpen={(tab) => canOpenTab(authUser, tab)}
               onSelectTab={(tab) => { setNavOpen(false); goToTab(tab); }}
               isCollapsed={false}
               onToggleCollapsed={() => setNavOpen(false)}
@@ -214,7 +245,9 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
             {/* A page's own translation file loads the first time it opens; only the
                 page waits for it, not the sidebar and header around it. */}
             <Suspense fallback={null}>
-              <Outlet />
+              {allowedHere ? <Outlet /> : landing && isLanding
+                ? <Navigate to={landing} replace />
+                : <NoAccess goTo={landing} />}
             </Suspense>
           </div>
         </main>

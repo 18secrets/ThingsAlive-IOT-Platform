@@ -263,5 +263,10 @@
     "saveFailed": "Could not save",
     "deleteFailed": "Could not delete",
     "noReason": "The server could not be reached. Please try again."
+  },
+  "access": {
+    "noPageTitle": "You don't have access to this page",
+    "noPageBody": "Your role doesn't include this page. Ask your administrator if you need it.",
+    "goBack": "Go to my pages"
   }
 }

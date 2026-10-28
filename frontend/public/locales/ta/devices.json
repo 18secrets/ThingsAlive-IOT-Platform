@@ -152,6 +152,9 @@
     "modelNumberPlaceholder": "எ.கா. EC210",
     "serialNumber": "வரிசை எண்",
     "serialNumberPlaceholder": "எ.கா. SER-4920",
-    "serviceTier": "சேவை அடுக்கு"
+    "serviceTier": "சேவை அடுக்கு",
+    "machineType": "இயந்திர வகை",
+    "unclassified": "வகைப்படுத்தப்படவில்லை",
+    "noGrantedTypes": "இந்த வாடிக்கையாளருக்கு இன்னும் எந்த இயந்திர வகையும் வழங்கப்படவில்லை. முதலில் Clients பக்கத்தில் ஒன்றை வழங்கவும்."
   }
 }

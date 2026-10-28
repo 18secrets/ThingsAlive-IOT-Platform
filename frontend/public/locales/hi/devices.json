@@ -152,6 +152,9 @@
     "modelNumberPlaceholder": "जैसे EC210",
     "serialNumber": "सीरियल नंबर",
     "serialNumberPlaceholder": "जैसे SER-4920",
-    "serviceTier": "सर्विस टियर"
+    "serviceTier": "सर्विस टियर",
+    "machineType": "मशीन प्रकार",
+    "unclassified": "अवर्गीकृत",
+    "noGrantedTypes": "इस क्लाइंट को अभी कोई मशीन प्रकार नहीं दिया गया है। पहले Clients पेज पर एक दें।"
   }
 }
