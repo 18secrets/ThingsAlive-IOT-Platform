@@ -152,6 +152,9 @@
     "modelNumberPlaceholder": "ఉదా. EC210",
     "serialNumber": "సీరియల్ నంబర్",
     "serialNumberPlaceholder": "ఉదా. SER-4920",
-    "serviceTier": "సర్వీస్ టియర్"
+    "serviceTier": "సర్వీస్ టియర్",
+    "machineType": "యంత్ర రకం",
+    "unclassified": "వర్గీకరించబడలేదు",
+    "noGrantedTypes": "ఈ క్లయింట్‌కు ఇంకా ఏ యంత్ర రకమూ ఇవ్వలేదు. ముందుగా Clients పేజీలో ఒకటి ఇవ్వండి."
   }
 }

@@ -34,6 +34,8 @@ interface SidebarProps {
   allowedTabs?: NavigationTab[];
   /** Client role only — a Super Admin sees every client page, regardless of allowedTabs. */
   isSuperAdmin?: boolean;
+  /** Whether this person may open a page at all (lib/pageAccess.ts); absent = no further limit. */
+  canOpen?: (tab: NavigationTab) => boolean;
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -54,7 +56,7 @@ const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>([
 const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff', 'devices', 'equipment']);
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, isCollapsed, onToggleCollapsed,
+  currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, canOpen, isCollapsed, onToggleCollapsed,
 }) => {
   const { t } = useTranslation();
   const allNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -85,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allowed = allowedTabs || [];
   const navItems = allNavItems.filter((item) => {
+    if (canOpen && !canOpen(item.id)) return false;
     if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
     if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
     // A Super Admin gets every client page unconditionally, regardless of

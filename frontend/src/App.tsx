@@ -29,6 +29,7 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { ForgotPasswordScreen } from './components/auth/ForgotPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
+import { firstAllowedAdminSubTab } from './lib/pageAccess';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { SitePagePage } from './pages/SitePagePage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
@@ -128,7 +129,8 @@ function AdminIndexRedirect() {
   // Clients/Staff/Devices/Equipment moved to their own sidebar entries
   // (2026-10-10, Shell.tsx's ADMIN_PROMOTED_SUBTABS) — landing on bare
   // /admin now defaults to a tab that's actually still in the sub-tab bar.
-  return <Navigate to={`/admin/${firstAdminSubTab(authUser?.role === 'client')}`} replace />;
+  const sub = authUser ? firstAllowedAdminSubTab(authUser) : null;
+  return <Navigate to={`/admin/${sub ?? firstAdminSubTab(authUser?.role === 'client')}`} replace />;
 }
 
 function AppData() {

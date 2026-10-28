@@ -32,10 +32,12 @@ function loadSession(): AuthUser | null {
 // for "which pages does this person see" and "are they this account's super
 // admin" (holding both user.manage and role.manage).
 async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
-  if (user.tenantId === PLATFORM_TENANT_ID) {
-    return { role: 'master-admin', username: user.email };
-  }
   const { capabilities, allowedTabs } = await apiMyPermissions();
+  if (user.tenantId === PLATFORM_TENANT_ID) {
+    // Every staff member uses the platform screens ('master-admin' here names that
+    // side of the app); what each may open comes from their own role's capabilities.
+    return { role: 'master-admin', username: user.email, platformRole: user.roleSlug, capabilities };
+  }
   return {
     role: 'client',
     username: user.email,

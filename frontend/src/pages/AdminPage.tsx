@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
+import { canOpenAdminSubTab, firstAllowedAdminSubTab } from '../lib/pageAccess';
 
 interface AdminPageProps {
   sensors: SensorItem[];
@@ -162,13 +163,14 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
   const restrictToClientAdmin = authUser.role === 'client';
   // Clients/Staff/Devices/Equipment moved to the sidebar for Master Admin —
   // see AdminIndexRedirect's own comment in App.tsx, which this must match.
-  const activeSubTab = (subTab ?? firstAdminSubTab(!!restrictToClientAdmin)) as AdminSubTab;
+  const activeSubTab = (subTab ?? firstAllowedAdminSubTab(authUser) ?? firstAdminSubTab(!!restrictToClientAdmin)) as AdminSubTab;
 
   const visiblePlants = restrictToClientAdmin ? props.plants.filter((p) => p.clientId === authUser.clientId) : props.plants;
   const modalClients = restrictToClientAdmin ? props.clients.filter((c) => c.id === authUser.clientId) : props.clients;
 
   return (
     <AdminManagement
+      canOpenSubTab={(tab) => canOpenAdminSubTab(authUser, tab)}
       sensors={props.sensors}
       toolMappings={props.toolMappings}
       categories={props.categories}

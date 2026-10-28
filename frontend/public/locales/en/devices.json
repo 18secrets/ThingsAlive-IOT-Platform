@@ -152,6 +152,9 @@
     "modelNumberPlaceholder": "e.g. EC210",
     "serialNumber": "Serial Number",
     "serialNumberPlaceholder": "e.g. SER-4920",
-    "serviceTier": "Service Tier"
+    "serviceTier": "Service Tier",
+    "machineType": "Machine type",
+    "unclassified": "Unclassified",
+    "noGrantedTypes": "No machine types are granted to this client yet. Grant one on the Clients page first."
   }
 }

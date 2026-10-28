@@ -191,6 +191,8 @@ interface AdminManagementProps {
   onDeleteStaff: (id: string) => Promise<void>;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
+  /** Which sub-tabs this person may open (lib/pageAccess.ts); absent = all. */
+  canOpenSubTab?: (tab: AdminSubTab) => boolean;
 }
 
 const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
@@ -317,6 +319,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onReinstateStaff,
   onDeleteStaff,
   restrictToClientAdmin,
+  canOpenSubTab,
 }) => {
   const { t } = useTranslation('admin');
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -346,7 +349,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant', ...PROMOTED_SUBTABS].includes(tab.id)
+      !['plant', ...PROMOTED_SUBTABS].includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true)
     ));
 
   // A promoted tab (Master Admin only) is reached directly from the sidebar
