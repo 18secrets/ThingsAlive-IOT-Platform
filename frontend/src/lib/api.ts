@@ -2708,6 +2708,37 @@ export function apiGetPredictionHistory(
   );
 }
 
+/** One watched signal of a scenario, opened up: its readings over a window ending at
+ *  the latest verdict, and the lines that verdict was judged against. The bands come
+ *  back computed (overrides applied) so the chart never draws a threshold the scorer
+ *  did not use. `baseline` is null for an influence-model score or before a baseline
+ *  exists; `verdict` is null before the first score. */
+export interface PredictionSignalDetail {
+  clientScenarioSlug: string;
+  signal: string;
+  predictionId: string | null;
+  occurredAt: string | null;
+  modelRef: string | null;
+  verdict: (SignalVerdict & { expected?: number; residual?: number }) | null;
+  baseline: {
+    windowDays: number; mean: number; stddev: number; sampleCount: number; coverageRatio: number;
+    warningSigma: number; criticalSigma: number;
+    warning: { lo: number; hi: number };
+    critical: { lo: number; hi: number };
+  } | null;
+  window: { from: string; to: string; bucketSeconds: number };
+  readings: { at: string; avg: number; min: number; max: number; count: number }[];
+}
+
+export function apiGetPredictionSignalDetail(
+  sourceSystem: string, externalId: string, clientScenarioSlug: string, signal: string, hours?: number,
+): Promise<PredictionSignalDetail> {
+  const qs = hours ? `?hours=${hours}` : "";
+  return authFetch(
+    `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/${encodeURIComponent(clientScenarioSlug)}/signals/${encodeURIComponent(signal)}${qs}`,
+  );
+}
+
 /** Scores every active scenario on this asset right now, rather than waiting for the
  *  next arrival to trigger it — the one case the route exists for. */
 export function apiScorePredictionsNow(sourceSystem: string, externalId: string): Promise<ScoreResult> {

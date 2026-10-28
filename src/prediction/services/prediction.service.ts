@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
@@ -24,6 +24,34 @@ export const DEFAULT_INFLUENCE_WINDOW_HOURS = 12;
 
 /** So one fast logger cannot pull a million rows into memory for one score. */
 const INFLUENCE_SAMPLE_CAP = 20_000;
+
+/** Three days: enough to see a drift start, short enough to see a single shift in. */
+export const DEFAULT_SIGNAL_DETAIL_HOURS = 72;
+/** The default baseline window; past that the chart is history, not detail. */
+export const MAX_SIGNAL_DETAIL_HOURS = 30 * 24;
+/** About one point per two pixels on a card-width chart, whatever the window. */
+const SIGNAL_DETAIL_BUCKETS = 300;
+
+export interface SignalDetail {
+  clientScenarioSlug: string;
+  signal: string;
+  /** Null when the scenario has never been scored on this machine. */
+  predictionId: string | null;
+  occurredAt: string | null;
+  modelRef: string | null;
+  /** This signal's entry in the latest prediction, exactly as the scorer wrote it. */
+  verdict: unknown;
+  /** Null for an influence-model score, or when no baseline has been built yet. */
+  baseline: {
+    windowDays: number; mean: number; stddev: number; sampleCount: number; coverageRatio: number;
+    warningSigma: number; criticalSigma: number;
+    warning: { lo: number; hi: number };
+    critical: { lo: number; hi: number };
+  } | null;
+  window: { from: string; to: string; bucketSeconds: number };
+  /** Oldest first; `at` is the newest reading in the bucket. */
+  readings: { at: string; avg: number; min: number; max: number; count: number }[];
+}
 
 export type SkipReason = 'no-device' | 'no-readings' | 'scenario-missing' | 'scenario-disabled';
 
@@ -429,6 +457,118 @@ export class PredictionService {
         take,
       }),
     );
+  }
+
+  /**
+   * One signal of one scenario, opened up: what the readings did, and the lines the
+   * scorer judged them against (the drill-down behind a scenario card's signal row).
+   *
+   * Anchored on the latest prediction's `occurred_at`, not the clock, so the chart
+   * shows the moment the verdict is about. A machine that stopped reporting yesterday
+   * would otherwise open on an empty window and look like it had never run.
+   *
+   * Bucketed, with min and max kept beside the mean: a logger reporting every few
+   * seconds puts tens of thousands of rows in three days, and a mean alone would
+   * flatten the one spike the operator clicked through to see.
+   */
+  async signalDetail(
+    scope: RequestScope,
+    target: { sourceSystem: string; externalId: string; clientScenarioSlug: string },
+    signal: string,
+    hours = DEFAULT_SIGNAL_DETAIL_HOURS,
+  ): Promise<SignalDetail> {
+    if (!Number.isInteger(hours) || hours < 1 || hours > MAX_SIGNAL_DETAIL_HOURS) {
+      throw new BadRequestException(`hours must be a whole number from 1 to ${MAX_SIGNAL_DETAIL_HOURS}.`);
+    }
+    return withTenantSession(this.ds, scope, async (m) => {
+      const row = await m.getRepository(EquipmentScenario).findOne({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: target.sourceSystem,
+          externalId: target.externalId, clientScenarioSlug: target.clientScenarioSlug,
+        },
+      });
+      const scenario = row && await m.getRepository(ClientScenario).findOne({
+        where: { tenantId: scope.tenantId, slug: target.clientScenarioSlug },
+      });
+      if (!row || !scenario) throw new NotFoundException('That scenario is not on this machine.');
+
+      // Only a signal the scenario actually watches. Anything else would chart readings
+      // beside thresholds that were never applied to them.
+      const model = influenceModelFrom(scenario.parameters as any, row.parameterOverrides as any);
+      const watched = new Set([
+        ...scenario.requiredSignals,
+        ...(model ? [model.target, ...model.terms.map((t) => t.signal)] : []),
+      ]);
+      if (!watched.has(signal)) throw new NotFoundException(`${target.clientScenarioSlug} does not watch ${signal}.`);
+
+      const latest = await m.getRepository(Prediction).findOne({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: target.sourceSystem,
+          externalId: target.externalId, clientScenarioSlug: target.clientScenarioSlug,
+        },
+        order: { occurredAt: 'DESC' },
+      });
+      const to = latest ? new Date(latest.occurredAt) : new Date();
+      const from = new Date(to.getTime() - hours * 3_600_000);
+      const bucketSeconds = Math.max(60, Math.ceil((hours * 3600) / SIGNAL_DETAIL_BUCKETS));
+
+      const verdict = (latest?.signals as unknown as { signal: string }[] | undefined)
+        ?.find((s) => s.signal === signal) ?? null;
+
+      // The baseline lines only mean something for the scorer that used them. An
+      // influence model judges a residual against the machine's own curve, so drawing
+      // ±σ bands under it would show a rule that was never applied.
+      const windowDays = latest?.windowDays
+        ?? this.numberParam(row, scenario, 'baseline_window_days', DEFAULT_WINDOW_DAYS);
+      const baselineRow = latest?.modelRef === 'influence@1' ? null : await m.getRepository(PredictionBaseline).findOne({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: target.sourceSystem,
+          externalId: target.externalId, signal, windowDays,
+        },
+      });
+      let baseline: SignalDetail['baseline'] = null;
+      if (baselineRow) {
+        const mean = Number(baselineRow.mean);
+        const stddev = Number(baselineRow.stddev);
+        const warningSigma = this.numberParam(row, scenario, 'warning_sigma', DEFAULT_WARNING_SIGMA);
+        const criticalSigma = this.numberParam(row, scenario, 'critical_sigma', DEFAULT_CRITICAL_SIGMA);
+        baseline = {
+          windowDays, mean, stddev, sampleCount: baselineRow.sampleCount,
+          coverageRatio: Number(baselineRow.coverageRatio), warningSigma, criticalSigma,
+          warning: { lo: mean - warningSigma * stddev, hi: mean + warningSigma * stddev },
+          critical: { lo: mean - criticalSigma * stddev, hi: mean + criticalSigma * stddev },
+        };
+      }
+
+      const imeis = await boundImeis(m, scope.tenantId, target, from, to);
+      // Buckets counted back from the verdict, not aligned to the clock: a clock-aligned
+      // first bucket starts before the window, and the scored reading would share its
+      // last bucket with whatever came just before a boundary. Each bucket is dated by
+      // its newest reading, so the last point is the reading the verdict is about.
+      const rows: { at: Date; avg: number; min: number; max: number; count: number }[] = imeis.length === 0 ? [] : await m.query(
+        `SELECT max("source_timestamp") AS "at",
+                avg("value")::float8 AS "avg", min("value")::float8 AS "min",
+                max("value")::float8 AS "max", count(*)::int AS "count"
+           FROM "telemetry_reading"
+          WHERE "tenant_id" = $1 AND "imei" = ANY($2::text[]) AND "signal" = $3
+            AND "source_timestamp" > $4 AND "source_timestamp" <= $5
+          GROUP BY floor(extract(epoch FROM ($5::timestamptz - "source_timestamp")) / $6)
+          ORDER BY 1`,
+        [scope.tenantId, imeis, signal, from, to, bucketSeconds],
+      );
+
+      return {
+        clientScenarioSlug: target.clientScenarioSlug,
+        signal,
+        predictionId: latest?.id ?? null,
+        occurredAt: latest ? to.toISOString() : null,
+        modelRef: latest?.modelRef ?? null,
+        verdict,
+        baseline,
+        window: { from: from.toISOString(), to: to.toISOString(), bucketSeconds },
+        readings: rows.map((r) => ({ at: new Date(r.at).toISOString(), avg: r.avg, min: r.min, max: r.max, count: r.count })),
+      };
+    });
   }
 
   /**
