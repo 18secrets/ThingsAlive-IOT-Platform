@@ -40,22 +40,22 @@
     "na": "n/a"
   },
   "severity": {
-    "none": "none",
-    "low": "low",
-    "medium": "medium",
-    "high": "high",
-    "critical": "critical"
+    "none": "Healthy",
+    "low": "Low risk",
+    "medium": "Medium risk",
+    "high": "High risk",
+    "critical": "Critical"
   },
   "confidence": {
-    "full": "full",
-    "partial": "partial",
-    "none": "none"
+    "full": "All signals checked",
+    "partial": "Some signals checked",
+    "none": "Could not check"
   },
   "signalState": {
-    "normal": "normal",
-    "warning": "warning",
-    "critical": "critical",
-    "unscored": "unscored"
+    "normal": "Healthy",
+    "warning": "Warning",
+    "critical": "Critical",
+    "unscored": "Not checked"
   },
   "workOrderStatus": {
     "created": "created",
@@ -101,7 +101,20 @@
     "window_other": "{{count}}d window",
     "maintenanceHistory": "Maintenance history",
     "noWorkOrders": "No work orders for this machine yet.",
-    "needsScenario": "Needs an active client scenario with enough baseline history before a prediction can be produced."
+    "needsScenario": "Needs an active client scenario with enough baseline history before a prediction can be produced.",
+    "healthy_one": "{{count}} healthy",
+    "healthy_other": "{{count}} healthy",
+    "notChecked_one": "{{count}} not checked",
+    "notChecked_other": "{{count}} not checked",
+    "checkedAll_one": "1 signal checked",
+    "checkedAll_other": "All {{count}} signals checked",
+    "checkedSome": "{{scored}} of {{total}} checked",
+    "checkedNone": "No data to check",
+    "openAbnormal": "Open the abnormal signal",
+    "clickSignal": "Click a signal to see its readings against normal",
+    "sigmaTitle": "How far the latest reading is from this machine's normal, in standard deviations",
+    "footer_one": "Judged against a {{count}}-day normal · {{model}} · reading at {{at}}",
+    "footer_other": "Judged against a {{count}}-day normal · {{model}} · reading at {{at}}"
   },
   "chain": {
     "title": "Root-cause diagnosis",
@@ -207,5 +220,53 @@
     "risk": "Risk",
     "confidence": "Confidence",
     "abnormal": "Signals outside baseline"
+  },
+  "trend": {
+    "tooFew_one": "First score. A trend appears after the next one.",
+    "tooFew_other": "No scores yet.",
+    "title_one": "Risk score (0–100) over the last score",
+    "title_other": "Risk score (0–100) over the last {{count}} scores",
+    "caption_one": "risk, last score",
+    "caption_other": "risk, last {{count}} scores",
+    "risk": "Risk"
+  },
+  "drill": {
+    "loadError": "Could not load this signal.",
+    "window": "Chart window",
+    "range": {
+      "h24": "24h",
+      "h72": "3d",
+      "h168": "7d"
+    },
+    "noReadings": "No readings in this window.",
+    "minMax": "Min – max",
+    "average": "Average",
+    "legend": {
+      "reading": "Reading (average, shaded min–max)",
+      "normal": "Normal {{lo}} – {{hi}}",
+      "warning": "Warning at ±{{sigma}}σ",
+      "critical": "Critical at ±{{sigma}}σ ({{lo}} / {{hi}})"
+    },
+    "influenceNoBands": "Judged against this machine's load curve, not a baseline band.",
+    "noBaseline": "No baseline yet. Bands appear once one is built.",
+    "baselineFrom": "Normal from {{days}} days · {{samples}} readings · {{coverage}}% of days covered",
+    "notScoredYet": "Not scored yet.",
+    "unscored": "Not checked: {{reason}} (as of {{at}}).",
+    "influenceSummary": "{{value}} at {{at}}: {{residual}} {{dir}} the {{expected}} its load predicts.",
+    "above": "above",
+    "below": "below",
+    "valueOnly": "{{value}} at {{at}}.",
+    "summary": {
+      "normal": "{{value}} at {{at}}: {{sigma}}σ {{dir}} its normal of {{mean}}. Healthy.",
+      "warning": "{{value}} at {{at}}: {{sigma}}σ {{dir}} its normal of {{mean}}. Warning.",
+      "critical": "{{value}} at {{at}}: {{sigma}}σ {{dir}} its normal of {{mean}}. Critical."
+    }
+  },
+  "unscoredReason": {
+    "no-reading": "no reading",
+    "no-baseline": "no baseline yet",
+    "too-few-samples": "too few samples for a baseline",
+    "no-variance": "the reading never changes (sensor may be stuck)",
+    "unknown": "unknown"
   }
 }
