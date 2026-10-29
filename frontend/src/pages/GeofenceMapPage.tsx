@@ -353,6 +353,7 @@ const SiteMap: React.FC<{
 }> = ({ view, zones, machines, selected, onSelect, preview, draftPoints, onPick, onCentre, emptyText }) => {
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [centreText, setCentreText] = useState('');
 
   if (!view) {
@@ -445,8 +446,11 @@ const SiteMap: React.FC<{
             tabIndex={0}
             aria-label={`${m.name ?? m.externalId}`}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(key); }}
+            onMouseEnter={() => setHovered(key)}
+            onMouseLeave={() => setHovered((h) => (h === key ? null : h))}
+            onFocus={() => setHovered(key)}
+            onBlur={() => setHovered((h) => (h === key ? null : h))}
           >
-            <title>{`${m.name ?? m.externalId}`}</title>
             <circle
               r={selected === key ? r * 1.5 : r}
               className={`${STATE_FILL[s]} ${selected === key ? 'stroke-slate-900 dark:stroke-white' : 'stroke-white dark:stroke-slate-900'}`}
@@ -460,6 +464,29 @@ const SiteMap: React.FC<{
           </g>
         );
       })}
+      {/* The hovered machine's label, else the selected one's, drawn last so nothing covers it. */}
+      {(() => {
+        const key = hovered ?? selected;
+        const m = key ? order.find((x) => `${x.sourceSystem}/${x.externalId}` === key) : undefined;
+        if (!m) return null;
+        const [x0, y0] = project([m.position!.lng, m.position!.lat]);
+        const [x, y] = [clamp(x0), clamp(y0)];
+        const name = (m.name ?? m.externalId).split(' · ')[0];
+        const line2 = `${m.externalId} · ${t(`geofence.state.${stateOf(m)}`)}`;
+        const fs = r * 1.25;
+        const w = Math.max(name.length, line2.length) * fs * 0.56 + fs * 1.4;
+        const h = fs * 3.1;
+        // Flip to the left near the right edge, so the label stays on the plan.
+        const lx = x + w + r * 2 > half ? x - w - r * 1.6 : x + r * 1.6;
+        const ly = Math.max(-half, Math.min(half - h, y - h / 2));
+        return (
+          <g pointerEvents="none">
+            <rect x={lx} y={ly} width={w} height={h} rx={fs * 0.3} className="fill-white dark:fill-slate-900 stroke-slate-300 dark:stroke-slate-600" strokeWidth={unit} />
+            <text x={lx + fs * 0.7} y={ly + fs * 1.3} fontSize={fs} className="fill-slate-900 dark:fill-slate-100 font-semibold">{name}</text>
+            <text x={lx + fs * 0.7} y={ly + fs * 2.55} fontSize={fs * 0.9} className="fill-slate-500 dark:fill-slate-400 font-mono">{line2}</text>
+          </g>
+        );
+      })()}
       <g transform={`translate(${-half * 0.94},${half * 0.9})`}>
         <rect x={-unit * 4} y={-unit * 22} width={barM * k + unit * 8} height={unit * 30} className="fill-white/80 dark:fill-slate-900/80" />
         <line x1={0} y1={0} x2={barM * k} y2={0} className="stroke-slate-800 dark:stroke-slate-100" strokeWidth={unit * 2.5} />
@@ -525,7 +552,17 @@ const ZoneShape: React.FC<{
   const s = zone.shape;
   if (s.type === 'Circle') {
     const [cx, cy] = project(s.center);
-    return <circle cx={cx} cy={cy} r={s.radiusM * k} className={`${stroke} ${fill}`} strokeWidth={unit * 2} />;
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={s.radiusM * k} className={`${stroke} ${fill}`} strokeWidth={unit * 2} />
+        {restricted && !draft && (
+          // Said on the map, not only in the legend: a red disc alone reads as an alarm, not a place.
+          <text x={cx} y={cy + unit * 4} textAnchor="middle" fontSize={unit * 12} className="fill-rose-700 dark:fill-rose-300 font-semibold" pointerEvents="none">
+            NO-GO
+          </text>
+        )}
+      </g>
+    );
   }
   if (s.type === 'Corridor') {
     const d = s.path.map(project).map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join(' ');
