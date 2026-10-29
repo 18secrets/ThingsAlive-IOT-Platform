@@ -4664,3 +4664,46 @@ export function apiEnableProposalRule(id: string, ruleId: string): Promise<unkno
 export function apiListPublishedNamedFormulas(): Promise<NamedFormula[]> {
   return authFetch("/catalog/named-formulas");
 }
+
+// ---------------------------------------------------------------- geofence fleet map (QGEO2)
+// Shape: docs/ai/contracts/geofence-fleet-status.v1.schema.json. Positions are
+// [longitude, latitude], as GeoJSON has them.
+
+export type GeofenceShape =
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "Circle"; center: [number, number]; radiusM: number }
+  | { type: "Corridor"; path: [number, number][]; widthM: number };
+
+export interface GeofenceFleetZone {
+  key: string;
+  id: string | null;
+  source: "zone" | "site-boundary";
+  code: string;
+  name: string;
+  kind: "allowed" | "restricted" | "corridor";
+  shape: GeofenceShape;
+  appliesTo: string;
+}
+
+export interface GeofenceFleetMachine {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  site: { id: string; code: string; name: string } | null;
+  position: { lng: number; lat: number; at: string; ageSeconds: number; imei: string } | null;
+  positionStatus: "live" | "stale" | "none";
+  zones: { key: string; inside: boolean; violation: boolean }[];
+  violating: boolean;
+}
+
+export interface GeofenceFleetStatus {
+  asOf: string;
+  zones: GeofenceFleetZone[];
+  machines: GeofenceFleetMachine[];
+  summary: { machines: number; live: number; stale: number; noPosition: number; violating: number };
+}
+
+/** Every machine's latest position against its fences, for the fleet map. */
+export function apiGeofenceFleetStatus(siteId?: string): Promise<GeofenceFleetStatus> {
+  return authFetch(`/geofences/fleet-status${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`);
+}

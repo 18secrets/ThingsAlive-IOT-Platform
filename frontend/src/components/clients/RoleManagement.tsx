@@ -17,6 +17,9 @@ const TAB_LABEL_KEYS: Record<NavigationTab, string> = {
   'ai-onboarding': 'translation:sidebar.aiOnboarding',
   'alert-agent': 'translation:pages.alertAgent.title',
   alerts: 'translation:sidebar.alerts',
+  // Not grantable yet (not in CLIENT_ASSIGNABLE_TABS or the backend's page list): super
+  // admins see the geofence map; the label is here because this record covers every tab.
+  geofence: 'translation:sidebar.geofence',
   predictions: 'translation:sidebar.livePredictions',
   scenarios: 'translation:sidebar.scenarios',
   'work-orders': 'translation:sidebar.workOrders',
