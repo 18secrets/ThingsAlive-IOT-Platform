@@ -14,6 +14,7 @@ import { ProjectionModule } from '../projection/projection.module';
 import { UtilizationModule } from '../utilization/utilization.module';
 import { DeviceHealthModule } from '../device-health/device-health.module';
 import { IntelligenceModule } from '../intelligence/intelligence.module';
+import { GeofenceModule } from '../geofence/geofence.module';
 
 @Module({
   // The runner needs all three: somewhere to read from, somewhere to put it, and
@@ -33,6 +34,8 @@ import { IntelligenceModule } from '../intelligence/intelligence.module';
     // The chains, so an alert can fire on where a fault entered rather than on a
     // raw number that a hard-working machine crosses honestly.
     IntelligenceModule,
+    // Where the machine went, from the same window's positions (QGEO2 stage 2).
+    GeofenceModule,
   ],
   controllers: [ShiftController],
   providers: [ShiftService, ShiftRunner, ShiftScheduler, ShiftRunService],

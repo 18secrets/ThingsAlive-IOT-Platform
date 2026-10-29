@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { GeofenceVisit } from './entities/geofence-visit.entity';
 import { GeofenceZone } from './entities/geofence-zone.entity';
+import { GeofenceTracker } from './geofence-tracker.service';
 import { GeofenceController } from './geofence.controller';
 import { GeofenceService } from './geofence.service';
 
@@ -10,9 +12,9 @@ import { GeofenceService } from './geofence.service';
  * rather than this importing them.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([GeofenceZone])],
+  imports: [TypeOrmModule.forFeature([GeofenceZone, GeofenceVisit])],
   controllers: [GeofenceController],
-  providers: [GeofenceService],
-  exports: [GeofenceService],
+  providers: [GeofenceService, GeofenceTracker],
+  exports: [GeofenceService, GeofenceTracker],
 })
 export class GeofenceModule {}

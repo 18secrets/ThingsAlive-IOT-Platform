@@ -23,6 +23,7 @@ import { EquipmentScenario } from '../activation/entities/equipment-scenario.ent
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
 import { Plant } from '../equipment/entities/plant.entity';
 import { GeofenceZone } from '../geofence/entities/geofence-zone.entity';
+import { GeofenceVisit } from '../geofence/entities/geofence-visit.entity';
 import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placement-event.entity';
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
@@ -132,6 +133,7 @@ export const ENTITIES = [
   Tenant,
   Plant,
   GeofenceZone,
+  GeofenceVisit,
   EquipmentPlacementEvent,
   WorkOrder,
   WorkOrderCounter,

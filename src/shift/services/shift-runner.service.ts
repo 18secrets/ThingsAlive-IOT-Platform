@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { GeofenceTracker } from '../../geofence/geofence-tracker.service';
 import { DataSource } from 'typeorm';
 import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -71,6 +72,9 @@ export class ShiftRunner {
     private readonly utilization: UtilizationService,
     private readonly deviceHealth: DeviceHealthService,
     private readonly chains: ChainService,
+    // Optional and last: Nest always supplies it, and a runner built by hand for a test
+    // that is not about geofences runs without it (QGEO2 stage 2).
+    @Optional() private readonly geofences?: GeofenceTracker,
   ) {}
 
   /**
@@ -261,6 +265,10 @@ export class ShiftRunner {
         // question of whether a baseline should be built from idle periods is a
         // separate one (P1-123) that this must not quietly decide.
         await ingest();
+        // A machine with its engine off can still be moved — on a low-loader, or by
+        // somebody who should not be moving it. Where it went is not a question about
+        // whether it ran.
+        await this.trackGeofences(window, readings);
         // The shift the machine slept through is the one the utilization report exists
         // to show. Skipping it here would leave a hole that reads as a gap in the data
         // rather than as a machine that was paid for and not used.
@@ -293,6 +301,7 @@ export class ShiftRunner {
         chains,
       );
 
+      await this.trackGeofences(window, readings);
       await this.recordUtilization(window, readings);
       await this.recordLinkHealth(window, readings, !!own);
 
@@ -558,6 +567,24 @@ export class ShiftRunner {
         `Scored ${window.externalId} but could not evaluate alerts: ${(error as Error).message}`,
       );
       return 0;
+    }
+  }
+
+  /**
+   * Zone visits from this window's positions. Never fatal, as alerts are not: losing a
+   * shift's scoring because a fence could not be checked would be the wrong way round.
+   */
+  private async trackGeofences(
+    window: OwedWindow, readings: { imei: string; signal: string; value: number; sourceTimestamp: string }[],
+  ): Promise<void> {
+    if (!this.geofences) return;
+    try {
+      await this.geofences.trackWindow({
+        tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+        start: window.start, end: window.end, readings,
+      });
+    } catch (error) {
+      this.logger.error(`Scored ${window.externalId} but could not track geofences: ${(error as Error).message}`);
     }
   }
 

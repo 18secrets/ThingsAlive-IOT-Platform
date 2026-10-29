@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsDefined, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Matches } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { ZoneAppliesTo } from './entities/geofence-zone.entity';
+import { GeofenceTracker } from './geofence-tracker.service';
 import { GeofenceService } from './geofence.service';
 import { ZoneKind } from './geometry';
 
@@ -45,7 +46,10 @@ export class PositionDto {
 @ApiTags('Geofences')
 @Controller()
 export class GeofenceController {
-  constructor(private readonly zones: GeofenceService) {}
+  constructor(
+    private readonly zones: GeofenceService,
+    private readonly tracker: GeofenceTracker,
+  ) {}
 
   @Get('geofences')
   @Requires('catalog.read')
@@ -89,6 +93,31 @@ export class GeofenceController {
     return this.zones.remove(scope, id);
   }
 
+  @Get('geofences/:id/visits')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Visits to this zone, newest first (at most 500); from/to bound the entry time' })
+  zoneVisits(
+    @CurrentScope() scope: RequestScope,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.tracker.visits(scope, { zoneId: id }, range(from, to));
+  }
+
+  @Get('equipment/:sourceSystem/:externalId/geofence-visits')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'This machine\'s zone visits, its site boundary\'s included, newest first (at most 500)' })
+  machineVisits(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.tracker.visits(scope, { sourceSystem, externalId }, range(from, to));
+  }
+
   @Get('equipment/:sourceSystem/:externalId/geofences')
   @Requires('catalog.read')
   @ApiOperation({ summary: 'Every zone that applies to this machine, its site boundary included' })
@@ -112,4 +141,15 @@ export class GeofenceController {
   ) {
     return this.zones.check(scope, sourceSystem, externalId, [body.lng, body.lat]);
   }
+}
+
+/** An unreadable date is refused rather than ignored: ignoring it widens the answer silently. */
+function range(from?: string, to?: string): { from?: Date; to?: Date } {
+  const read = (v: string | undefined, name: string) => {
+    if (v === undefined) return undefined;
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) throw new BadRequestException(`${name} is an ISO 8601 date or time.`);
+    return d;
+  };
+  return { from: read(from, 'from'), to: read(to, 'to') };
 }
