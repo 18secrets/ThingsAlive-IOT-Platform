@@ -121,10 +121,10 @@ export function demoSiteBoundary(centre: LngLat): SiteBoundary {
   return { type: 'Polygon', coordinates: [ring] };
 }
 
-/** Half-way along the site, on its centre line; a fifth of its width across, at most 120 m. */
+/** Half-way along the site, on its centre line: a blasting pit or a cut, a sixth of the width across, at most 80 m. */
 export function demoNoGoZone(centre: LngLat): CircleShape {
   const site = siteAt(centre);
-  return { type: 'Circle', center: place(site, 0, 0.5), radiusM: Math.round(Math.min(120, 0.2 * site.halfWidthM)) };
+  return { type: 'Circle', center: place(site, 0, 0.5), radiusM: Math.round(Math.min(80, site.halfWidthM / 6)) };
 }
 
 export type DemoMobility = 'mobile' | 'working' | 'stationary';

@@ -940,7 +940,9 @@ async function main() {
         console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
         // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
         // readings that say which machines are online.
-        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: STEP_MS });
+        // A fix a minute, back-filled each run: at the readings' ten-minute cadence the newest
+        // position was up to twenty minutes old by the next run, and the map called it stale.
+        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: 60_000 });
         // eslint-disable-next-line no-console
         console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
       };
