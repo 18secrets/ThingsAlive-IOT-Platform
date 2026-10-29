@@ -6,7 +6,7 @@ import {
   AssistantModel, AssistantTurn, GeminiModel, geminiConfigFrom, ModelReply, ToolDeclaration,
 } from '../src/assistant/assistant-model';
 import { AssistantTools } from '../src/assistant/assistant-tools';
-import { AssistantService, MAX_ROUNDS } from '../src/assistant/assistant.service';
+import { AssistantService, MAX_ROUNDS, tidyReply } from '../src/assistant/assistant.service';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { createApp } from '../src/main';
 import { withTenantId } from '../src/scope/tenant-session';
@@ -193,6 +193,40 @@ describeDb('assistant chat', () => {
     ))).rejects.toThrow(/ck_assistant_usage_tokens/);
   });
 
+
+  it('tells the model today\'s date, so "this week" has something to count from', async () => {
+    const model = new ScriptedModel(() => say('ok'));
+    await service(model).chat(acme, ask('Alerts this week?'), new Date('2026-10-29T08:00:00Z'));
+    expect(model.seen[0].system).toMatch(/Today is 2026-10-29 \(UTC\)\.$/);
+  });
+
+  it('list_alerts keeps to the days asked for: since inclusive, before exclusive', async () => {
+    await owner.query(
+      `INSERT INTO alert_event (tenant_id, rule_id, rule_name, source_system, external_id, severity, summary, evidence, state, fired_at)
+         VALUES ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'last week', '{}'::jsonb, 'open', '2026-10-25T23:59:59Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'monday', '{}'::jsonb, 'open', '2026-10-26T00:00:00Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'today', '{}'::jsonb, 'open', '2026-10-29T07:00:00Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'next week', '{}'::jsonb, 'open', '2026-11-02T00:00:00Z')`,
+    );
+    const summaries = async (args: Record<string, unknown>) =>
+      ((await tools.run(acme, 'list_alerts', args)) as { summary: string }[]).map((a) => a.summary);
+    expect(await summaries({ firedSince: '2026-10-26', firedBefore: '2026-11-02' })).toEqual(['today', 'monday']);
+    expect(await summaries({ firedSince: '2026-10-29' })).toEqual(['next week', 'today']);
+    expect(await summaries({ firedBefore: '2026-10-26' })).toEqual(['last week']);
+  });
+
+  it('list_alerts refuses a day it cannot read rather than answering about every alert', async () => {
+    for (const bad of ['last week', '2026-02-31', '29/10/2026']) {
+      expect(await tools.run(acme, 'list_alerts', { firedSince: bad }))
+        .toEqual({ error: 'firedSince and firedBefore are days written YYYY-MM-DD.' });
+    }
+  });
+
+  it('drops an emphasis marker the model opened and never closed', async () => {
+    const model = new ScriptedModel(() => say('_There are 3 open alerts:\n- **EX-03**: hot'));
+    expect((await service(model).chat(acme, ask('Open alerts?'))).reply).toBe('There are 3 open alerts:\n- **EX-03**: hot');
+  });
+
   describe('over HTTP', () => {
     const token = () => app.get(JwtService).signAsync(
       { sub: '00000000-0000-4000-8000-0000000000a1', client_id: 'acme', roles: ['admin'] }, { secret: SECRET, issuer: ISSUER },
@@ -280,5 +314,57 @@ describe('Gemini adapter', () => {
     expect(sent[1].contents[1]).toEqual({
       role: 'model', parts: [{ functionCall: { name: 'list_equipment', args: {} }, thoughtSignature: 'sig-1' }],
     });
+  });
+});
+
+describe('tidying a reply', () => {
+  it('keeps emphasis that closes, bold, bullets and plain text as they are', () => {
+    for (const text of ['_Note_: two alerts.', '**EX-03** is hot.', '* EX-03\n* EX-02', 'Two alerts.', '']) {
+      expect(tidyReply(text)).toBe(text);
+    }
+  });
+
+  it('drops an unclosed opener on the first line only', () => {
+    expect(tidyReply('*Two alerts:\n- EX-03')).toBe('Two alerts:\n- EX-03');
+    expect(tidyReply('Two alerts:\n_EX-03')).toBe('Two alerts:\n_EX-03');
+  });
+});
+
+describe('Gemini adapter, when a call runs out of time', () => {
+  const ok = { candidates: [{ content: { parts: [{ text: 'answer' }] } }], usageMetadata: { totalTokenCount: 3 } };
+  const deadline = Object.assign(new Error('{"error":{"code":504,"message":"Deadline expired before operation could complete.","status":"DEADLINE_EXCEEDED"}}'), { status: 504 });
+  const failing = (...outcomes: unknown[]) => {
+    const model = new GeminiModel({ mode: 'api-key', apiKey: 'unused', model: 'gemini-3.5-flash-lite' });
+    const asked: string[] = [];
+    (model as unknown as { ai: unknown }).ai = {
+      models: {
+        generateContent: async (req: { model: string }) => {
+          asked.push(req.model);
+          const next = outcomes.shift();
+          if (next instanceof Error) throw next;
+          return next;
+        },
+      },
+    };
+    return { model, asked };
+  };
+  const input = { system: 's', turns: [{ role: 'user' as const, text: 'q' }], tools: [] };
+
+  it('asks once more, and answers, when the first call hits the deadline', async () => {
+    const { model, asked } = failing(deadline, ok);
+    expect(await model.generate(input)).toEqual({ text: 'answer', calls: [], tokens: 3 });
+    expect(asked).toEqual(['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite']);
+  });
+
+  it('gives up after the second deadline rather than keeping the person waiting', async () => {
+    const { model, asked } = failing(deadline, deadline, ok);
+    await expect(model.generate(input)).rejects.toThrow(/DEADLINE_EXCEEDED/);
+    expect(asked).toHaveLength(2);
+  });
+
+  it('does not retry a request Gemini refused outright', async () => {
+    const { model, asked } = failing(Object.assign(new Error('Request contains an invalid argument'), { status: 400 }), ok);
+    await expect(model.generate(input)).rejects.toThrow(/invalid argument/);
+    expect(asked).toHaveLength(1);
   });
 });

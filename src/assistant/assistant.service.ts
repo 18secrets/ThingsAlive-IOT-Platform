@@ -159,7 +159,9 @@ export class AssistantService {
         // The last round offers no tools, so the model has to answer with what it has
         // rather than spend the round on one more lookup it will never get to read.
         const final = round === MAX_ROUNDS - 1;
-        const out = await this.model.generate({ system: SYSTEM_FOR[profile], turns, tools: final ? [] : offered });
+        // Today's date, or "this week" is a guess: the model has no clock of its own.
+        const system = `${SYSTEM_FOR[profile]}\nToday is ${day} (UTC).`;
+        const out = await this.model.generate({ system, turns, tools: final ? [] : offered });
         tokens += out.tokens;
         if (out.calls.length && !final) {
           const calls = out.calls.slice(0, MAX_CALLS_PER_ROUND);
@@ -176,7 +178,7 @@ export class AssistantService {
           turns.push({ role: 'tool', results });
           continue;
         }
-        reply = out.text ?? '';
+        reply = tidyReply(out.text ?? '');
       }
     } catch (err) {
       this.logger.warn(`assistant model call failed for ${scope.tenantId}: ${err instanceof Error ? err.message : err}`);
@@ -225,6 +227,20 @@ export class AssistantService {
     )));
     return Number(rows[0]?.tokens ?? 0);
   }
+}
+
+/**
+ * Drops an emphasis marker the model opened on the first line and never closed. Dev
+ * answered "_There are 3 open alerts:" on 29 Oct, and the widget showed the underscore.
+ * Only the first line: emphasis does not reach past a paragraph, and a closed `_x_`
+ * there is meant.
+ */
+export function tidyReply(text: string): string {
+  const [head, ...rest] = text.split('\n');
+  // Not followed by a space: `* item` is a list bullet, not emphasis.
+  const m = /^([_*])(?!\1|\s)/.exec(head);
+  if (!m || head.slice(1).includes(m[1])) return text;
+  return [head.slice(1), ...rest].join('\n');
 }
 
 /** TypeORM hands back `[rows, count]` for an UPDATE and the rows alone for an INSERT. */

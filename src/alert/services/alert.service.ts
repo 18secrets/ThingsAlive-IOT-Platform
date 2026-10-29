@@ -1,6 +1,6 @@
 import { absorbAlerts } from '../../incident/incident-absorb';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, In, Not } from 'typeorm';
+import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { Severity } from '../../common/severity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -195,12 +195,22 @@ export class AlertService {
     // `limit: null` is unbounded. The default stays 200 for the alert list; the
     // incident view (closeout §4) asks for every open alert, because an incident list
     // cut short at 200 silently drops whichever machines happened to fire earliest.
-    filter: { state?: string[]; externalId?: string; limit?: number | null } = {},
+    // `firedSince` is inclusive and `firedBefore` exclusive, so consecutive windows
+    // never count the same alert twice.
+    filter: { state?: string[]; externalId?: string; limit?: number | null; firedSince?: Date; firedBefore?: Date } = {},
   ): Promise<AlertEvent[]> {
     return withTenantSession(this.ds, scope, (m) => {
       const where: Record<string, unknown> = { tenantId: scope.tenantId };
       if (filter.state?.length) where.state = In(filter.state);
       if (filter.externalId) where.externalId = filter.externalId;
+      if (filter.firedSince && filter.firedBefore) {
+        // Between is inclusive at both ends; one millisecond off the end keeps it exclusive.
+        where.firedAt = Between(filter.firedSince, new Date(filter.firedBefore.getTime() - 1));
+      } else if (filter.firedSince) {
+        where.firedAt = MoreThanOrEqual(filter.firedSince);
+      } else if (filter.firedBefore) {
+        where.firedAt = LessThan(filter.firedBefore);
+      }
 
       // Undefined is unrestricted, [] matches nothing. Reading the empty case as "no
       // filter" would hand somebody assigned to no machines every alert in the account.

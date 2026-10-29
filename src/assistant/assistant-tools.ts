@@ -233,16 +233,28 @@ export class AssistantTools {
           properties: {
             state: { type: 'array', items: { type: 'string', enum: ['open', 'acknowledged', 'resolved'] } },
             equipmentCode: { type: 'string', description: 'Only alerts on this machine code.' },
+            firedSince: { type: 'string', description: 'Only alerts fired on or after this day, YYYY-MM-DD (UTC).' },
+            firedBefore: { type: 'string', description: 'Only alerts fired before this day, YYYY-MM-DD (UTC).' },
           },
         },
         capability: 'prediction.read',
         profiles: ASK,
-        run: async (scope, a) => (await alerts.listEvents(scope, {
-          state: strs(a.state), externalId: str(a.equipmentCode), limit: MAX_LIST_ITEMS,
-        })).map((e) => ({
+        run: async (scope, a) => {
+          // Without a window "how many alerts this week" could not be answered (Dev, 29
+          // Oct). A date the model garbled goes back to it as an error: dropping it would
+          // answer about every alert ever, as if it were the week asked about.
+          const firedSince = day(a.firedSince);
+          const firedBefore = day(a.firedBefore);
+          if (firedSince === null || firedBefore === null) {
+            return { error: 'firedSince and firedBefore are days written YYYY-MM-DD.' };
+          }
+          return (await alerts.listEvents(scope, {
+            state: strs(a.state), externalId: str(a.equipmentCode), limit: MAX_LIST_ITEMS, firedSince, firedBefore,
+          })).map((e) => ({
           machine: e.externalId, rule: e.ruleName, severity: e.severity, state: e.state,
           summary: e.summary, firedAt: e.firedAt, acknowledgedAt: e.acknowledgedAt, resolvedAt: e.resolvedAt,
-        })),
+          }));
+        },
       },
       {
         name: 'logger_health',
@@ -345,6 +357,16 @@ export class AssistantTools {
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+/** A YYYY-MM-DD day as UTC midnight; undefined when absent, null when not a real day. */
+function day(v: unknown): Date | undefined | null {
+  const s = str(v);
+  if (s === undefined) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  // Date rolls 2026-02-31 over to 3 March rather than refusing it.
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? null : d;
 }
 
 function strs(v: unknown): string[] | undefined {
