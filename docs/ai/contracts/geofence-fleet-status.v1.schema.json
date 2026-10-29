@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "geofence-fleet-status.v1",
+  "title": "GET /api/v1/geofences/fleet-status",
+  "description": "Every machine the caller can see, its latest position, and where that position stands against each zone and site boundary that applies to it. Computed live from readings on each request. Zone shapes are included once, in `zones`, and referenced from each machine by `key`.",
+  "type": "object",
+  "required": ["asOf", "zones", "machines", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "asOf": { "type": "string", "format": "date-time" },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "id", "source", "code", "name", "kind", "shape", "appliesTo"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "description": "zone:<uuid>, or site:<plant uuid> for a site boundary." },
+          "id": { "type": ["string", "null"], "description": "The zone's id; null for a site boundary." },
+          "source": { "enum": ["zone", "site-boundary"] },
+          "code": { "type": "string", "description": "The zone code, or site:<site code>." },
+          "name": { "type": "string" },
+          "kind": { "enum": ["allowed", "restricted", "corridor"] },
+          "appliesTo": { "enum": ["account", "plant", "equipment", "equipment-class"] },
+          "shape": {
+            "oneOf": [
+              {
+                "type": "object", "required": ["type", "coordinates"],
+                "properties": {
+                  "type": { "const": "Polygon" },
+                  "coordinates": { "type": "array", "description": "GeoJSON: outer ring, then holes; [longitude, latitude]." }
+                }
+              },
+              {
+                "type": "object", "required": ["type", "center", "radiusM"],
+                "properties": {
+                  "type": { "const": "Circle" },
+                  "center": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+                  "radiusM": { "type": "number" }
+                }
+              },
+              {
+                "type": "object", "required": ["type", "path", "widthM"],
+                "properties": {
+                  "type": { "const": "Corridor" },
+                  "path": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } },
+                  "widthM": { "type": "number", "description": "Full width; inside is within half of it of the path." }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "machines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceSystem", "externalId", "name", "site", "position", "positionStatus", "zones", "violating"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceSystem": { "type": "string" },
+          "externalId": { "type": "string", "description": "The machine code." },
+          "name": { "type": ["string", "null"] },
+          "site": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object", "required": ["id", "code", "name"],
+                "properties": { "id": { "type": "string" }, "code": { "type": "string" }, "name": { "type": "string" } }
+              }
+            ]
+          },
+          "position": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object", "required": ["lng", "lat", "at", "ageSeconds", "imei"],
+                "properties": {
+                  "lng": { "type": "number" }, "lat": { "type": "number" },
+                  "at": { "type": "string", "format": "date-time" },
+                  "ageSeconds": { "type": "integer", "minimum": 0 },
+                  "imei": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "positionStatus": {
+            "enum": ["live", "stale", "none"],
+            "description": "live: at most 15 minutes old. stale: older, up to a day. none: no paired latitude and longitude in the last day."
+          },
+          "zones": {
+            "type": "array",
+            "description": "One entry per zone that applies to the machine; empty when there is no position.",
+            "items": {
+              "type": "object", "required": ["key", "inside", "violation"],
+              "properties": { "key": { "type": "string" }, "inside": { "type": "boolean" }, "violation": { "type": "boolean" } }
+            }
+          },
+          "violating": {
+            "type": "boolean",
+            "description": "Any zone broken at the latest position. False when there is no position: read it with positionStatus, since unknown is not fine."
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["machines", "live", "stale", "noPosition", "violating"],
+      "properties": {
+        "machines": { "type": "integer" }, "live": { "type": "integer" }, "stale": { "type": "integer" },
+        "noPosition": { "type": "integer" }, "violating": { "type": "integer" }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GeofenceVisit } from './entities/geofence-visit.entity';
 import { GeofenceZone } from './entities/geofence-zone.entity';
+import { FleetStatusService } from './fleet-status.service';
 import { GeofenceTracker } from './geofence-tracker.service';
 import { GeofenceController } from './geofence.controller';
 import { GeofenceService } from './geofence.service';
@@ -14,7 +15,7 @@ import { GeofenceService } from './geofence.service';
 @Module({
   imports: [TypeOrmModule.forFeature([GeofenceZone, GeofenceVisit])],
   controllers: [GeofenceController],
-  providers: [GeofenceService, GeofenceTracker],
-  exports: [GeofenceService, GeofenceTracker],
+  providers: [GeofenceService, GeofenceTracker, FleetStatusService],
+  exports: [GeofenceService, GeofenceTracker, FleetStatusService],
 })
 export class GeofenceModule {}
