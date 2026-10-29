@@ -31,6 +31,8 @@ export interface ZonePatch {
 
 /** A zone as it applies to one machine. A site boundary appears as an allowed zone with no id. */
 export interface AppliedZone {
+  /** `zone:<id>`, or `site:<plant id>` — by id, not code, since a site's code can be edited. */
+  key: string;
   id: string | null;
   source: 'zone' | 'site-boundary';
   code: string;
@@ -147,13 +149,13 @@ export class GeofenceService {
         const plant = await m.getRepository(Plant).findOne({ where: { tenantId: scope.tenantId, id: machine.plantId } });
         if (plant?.boundary) {
           out.push({
-            id: null, source: 'site-boundary', code: `site:${plant.code}`, name: plant.name,
+            key: `site:${plant.id}`, id: null, source: 'site-boundary', code: `site:${plant.code}`, name: plant.name,
             kind: 'allowed', shape: plant.boundary, appliesTo: 'plant',
           });
         }
       }
       for (const z of zones) {
-        out.push({ id: z.id, source: 'zone', code: z.code, name: z.name, kind: z.kind, shape: z.shape, appliesTo: z.appliesTo });
+        out.push({ key: `zone:${z.id}`, id: z.id, source: 'zone', code: z.code, name: z.name, kind: z.kind, shape: z.shape, appliesTo: z.appliesTo });
       }
       return out;
     });

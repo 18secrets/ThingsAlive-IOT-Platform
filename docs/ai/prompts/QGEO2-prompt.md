@@ -65,13 +65,42 @@ corridor scale). On an edge counts as inside, as QGEO1 decided.
 A person narrowed to sites or machines does not see, or target, a zone on a site or machine
 outside their scope; account and machine-type zones are visible to all.
 
-## Stage 2 — entry/exit events (next)
+## Stage 2 — entry/exit visits
 
-`geofence_event`: one row per visit (entered at, left at, dwell), at most one open visit per
-machine and zone, enforced by a partial unique index. Positions are paired with QGEO1's
-`pairPositions`. Each entry and exit is written to the `domain_event` outbox (D11), which is how
-alerts, work orders, workflows and the assistant consume it. Late readings, and replay in its
-own namespace (G10), are designed there.
+`geofence_visit`: one row per stretch of time a machine spent inside a zone, its site boundary
+included (`zone_key` is `zone:<id>` or `site:<plant id>`). The database holds at most one open
+visit per machine and zone (partial unique index), an exit as time, place and reason together,
+and exit after entry. Deleting a zone keeps its visits (`zone_id` SET NULL, snapshot columns).
+
+**When.** In the shift pass (D12), from the readings it already holds, on the scored path and
+the engine-never-ran path — a machine with its engine off can still be moved. Never fatal, as
+alert evaluation is not. `ShiftRunner` takes the tracker as an optional last argument, so the
+runners existing tests build by hand are unchanged.
+
+**Positions.** `latitude` and `longitude` paired per logger with QGEO1's `pairPositions`, the
+window as the runner pulls it: after the start, up to the end.
+
+**Recomputing.** A late reading rewinds the shift and every later one (`rewindForLateArrivals`).
+A pass reconciles rather than appends, so the same window twice writes nothing the second time.
+A window decides only what is timestamped inside it: a leave after its end is a later
+window's, and is kept. Concurrent passes over one machine serialise on an advisory lock.
+
+**Events** (`domain_event`, D11), subject `<source>/<external id>/<zone key>`:
+`geofence.entered.v1`, `geofence.left.v1` (with `violation` and `dwellSeconds`),
+`geofence.visit.revised.v1` (a leave time moved) and `geofence.visit.withdrawn.v1` (a late reading
+showed a visit never happened). `violation` is true on entering a restricted zone and on leaving
+an allowed zone or a corridor.
+
+**A zone switched off or removed** closes the visits inside it at the next window's start, as
+`zone_removed`, with no exit position: the machine did not move, the fence did.
+
+**API.** `GET /equipment/:sourceSystem/:externalId/geofence-visits` and
+`GET /geofences/:id/visits`, `catalog.read`, newest first, at most 500, `from`/`to` on entry time.
+A site-boundary visit is hidden from someone who cannot see the site.
+
+**Not here:** replay (G10) of visits — the alert replay harness does not call the tracker, so a
+replay cannot write visits or events. Acting on events (an alert per restricted entry) is a
+consumer's, in stage 3 or later.
 
 ## Stage 3 — operators and the assistant (after)
 
