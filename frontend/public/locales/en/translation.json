@@ -368,6 +368,7 @@
       "centreLabel": "Centre the plan on latitude, longitude",
       "centreGo": "Go",
       "centreHint": "Type the site’s latitude and longitude to draw its first fence."
-    }
+    },
+    "notLoaded": "Positions could not be loaded. See the message above, then Refresh."
   }
 }
