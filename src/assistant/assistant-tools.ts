@@ -6,6 +6,9 @@ import { AlertService } from '../alert/services/alert.service';
 import { DeviceHealthService } from '../device-health/services/device-health.service';
 import { LinkState } from '../device-health/services/link-health';
 import { EquipmentService } from '../equipment/services/equipment.service';
+import { GeofenceTracker } from '../geofence/geofence-tracker.service';
+import { GeofenceService } from '../geofence/geofence.service';
+import { violates } from '../geofence/geometry';
 import { PlantService } from '../equipment/services/plant.service';
 import { IncidentStatus } from '../incident/entities/incident.entity';
 import { IncidentRecordService } from '../incident/incident-record.service';
@@ -47,7 +50,9 @@ const MAX_RESULT_CHARS = 12_000;
 /** What each onboarding reason code means to the person onboarding, and who acts on it. */
 const STEP_REASON_MEANING: Record<string, string> = {
   unclassified: 'The machine has no machine type. Set one by editing the machine on Administration > Equipment.',
-  no_device_claimed: 'No logger is fitted. Fit one of this account\'s loggers (my_loggers).',
+  // No tool or field names in here: the model passes these on to people word for word,
+  // and "(my_loggers)" reached the onboarding chat on Development, 29 Oct.
+  no_device_claimed: 'No logger is fitted. Fit one of this account\'s free loggers to it.',
   no_requirements: 'The machine type lists no required signals, so there is nothing to map. The customer '
     + 'cannot fix this: Things Alive has to add required signals to the machine type and publish it. '
     + 'Readings, scenario and later steps wait on it.',
@@ -58,7 +63,7 @@ const STEP_REASON_MEANING: Record<string, string> = {
   no_active_scenario: 'No prediction scenario is switched on. Switch one on from the Scenarios page.',
   no_alert_rule: 'No enabled alert rule covers the machine. Add one on the Alerts page.',
   no_user_access: 'Only super admins can see the machine. Give people access on Client Users.',
-  blocked_by_step: 'Waiting on an earlier step (blockedBy); that step\'s meaning says what to do.',
+  blocked_by_step: 'Waiting on an earlier step; that step\'s meaning says what to do.',
 };
 
 /**
@@ -96,6 +101,8 @@ export class AssistantTools {
     inventory: InventoryService,
     proposals: AssistantProposalService,
     ds: DataSource,
+    geofences: GeofenceService,
+    visits: GeofenceTracker,
   ) {
     /**
      * Site and machine-type names, keyed by the id and slug a machine carries. Without
@@ -374,6 +381,42 @@ export class AssistantTools {
         capability: 'catalog.read',
         profiles: ASK,
         run: (scope, a) => pages.machinePage(scope, { sourceSystem: str(a.sourceSystem) ?? '', externalId: str(a.code) ?? '' }),
+      },
+      {
+        name: 'machine_geofences',
+        description: 'One machine\'s geofence zones, its site boundary included, and its visits to them in the last '
+          + '7 days: when it entered and left, and whether that broke the zone\'s rule (entering a restricted zone, '
+          + 'leaving an allowed zone or a corridor).',
+        parameters: {
+          type: 'object',
+          properties: {
+            code: { type: 'string', description: 'The machine code, from list_equipment.' },
+            sourceSystem: { type: 'string', description: 'From list_equipment. Leave out to find the machine by code.' },
+          },
+          required: ['code'],
+        },
+        capability: 'catalog.read',
+        profiles: ASK,
+        run: async (scope, a, _ctx) => {
+          const code = str(a.code) ?? '';
+          const sourceSystem = str(a.sourceSystem)
+            ?? (await equipment.list(scope, {})).find((e) => e.externalId === code)?.sourceSystem
+            ?? '';
+          const since = new Date(Date.now() - 7 * 24 * 3_600_000);
+          const [zones, recent] = await Promise.all([
+            geofences.zonesFor(scope, sourceSystem, code),
+            visits.visits(scope, { sourceSystem, externalId: code }, { from: since }),
+          ]);
+          // Shapes left out: coordinates spend tokens and answer nothing a person asks here.
+          return {
+            zones: zones.map((z) => ({ code: z.code, name: z.name, kind: z.kind, isSiteBoundary: z.source === 'site-boundary' })),
+            visits: recent.slice(0, 20).map((v) => ({
+              zone: v.zoneName, zoneCode: v.zoneCode, kind: v.zoneKind, enteredAt: v.enteredAt,
+              leftAt: v.leftAt, stillInside: v.leftAt === null,
+              brokeRule: violates(v.zoneKind, true) || (v.leftReason === 'exited' && violates(v.zoneKind, false)),
+            })),
+          };
+        },
       },
     ];
   }

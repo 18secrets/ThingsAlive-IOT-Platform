@@ -6,6 +6,8 @@ import {
   AssistantModel, AssistantTurn, GeminiModel, geminiConfigFrom, ModelReply, ToolDeclaration,
 } from '../src/assistant/assistant-model';
 import { AssistantTools } from '../src/assistant/assistant-tools';
+import { GeofenceTracker } from '../src/geofence/geofence-tracker.service';
+import { GeofenceService } from '../src/geofence/geofence.service';
 import { AssistantService, MAX_ROUNDS, tidyReply } from '../src/assistant/assistant.service';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { createApp } from '../src/main';
@@ -107,9 +109,9 @@ describeDb('assistant chat', () => {
   it('offers only read tools, and only those the caller\'s capabilities open', async () => {
     const names = (s: RequestScope) => tools.available(s).map((t) => t.name).sort();
     expect(names(acme)).toEqual(
-      ['list_alerts', 'list_equipment', 'list_incidents', 'list_work_orders', 'logger_health', 'machine_page'],
+      ['list_alerts', 'list_equipment', 'list_incidents', 'list_work_orders', 'logger_health', 'machine_geofences', 'machine_page'],
     );
-    expect(names(viewer)).toEqual(['list_equipment', 'machine_page']);
+    expect(names(viewer)).toEqual(['list_equipment', 'machine_geofences', 'machine_page']);
   });
 
   it('a tool the caller was not offered is refused when the model calls it anyway', async () => {
@@ -225,6 +227,41 @@ describeDb('assistant chat', () => {
   it('drops an emphasis marker the model opened and never closed', async () => {
     const model = new ScriptedModel(() => say('_There are 3 open alerts:\n- **EX-03**: hot'));
     expect((await service(model).chat(acme, ask('Open alerts?'))).reply).toBe('There are 3 open alerts:\n- **EX-03**: hot');
+  });
+
+  describe('machine_geofences', () => {
+    const fix = (iso: string, lat: number) => [
+      { imei: 'L1', signal: 'latitude', value: lat, sourceTimestamp: iso },
+      { imei: 'L1', signal: 'longitude', value: 77.2, sourceTimestamp: iso },
+    ];
+    beforeEach(async () => {
+      const zones = app.get(GeofenceService);
+      await zones.create(acme, {
+        code: 'PIT', name: 'Blast pit', kind: 'restricted', appliesTo: 'account',
+        shape: { type: 'Circle', center: [77.2, 12.2], radiusM: 300 },
+      });
+      const recent = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+      await app.get(GeofenceTracker).trackWindow({
+        tenantId: 'acme', sourceSystem: 'ta-2.0', externalId: 'GEN-1',
+        start: new Date(Date.now() - 10 * 3_600_000), end: new Date(),
+        readings: [...fix(recent(5), 12.2), ...fix(recent(4), 12.6)],
+      });
+    });
+
+    it('gives the machine\'s zones by name, without coordinates, and its recent visits, saying which broke a rule', async () => {
+      const out = await tools.run(acme, 'machine_geofences', { code: 'GEN-1' }) as {
+        zones: Record<string, unknown>[]; visits: Record<string, unknown>[];
+      };
+      expect(out.zones).toEqual([{ code: 'PIT', name: 'Blast pit', kind: 'restricted', isSiteBoundary: false }]);
+      expect(out.visits).toHaveLength(1);
+      expect(out.visits[0]).toMatchObject({ zone: 'Blast pit', kind: 'restricted', stillInside: false, brokeRule: true });
+      expect(JSON.stringify(out)).not.toMatch(/radiusM|center|coordinates/);
+    });
+
+    it('another account\'s machine is an error the model reads, not an answer', async () => {
+      expect(await tools.run(acme, 'machine_geofences', { code: 'SECRET-9', sourceSystem: 'ta-2.0' }))
+        .toEqual({ error: 'No such machine in this account.' });
+    });
   });
 
   describe('over HTTP', () => {
