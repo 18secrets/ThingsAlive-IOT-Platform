@@ -105,7 +105,6 @@
     "assistantName": "Things Alive Assistant",
     "placeholder": "Add more details or ask a question...",
     "send": "Send",
-    "manualSetup": "I will set it up myself",
     "setupStatus": "Setup Status",
     "quick": {
       "assets": {

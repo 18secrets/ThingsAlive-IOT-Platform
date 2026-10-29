@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { OnboardingProgress } from '../components/onboarding/OnboardingProgress';
@@ -14,7 +14,6 @@ type View = 'list' | 'chat';
  * confirms it.
  */
 export const AiOnboardingPage: React.FC = () => {
-  const navigate = useNavigate();
   const { t } = useTranslation('onboarding');
   const [searchParams] = useSearchParams();
   // AdminPage's "AI-assisted setup" link and Devices' "Setup with AI" both
@@ -28,7 +27,7 @@ export const AiOnboardingPage: React.FC = () => {
   );
 
   if (view === 'chat') {
-    return <AIOnboarding onSkipToManualSetup={() => navigate('/admin/equipment')} />;
+    return <AIOnboarding />;
   }
   return <OnboardingProgress onAddNew={() => setView('chat')} />;
 };

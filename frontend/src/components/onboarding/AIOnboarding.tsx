@@ -34,9 +34,6 @@ function errorKey(err: unknown): string {
   return 'chat.error.generic';
 }
 
-interface AIOnboardingProps {
-  onSkipToManualSetup: () => void;
-}
 
 // Title, description and prompt are onboarding.json's chat.quick.<id>.*.
 const QUICK_CARDS: { id: string; icon: React.FC<{ className?: string }> }[] = [
@@ -66,7 +63,7 @@ function focusOf(p: AssistantProposal): OnboardingFocus | null {
   return null;
 }
 
-export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup }) => {
+export const AIOnboarding: React.FC = () => {
   const { t } = useTranslation('onboarding');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Hidden until the conversation is about setup; then re-read after each answer and
@@ -282,14 +279,6 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
               <Send className="w-4 h-4" />
             </button>
           </form>
-
-          <button
-            type="button"
-            onClick={onSkipToManualSetup}
-            className="block text-center text-xs text-slate-500 dark:text-slate-400 underline hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer mt-3 mx-auto"
-          >
-            {t('chat.manualSetup')}
-          </button>
         </div>
       </div>
 
