@@ -4666,7 +4666,7 @@ export function apiListPublishedNamedFormulas(): Promise<NamedFormula[]> {
 }
 
 // ---------------------------------------------------------------- geofence fleet map (QGEO2)
-// Shape: docs/ai/contracts/geofence-fleet-status.v1.schema.json. Positions are
+// Shape: docs/ai/contracts/geofence/fleet-status.v1.schema.json. Positions are
 // [longitude, latitude], as GeoJSON has them.
 
 export type GeofenceShape =

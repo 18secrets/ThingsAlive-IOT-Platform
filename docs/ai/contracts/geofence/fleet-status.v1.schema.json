@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "geofence-fleet-status.v1",
+  "$id": "https://things-alive.io/schemas/geofence/fleet-status.v1.json",
   "title": "GET /api/v1/geofences/fleet-status",
   "description": "Every machine the caller can see, its latest position, and where that position stands against each zone and site boundary that applies to it. Computed live from readings on each request. Zone shapes are included once, in `zones`, and referenced from each machine by `key`.",
   "type": "object",
