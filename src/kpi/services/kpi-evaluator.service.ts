@@ -12,6 +12,9 @@ import { ClientFormula } from '../../client-catalog/entities/client-formula.enti
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { Plant } from '../../equipment/entities/plant.entity';
 import { SiteBoundary } from '../../catalog/formula/geofence';
+import { GeofenceZone } from '../../geofence/entities/geofence-zone.entity';
+import { zoneAppliesTo } from '../../geofence/geofence.service';
+import { ZoneShape } from '../../geofence/geometry';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantSession } from '../../scope/tenant-session';
 import { BindingSegment, bindingSegments, overlapping, SignalBindingService } from '../../signal-binding/services/signal-binding.service';
@@ -53,6 +56,8 @@ interface PlanEvalContext {
   /** The machine's site boundary (task QGEO1); null when it has no site or the site
    * is unfenced. */
   siteBoundary: SiteBoundary | null;
+  /** The machine's enabled geofence zones by code (task QGEO2). */
+  zones: Map<string, ZoneShape>;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -318,6 +323,14 @@ export class KpiEvaluatorService {
       : null;
     const siteBoundary = plant?.boundary ?? null;
 
+    // The machine's geofence zones (task QGEO2), by code — the same rule the zone API
+    // uses for "which zones apply to this machine". Few rows per account; read whole.
+    const zones = new Map(
+      (await m.getRepository(GeofenceZone).find({ where: { tenantId, enabled: true } }))
+        .filter((z) => zoneAppliesTo(z, profile))
+        .map((z) => [z.code, z.shape] as [string, ZoneShape]),
+    );
+
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
       const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
@@ -329,7 +342,7 @@ export class KpiEvaluatorService {
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
       {
-        signals, parameters, excludedRangesBySignal, siteBoundary, operating,
+        signals, parameters, excludedRangesBySignal, siteBoundary, zones, operating,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
       m, tenantId, toTelemetry(segments),
@@ -405,7 +418,7 @@ export class KpiEvaluatorService {
     ctxBase: {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
-      siteBoundary: SiteBoundary | null; operating?: OperatingGate;
+      siteBoundary: SiteBoundary | null; zones: Map<string, ZoneShape>; operating?: OperatingGate;
     },
     m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<KpiEnvelope> {
@@ -463,7 +476,7 @@ export class KpiEvaluatorService {
     const ctx: PlanEvalContext = {
       window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal, siteBoundary: ctxBase.siteBoundary,
-      operating: ctxBase.operating,
+      zones: ctxBase.zones, operating: ctxBase.operating,
     };
 
     if (resultKind === 'series') {
@@ -742,6 +755,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       if (opEntry.needsSiteBoundary && !ctx.siteBoundary) {
         return { ok: false, readiness: 'not_configured', reason: 'site_boundary_not_set' };
       }
+      // A zone this machine does not have is not one it is outside of (task QGEO2).
+      let zoneShape: ZoneShape | null = null;
+      if (opEntry.needsZone) {
+        const zoneArg = node.args.find((a: { type: string }) => a.type === 'zone');
+        zoneShape = zoneArg ? ctx.zones.get(zoneArg.code) ?? null : null;
+        if (!zoneShape) return { ok: false, readiness: 'not_configured', reason: 'zone_not_applied' };
+      }
       const seriesArgs: Reading[][] = [];
       const scalarArgs: number[] = [];
       const durationArgs: number[] = [];
@@ -753,6 +773,8 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           durationArgs.push(argNode.hours);
           continue;
         }
+        if (kind === 'zone') continue; // resolved above, into zoneShape
+
         // A state's code, resolved at publish (task QCAT1). Null only in a plan that
         // never went through publish — not configured, rather than a guessed state.
         if (kind === 'state') {
@@ -781,7 +803,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
         windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
-        siteBoundary: ctx.siteBoundary, operating: ctx.operating,
+        siteBoundary: ctx.siteBoundary, zoneShape, operating: ctx.operating,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
       if (result.ok === false) return { ok: false, readiness: readinessFor(result.reason), reason: result.reason };

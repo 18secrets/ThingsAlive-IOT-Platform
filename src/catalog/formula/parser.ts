@@ -247,9 +247,13 @@ function tokenize(source: string): Token[] {
       const end = source.indexOf("'", i + 1);
       if (end === -1) throw new FormulaCompileError(`unterminated state name starting at position ${start}.`);
       const name = source.slice(i + 1, end);
-      if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+      // A quoted name is a state (QCAT1) or a zone code (QGEO2). The widest of the two
+      // shapes is allowed here; the compiler holds each argument to its own, since only
+      // it knows which one the operator takes.
+      if (!/^[A-Za-z0-9._-]+$/.test(name)) {
         throw new FormulaCompileError(
-          `'${name}' at position ${start} is not a state name: lower_snake_case, starting with a letter.`,
+          `'${name}' at position ${start} is not a quoted name: a state (lower_snake_case) or a zone code `
+            + '(letters, digits and .-_).',
         );
       }
       tokens.push({ type: 'state', text: name, pos: start });

@@ -1,7 +1,9 @@
 import { divideByHour, DIMENSIONLESS, multiplyByHour, Unit } from './units';
 
-/** `'state'` (task QCAT1): a quoted categorical state, resolved to its code at publish. */
-export type ArgKind = 'series' | 'scalar' | 'duration' | 'state';
+/** `'state'` (task QCAT1): a quoted categorical state, resolved to its code at publish.
+ * `'zone'` (task QGEO2): a quoted geofence zone code, resolved per machine at evaluation —
+ * zones belong to the account and apply per machine, so publish cannot know them. */
+export type ArgKind = 'series' | 'scalar' | 'duration' | 'state' | 'zone';
 
 export interface OperatorEntry {
   name: string;
@@ -19,6 +21,9 @@ export interface OperatorEntry {
   /** Reads the machine's site boundary (task QGEO1); the evaluator supplies it, and a
    * machine with none is `not_configured` rather than "inside". */
   needsSiteBoundary?: boolean;
+  /** Reads one of the machine's geofence zones by code (task QGEO2); a code that does not
+   * apply to the machine is `not_configured`, never "outside". */
+  needsZone?: boolean;
 }
 
 /**
@@ -119,6 +124,21 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
   fraction_outside_site: {
     name: 'fraction_outside_site', argKinds: ['series', 'series'], resultKind: 'scalar',
     unitRule: () => DIMENSIONLESS, needsSiteBoundary: true,
+  },
+
+  // -------------------------------------------------------------- QGEO2
+  // (latitude, longitude, 'ZONE') against one of the machine's geofence zones, by code.
+  outside_zone: {
+    name: 'outside_zone', argKinds: ['series', 'series', 'zone'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsZone: true,
+  },
+  fraction_in_zone: {
+    name: 'fraction_in_zone', argKinds: ['series', 'series', 'zone'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsZone: true,
+  },
+  time_in_zone: {
+    name: 'time_in_zone', argKinds: ['series', 'series', 'zone'], resultKind: 'scalar',
+    unitRule: () => multiplyByHour(DIMENSIONLESS), needsZone: true,
   },
 });
 

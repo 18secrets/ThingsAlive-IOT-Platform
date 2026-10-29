@@ -102,11 +102,35 @@ A site-boundary visit is hidden from someone who cannot see the site.
 replay cannot write visits or events. Acting on events (an alert per restricted entry) is a
 consumer's, in stage 3 or later.
 
-## Stage 3 — operators and the assistant (after)
+## Stage 3 — zone operators and time in zone
 
-`outside_zone(latitude, longitude, 'code')`, `fraction_in_zone(...)` and `time_in_zone(...)`
-beside QGEO1's operators, which keep working. Time-in-zone per shift and day as an API. A
-read-only assistant tool listing a machine's zones and recent visits.
+**Operators** (appended to `operator-registry.ts`, `needsZone`), each `(latitude, longitude, 'CODE')`:
+
+| operator | result | meaning |
+|---|---|---|
+| `outside_zone` | dimensionless 0/1 | is the latest position outside the zone |
+| `fraction_in_zone` | dimensionless | share of known time inside, time-weighted as QGEO1 |
+| `time_in_zone` | hours | time inside within the window |
+
+A zone argument is a new `ArgKind`, `'zone'`: a quoted code kept in the plan as
+`{ type: 'zone', code }`. It is resolved per machine at evaluation, not at publish — a formula
+belongs to a machine class, zones to the account and each machine — using the zone API's own
+`zoneAppliesTo`. A code that does not apply to the machine (never drawn, switched off, another
+machine's) is `not_configured`, reason `zone_not_applied`; never "outside".
+
+The parser's quoted name widens from lower_snake_case to `[A-Za-z0-9._-]+`, since zone codes may
+be upper case; the compiler now holds a state name to lower_snake_case, with the same words.
+
+**Time in zone.** `GET /geofences/time-in-zone?from&to[&timezone][&sourceSystem&externalId][&zoneId]`,
+`catalog.read`: hours per machine, zone and local day, from the visits. An open visit counts up to
+now, never past it. Days are cut in the time zone asked for (default UTC; refused if Postgres does
+not know it). `from` and `to` required, at most 92 days (D12: no unbounded query).
+
+**Deferred, needing a decision:**
+- Per-shift grouping: shift windows differ per machine; days first.
+- The assistant tool: adding any tool to the Ask AI chat changes the exact list
+  `assistant-chat.spec.ts` asserts, and an existing test is not edited to make new code pass.
+  It waits on that approval.
 
 ## Out of scope throughout
 
