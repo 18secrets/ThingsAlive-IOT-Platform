@@ -207,7 +207,8 @@ export const GeofenceMapPage: React.FC = () => {
             draftPoints={draft?.points ?? []}
             onPick={draft ? (p) => setDraft({ ...draft, mode: draft.mode, points: draft.mode === 'circle' ? [p] : [...draft.points, p] }) : undefined}
             onCentre={setManualCentre}
-            emptyText={status ? t('geofence.noSites') : t('geofence.loading')}
+            // A failed load is said as one; "Loading" under an error reads as a page still working.
+            emptyText={status ? t('geofence.noSites') : error ? t('geofence.notLoaded') : t('geofence.loading')}
           />
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
             <Legend fill="bg-emerald-500" label={t('geofence.legend.ok')} />
