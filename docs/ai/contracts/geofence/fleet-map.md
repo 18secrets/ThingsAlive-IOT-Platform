@@ -1,7 +1,7 @@
 # Geofence fleet map: page contract for the UI team
 
 Task QGEO2. The backend serves this page; the UI team builds it (`frontend/` is theirs).
-Schema: `geofence-fleet-status.v1.schema.json`, next to this file.
+Schema: `fleet-status.v1.schema.json`, next to this file.
 
 ## What the page shows
 
@@ -77,7 +77,7 @@ boundary or a `corridor`.
 ## Errors
 
 `400` for a `siteId` that is not a uuid; `401` without a token; `403` without `catalog.read`.
-Errors use the shared envelope, `error-envelope.schema.json`.
+Errors use the shared envelope, `../error-envelope.schema.json`.
 
 ## Demo data
 
