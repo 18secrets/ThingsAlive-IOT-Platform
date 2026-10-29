@@ -927,6 +927,9 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
 
 // ============================================================================ CLI
 
+/** How often the demo's simulated GPS moves: a fix a minute, as a logger reporting position would. */
+const GPS_STEP_MS = 60_000;
+
 async function main() {
   requireEnabled();
   const ds = await new DataSource(dataSourceOptions(process.env, { appRole: null })).initialize();
@@ -938,19 +941,27 @@ async function main() {
         const { written, trimmed } = await topUpDemo(ds);
         // eslint-disable-next-line no-console
         console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
-        // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
-        // readings that say which machines are online.
-        // A fix a minute, back-filled each run: at the readings' ten-minute cadence the newest
-        // position was up to twenty minutes old by the next run, and the map called it stale.
-        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: 60_000 });
+      };
+      // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
+      // readings that say which machines are online. Every minute, not with the readings:
+      // a tipper drives a site loop in twelve minutes, so positions at the readings'
+      // ten-minute cadence showed it jumping, not driving.
+      const positions = async () => {
+        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: GPS_STEP_MS });
         // eslint-disable-next-line no-console
         console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
       };
       await once();
+      await positions();
       if (!process.argv.includes('--follow')) return;
+      let lastReadings = Date.now();
       for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, STEP_MS));
-        await once();
+        await new Promise((resolve) => setTimeout(resolve, GPS_STEP_MS));
+        if (Date.now() - lastReadings >= STEP_MS) {
+          await once();
+          lastReadings = Date.now();
+        }
+        await positions();
       }
     }
     if (process.argv.includes('--reset')) {
