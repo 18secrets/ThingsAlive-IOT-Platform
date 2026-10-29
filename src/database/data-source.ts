@@ -22,6 +22,7 @@ import { ClientFormula } from '../client-catalog/entities/client-formula.entity'
 import { EquipmentScenario } from '../activation/entities/equipment-scenario.entity';
 import { ScenarioActivationEvent } from '../activation/entities/scenario-activation-event.entity';
 import { Plant } from '../equipment/entities/plant.entity';
+import { GeofenceZone } from '../geofence/entities/geofence-zone.entity';
 import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placement-event.entity';
 import { WorkOrder, WorkOrderCounter } from '../work/entities/work-order.entity';
 import { WorkOrderEvent } from '../work/entities/work-order-event.entity';
@@ -130,6 +131,7 @@ export const ENTITIES = [
   UserSecurityEvent,
   Tenant,
   Plant,
+  GeofenceZone,
   EquipmentPlacementEvent,
   WorkOrder,
   WorkOrderCounter,
