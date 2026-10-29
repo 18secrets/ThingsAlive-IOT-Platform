@@ -177,10 +177,11 @@ export class GeminiModel implements AssistantModel {
 
     let res: any;
     const fallback = 'gemini-3.5-flash-lite';
+    // While the primary is known to be overloaded, go straight to the fallback rather
+    // than waiting for the primary to fail again on every round of every turn.
+    const first = Date.now() < this.fallbackUntil ? fallback : this.name;
     try {
-      // While the primary is known to be overloaded, go straight to the fallback rather
-      // than waiting for the primary to fail again on every round of every turn.
-      res = await callModel(Date.now() < this.fallbackUntil ? fallback : this.name);
+      res = await callModel(first);
     } catch (err: any) {
       const msg = `${err?.message || ''} ${JSON.stringify(err || {})}`;
       const isCapacityOrNotFound =
@@ -189,9 +190,17 @@ export class GeminiModel implements AssistantModel {
         err?.status === 429 ||
         err?.code === 503 ||
         /503|404|UNAVAILABLE|high demand|not found/i.test(msg);
+      // A deadline is one stuck call, not a model in trouble: on Dev, 29 Oct, the
+      // first question hung the full minute and came back DEADLINE_EXCEEDED, and the
+      // same question asked again answered in 2 s. Dev runs the fallback model itself,
+      // so the branch above never retried it. Once only: two in a row is an outage,
+      // and the person is already waiting.
+      const deadline = err?.status === 504 || err?.code === 504 || /\b504\b|DEADLINE_EXCEEDED/.test(msg);
       if (isCapacityOrNotFound && this.name !== fallback) {
         this.fallbackUntil = Date.now() + FALLBACK_HOLD_MS;
         res = await callModel(fallback);
+      } else if (deadline) {
+        res = await callModel(first);
       } else {
         throw err;
       }
