@@ -1,13 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, MapPin, RotateCw } from 'lucide-react';
+import { AlertCircle, MapPin, PenLine, RotateCw } from 'lucide-react';
 import { SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip, ChipTone } from '../components/common/Chip';
 import {
-  ApiError, GeofenceFleetMachine, GeofenceFleetStatus, GeofenceFleetZone, GeofenceShape, apiGeofenceFleetStatus,
+  ApiError, EquipmentProfile, GeofenceFleetMachine, GeofenceFleetStatus, GeofenceFleetZone, GeofenceShape,
+  GeofenceZoneRecord, apiGeofenceFleetStatus, apiListEquipment, apiListGeofences,
 } from '../lib/api';
+import { DrawZonePanel, ZoneDraft, draftShape } from '../components/geofence/DrawZonePanel';
 
 /** Positions arrive at the loggers' cadence; polling faster shows nothing new. */
 const REFRESH_MS = 60_000;
@@ -35,6 +37,35 @@ function projector([lng0, lat0]: [number, number]) {
   return ([lng, lat]: [number, number]): [number, number] => [(lng - lng0) * kx, -(lat - lat0) * 110_574];
 }
 
+function unprojector([lng0, lat0]: [number, number]) {
+  const kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
+  return ([x, y]: [number, number]): [number, number] => [
+    Math.round((lng0 + x / kx) * 1e6) / 1e6, Math.round((lat0 - y / 110_574) * 1e6) / 1e6,
+  ];
+}
+
+interface PlanView { centre: [number, number]; half: number }
+
+/**
+ * The plan's centre and half-width in metres: sized to the site's fence, else to its zones,
+ * else to its machines. Fixed while drawing — a plan that re-centred on every click would
+ * move the next point away from where it was aimed.
+ */
+function planView(zones: GeofenceFleetZone[], machines: GeofenceFleetMachine[], fallback: [number, number] | null): PlanView | null {
+  const boundary = zones.find((z) => z.source === 'site-boundary');
+  const fence = (boundary ? [boundary] : zones).flatMap((z) => shapePoints(z.shape));
+  const anchor: [number, number][] = fence.length ? fence
+    : machines.filter((m) => m.position).map((m) => [m.position!.lng, m.position!.lat]);
+  if (!anchor.length) return fallback ? { centre: fallback, half: 600 } : null;
+  const centre: [number, number] = [
+    anchor.reduce((a, p) => a + p[0], 0) / anchor.length,
+    anchor.reduce((a, p) => a + p[1], 0) / anchor.length,
+  ];
+  const project = projector(centre);
+  const half = Math.max(400, ...anchor.map(project).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) * 1.25;
+  return { centre, half };
+}
+
 function shapePoints(shape: GeofenceShape): [number, number][] {
   if (shape.type === 'Polygon') return shape.coordinates[0] ?? [];
   if (shape.type === 'Circle') return [shape.center];
@@ -56,11 +87,16 @@ export const GeofenceMapPage: React.FC = () => {
   const [siteId, setSiteId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<'machines' | 'zones'>('machines');
+  const [draft, setDraft] = useState<ZoneDraft | null>(null);
+  const [records, setRecords] = useState<GeofenceZoneRecord[]>([]);
+  const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
+  const [manualCentre, setManualCentre] = useState<[number, number] | null>(null);
 
   const load = () => {
     setLoading(true);
-    return apiGeofenceFleetStatus()
-      .then((s) => { setStatus(s); setError(undefined); })
+    return Promise.all([apiGeofenceFleetStatus(), apiListGeofences(), apiListEquipment()])
+      .then(([s, z, e]) => { setStatus(s); setRecords(z); setEquipment(e); setError(undefined); })
       .catch((err) => setError(err instanceof ApiError ? err.message : t('geofence.loadFailed')))
       .finally(() => setLoading(false));
   };
@@ -93,11 +129,28 @@ export const GeofenceMapPage: React.FC = () => {
     () => (status?.machines ?? []).filter((m) => m.site?.id === siteId),
     [status, siteId],
   );
-  const zones = useMemo(() => {
-    const keys = new Set(here.flatMap((m) => m.zones.map((z) => z.key)));
-    if (siteId) keys.add(`site:${siteId}`);
-    return (status?.zones ?? []).filter((z) => keys.has(z.key));
-  }, [status, here, siteId]);
+
+  const siteMachines = useMemo(() => equipment.filter((e) => e.plantId === siteId), [equipment, siteId]);
+  // Every zone that touches this site: its own, its machines', its machine types', the account's.
+  const siteRecords = useMemo(() => {
+    const ids = new Set(siteMachines.map((m) => m.externalId));
+    const types = new Set(siteMachines.map((m) => m.equipmentClassSlug).filter(Boolean));
+    return records.filter((z) => z.appliesTo === 'account' || (z.appliesTo === 'plant' && z.plantId === siteId)
+      || (z.appliesTo === 'equipment' && !!z.externalId && ids.has(z.externalId))
+      || (z.appliesTo === 'equipment-class' && types.has(z.equipmentClassSlug)));
+  }, [records, siteMachines, siteId]);
+  // Drawn from the zone records, not from the machines' results: a machine with no position
+  // has none, and its site's fences must still show.
+  const zones = useMemo((): GeofenceFleetZone[] => [
+    ...(status?.zones ?? []).filter((z) => z.key === `site:${siteId}`),
+    ...siteRecords.filter((z) => z.enabled).map((z) => ({
+      key: `zone:${z.id}`, id: z.id, source: 'zone' as const, code: z.code, name: z.name,
+      kind: z.kind, shape: z.shape, appliesTo: z.appliesTo,
+    })),
+  ], [status, siteRecords, siteId]);
+  const view = useMemo(() => planView(zones, here, manualCentre), [zones, here, manualCentre]);
+  const currentSite = sites.find((s) => s.id === siteId) ?? null;
+  const preview = draft ? draftShape(draft) : null;
 
   const selectedMachine = here.find((m) => `${m.sourceSystem}/${m.externalId}` === selected) ?? null;
   const summary = status?.summary;
@@ -122,7 +175,7 @@ export const GeofenceMapPage: React.FC = () => {
         <SelectPicker
           data={sites.map((s) => ({ label: `${s.name} (${s.machines})${s.violating ? ` · ${s.violating} ⚠` : ''}`, value: s.id }))}
           value={siteId}
-          onChange={(v) => { setSiteId(v); setSelected(null); }}
+          onChange={(v) => { setSiteId(v); setSelected(null); setDraft(null); setManualCentre(null); }}
           cleanable={false}
           searchable={sites.length > 8}
           placeholder={t('geofence.pickSite')}
@@ -145,10 +198,15 @@ export const GeofenceMapPage: React.FC = () => {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
         <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 overflow-hidden">
           <SiteMap
+            view={view}
             zones={zones}
             machines={here}
             selected={selected}
             onSelect={setSelected}
+            preview={preview}
+            draftPoints={draft?.points ?? []}
+            onPick={draft ? (p) => setDraft({ ...draft, mode: draft.mode, points: draft.mode === 'circle' ? [p] : [...draft.points, p] }) : undefined}
+            onCentre={setManualCentre}
             emptyText={status ? t('geofence.noSites') : t('geofence.loading')}
           />
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
@@ -161,7 +219,28 @@ export const GeofenceMapPage: React.FC = () => {
         </div>
 
         <div className="space-y-3 min-w-0">
-          {selectedMachine && (
+          <div className="grid grid-cols-2 rounded-md border border-slate-200 dark:border-slate-700 p-0.5 text-sm" role="tablist">
+            {(['machines', 'zones'] as const).map((k) => (
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => { setTab(k); if (k === 'machines') setDraft(null); }}
+                className={`inline-flex items-center justify-center gap-1.5 rounded px-3 py-1.5 font-medium ${tab === k
+                  ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 dark:text-slate-300'}`}>
+                {k === 'zones' && <PenLine className="w-4 h-4" />}{t(`geofence.tab.${k}`)}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'zones' && currentSite && (
+            <DrawZonePanel
+              site={currentSite}
+              machines={siteMachines}
+              zones={siteRecords}
+              draft={draft}
+              onDraft={setDraft}
+              onChanged={() => { load(); }}
+            />
+          )}
+
+          {tab === 'machines' && selectedMachine && (
             <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm space-y-2">
               <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">{selectedMachine.name ?? selectedMachine.externalId}</div>
               <MachineChip m={selectedMachine} />
@@ -191,6 +270,7 @@ export const GeofenceMapPage: React.FC = () => {
             </div>
           )}
 
+          {tab === 'machines' && (
           <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
             <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {t('geofence.machinesHere', { count: here.length })}
@@ -218,6 +298,7 @@ export const GeofenceMapPage: React.FC = () => {
                 })}
             </ul>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -246,52 +327,93 @@ const Legend: React.FC<{ fill: string; label: string }> = ({ fill, label }) => (
 
 /** The site in metres around its centre: fences first, machines on top, breakers last. */
 const SiteMap: React.FC<{
+  view: PlanView | null;
   zones: GeofenceFleetZone[];
   machines: GeofenceFleetMachine[];
   selected: string | null;
   onSelect: (key: string) => void;
+  preview: GeofenceShape | null;
+  draftPoints: [number, number][];
+  onPick?: (p: [number, number]) => void;
+  onCentre: (p: [number, number]) => void;
   emptyText: string;
-}> = ({ zones, machines, selected, onSelect, emptyText }) => {
-  const boundary = zones.find((z) => z.source === 'site-boundary');
-  const fencePoints = (boundary ? [boundary] : zones).flatMap((z) => shapePoints(z.shape));
-  const positioned = machines.filter((m) => m.position);
-  const anchor: [number, number][] = fencePoints.length ? fencePoints : positioned.map((m) => [m.position!.lng, m.position!.lat]);
+}> = ({ view, zones, machines, selected, onSelect, preview, draftPoints, onPick, onCentre, emptyText }) => {
+  const { t } = useTranslation();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [centreText, setCentreText] = useState('');
 
-  if (!anchor.length) {
+  if (!view) {
+    // Nothing here has a place yet. Drawing needs one: let the person say where the site is.
+    const parsed = centreText.split(',').map((v) => Number(v.trim()));
+    const valid = parsed.length === 2 && parsed.every(Number.isFinite) && Math.abs(parsed[0]) <= 90 && Math.abs(parsed[1]) <= 180;
     return (
-      <div className="aspect-square max-h-[640px] w-full flex flex-col items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+      <div className="aspect-square max-h-[640px] w-full flex flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
         <MapPin className="w-6 h-6" />{emptyText}
+        <div className="flex flex-wrap justify-center gap-2">
+          <input aria-label={t('geofence.draw.centreLabel')} placeholder="18.5204, 73.8567" value={centreText}
+            onChange={(e) => setCentreText(e.target.value)}
+            className="w-48 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-100" />
+          <button type="button" disabled={!valid} onClick={() => onCentre([parsed[1], parsed[0]])}
+            className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">{t('geofence.draw.centreGo')}</button>
+        </div>
+        <span className="text-xs">{t('geofence.draw.centreHint')}</span>
       </div>
     );
   }
 
-  const centre: [number, number] = [
-    anchor.reduce((a, p) => a + p[0], 0) / anchor.length,
-    anchor.reduce((a, p) => a + p[1], 0) / anchor.length,
-  ];
-  const project = projector(centre);
-  // Sized to the fence, with a margin; a machine far beyond it is pinned to the edge with
-  // its distance, so a haul trip does not shrink the site to a dot.
-  const fenceXY = anchor.map(project);
-  const half = Math.max(400, ...fenceXY.map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) * 1.25;
+  const { half } = view;
+  const project = projector(view.centre);
+  const unproject = unprojector(view.centre);
+  const positioned = machines.filter((m) => m.position);
+  // A machine far beyond the fence is pinned to the edge with its distance, so a haul trip
+  // does not shrink the site to a dot.
   const edge = half * 0.94;
   const clamp = (v: number) => Math.max(-edge, Math.min(edge, v));
   const grid = half > 2000 ? 1000 : half > 800 ? 500 : 200;
   const lines: number[] = [];
   for (let v = -Math.floor(half / grid) * grid; v <= half; v += grid) lines.push(v);
   const r = half / 55;
-
+  const unit = half / 400;
   const order = [...positioned].sort((a, b) => Number(a.violating) - Number(b.violating));
 
+  const pick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!onPick || !svgRef.current) return;
+    const ctm = svgRef.current.getScreenCTM();
+    if (!ctm) return;
+    const pt = svgRef.current.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const { x, y } = pt.matrixTransform(ctm.inverse());
+    onPick(unproject([x, y]));
+  };
+
   return (
-    <svg viewBox={`${-half} ${-half} ${half * 2} ${half * 2}`} className="block w-full h-auto aspect-square max-h-[640px]" role="img">
+    <svg
+      ref={svgRef}
+      viewBox={`${-half} ${-half} ${half * 2} ${half * 2}`}
+      className={`block w-full h-auto aspect-square max-h-[640px] ${onPick ? 'cursor-crosshair' : ''}`}
+      role="img"
+      onClick={pick}
+    >
       {lines.map((v) => (
         <g key={v}>
           <line x1={v} y1={-half} x2={v} y2={half} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={half / 600} />
           <line x1={-half} y1={v} x2={half} y2={v} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={half / 600} />
         </g>
       ))}
-      {zones.map((z) => <ZoneShape key={z.key} zone={z} project={project} unit={half / 400} />)}
+      {zones.map((z) => <ZoneShape key={z.key} zone={z} project={project} unit={unit} />)}
+      {preview && (
+        <ZoneShape
+          zone={{ key: 'draft', id: null, source: 'zone', code: 'draft', name: 'draft', kind: preview.type === 'Corridor' ? 'corridor' : 'restricted', shape: preview, appliesTo: 'plant' }}
+          project={project}
+          unit={unit}
+          draft
+        />
+      )}
+      {draftPoints.map((p, i) => {
+        const [x, y] = project(p);
+        return <circle key={i} cx={x} cy={y} r={r * 0.55} className="fill-sky-500 stroke-white dark:stroke-slate-900" strokeWidth={r / 5} />;
+      })}
       {order.map((m) => {
         const key = `${m.sourceSystem}/${m.externalId}`;
         const [x, y] = project([m.position!.lng, m.position!.lat]);
@@ -301,8 +423,8 @@ const SiteMap: React.FC<{
           <g
             key={key}
             transform={`translate(${clamp(x)},${clamp(y)})`}
-            onClick={() => onSelect(key)}
-            className="cursor-pointer"
+            onClick={(e) => { if (onPick) return; e.stopPropagation(); onSelect(key); }}
+            className={onPick ? '' : 'cursor-pointer'}
             role="button"
             tabIndex={0}
             aria-label={`${m.name ?? m.externalId}`}
@@ -326,10 +448,13 @@ const SiteMap: React.FC<{
   );
 };
 
-const ZoneShape: React.FC<{ zone: GeofenceFleetZone; project: (p: [number, number]) => [number, number]; unit: number }> = ({ zone, project, unit }) => {
+const ZoneShape: React.FC<{
+  zone: GeofenceFleetZone; project: (p: [number, number]) => [number, number]; unit: number; draft?: boolean;
+}> = ({ zone, project, unit, draft }) => {
   const restricted = zone.kind === 'restricted';
-  const stroke = restricted ? 'stroke-rose-500' : 'stroke-slate-500 dark:stroke-slate-400';
-  const fill = restricted ? 'fill-rose-500/15' : 'fill-none';
+  // A shape still being drawn is blue, whatever it will be once saved.
+  const stroke = draft ? 'stroke-sky-500' : restricted ? 'stroke-rose-500' : 'stroke-slate-500 dark:stroke-slate-400';
+  const fill = draft ? 'fill-sky-500/15' : restricted ? 'fill-rose-500/15' : 'fill-none';
   const s = zone.shape;
   if (s.type === 'Circle') {
     const [cx, cy] = project(s.center);

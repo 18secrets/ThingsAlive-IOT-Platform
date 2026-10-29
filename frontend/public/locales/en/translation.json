@@ -305,6 +305,69 @@
     "outside": "outside",
     "age": "{{minutes}} min ago",
     "machinesHere": "{{count}} machines on this site",
-    "openMachine": "Open machine page"
+    "openMachine": "Open machine page",
+    "tab": {
+      "machines": "Machines",
+      "zones": "Zones"
+    },
+    "draw": {
+      "title": "Draw a zone on {{site}}",
+      "name": "Name",
+      "namePlaceholder": "e.g. Quarry edge",
+      "code": "Code: {{code}}",
+      "appliesTo": "Applies to",
+      "pickMachine": "Choose a machine on this site",
+      "pickType": "Choose a machine type",
+      "kindLabel": "Kind",
+      "shapeLabel": "Shape",
+      "target": {
+        "plant": "Every machine on this site",
+        "equipment": "One machine",
+        "equipment-class": "A machine type",
+        "account": "Every machine, all sites",
+        "site-boundary": "This site's boundary"
+      },
+      "kind": {
+        "restricted": "No-go",
+        "allowed": "Allowed area",
+        "corridor": "Route corridor"
+      },
+      "mode": {
+        "circle": "Circle",
+        "polygon": "Polygon",
+        "corridor": "Route"
+      },
+      "hint": {
+        "circle": "Click the plan where the centre goes.",
+        "polygon_one": "Click {{count}} more corner on the plan.",
+        "polygon_other": "Click {{count}} more corners on the plan.",
+        "corridor_one": "Click {{count}} more point along the route.",
+        "corridor_other": "Click {{count}} more points along the route.",
+        "ready": "Ready to save. Keep clicking to add points, or undo the last one."
+      },
+      "radius": "Radius (metres)",
+      "width": "Width (metres, total)",
+      "save": "Save zone",
+      "saveBoundary": "Save site boundary",
+      "saving": "Saving…",
+      "undo": "Undo point",
+      "cancel": "Cancel",
+      "saveFailed": "Could not save. Try again.",
+      "boundaryPolygon": "A site boundary is a polygon.",
+      "zonesHere_one": "{{count}} zone on this site",
+      "zonesHere_other": "{{count}} zones on this site",
+      "noZones": "No zones here yet. Draw one above.",
+      "off": "switched off",
+      "rename": "Rename",
+      "saveName": "Save name",
+      "switchOff": "Switch off",
+      "switchOn": "Switch on",
+      "delete": "Delete",
+      "confirmDelete": "Delete for good",
+      "keep": "Keep",
+      "centreLabel": "Centre the plan on latitude, longitude",
+      "centreGo": "Go",
+      "centreHint": "Type the site’s latitude and longitude to draw its first fence."
+    }
   }
 }
