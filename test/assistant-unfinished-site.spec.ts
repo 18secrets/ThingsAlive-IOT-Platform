@@ -64,7 +64,14 @@ describeDb('assistant unfinished_machines: one site, filtered by the tool', () =
     expect(await codes({ site: 'VZG' })).toEqual(['DG-1']);
   });
 
-  it('a site that does not exist gives none, not the whole fleet', async () => {
-    expect(await codes({ site: 'Chennai' })).toEqual([]);
+  it('a site that matches none says so and names the sites, rather than an empty list that reads as done', async () => {
+    const out = await tools.run(scope, 'unfinished_machines', { site: 'Chennai' }, onboarding);
+    expect(out).toEqual({ error: 'No site matches "Chennai". The sites are: Tata-manfacturing, vizag.' });
+  });
+
+  it('a site the person cannot see is the same as one that does not exist', async () => {
+    const tataOnly: RequestScope = { ...scope, plantIds: [] };
+    const out = await tools.run(tataOnly, 'unfinished_machines', { site: 'vizag' }, onboarding);
+    expect(out).toMatchObject({ error: expect.stringContaining('No site matches "vizag"') });
   });
 });

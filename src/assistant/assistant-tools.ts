@@ -121,6 +121,7 @@ export class AssistantTools {
       const type = new Map(classes.map((c) => [c.slug, c.name]));
       return {
         site: (id: string | null) => (id ? site.get(id) ?? null : null),
+        sites: () => [...site.values()],
         type: (slug: string | null) => (slug ? type.get(slug) ?? slug : null),
       };
     };
@@ -205,12 +206,16 @@ export class AssistantTools {
           const [machines, names] = await Promise.all([onboarding.machines(scope), namesFor(scope)]);
           // Filtered here, not by the model: asked about one site, it read the whole fleet
           // and listed a vizag machine under Tata-manfacturing on one run in two.
-          const wanted = str(a.site)?.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const atWantedSite = (plantId: string | null) => {
-            if (!wanted) return true;
-            const site = names.site(plantId);
-            return !!site && [site.name, site.code].some((v) => v?.toLowerCase().replace(/[^a-z0-9]/g, '') === wanted);
-          };
+          const squash = (v: string | null | undefined) => (v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const wanted = squash(str(a.site));
+          const isWanted = (site: { code: string; name: string } | null) =>
+            !!site && [site.name, site.code].some((v) => squash(v) === wanted);
+          // A site that matches none the person can see is said, not answered with an empty
+          // list: an empty list reads as "nothing left to do there", and the chat said so.
+          if (wanted && !names.sites().some(isWanted)) {
+            return { error: `No site matches "${str(a.site)}". The sites are: ${names.sites().map((x) => x.name).join(', ') || 'none'}.` };
+          }
+          const atWantedSite = (plantId: string | null) => !wanted || isWanted(names.site(plantId));
           return machines.filter((r) => r.overall !== 'done' && atWantedSite(r.machine.plantId)).map((r) => {
             const open = r.steps.filter((s) => s.state !== 'done');
             const site = names.site(r.machine.plantId);
