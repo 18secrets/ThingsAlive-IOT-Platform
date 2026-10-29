@@ -121,6 +121,7 @@ export class AssistantTools {
       const type = new Map(classes.map((c) => [c.slug, c.name]));
       return {
         site: (id: string | null) => (id ? site.get(id) ?? null : null),
+        sites: () => [...site.values()],
         type: (slug: string | null) => (slug ? type.get(slug) ?? slug : null),
       };
     };
@@ -194,13 +195,28 @@ export class AssistantTools {
       {
         name: 'unfinished_machines',
         description: 'The machines not yet fully onboarded, each with its site and type names, the steps not '
-          + 'done, and the first step it waits on with what that means. One call for the whole fleet.',
-        parameters: { type: 'object', properties: {} },
+          + 'done, and the first step it waits on with what that means. One call for the whole fleet, or one site.',
+        parameters: {
+          type: 'object',
+          properties: { site: { type: 'string', description: 'Only machines at this site, by its name or code as the person said it.' } },
+        },
         capability: 'equipment.write',
         profiles: ONBOARDING,
-        run: async (scope) => {
+        run: async (scope, a) => {
           const [machines, names] = await Promise.all([onboarding.machines(scope), namesFor(scope)]);
-          return machines.filter((r) => r.overall !== 'done').map((r) => {
+          // Filtered here, not by the model: asked about one site, it read the whole fleet
+          // and listed a vizag machine under Tata-manfacturing on one run in two.
+          const squash = (v: string | null | undefined) => (v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const wanted = squash(str(a.site));
+          const isWanted = (site: { code: string; name: string } | null) =>
+            !!site && [site.name, site.code].some((v) => squash(v) === wanted);
+          // A site that matches none the person can see is said, not answered with an empty
+          // list: an empty list reads as "nothing left to do there", and the chat said so.
+          if (wanted && !names.sites().some(isWanted)) {
+            return { error: `No site matches "${str(a.site)}". The sites are: ${names.sites().map((x) => x.name).join(', ') || 'none'}.` };
+          }
+          const atWantedSite = (plantId: string | null) => !wanted || isWanted(names.site(plantId));
+          return machines.filter((r) => r.overall !== 'done' && atWantedSite(r.machine.plantId)).map((r) => {
             const open = r.steps.filter((s) => s.state !== 'done');
             const site = names.site(r.machine.plantId);
             return {
