@@ -39,7 +39,7 @@ function tabFromPath(pathname: string, state: unknown, role?: UserRole): Navigat
     if (second && ADMIN_PROMOTED_SUBTABS.includes(second)) return second;
   }
   const known: NavigationTab[] = [
-    'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alert-agent', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
+    'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alert-agent', 'alerts', 'geofence', 'predictions', 'scenarios', 'work-orders', 'cost-administration',
     'admin', 'client-users', 'roles', 'users', 'settings',
   ];
   return (known as string[]).includes(first) ? (first as NavigationTab) : 'dashboard';
@@ -51,7 +51,7 @@ const TAB_PAGE_KEY: Partial<Record<NavigationTab, string>> = {
   admin: 'admin', clients: 'clients', staff: 'staff', devices: 'devices', equipment: 'equipment',
   'things-care': 'thingsCare', 'things-shield': 'thingsShield', 'incident-management': 'incidentManagement',
   'production-monitoring': 'productionMonitoring', 'ai-onboarding': 'aiOnboarding', 'alert-agent': 'alertAgent',
-  alerts: 'alerts', predictions: 'predictions', scenarios: 'scenarios', 'work-orders': 'workOrders',
+  alerts: 'alerts', geofence: 'geofence', predictions: 'predictions', scenarios: 'scenarios', 'work-orders': 'workOrders',
   'cost-administration': 'costAdministration', users: 'users', 'client-users': 'clientUsers', roles: 'roles',
   settings: 'settings',
 };

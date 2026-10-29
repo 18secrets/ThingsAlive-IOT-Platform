@@ -39,6 +39,7 @@ import { AiOnboardingPage } from './pages/AiOnboardingPage';
 import { AlertAgentPage } from './pages/AlertAgentPage';
 import { DraftsPage } from './pages/DraftsPage';
 import { AlertsPage } from './pages/AlertsPage';
+import { GeofenceMapPage } from './pages/GeofenceMapPage';
 import { ThingsCarePage } from './pages/ThingsCarePage';
 import { ThingsCareDetailPage } from './pages/ThingsCareDetailPage';
 import { ThingsShieldPage } from './pages/ThingsShieldPage';
@@ -1329,6 +1330,7 @@ function AppData() {
           <Route path="alert-agent" element={<AlertAgentPage />} />
           <Route path="drafts" element={<DraftsPage />} />
           <Route path="alerts" element={<AlertsPage />} />
+          <Route path="geofence" element={<ErrorBoundary fallbackTitle="Geofence map"><GeofenceMapPage /></ErrorBoundary>} />
           <Route path="predictions" element={<ErrorBoundary fallbackTitle="Predictions"><LivePredictionsPage /></ErrorBoundary>} />
           <Route path="scenarios" element={<ErrorBoundary fallbackTitle="Scenarios"><ScenariosPage /></ErrorBoundary>} />
           <Route path="work-orders" element={<WorkOrdersPage />} />

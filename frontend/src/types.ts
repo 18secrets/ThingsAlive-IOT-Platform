@@ -7,6 +7,7 @@ export type NavigationTab =
   | 'ai-onboarding'
   | 'alert-agent'
   | 'alerts'
+  | 'geofence'
   | 'predictions'
   | 'scenarios'
   | 'work-orders'

@@ -19,7 +19,8 @@ import {
   Factory,
   Briefcase,
   Cpu,
-  Wrench
+  Wrench,
+  MapPinned
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 import logoFull from '../../assets/logo-icon.png';
@@ -70,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // direct link (Alerts' "Create alert" / "Edit, assign" buttons navigate
     // to it) but no longer has its own sidebar entry.
     { id: 'alerts', label: t('sidebar.alerts'), icon: AlertTriangle },
+    { id: 'geofence', label: t('sidebar.geofence'), icon: MapPinned },
     { id: 'predictions', label: t('sidebar.livePredictions'), icon: Activity },
     { id: 'scenarios', label: t('sidebar.scenarios'), icon: GitBranch },
     { id: 'work-orders', label: t('sidebar.workOrders'), icon: ClipboardList },

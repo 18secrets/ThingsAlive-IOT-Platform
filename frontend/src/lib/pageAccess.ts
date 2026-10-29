@@ -39,6 +39,8 @@ function clientTabOf(first: string): NavigationTab | null {
     case 'dashboard':
     case 'equipment':
     case 'sites':
+    // The geofence map (QGEO2) is a view of the same fleet; the API scopes its rows.
+    case 'geofence':
       // A machine's or site's page is reached from the dashboard and goes with it.
       return 'dashboard';
     case 'alert-agent':

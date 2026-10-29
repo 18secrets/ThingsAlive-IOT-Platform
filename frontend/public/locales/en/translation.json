@@ -33,7 +33,8 @@
     "collapse": "Collapse sidebar",
     "version": "Version: {{version}}",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "geofence": "Geofence map"
   },
   "header": {
     "goBack": "Go Back",
@@ -201,6 +202,10 @@
     "dashboardPlatform": {
       "title": "Dashboard",
       "subtitle": "Platform Overview"
+    },
+    "geofence": {
+      "title": "Geofence map",
+      "subtitle": "Where every machine is, against its fences"
     }
   },
   "rsuite": {
@@ -268,5 +273,38 @@
     "noPageTitle": "You don't have access to this page",
     "noPageBody": "Your role doesn't include this page. Ask your administrator if you need it.",
     "goBack": "Go to my pages"
+  },
+  "geofence": {
+    "loadFailed": "Could not load machine positions. Try again.",
+    "loading": "Loading positions…",
+    "noSites": "No machine on this site has a position or a fence yet.",
+    "pickSite": "Choose a site",
+    "refresh": "Refresh",
+    "updated": "Updated {{time}}",
+    "stat": {
+      "machines": "Machines",
+      "live": "Reporting position",
+      "violating": "Breaking a rule",
+      "stale": "Position stale",
+      "noPosition": "No position"
+    },
+    "legend": {
+      "ok": "Inside its fences",
+      "violating": "Breaking a rule",
+      "stale": "Last known place",
+      "boundary": "Site boundary",
+      "noGo": "No-go zone"
+    },
+    "state": {
+      "ok": "Inside",
+      "violating": "Breaking a rule",
+      "stale": "Stale",
+      "none": "No position"
+    },
+    "inside": "inside",
+    "outside": "outside",
+    "age": "{{minutes}} min ago",
+    "machinesHere": "{{count}} machines on this site",
+    "openMachine": "Open machine page"
   }
 }
