@@ -140,7 +140,7 @@ export class GeofenceService {
       const machine = await this.machine(m, scope, sourceSystem, externalId);
       const zones = (await m.getRepository(GeofenceZone).find({
         where: { tenantId: scope.tenantId, enabled: true }, order: { code: 'ASC' },
-      })).filter((z) => applies(z, machine));
+      })).filter((z) => zoneAppliesTo(z, machine));
 
       const out: AppliedZone[] = [];
       // A site the caller may not see is not named, nor its fence shown — the onboarding
@@ -234,7 +234,9 @@ function visible(scope: RequestScope, z: GeofenceZone): boolean {
   return true;
 }
 
-function applies(z: GeofenceZone, machine: EquipmentProfile): boolean {
+/** Whether a zone applies to a machine. Exported for the KPI evaluator (QGEO2 stage 3), so
+ * a formula and the zone API cannot disagree about which zones a machine has. */
+export function zoneAppliesTo(z: GeofenceZone, machine: Pick<EquipmentProfile, 'plantId' | 'sourceSystem' | 'externalId' | 'equipmentClassSlug'>): boolean {
   switch (z.appliesTo) {
     case 'account': return true;
     case 'plant': return !!machine.plantId && z.plantId === machine.plantId;

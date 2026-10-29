@@ -65,6 +65,25 @@ export class GeofenceController {
     });
   }
 
+  // Before `geofences/:id`, which would otherwise take "time-in-zone" for an id.
+  @Get('geofences/time-in-zone')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Hours inside each zone per machine and local day, from visits; from/to required, at most 92 days' })
+  timeInZone(
+    @CurrentScope() scope: RequestScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('timezone') timezone?: string,
+    @Query('sourceSystem') sourceSystem?: string,
+    @Query('externalId') externalId?: string,
+    @Query('zoneId') zoneId?: string,
+  ) {
+    const r = range(from, to);
+    if (!r.from || !r.to) throw new BadRequestException('from and to are required.');
+    if (zoneId !== undefined && !/^[0-9a-f-]{36}$/i.test(zoneId)) throw new BadRequestException('zoneId is a uuid.');
+    return this.tracker.timeInZone(scope, { from: r.from, to: r.to, timezone, sourceSystem, externalId, zoneId });
+  }
+
   @Get('geofences/:id')
   @Requires('catalog.read')
   @ApiOperation({ summary: 'One geofence zone' })

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Between, DataSource, EntityManager, IsNull, LessThanOrEqual, MoreThan } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { DomainEvent } from '../events/domain-event.entity';
@@ -17,6 +17,21 @@ export interface TrackWindow {
   end: Date;
   readings: WindowReading[];
 }
+
+export interface TimeInZoneRow {
+  sourceSystem: string;
+  externalId: string;
+  zoneKey: string;
+  zoneCode: string;
+  zoneName: string;
+  zoneKind: string;
+  /** The local day, YYYY-MM-DD, in the time zone asked for. */
+  day: string;
+  hours: number;
+}
+
+/** A report range is bounded (D12: no unbounded query); a quarter covers any monthly view. */
+export const MAX_REPORT_DAYS = 92;
 
 export interface TrackResult { positions: number; entered: number; left: number; revised: number; withdrawn: number }
 
@@ -173,6 +188,61 @@ export class GeofenceTracker {
       else if (range.to) where.enteredAt = LessThanOrEqual(range.to);
       const rows = await m.getRepository(GeofenceVisit).find({ where, order: { enteredAt: 'DESC' }, take: 500 });
       return rows.filter((v) => visibleVisit(scope, v));
+    });
+  }
+
+  /**
+   * Hours inside each zone, per machine, zone and local day (task QGEO2, stage 3), from
+   * the visits. A visit still open counts up to now, never past it — time not yet
+   * happened is not time spent. Days are cut in the time zone asked for, since a shift
+   * report in Pune and the server's UTC disagree about where a day ends.
+   */
+  async timeInZone(
+    scope: RequestScope,
+    q: { from: Date; to: Date; timezone?: string; sourceSystem?: string; externalId?: string; zoneId?: string },
+    now = new Date(),
+  ): Promise<TimeInZoneRow[]> {
+    if (!(q.to > q.from)) throw new BadRequestException('to comes after from.');
+    if (q.to.getTime() - q.from.getTime() > MAX_REPORT_DAYS * 86_400_000) {
+      throw new BadRequestException(`A report covers at most ${MAX_REPORT_DAYS} days.`);
+    }
+    // One without the other would quietly widen the report to every machine.
+    if (!q.sourceSystem !== !q.externalId) throw new BadRequestException('sourceSystem and externalId go together.');
+    if (q.zoneId) await this.zones.get(scope, q.zoneId);
+    const tz = q.timezone ?? 'UTC';
+    return withTenantSession(this.ds, scope, async (m) => {
+      // Asked of Postgres, which knows every zone name it can convert with.
+      const [{ ok }] = await m.query(`SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1) AS ok`, [tz]);
+      if (!ok) throw new BadRequestException(`"${tz}" is not a time zone name, e.g. Asia/Kolkata.`);
+      const rows: (TimeInZoneRow & { zoneSource: string })[] = await m.query(
+        `WITH v AS (
+           SELECT source_system, external_id, zone_key, zone_code, zone_name, zone_kind, zone_source,
+                  greatest(entered_at, $2::timestamptz) AS s,
+                  least(coalesce(left_at, $4::timestamptz), $3::timestamptz, $4::timestamptz) AS e
+             FROM geofence_visit
+            WHERE tenant_id = $1 AND entered_at < $3 AND coalesce(left_at, $4) > $2
+              AND ($6::text IS NULL OR (source_system = $6 AND external_id = $7))
+              AND ($8::uuid IS NULL OR zone_id = $8)
+         ), d AS (
+           SELECT v.*, gs AS day_local
+             FROM v, generate_series(date_trunc('day', v.s AT TIME ZONE $5),
+                                     date_trunc('day', (v.e - interval '1 microsecond') AT TIME ZONE $5),
+                                     interval '1 day') gs
+            WHERE v.e > v.s
+         )
+         SELECT source_system AS "sourceSystem", external_id AS "externalId", zone_key AS "zoneKey",
+                zone_code AS "zoneCode", zone_name AS "zoneName", zone_kind AS "zoneKind", zone_source AS "zoneSource",
+                to_char(day_local, 'YYYY-MM-DD') AS day,
+                round((sum(extract(epoch FROM least(e, (day_local + interval '1 day') AT TIME ZONE $5)
+                                         - greatest(s, day_local AT TIME ZONE $5))) / 3600)::numeric, 4)::float8 AS hours
+           FROM d
+          GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+          ORDER BY day, "externalId", "zoneCode"`,
+        [scope.tenantId, q.from, q.to, now, tz, q.sourceSystem ?? null, q.externalId ?? null, q.zoneId ?? null],
+      );
+      return rows
+        .filter((r) => visibleVisit(scope, { externalId: r.externalId, zoneSource: r.zoneSource, zoneKey: r.zoneKey } as GeofenceVisit))
+        .map(({ zoneSource: _s, ...r }) => r);
     });
   }
 

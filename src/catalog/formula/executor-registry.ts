@@ -1,4 +1,5 @@
-import { insideBoundary, pairPositions, SiteBoundary } from './geofence';
+import { insideBoundary, pairPositions, Position, SiteBoundary } from './geofence';
+import { insideZone, ZoneShape } from '../../geofence/geometry';
 import {
   alertExcludedRanges, baselineAvg, BaselineReason, baselineSd, BaselineValue, deltaRatio, ExcludedRange,
   OperatingGate, Reading, zscore,
@@ -19,6 +20,8 @@ export interface ExecContext {
   operating?: OperatingGate;
   /** The machine's site boundary (task QGEO1), for operators that need one. */
   siteBoundary?: SiteBoundary | null;
+  /** The zone a QGEO2 operator names, already looked up among the machine's zones. */
+  zoneShape?: ZoneShape | null;
 }
 
 export type ExecValue =
@@ -203,7 +206,54 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
 
   outside_site: { run: (series, _s, _d, ctx) => outsideSite(series, ctx) },
   fraction_outside_site: { run: (series, _s, _d, ctx) => fractionOutsideSite(series, ctx) },
+
+  // ----------------------------------------------------------------------- QGEO2
+  outside_zone: {
+    run: (series, _s, _d, ctx) => {
+      if (!ctx.zoneShape) return UNDEFINED_RESULT; // the evaluator refuses this case first
+      const positions = zonePositions(series, ctx);
+      if (!positions.length) return NO_READINGS;
+      const last = positions[positions.length - 1];
+      return { ok: true, value: insideZone(ctx.zoneShape, [last.lng, last.lat]) ? 0 : 1 };
+    },
+  },
+  fraction_in_zone: {
+    run: (series, _s, _d, ctx) => {
+      const t = timeInZone(series, ctx);
+      if (t.ok === false) return t;
+      if (t.total === 0) return UNDEFINED_RESULT;
+      return { ok: true, value: t.inside / t.total };
+    },
+  },
+  time_in_zone: {
+    run: (series, _s, _d, ctx) => {
+      const t = timeInZone(series, ctx);
+      return t.ok === false ? t : { ok: true, value: t.inside };
+    },
+  },
 });
+
+function zonePositions([lat, lng]: Reading[][], ctx: ExecContext): Position[] {
+  return pairPositions(windowed(lat, ctx.windowFrom, ctx.windowTo), windowed(lng, ctx.windowFrom, ctx.windowTo));
+}
+
+/** Hours inside the zone and hours known, each position holding until the next — QGEO1's
+ * step-function reading, so `fraction_in_zone` and `fraction_outside_site` agree on a site. */
+function timeInZone(series: Reading[][], ctx: ExecContext):
+  { ok: true; inside: number; total: number } | Extract<ExecValue, { ok: false }> {
+  if (!ctx.zoneShape) return UNDEFINED_RESULT as Extract<ExecValue, { ok: false }>;
+  const positions = zonePositions(series, ctx);
+  if (!positions.length) return NO_READINGS as Extract<ExecValue, { ok: false }>;
+  let total = 0;
+  let inside = 0;
+  positions.forEach((p, i) => {
+    const end = i + 1 < positions.length ? positions[i + 1].at : ctx.windowTo;
+    const hours = Math.max(0, end.getTime() - p.at.getTime()) / 3_600_000;
+    total += hours;
+    if (insideZone(ctx.zoneShape!, [p.lng, p.lat])) inside += hours;
+  });
+  return { ok: true, inside, total };
+}
 
 // QGEO1 operators live in the table above; their arithmetic is here.
 function outsideSite([lat, lng]: Reading[][], ctx: ExecContext): ExecValue {
