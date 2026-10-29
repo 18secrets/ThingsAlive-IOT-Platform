@@ -137,6 +137,16 @@ export class OnboardingStatusService {
     return { asOf: at.toISOString(), sites };
   }
 
+  /**
+   * Every machine the caller can see, with its steps. The summary counts machines per
+   * site but cannot say which ones are unfinished, and asking `machine` once per machine
+   * spent the onboarding chat's whole step limit on a fleet of a dozen.
+   */
+  async machines(scope: RequestScope, at = new Date()): Promise<MachineOnboarding[]> {
+    const machines = await withTenantSession(this.ds, scope, (m) => this.visibleMachines(m, scope));
+    return this.evaluate(scope, machines, at);
+  }
+
   async machine(scope: RequestScope, sourceSystem: string, externalId: string, at = new Date()): Promise<MachineOnboarding> {
     const notFound = () => new NotFoundException('No such machine in this account.');
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(externalId)) throw notFound();

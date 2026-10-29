@@ -97,6 +97,27 @@ export class AssistantTools {
     proposals: AssistantProposalService,
     ds: DataSource,
   ) {
+    /**
+     * Site and machine-type names, keyed by the id and slug a machine carries. Without
+     * them the chat printed "4ee4adc1-…" for a site and "ashokleyland-genset-180-test"
+     * for a type, unless the model happened to make a second lookup. A site the caller
+     * may not see stays unnamed, as the onboarding summary leaves it: naming it would
+     * leak it.
+     */
+    const namesFor = async (scope: RequestScope) => {
+      const [sites, classes] = await Promise.all([
+        plants.list(scope, true),
+        withTenantSession(ds, scope, (m) => m.getRepository(ClientEquipmentClass).find({ where: { tenantId: scope.tenantId } })),
+      ]);
+      const visible = sites.filter((p) => scope.plantIds === undefined || scope.plantIds.includes(p.id));
+      const site = new Map(visible.map((p) => [p.id, { code: p.code, name: p.name }]));
+      const type = new Map(classes.map((c) => [c.slug, c.name]));
+      return {
+        site: (id: string | null) => (id ? site.get(id) ?? null : null),
+        type: (slug: string | null) => (slug ? type.get(slug) ?? slug : null),
+      };
+    };
+
     const BOTH: AssistantProfile[] = ['ask', 'onboarding'];
     const ASK: AssistantProfile[] = ['ask'];
     const ONBOARDING: AssistantProfile[] = ['onboarding'];
@@ -164,6 +185,28 @@ export class AssistantTools {
         },
       },
       {
+        name: 'unfinished_machines',
+        description: 'The machines not yet fully onboarded, each with its site and type names, the steps not '
+          + 'done, and the first step it waits on with what that means. One call for the whole fleet.',
+        parameters: { type: 'object', properties: {} },
+        capability: 'equipment.write',
+        profiles: ONBOARDING,
+        run: async (scope) => {
+          const [machines, names] = await Promise.all([onboarding.machines(scope), namesFor(scope)]);
+          return machines.filter((r) => r.overall !== 'done').map((r) => {
+            const open = r.steps.filter((s) => s.state !== 'done');
+            const site = names.site(r.machine.plantId);
+            return {
+              code: r.machine.externalId, name: r.machine.name, site: site?.name ?? null, siteCode: site?.code ?? null,
+              type: names.type(r.machine.classSlug), notDone: open.map((s) => s.step),
+              waitingOn: open[0]?.step ?? null,
+              meaning: open[0]?.reason ? STEP_REASON_MEANING[open[0].reason] ?? null : null,
+              hasLogger: !open.some((s) => s.step === 'device'),
+            };
+          });
+        },
+      },
+      {
         name: 'list_sites',
         description: 'The sites in this account: code and name.',
         parameters: { type: 'object', properties: {} },
@@ -216,14 +259,23 @@ export class AssistantTools {
       }, ['imei', 'equipmentCode']),
       {
         name: 'list_equipment',
-        description: 'The machines in this account: code, name, class, site and status.',
+        description: 'The machines in this account: code, name, type, site and status. Show people `site` and '
+          + '`type`, the names; the ids and slugs are for other tools.',
         parameters: { type: 'object', properties: { siteId: { type: 'string', description: 'Only machines at this site id.' } } },
         capability: 'catalog.read',
         profiles: BOTH,
-        run: async (scope, a) => (await equipment.list(scope, { plantId: str(a.siteId) })).map((e) => ({
-          sourceSystem: e.sourceSystem, code: e.externalId, name: e.name, class: e.equipmentClassSlug,
-          siteId: e.plantId, status: e.status, manufacturer: e.manufacturer, model: e.modelNumber,
-        })),
+        run: async (scope, a) => {
+          const [machines, names] = await Promise.all([equipment.list(scope, { plantId: str(a.siteId) }), namesFor(scope)]);
+          return machines.map((e) => {
+            const site = names.site(e.plantId);
+            return {
+              sourceSystem: e.sourceSystem, code: e.externalId, name: e.name,
+              type: names.type(e.equipmentClassSlug), typeSlug: e.equipmentClassSlug,
+              site: site?.name ?? null, siteCode: site?.code ?? null, siteId: e.plantId,
+              status: e.status, manufacturer: e.manufacturer, model: e.modelNumber,
+            };
+          });
+        },
       },
       {
         name: 'list_alerts',
