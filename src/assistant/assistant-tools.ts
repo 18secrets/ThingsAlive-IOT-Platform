@@ -194,13 +194,24 @@ export class AssistantTools {
       {
         name: 'unfinished_machines',
         description: 'The machines not yet fully onboarded, each with its site and type names, the steps not '
-          + 'done, and the first step it waits on with what that means. One call for the whole fleet.',
-        parameters: { type: 'object', properties: {} },
+          + 'done, and the first step it waits on with what that means. One call for the whole fleet, or one site.',
+        parameters: {
+          type: 'object',
+          properties: { site: { type: 'string', description: 'Only machines at this site, by its name or code as the person said it.' } },
+        },
         capability: 'equipment.write',
         profiles: ONBOARDING,
-        run: async (scope) => {
+        run: async (scope, a) => {
           const [machines, names] = await Promise.all([onboarding.machines(scope), namesFor(scope)]);
-          return machines.filter((r) => r.overall !== 'done').map((r) => {
+          // Filtered here, not by the model: asked about one site, it read the whole fleet
+          // and listed a vizag machine under Tata-manfacturing on one run in two.
+          const wanted = str(a.site)?.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const atWantedSite = (plantId: string | null) => {
+            if (!wanted) return true;
+            const site = names.site(plantId);
+            return !!site && [site.name, site.code].some((v) => v?.toLowerCase().replace(/[^a-z0-9]/g, '') === wanted);
+          };
+          return machines.filter((r) => r.overall !== 'done' && atWantedSite(r.machine.plantId)).map((r) => {
             const open = r.steps.filter((s) => s.state !== 'done');
             const site = names.site(r.machine.plantId);
             return {
