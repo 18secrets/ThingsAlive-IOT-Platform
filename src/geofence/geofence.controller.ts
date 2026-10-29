@@ -5,6 +5,7 @@ import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { ZoneAppliesTo } from './entities/geofence-zone.entity';
+import { FleetStatusService } from './fleet-status.service';
 import { GeofenceTracker } from './geofence-tracker.service';
 import { GeofenceService } from './geofence.service';
 import { ZoneKind } from './geometry';
@@ -49,6 +50,7 @@ export class GeofenceController {
   constructor(
     private readonly zones: GeofenceService,
     private readonly tracker: GeofenceTracker,
+    private readonly fleet: FleetStatusService,
   ) {}
 
   @Get('geofences')
@@ -63,6 +65,18 @@ export class GeofenceController {
       appliesTo: TARGETS.includes(appliesTo as ZoneAppliesTo) ? appliesTo : undefined,
       enabled: enabled === undefined ? undefined : enabled === 'true',
     });
+  }
+
+  // Before `geofences/:id`, which would otherwise take "fleet-status" for an id.
+  @Get('geofences/fleet-status')
+  @Requires('catalog.read')
+  @ApiOperation({
+    summary: 'Every machine\'s latest position against its zones and site boundary, for the fleet map; '
+      + 'zone shapes included. Computed live from readings, not from visits',
+  })
+  fleetStatus(@CurrentScope() scope: RequestScope, @Query('siteId') siteId?: string) {
+    if (siteId !== undefined && !/^[0-9a-f-]{36}$/i.test(siteId)) throw new BadRequestException('siteId is a uuid.');
+    return this.fleet.status(scope, { plantId: siteId });
   }
 
   // Before `geofences/:id`, which would otherwise take "time-in-zone" for an id.

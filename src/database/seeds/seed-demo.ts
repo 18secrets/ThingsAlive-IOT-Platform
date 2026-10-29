@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { DataSource, EntityManager } from 'typeorm';
+import { topUpDemoPositions } from './demo-geofence';
 import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
 import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
@@ -937,6 +938,11 @@ async function main() {
         const { written, trimmed } = await topUpDemo(ds);
         // eslint-disable-next-line no-console
         console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
+        // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
+        // readings that say which machines are online.
+        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: STEP_MS });
+        // eslint-disable-next-line no-console
+        console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
       };
       await once();
       if (!process.argv.includes('--follow')) return;
