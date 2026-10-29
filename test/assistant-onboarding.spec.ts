@@ -225,6 +225,52 @@ describeDb('onboarding assistant: propose, then confirm', () => {
     expect(await proposals.list(acme, 'applied')).toHaveLength(2);
   });
 
+  describe('naming what is here', () => {
+    beforeEach(async () => {
+      await owner.query(`TRUNCATE TABLE "client_equipment_class" CASCADE`);
+      await owner.query(
+        `INSERT INTO client_equipment_class (tenant_id, slug, name) VALUES ('acme', 'ashok-genset-180', 'Ashok Leyland genset 180')`,
+      );
+      await owner.query(
+        `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, origin, status, tier, readiness, equipment_class_slug, plant_id)
+           SELECT 'acme', 'ta-2.0', 'GEN-2', 'Genset 2', 'client', 'active', 'basic', '{}'::jsonb, 'ashok-genset-180', id
+             FROM plant WHERE code = 'NORTH'`,
+      );
+      await owner.query(
+        `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, origin, status, tier, readiness)
+           VALUES ('globex', 'ta-2.0', 'G-1', 'Globex rig', 'client', 'active', 'basic', '{}'::jsonb)`,
+      );
+    });
+
+    it('list_equipment gives the site and type by name, keeping the ids other tools need', async () => {
+      const out = await tools.run(acme, 'list_equipment', {}) as Record<string, unknown>[];
+      expect(out.find((e) => e.code === 'GEN-2')).toMatchObject({
+        site: 'North yard', siteCode: 'NORTH', type: 'Ashok Leyland genset 180', typeSlug: 'ashok-genset-180',
+      });
+      expect(out.find((e) => e.code === 'EX-1')).toMatchObject({ site: null, type: null });
+      expect(JSON.stringify(out)).not.toContain('Globex');
+    });
+
+    it('unfinished_machines lists every unfinished machine here in one call, by name, with what it waits on', async () => {
+      expect(tools.available(acme, 'onboarding').map((t) => t.name)).toContain('unfinished_machines');
+      expect(tools.available(acme, 'ask').map((t) => t.name)).not.toContain('unfinished_machines');
+
+      const out = await tools.run(acme, 'unfinished_machines', {}, { profile: 'onboarding', proposals: [] }) as Record<string, unknown>[];
+      expect(out.map((m) => m.code).sort()).toEqual(['EX-1', 'GEN-2']);
+      const gen = out.find((m) => m.code === 'GEN-2')!;
+      expect(gen).toMatchObject({ site: 'North yard', type: 'Ashok Leyland genset 180', hasLogger: false });
+      expect(gen.notDone).toContain('device');
+      expect(typeof gen.meaning).toBe('string');
+    });
+
+    it('a machine on a site the caller may not see is listed, but its site is not named', async () => {
+      const elsewhere: RequestScope = { ...acme, plantIds: ['00000000-0000-4000-8000-00000000beef'] };
+      const out = await tools.run(elsewhere, 'unfinished_machines', {}, { profile: 'onboarding', proposals: [] }) as Record<string, unknown>[];
+      expect(out.find((m) => m.code === 'GEN-2')).toMatchObject({ site: null, siteCode: null });
+      expect(JSON.stringify(out)).not.toContain('North yard');
+    });
+  });
+
   describe('over HTTP', () => {
     const token = () => app.get(JwtService).signAsync(
       { sub: '00000000-0000-4000-8000-0000000000b1', client_id: 'acme', roles: ['admin'] }, { secret: SECRET, issuer: ISSUER },
