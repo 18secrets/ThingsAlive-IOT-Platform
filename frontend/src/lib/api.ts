@@ -4707,3 +4707,50 @@ export interface GeofenceFleetStatus {
 export function apiGeofenceFleetStatus(siteId?: string): Promise<GeofenceFleetStatus> {
   return authFetch(`/geofences/fleet-status${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`);
 }
+
+/** A zone as authored (GET /geofences): disabled ones included, unlike the fleet map's. */
+export interface GeofenceZoneRecord {
+  id: string;
+  code: string;
+  name: string;
+  kind: "allowed" | "restricted" | "corridor";
+  shape: GeofenceShape;
+  appliesTo: "account" | "plant" | "equipment" | "equipment-class";
+  plantId: string | null;
+  sourceSystem: string | null;
+  externalId: string | null;
+  equipmentClassSlug: string | null;
+  enabled: boolean;
+}
+
+export interface GeofenceZoneInput {
+  code: string;
+  name: string;
+  kind: GeofenceZoneRecord["kind"];
+  shape: GeofenceShape;
+  appliesTo: GeofenceZoneRecord["appliesTo"];
+  plantId?: string;
+  sourceSystem?: string;
+  externalId?: string;
+  equipmentClassSlug?: string;
+}
+
+export function apiListGeofences(): Promise<GeofenceZoneRecord[]> {
+  return authFetch("/geofences");
+}
+
+export function apiCreateGeofence(input: GeofenceZoneInput): Promise<GeofenceZoneRecord> {
+  return authFetch("/geofences", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Code and target never change after creation (the backend refuses it); a new target is a new zone. */
+export function apiUpdateGeofence(
+  id: string, patch: { name?: string; kind?: GeofenceZoneRecord["kind"]; shape?: GeofenceShape; enabled?: boolean },
+): Promise<GeofenceZoneRecord> {
+  return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function apiDeleteGeofence(id: string): Promise<{ id: string; deleted: true }> {
+  return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
