@@ -17,6 +17,7 @@ export const SitePagePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   usePageHeader({
+    breadcrumb: t('translation:breadcrumb.sites'),
     title: page?.site.name ?? t('sitePage.site'),
     subtitle: t('sitePage.title'),
     onBack: goBack,

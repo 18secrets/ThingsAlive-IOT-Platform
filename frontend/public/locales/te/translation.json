@@ -284,5 +284,8 @@
   },
   "geofence": {
     "loadingSites": "సైట్‌లు లోడ్ అవుతున్నాయి…"
+  },
+  "breadcrumb": {
+    "sites": "సైట్‌లు"
   }
 }

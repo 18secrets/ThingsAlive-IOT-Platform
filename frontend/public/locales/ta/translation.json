@@ -284,5 +284,8 @@
   },
   "geofence": {
     "loadingSites": "தளங்கள் ஏற்றப்படுகின்றன…"
+  },
+  "breadcrumb": {
+    "sites": "தளங்கள்"
   }
 }

@@ -250,7 +250,7 @@ export const WorkOrdersPage: React.FC = () => {
     <div id="work-orders-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-bold">{t('translation:sidebar.workOrders')}</h2>
+          <h2 className="text-xl font-bold">{t('hero.heading')}</h2>
           <p className="text-sm text-sky-100">{t('hero.subtitle')}</p>
         </div>
         <button

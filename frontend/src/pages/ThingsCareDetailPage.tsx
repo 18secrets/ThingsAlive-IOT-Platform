@@ -156,6 +156,7 @@ export const ThingsCareDetailPage: React.FC = () => {
   const [openSignal, setOpenSignal] = useState<{ slug: string; signal: string } | null>(null);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.thingsCare'),
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
     onBack: goBack,

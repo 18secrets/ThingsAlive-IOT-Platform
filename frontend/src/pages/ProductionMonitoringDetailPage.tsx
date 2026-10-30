@@ -167,6 +167,7 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.productionMonitoring'),
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
     onBack: goBack,

@@ -125,7 +125,7 @@ export const IncidentManagementPage: React.FC = () => {
               <Info className="w-4 h-4 text-sky-200" />
             </span>
           </div>
-          <h2 className="text-xl font-bold">{t('page.title')}</h2>
+          <h2 className="text-xl font-bold">{t('page.heading')}</h2>
         </div>
         <button
           onClick={() => setPoliciesOpen(true)}

@@ -284,5 +284,8 @@
   },
   "geofence": {
     "loadingSites": "साइटें लोड हो रही हैं…"
+  },
+  "breadcrumb": {
+    "sites": "साइटें"
   }
 }

@@ -1,6 +1,7 @@
 {
   "hero": {
-    "subtitle": "Jobs raised against your machines"
+    "subtitle": "Jobs raised against your machines",
+    "heading": "Maintenance jobs"
   },
   "loading": "Loading…",
   "empty": "No work orders for this selection.",

@@ -284,5 +284,8 @@
   },
   "geofence": {
     "loadingSites": "ସାଇଟ୍ ଲୋଡ୍ ହେଉଛି…"
+  },
+  "breadcrumb": {
+    "sites": "ସାଇଟ୍"
   }
 }

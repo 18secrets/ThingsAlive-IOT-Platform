@@ -57,7 +57,7 @@ export const ThingDetailLivePage: React.FC = () => {
   );
 
   const name = profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
-  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: goBack });
+  usePageHeader({ breadcrumb: t('translation:sidebar.dashboard'), title: name, subtitle: t('thingLive.subtitle'), onBack: goBack });
 
   if (profile.state === 'ok' && !profile.data) {
     return <p className="text-sm text-slate-500">{t('thingLive.notInRegister')}</p>;

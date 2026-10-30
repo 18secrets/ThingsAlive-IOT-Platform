@@ -37,6 +37,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
   const [correcting, setCorrecting] = useState<ShieldEvidence | null>(null);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.thingsShield'),
     title: shield?.machine.name ?? externalId ?? t('detail.notFoundTitle'),
     subtitle: t('detail.subtitle'),
     onBack: goBack,

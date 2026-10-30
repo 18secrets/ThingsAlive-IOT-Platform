@@ -114,7 +114,7 @@ export const CostAdministrationPage: React.FC = () => {
   return (
     <div id="cost-administration-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">{t('page.title')}</h2>
+        <h2 className="text-xl font-bold">{t('page.heading')}</h2>
         <p className="text-sm text-sky-100">{t('page.intro')}</p>
       </div>
 

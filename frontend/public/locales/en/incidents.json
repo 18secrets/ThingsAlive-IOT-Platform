@@ -10,7 +10,8 @@
     "empty": "No incidents for this selection.",
     "unassigned": "Unassigned",
     "escalated": "escalated (level {{level}})",
-    "openedAt": "Opened {{date}}"
+    "openedAt": "Opened {{date}}",
+    "heading": "Live incidents and response times"
   },
   "filter": {
     "live": "Live (open + acknowledged)"

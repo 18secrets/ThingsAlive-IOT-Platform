@@ -413,6 +413,7 @@ export const EquipmentPagePage: React.FC = () => {
   const { t } = useTranslation(['equipment', 'drafts']);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.equipment'),
     title: page?.equipment.name ?? externalId ?? t('translation:sidebar.equipment'),
     subtitle: t('equipmentPage.title'),
     onBack: goBack,
