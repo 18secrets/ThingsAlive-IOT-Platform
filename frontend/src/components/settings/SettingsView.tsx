@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AuthUser, ClientAccount } from '../../types';
 import { PasswordField } from '../common/PasswordField';
+import { PasswordChecklist, passwordMeetsRules } from '../common/PasswordChecklist';
 import { SessionDiagnostics } from './SessionDiagnostics';
 
 interface SettingsViewProps {
@@ -44,7 +45,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     const trimmedNew = newPassword.trim();
     const trimmedConfirm = confirmPassword.trim();
 
-    if (trimmedNew.length < 8) {
+    if (!passwordMeetsRules(trimmedNew)) {
       setFormError(t('settings.tooShort'));
       return;
     }
@@ -175,6 +176,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               placeholder={t('settings.newPasswordPlaceholder')}
               required
             />
+            <PasswordChecklist password={newPassword.trim()} />
 
             <PasswordField
               label={t('settings.confirmNewPassword')}
@@ -200,7 +202,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !currentPassword.trim() || !passwordMeetsRules(newPassword.trim())
+                || newPassword.trim() !== confirmPassword.trim()}
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <KeyRound className="w-4 h-4" />

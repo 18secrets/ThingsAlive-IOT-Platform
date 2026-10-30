@@ -370,5 +370,12 @@
       "centreHint": "Type the site’s latitude and longitude to draw its first fence."
     },
     "notLoaded": "Positions could not be loaded. See the message above, then Refresh."
+  },
+  "passwordRules": {
+    "length": "At least 8 characters",
+    "upper": "An uppercase letter",
+    "lower": "A lowercase letter",
+    "number": "A number",
+    "special": "A special character"
   }
 }
