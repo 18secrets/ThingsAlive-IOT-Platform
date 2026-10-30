@@ -383,7 +383,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
     const numId = Number(machine.externalId.replace(/[^0-9]/g, '')) || 7;
     for (const [index, s] of DEMO_SIGNALS.entries()) {
       let val: number;
-      if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(nowMs)) {
+      if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(nowMs, machine.externalId)) {
         val = BREACH_TAIL[tickIndex % BREACH_TAIL.length];
       } else {
         const noise = prng(numId * 101 + index + tickIndex * 7919);
@@ -417,7 +417,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
 
     // Fuel consumption (rate in L/h) for productive quality tracking in OEE
     const noiseFuel = prng(numId * 313 + tickIndex * 6271)();
-    const isEngineRunning = running(nowMs);
+    const isEngineRunning = running(nowMs, machine.externalId);
     const fuelRate = isEngineRunning ? parseFloat((12.4 + noiseFuel * 1.5).toFixed(2)) : 0;
     imeis.push(imei);
     signals.push('fuel_consumption');
