@@ -34,7 +34,8 @@
     "fullyOnboarded": "పూర్తిగా ఆన్‌బోర్డ్ అయింది",
     "inProgress": "జరుగుతోంది",
     "class": "తరగతి {{slug}}",
-    "waitingOn": "వేచి ఉంది: {{step}}"
+    "waitingOn": "వేచి ఉంది: {{step}}",
+    "fix": "సరిచేయండి"
   },
   "siteStatus": {
     "completed": "పూర్తయింది",

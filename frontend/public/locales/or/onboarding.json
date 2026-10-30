@@ -34,7 +34,8 @@
     "fullyOnboarded": "ସମ୍ପୂର୍ଣ୍ଣ ଅନବୋର୍ଡ",
     "inProgress": "ଚାଲୁଛି",
     "class": "ଶ୍ରେଣୀ {{slug}}",
-    "waitingOn": "ଅପେକ୍ଷାରେ: {{step}}"
+    "waitingOn": "ଅପେକ୍ଷାରେ: {{step}}",
+    "fix": "ଠିକ୍ କରନ୍ତୁ"
   },
   "siteStatus": {
     "completed": "ସମ୍ପୂର୍ଣ୍ଣ",

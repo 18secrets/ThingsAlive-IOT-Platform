@@ -34,7 +34,8 @@
     "fullyOnboarded": "Fully onboarded",
     "inProgress": "In progress",
     "class": "class {{slug}}",
-    "waitingOn": "Waiting on: {{step}}"
+    "waitingOn": "Waiting on: {{step}}",
+    "fix": "Fix"
   },
   "siteStatus": {
     "completed": "Completed",

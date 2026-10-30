@@ -5,8 +5,9 @@ import {
 import { Input, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
-  ApiError, EquipmentProfile, MachineOnboarding, ONBOARDING_STEPS, OnboardingStepState,
+  ApiError, EquipmentProfile, MachineOnboarding, ONBOARDING_STEPS, OnboardingStepName, OnboardingStepState,
   OnboardingSummary, SiteOnboarding, apiGetMachineOnboarding, apiGetOnboardingSummary, apiListEquipment,
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
@@ -306,8 +307,25 @@ const SiteMachines: React.FC<{ machines: EquipmentProfile[] }> = ({ machines }) 
   );
 };
 
+/**
+ * Where each step is fixed. The list said what was pending and left finding the screen to
+ * the person (test report OB-9). The machine's own page holds its class, signals, readings
+ * and shift schedule, which is what OEE and availability wait on.
+ */
+const FIX_ROUTE: Record<OnboardingStepName, (machinePage: string) => string> = {
+  equipment: (page) => page,
+  device: () => '/admin/devices',
+  mapping: (page) => page,
+  validation: (page) => page,
+  activation: () => '/scenarios',
+  alerts: () => '/alerts',
+  access: () => '/client-users',
+};
+
 const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ sourceSystem, externalId }) => {
   const { t } = useTranslation('onboarding');
+  const navigate = useNavigate();
+  const machinePage = `/admin/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`;
   const [data, setData] = useState<MachineOnboarding | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -338,7 +356,15 @@ const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ 
                 </p>
               )}
             </div>
-            <Chip tone={STATE_TONE[s.state]}>{t(`stepState.${s.state}`)}</Chip>
+            <span className="flex items-center gap-2 shrink-0">
+              {s.state === 'pending' && (
+                <button type="button" onClick={() => navigate(FIX_ROUTE[s.step](machinePage))}
+                  className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+                  {t('progress.fix')}
+                </button>
+              )}
+              <Chip tone={STATE_TONE[s.state]}>{t(`stepState.${s.state}`)}</Chip>
+            </span>
           </li>
         ))}
       </ol>

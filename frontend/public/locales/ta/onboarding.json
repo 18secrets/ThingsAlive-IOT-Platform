@@ -34,7 +34,8 @@
     "fullyOnboarded": "முழுமையாக இணைக்கப்பட்டது",
     "inProgress": "நடைபெறுகிறது",
     "class": "வகுப்பு {{slug}}",
-    "waitingOn": "காத்திருக்கிறது: {{step}}"
+    "waitingOn": "காத்திருக்கிறது: {{step}}",
+    "fix": "சரிசெய்"
   },
   "siteStatus": {
     "completed": "முடிந்தது",

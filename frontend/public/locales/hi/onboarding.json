@@ -34,7 +34,8 @@
     "fullyOnboarded": "पूरी तरह ऑनबोर्ड",
     "inProgress": "प्रगति में",
     "class": "वर्ग {{slug}}",
-    "waitingOn": "प्रतीक्षा: {{step}}"
+    "waitingOn": "प्रतीक्षा: {{step}}",
+    "fix": "ठीक करें"
   },
   "siteStatus": {
     "completed": "पूर्ण",
