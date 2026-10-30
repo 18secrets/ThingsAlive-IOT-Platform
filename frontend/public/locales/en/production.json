@@ -126,5 +126,8 @@
     "oeeWeek": "OEE this week",
     "up": "Up",
     "down": "Down"
+  },
+  "period": {
+    "label": "Availability period"
   }
 }

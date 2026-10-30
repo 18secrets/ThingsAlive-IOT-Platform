@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { DateRangePicker } from 'rsuite';
 import { AlertCircle, ChevronLeft, ChevronRight, Clock3, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
@@ -44,10 +45,13 @@ export const ProductionMonitoringPage: React.FC = () => {
   // OEE comes per site (GET /plants/:id/oee), which carries every machine's own OEE too —
   // one call per site instead of one per machine. A machine on no site has none here.
   const [siteOee, setSiteOee] = useState<Record<string, SiteOee>>({});
+  // The availability period: the last seven days, or a range the person picks — the page
+  // offered no other window (test report MIN-7 / P3-D4). OEE stays per calendar week.
+  const [range, setRange] = useState<[Date, Date] | null>(null);
+  const period = range ? { from: range[0].toISOString(), to: range[1].toISOString() } : null;
 
   useEffect(() => {
     let live = true;
-    const { from, to } = periodLastNDays(DAYS);
     apiListEquipment().then((e) => { if (live) setEquipment(e); }).catch(() => {});
     apiListPlants().then((p) => {
       if (!live) return;
@@ -59,12 +63,20 @@ export const ProductionMonitoringPage: React.FC = () => {
       }
     }).catch(() => {});
     apiGetDeviceHealthFleet({ days: DAYS }).then((rows) => { if (live) setLinkHealth(rows); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const { from, to } = period ?? periodLastNDays(DAYS);
+    setLoading(true);
     apiGetFleetAvailability(from, to)
       .then((a) => { if (live) { setAvailability(a); setError(undefined); } })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadAvailability')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period?.from, period?.to]);
 
   const profileOf = (sourceSystem: string, externalId: string) =>
     equipment.find((e) => e.sourceSystem === sourceSystem && e.externalId === externalId);
@@ -158,7 +170,9 @@ export const ProductionMonitoringPage: React.FC = () => {
     <div id="production-monitoring-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('hero.lastDays', { count: DAYS })}</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">
+            {range ? `${range[0].toLocaleDateString()} – ${range[1].toLocaleDateString()}` : t('hero.lastDays', { count: DAYS })}
+          </span>
           <span title={t('hero.tooltip')}>
             <Info className="w-4 h-4 text-sky-200" />
           </span>
@@ -172,6 +186,19 @@ export const ProductionMonitoringPage: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t('period.label')}</span>
+        <DateRangePicker
+          size="sm"
+          format="yyyy-MM-dd"
+          value={range}
+          onChange={(v) => { setRange(v as [Date, Date] | null); setPage(1); }}
+          shouldDisableDate={(date) => date.getTime() > Date.now()}
+          placeholder={t('hero.lastDays', { count: DAYS })}
+          cleanable
+        />
+      </div>
 
       <EquipmentFilters
         scope={scope}
