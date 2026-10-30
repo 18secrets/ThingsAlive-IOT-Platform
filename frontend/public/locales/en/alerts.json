@@ -189,7 +189,8 @@
     "proposing": "Proposing…",
     "proposeHint": "Replays it over 90 days on this machine and sends it to your super admin to approve, instead of opening it in the editor.",
     "proposeFailed": "Could not propose this workflow.",
-    "proposeNeedsInput": "The proposal needs more before it can be made:"
+    "proposeNeedsInput": "The proposal needs more before it can be made:",
+    "unmatchedSignal": "\"{{what}}\" matches no signal this machine reports. Choose the signal to watch before saving."
   },
   "workflow": {
     "name": "Workflow name",
