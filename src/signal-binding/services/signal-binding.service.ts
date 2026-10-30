@@ -3,6 +3,7 @@ import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
+import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { DeviceInventory } from '../../inventory/entities/device-inventory.entity';
 import { ToolMapping } from '../../device-catalog/entities/tool-mapping.entity';
@@ -128,6 +129,34 @@ export interface ProposeBindingInput {
  * (`signal_binding_version` and its exclusion constraint) already built. No
  * migration belongs here.
  */
+/**
+ * What coverage asks to be bound: the class's required signals, and a recommended one
+ * when an enabled scenario this account copied for the class cannot run without it.
+ * engine_load is "recommended" on the excavator class while three of its five scenarios
+ * need it, so coverage listed five signals and never asked for the sixth (test report
+ * OB-2). A recommended signal no scenario needs stays out, as before.
+ */
+async function coverageRequirements(
+  m: EntityManager, tenantId: string, classSlugs: string[],
+): Promise<EquipmentClassSensorRequirement[]> {
+  const [rows, scenarios] = await Promise.all([
+    m.getRepository(EquipmentClassSensorRequirement).find({
+      where: { classSlug: In(classSlugs), criticality: In(['required', 'recommended']) },
+    }),
+    m.getRepository(ClientScenario).find({
+      where: { tenantId, clientEquipmentClassSlug: In(classSlugs), enabled: true, status: 'active' },
+      select: { clientEquipmentClassSlug: true, requiredSignals: true },
+    }),
+  ]);
+  const needed = new Map<string, Set<string>>();
+  for (const s of scenarios) {
+    const set = needed.get(s.clientEquipmentClassSlug) ?? new Set<string>();
+    for (const sig of s.requiredSignals ?? []) set.add(sig);
+    needed.set(s.clientEquipmentClassSlug, set);
+  }
+  return rows.filter((r) => r.criticality === 'required' || needed.get(r.classSlug)?.has(r.measurementRole));
+}
+
 @Injectable()
 export class SignalBindingService {
   private readonly telemetryReader = new TelemetryWindowReader();
@@ -156,12 +185,8 @@ export class SignalBindingService {
       const profile = await this.findEquipment(m, scope.tenantId, equipment);
       if (!profile.equipmentClassSlug || !profile.classVersion) return computeCoverage(equipment, at, [], [], new Map(), null);
 
-      const requirements = await m.getRepository(EquipmentClassSensorRequirement).find({
-        where: {
-          classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion,
-          criticality: 'required',
-        },
-      });
+      const requirements = (await coverageRequirements(m, scope.tenantId, [profile.equipmentClassSlug]))
+        .filter((r) => r.classVersion === profile.classVersion);
 
       // Freshness by the binding's device, over the binding's window (task
       // QFIX-DEVICES) — not `device_inventory`'s IMEIs. The KPI evaluator reads the
@@ -216,9 +241,7 @@ export class SignalBindingService {
 
       const slugs = [...new Set(profiles.map((p) => p.equipmentClassSlug).filter((s): s is string => !!s))];
       const [requirements, bindings, parameterRows] = await Promise.all([
-        slugs.length ? m.getRepository(EquipmentClassSensorRequirement).find({
-          where: { classSlug: In(slugs), criticality: 'required' },
-        }) : Promise.resolve([]),
+        slugs.length ? coverageRequirements(m, scope.tenantId, slugs) : Promise.resolve([]),
         m.getRepository(SignalBindingVersion).find({ where: { tenantId: scope.tenantId, externalId: In(externalIds) } }),
         latestParameterRows(m, scope.tenantId, 'stale_after_seconds', at),
       ]);
