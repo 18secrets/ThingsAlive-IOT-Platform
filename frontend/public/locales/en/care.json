@@ -122,7 +122,7 @@
     "origins_one": "{{count}} origin",
     "origins_other": "{{count}} origins",
     "noStageOff": "no stage off its curve",
-    "notEnoughReadings": "not enough readings",
+    "notEnoughReadings": "chains not run: too few readings",
     "diagnosing": "Diagnosing…",
     "noChain": "No published causal chain covers this machine's class.",
     "noChainForClass": "No published causal chain covers this machine's class ({{classSlug}}).",
@@ -174,7 +174,8 @@
     "errors": {
       "diagnose": "Could not diagnose this machine.",
       "project": "Could not project this chain."
-    }
+    },
+    "notEnoughReadingsWhy": "No causal-chain stage had the readings it needs. This is the chain check only; a recommendation above reads its own signals and can still name a likely cause."
   },
   "rec": {
     "title": "Recommendations",

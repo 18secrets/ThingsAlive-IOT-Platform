@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { shieldStatusLabel } from '../components/shield/shieldStatusLabel';
 import { AlertCircle, ChevronRight, FileCheck2, HardHat, Lock, Plus, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/EvidenceRecord';
@@ -124,7 +125,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
 
         <div className="flex items-center gap-2 flex-wrap">
           <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{t(`category.${category}`)}</h4>
-          <Chip tone={STATUS_TONE[cell.status]} size="md">{t(`status.${cell.status}`)}</Chip>
+          <Chip tone={STATUS_TONE[cell.status]} size="md">{shieldStatusLabel(t, cell)}</Chip>
           <span className="text-[11px] text-slate-400">
             {t('detail.dueSoonWindow', { count: shield.dueSoonWindow.days, source: shield.dueSoonWindow.source === 'default' ? t('detail.windowDefault') : t('detail.windowParameter') })}
           </span>

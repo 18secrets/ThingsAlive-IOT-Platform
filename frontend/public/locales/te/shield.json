@@ -31,7 +31,8 @@
     "overdue": "గడువు దాటింది",
     "due_soon": "త్వరలో గడువు",
     "current": "ప్రస్తుతం",
-    "not_recorded": "నమోదు కాలేదు"
+    "not_recorded": "నమోదు కాలేదు",
+    "alsoOverdue": "గడువు కూడా మీరింది"
   },
   "result": {
     "passed": "ఉత్తీర్ణం",
