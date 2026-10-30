@@ -72,6 +72,8 @@ export const LivePredictionsPage: React.FC = () => {
   const visibleScenarios = (scenarios ?? []).filter((s) => equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug));
 
   async function toggle(s: ClientScenario) {
+    // Disabling stops scoring on every machine of the class; enabling only adds work.
+    if (s.enabled && !window.confirm(t('scenarios.disableConfirm', { name: s.name }))) return;
     setBusySlug(s.slug);
     try {
       await apiEditMyCatalogScenario(s.slug, { enabled: !s.enabled });

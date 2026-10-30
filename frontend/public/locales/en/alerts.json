@@ -13,7 +13,9 @@
     "save": "Could not save this rule."
   },
   "prompts": {
-    "resolve": "What was found / done?"
+    "resolve": "What was found / done?",
+    "acknowledgeConfirm": "Acknowledge this alert? This cannot be undone.",
+    "disableRuleConfirm": "Disable “{{name}}”? It stops raising alerts on every machine it covers until it is enabled again."
   },
   "severity": {
     "none": "none",

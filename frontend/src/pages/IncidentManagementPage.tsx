@@ -350,7 +350,7 @@ const IncidentPanel: React.FC<{
       {live && (
         <div className="flex items-center gap-2 flex-wrap">
           {detail.status === 'open' && (
-            <button disabled={busy} onClick={() => run(() => apiAcknowledgeIncident(id))} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
+            <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
           )}
           <SelectPicker
             size="sm"

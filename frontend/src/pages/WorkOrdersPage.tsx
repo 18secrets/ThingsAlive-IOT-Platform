@@ -136,6 +136,8 @@ export const WorkOrdersPage: React.FC = () => {
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
+    // Start has no note to ask for, which made it the one transition a single click committed.
+    if (action === 'start' && !window.confirm(t('prompts.start', { reference: order.reference }))) return;
     if (action !== 'start') {
       const prompt = { complete: t('prompts.complete'), cancel: t('prompts.cancel'), reopen: t('prompts.reopen') }[action];
       const entered = window.prompt(prompt);

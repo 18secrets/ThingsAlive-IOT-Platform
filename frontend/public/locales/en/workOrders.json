@@ -19,7 +19,8 @@
   "prompts": {
     "complete": "What was done?",
     "cancel": "Why is this being cancelled?",
-    "reopen": "Why is this being reopened?"
+    "reopen": "Why is this being reopened?",
+    "start": "Start {{reference}}? Its clock starts now."
   },
   "service": {
     "heading": "Service due",

@@ -54,6 +54,8 @@ export const ScenariosPage: React.FC = () => {
   );
 
   async function toggle(scenario: ClientScenario) {
+    // Disabling stops scoring on every machine of the class; enabling only adds work.
+    if (scenario.enabled && !window.confirm(t('page.disableConfirm', { name: scenario.name }))) return;
     setBusySlug(scenario.slug);
     try {
       await apiEditMyCatalogScenario(scenario.slug, { enabled: !scenario.enabled });

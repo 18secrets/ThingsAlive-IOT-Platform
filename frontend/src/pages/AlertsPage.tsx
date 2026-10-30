@@ -71,6 +71,8 @@ export const AlertsPage: React.FC = () => {
   }, []);
 
   async function acknowledge(id: string) {
+    // There is no un-acknowledge, so a stray click must not be the whole decision.
+    if (!window.confirm(t('prompts.acknowledgeConfirm'))) return;
     setBusyId(id);
     try {
       await apiAcknowledgeAlert(id);
@@ -97,6 +99,8 @@ export const AlertsPage: React.FC = () => {
   }
 
   async function toggleRule(rule: AlertRule) {
+    // Switching a rule off silences it for every machine it covers; switching on is harmless.
+    if (rule.enabled && !window.confirm(t('prompts.disableRuleConfirm', { name: rule.name }))) return;
     setBusyId(rule.id);
     try {
       if (rule.enabled) await apiDisableAlertRule(rule.id); else await apiEnableAlertRule(rule.id);
