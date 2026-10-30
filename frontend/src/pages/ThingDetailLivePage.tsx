@@ -56,7 +56,10 @@ export const ThingDetailLivePage: React.FC = () => {
     [profile.state],
   );
 
-  const name = profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
+  // Not the bare code while the profile loads: it flashed in the title before the name
+  // replaced it (test report COS-6). The code stays the fallback for a machine with no name.
+  const name = profile.state === 'loading' ? t('common.loading')
+    : profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
   usePageHeader({ breadcrumb: t('translation:sidebar.dashboard'), title: name, subtitle: t('thingLive.subtitle'), onBack: goBack });
 
   if (profile.state === 'ok' && !profile.data) {

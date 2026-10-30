@@ -21,7 +21,8 @@ import {
 const PAGE_SIZE = 12;
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
-  low: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
+  // Low is sky, as on every other page's severity scale (test report COS-1); green stays for none.
+  low: { ring: 'border-sky-200 dark:border-sky-900', bg: 'bg-sky-50/60 dark:bg-sky-950/20', gauge: 'text-sky-500 dark:text-sky-400' },
   medium: { ring: 'border-amber-200 dark:border-amber-900', bg: 'bg-amber-50/60 dark:bg-amber-950/20', gauge: 'text-amber-500 dark:text-amber-400' },
   high: { ring: 'border-rose-200 dark:border-rose-900', bg: 'bg-rose-50/60 dark:bg-rose-950/20', gauge: 'text-rose-500 dark:text-rose-400' },
   critical: { ring: 'border-rose-300 dark:border-rose-800', bg: 'bg-rose-100/60 dark:bg-rose-950/40', gauge: 'text-rose-600 dark:text-rose-400' },
@@ -159,9 +160,9 @@ export const ThingsCarePage: React.FC = () => {
           </p>
 
           <div>
-            <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
                 <SortSelect
                   sort={sort}
@@ -248,7 +249,8 @@ const ThingsCareCard: React.FC<{
     <button onClick={onOpen} className={`text-left w-full border ${style.ring} ${style.bg} rounded-xl p-4 shadow-xs space-y-3 hover:shadow-md transition-shadow cursor-pointer group`}>
       <div className="flex items-center gap-3">
         <span title={t('card.gaugeTitle')}>
-          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} />
+          {/* Points out of 100, as Live Predictions writes them: "21%" here beside "29/100" there read as two scorings (test report MAJ-7). */}
+          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} unit="" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
@@ -259,6 +261,7 @@ const ThingsCareCard: React.FC<{
           </div>
           <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{externalId}</p>
+          {prediction && <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString() })}</p>}
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">

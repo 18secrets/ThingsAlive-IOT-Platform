@@ -157,6 +157,8 @@
     "priorityHigh": "सबसे ऊँची प्राथमिकता पहले",
     "availabilityLow": "सबसे कम उपलब्धता पहले",
     "availabilityHigh": "सबसे अधिक उपलब्धता पहले",
-    "downtimeHigh": "सबसे अधिक डाउनटाइम पहले"
+    "downtimeHigh": "सबसे अधिक डाउनटाइम पहले",
+    "severityHigh": "सबसे गंभीर पहले",
+    "attentionFirst": "ध्यान चाहिए वाले पहले"
   }
 }

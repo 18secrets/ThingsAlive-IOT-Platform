@@ -232,9 +232,9 @@ export const ProductionMonitoringPage: React.FC = () => {
           ) : null}
 
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
                 <SortSelect
                   sort={sort}

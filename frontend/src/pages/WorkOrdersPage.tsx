@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, Search } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -53,6 +53,7 @@ export const WorkOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | WorkOrderPriority>('all');
+  const [search, setSearch] = useState('');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
@@ -136,6 +137,7 @@ export const WorkOrdersPage: React.FC = () => {
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
+    const text = search.trim().toLowerCase();
     const matching = orders.filter((o) => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
@@ -146,7 +148,11 @@ export const WorkOrdersPage: React.FC = () => {
       const matchesClass = scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug;
       const matchesConnection = scope.connection === 'all' || connectionOf(o.externalId) === scope.connection;
       const matchesQuery = !term || o.title.toLowerCase().includes(term) || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
-      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery;
+      // The list's own search, beside the sort: the Filters panel's box finds machines, and
+      // a WO reference is what people quote to each other (test report P3-A10).
+      const matchesText = !text || o.reference.toLowerCase().includes(text) || o.title.toLowerCase().includes(text)
+        || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(text);
+      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery && matchesText;
     });
     // By reference, not the API's created-at: seeded and imported jobs carry backdated
     // creation times, which put WO-000003 ahead of 6, 5 and 4 (test report MIN-8).
@@ -155,7 +161,7 @@ export const WorkOrdersPage: React.FC = () => {
       status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort]);
+  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort, search]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
@@ -333,6 +339,10 @@ export const WorkOrdersPage: React.FC = () => {
       </div>
 
       <div className="flex justify-end items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-72 sm:mr-auto">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+          <Input value={search} onChange={(v) => setSearch(v)} placeholder={t('filters.search')} size="sm" className="w-full pl-9!" />
+        </div>
         <SortSelect
           sort={sort}
           onChange={setSort}

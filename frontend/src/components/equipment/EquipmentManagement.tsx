@@ -301,7 +301,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           <ExportCsvButton
             name="equipment"

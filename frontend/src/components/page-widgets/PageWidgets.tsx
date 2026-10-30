@@ -12,6 +12,7 @@ import {
 import { Chip } from '../common/Chip';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
+import { severityTone } from '../common/statusTone';
 
 /** Every widget a composed page (machine or site) can render, shared because the
  *  shape — `PageWidget[]` with a `readiness`/`reason` a widget can't fill — is the
@@ -214,7 +215,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
                 <p className="text-[11px] text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString()}</p>
               </div>
-              <Chip icon={AlertTriangle} tone={a.severity === 'critical' ? 'rose' : 'amber'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
+              <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
           ))}
         </div>

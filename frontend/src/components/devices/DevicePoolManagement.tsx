@@ -13,6 +13,7 @@ import { ClientAccount } from '../../types';
 import { Modal } from '../common/Modal';
 import { AssignDeviceModal } from './AssignDeviceModal';
 import { RegisterDevicesModal } from './RegisterDevicesModal';
+import { sortRows, useSort } from '../../lib/useSort';
 
 // Labels are state.<value> in the devices namespace.
 const STATE_VALUES: PooledDevice['state'][] = ['in-stock', 'assigned', 'retired'];
@@ -20,6 +21,8 @@ const STATE_VALUES: PooledDevice['state'][] = ['in-stock', 'assigned', 'retired'
 interface DevicePoolManagementProps {
   pool: PooledDevice[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty (test report MAJ-6). */
+  loading?: boolean;
   clients: ClientAccount[];
   toolMappings: ToolMapping[];
   onRegister: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
@@ -39,7 +42,7 @@ const STATE_STYLE: Record<PooledDevice['state'], string> = {
 };
 
 export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
-  pool, error, clients, toolMappings, onRegister, onAssign, onRelease, onRetire, onReturnToStock, onUpdate,
+  pool, error, loading, clients, toolMappings, onRegister, onAssign, onRelease, onRetire, onReturnToStock, onUpdate,
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
   const [viewMode, setViewMode] = useViewMode('admin-devices');
@@ -79,15 +82,24 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
     });
   }, [pool, searchTerm, selectedState, clientName]);
 
-  const { pageItems: pagedRows, ...pager } = usePagination(filtered);
+  // Sortable headers (test report MAJ-9): the whole filtered set is sorted, then paged.
+  const { sort, toggle } = useSort<'imei' | 'model' | 'tool' | 'state' | 'client'>({ key: 'imei', dir: 'asc' });
+  const sorted = useMemo(() => sortRows(filtered, sort, {
+    imei: (d) => d.imei,
+    model: (d) => d.model,
+    tool: (d) => d.toolMappingName,
+    state: (d) => d.state,
+    client: (d) => clientName(d.tenantId),
+  }), [filtered, sort, clientName]);
+  const { pageItems: pagedRows, ...pager } = usePagination(sorted);
 
   // One definition for both views (cards or list on every list page).
   const viewColumns = [
-    { label: 'IMEI' },
-    { label: t('pool.col.model') },
-    { label: t('pool.col.toolProfile') },
-    { label: t('pool.col.state') },
-    { label: t('translation:common.client') },
+    { label: 'IMEI', sortKey: 'imei' },
+    { label: t('pool.col.model'), sortKey: 'model' },
+    { label: t('pool.col.toolProfile'), sortKey: 'tool' },
+    { label: t('pool.col.state'), sortKey: 'state' },
+    { label: t('translation:common.client'), sortKey: 'client' },
     { label: t('pool.col.action'), width: 200 },
   ];
   const viewCells = (d: (typeof pagedRows)[number]) => [
@@ -213,14 +225,14 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-sm">{t('pool.empty')}</div>
+          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('shared:loading') : t('pool.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
+          <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
         ) : (
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} actionsIndex={5} /></div>
         )}
 
-        <TablePagination pinToBottom {...pager} />
+        <TablePagination pinToBottom loading={loading} {...pager} />
       </div>
 
       <AssignDeviceModal

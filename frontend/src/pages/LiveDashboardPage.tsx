@@ -19,6 +19,7 @@ import {
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetOnboardingSummary, apiGetServiceForecast, apiGetShieldSummary,
   apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListMyDevices, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
+import { severityTone } from '../components/common/statusTone';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -138,13 +139,13 @@ export const LiveDashboardPage: React.FC = () => {
         <Panel title={t('live.liveIncidents')} icon={<Siren className="w-4 h-4" />} onOpen={() => navigate('/incident-management')}>
           <List slot={incidents} empty={t('live.noLiveIncidents')} render={(d) => d.slice(0, 5).map((i) => (
             <Row key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} left={machineName(i.machine.sourceSystem, i.machine.externalId)}
-              right={<><Chip tone={i.severity === 'critical' ? 'rose' : i.severity === 'high' ? 'amber' : 'slate'}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
+              right={<><Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
           ))} />
         </Panel>
         <Panel title={t('live.openAlerts')} icon={<Bell className="w-4 h-4" />} onOpen={() => navigate('/alerts')}>
           <List slot={alerts} empty={t('live.noOpenAlerts')} render={(d) => d.slice(0, 5).map((a) => (
             <Row key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={`${machineName(a.sourceSystem, a.externalId)} · ${a.summary}`}
-              right={<Chip tone={a.severity === 'critical' ? 'rose' : a.severity === 'high' ? 'amber' : 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
+              right={<Chip tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.serviceDue')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>

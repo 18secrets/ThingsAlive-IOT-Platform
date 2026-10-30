@@ -11,6 +11,7 @@ import { ApiError, DeviceHealthWindow, DeviceLinkState, EquipmentProfile, MyDevi
 import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
+import { sortRows, useSort } from '../../lib/useSort';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -72,12 +73,20 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
     }
   };
 
-  const { pageItems: pagedRows, ...pager } = usePagination(filtered);
+  // Sortable headers (test report MAJ-9): the whole filtered set is sorted, then paged.
+  const { sort, toggle } = useSort<'imei' | 'model' | 'state' | 'fitted'>({ key: 'imei', dir: 'asc' });
+  const sorted = useMemo(() => sortRows(filtered, sort, {
+    imei: (d) => d.imei,
+    model: (d) => d.model,
+    state: (d) => d.state,
+    fitted: (d) => equipmentName(d.equipmentExternalId),
+  }), [filtered, sort, equipmentName]);
+  const { pageItems: pagedRows, ...pager } = usePagination(sorted);
 
   // One definition for both views (cards or list on every list page).
   const viewColumns = [
-    { label: 'IMEI' }, { label: t('devices.col.model') }, { label: t('devices.col.state') },
-    { label: t('devices.col.fittedTo') }, { label: t('devices.col.action') },
+    { label: 'IMEI', sortKey: 'imei' }, { label: t('devices.col.model'), sortKey: 'model' }, { label: t('devices.col.state'), sortKey: 'state' },
+    { label: t('devices.col.fittedTo'), sortKey: 'fitted' }, { label: t('devices.col.action') },
   ];
   const viewCells = (d: (typeof pagedRows)[number]) => [
     <span className="font-mono text-[11px]">{d.imei}</span>,
@@ -138,7 +147,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
           name="devices"
           disabled={!filtered.length}
           headers={['IMEI', t('devices.col.model'), t('devices.col.state'), t('devices.col.fittedTo')]}
-          rows={() => filtered.map((d) => [d.imei, d.model, t(`deviceState.${d.state}`), equipmentName(d.equipmentExternalId)])}
+          rows={() => sorted.map((d) => [d.imei, d.model, t(`deviceState.${d.state}`), equipmentName(d.equipmentExternalId)])}
         />
       </div>
 
@@ -158,7 +167,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
         {filtered.length === 0 ? (
           <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('devices.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
+          <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
         ) : (
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} actionsIndex={4} /></div>
         )}

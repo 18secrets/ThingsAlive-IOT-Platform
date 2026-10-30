@@ -229,7 +229,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           onClick={() => setIsModalOpen(true)}
-          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t('staff.invite')}</span>

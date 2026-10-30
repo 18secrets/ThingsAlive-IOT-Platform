@@ -20,13 +20,15 @@ interface MasterAddEquipmentModalProps {
   clients: ClientAccount[];
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
   existingEquipment?: EquipmentProfile | null;
+  /** Every machine across accounts, to say before saving that a code is already taken in the chosen one. */
+  allEquipment?: EquipmentProfile[];
 }
 
 // Labels are equipment.tier.<value> in the devices namespace.
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
 
 export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = ({
-  isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment,
+  isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment, allEquipment = [],
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
   const TIER_OPTIONS = TIERS.map((tier) => ({ label: t(`equipment.tier.${tier}`), value: tier }));
@@ -121,6 +123,12 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
   }, [tenantId]);
 
   if (!isOpen) return null;
+
+  // Said while typing, as on the client's own form (test report MAJ-4c). A code is unique
+  // within one account, so only the chosen client's machines can clash.
+  const duplicateOf = !existingEquipment && tenantId && code.trim()
+    ? allEquipment.find((e) => e.tenantId === tenantId && e.externalId.toLowerCase() === code.trim().toLowerCase())
+    : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,11 +230,17 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
                 placeholder={t('equipment.codePlaceholder')}
                 className="font-mono text-xs"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                {isEditing
-                  ? t('equipment.codeLocked')
-                  : t('equipment.codeHint')}
-              </p>
+              {duplicateOf ? (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  {t('equipment.codeTaken', { name: duplicateOf.name ?? duplicateOf.externalId })}
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {isEditing
+                    ? t('equipment.codeLocked')
+                    : t('equipment.codeHint')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -356,7 +370,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
             </button>
             <button
               type="submit"
-              disabled={busy || !tenantId}
+              disabled={busy || !tenantId || !!duplicateOf}
               className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />

@@ -297,7 +297,7 @@ export const ThingsCareDetailPage: React.FC = () => {
               return (
                 <div key={p.clientScenarioSlug} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
                   <div className="flex items-center gap-3">
-                    <RingGauge value={typeof p.riskScore === 'number' ? p.riskScore : null} size={56} colorClass={p.severity === 'high' || p.severity === 'critical' ? 'text-rose-500 dark:text-rose-400' : p.severity === 'medium' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} />
+                    <RingGauge value={typeof p.riskScore === 'number' ? p.riskScore : null} size={56} unit="" colorClass={p.severity === 'high' || p.severity === 'critical' ? 'text-rose-500 dark:text-rose-400' : p.severity === 'medium' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'} />
                     <div className="min-w-0 flex-1">
                       <h4 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{p.clientScenarioSlug}</h4>
                       <div className="flex items-center gap-1.5 flex-wrap mt-1">

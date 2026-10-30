@@ -250,7 +250,12 @@ export const LivePredictionsPage: React.FC = () => {
             ]}
           />
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('kpis.subtitle')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('kpis.subtitle')}</p>
+        {/* The same bands ThingsCare states, said where this score is shown too (test report MAJ-7). */}
+        <p className="flex items-start gap-1.5 text-xs text-slate-400 mb-4">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{t('kpis.bands')}</span>
+        </p>
         <div className={LIST_PANEL}>
           {!equipmentLoaded ? (
             <p className="p-4 text-sm text-slate-400">{t('common.loading')}</p>

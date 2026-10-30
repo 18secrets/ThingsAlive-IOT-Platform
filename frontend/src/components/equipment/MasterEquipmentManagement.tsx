@@ -13,10 +13,13 @@ import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
+import { sortRows, useSort } from '../../lib/useSort';
 
 interface MasterEquipmentManagementProps {
   equipment: EquipmentProfile[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty (test report MAJ-6). */
+  loading?: boolean;
   clients: ClientAccount[];
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
@@ -38,7 +41,7 @@ interface MasterEquipmentManagementProps {
 const STATUS_VALUES: EquipmentProfile['status'][] = ['active', 'retired'];
 
 export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps> = ({
-  equipment, error, clients, onCreateEquipment, onUpdateEquipment, onMoveEquipment, onRetireEquipment,
+  equipment, error, loading, clients, onCreateEquipment, onUpdateEquipment, onMoveEquipment, onRetireEquipment,
   onGetEquipmentPlacementHistory, onListPlantsForTenant,
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
@@ -129,7 +132,17 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
     }
   };
 
-  const { pageItems: pagedRows, ...pager } = usePagination(filteredList);
+  // Sortable headers (test report MAJ-9): the whole filtered set is sorted, then paged.
+  const { sort, toggle } = useSort<'client' | 'code' | 'name' | 'site' | 'tier' | 'status'>({ key: 'client', dir: 'asc' });
+  const sorted = useMemo(() => sortRows(filteredList, sort, {
+    client: (e) => clientName(e.tenantId),
+    code: (e) => e.externalId,
+    name: (e) => e.name ?? e.externalId,
+    site: (e) => e.plantId ? plantName(e.tenantId, e.plantId) : null,
+    tier: (e) => e.tier,
+    status: (e) => e.status,
+  }), [filteredList, sort, clientName, plantsByTenant]);
+  const { pageItems: pagedRows, ...pager } = usePagination(sorted);
   const historyItem = historyKey ? equipment.find((item) => key(item) === historyKey) : undefined;
   const historyPanel = useRef<HTMLDivElement>(null);
   // The panel sits under the whole list, so on a full page it would open out of sight.
@@ -139,12 +152,12 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
 
   // One definition for both views (cards or list on every list page).
   const viewColumns: ListColumn[] = [
-    { label: t('translation:common.client') },
-    { label: t('equipment.col.code') },
-    { label: t('equipment.col.name') },
-    { label: t('equipment.col.site') },
-    { label: t('equipment.col.tier') },
-    { label: t('list.col.status') },
+    { label: t('translation:common.client'), sortKey: 'client' },
+    { label: t('equipment.col.code'), sortKey: 'code' },
+    { label: t('equipment.col.name'), sortKey: 'name' },
+    { label: t('equipment.col.site'), sortKey: 'site' },
+    { label: t('equipment.col.tier'), sortKey: 'tier' },
+    { label: t('list.col.status'), sortKey: 'status' },
     { label: t('equipment.col.actions'), width: 130 },
   ];
   const viewCells = (item: EquipmentProfile) => {
@@ -249,9 +262,9 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filteredList.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm">{t('equipment.empty')}</div>
+          <div className="py-10 text-center text-slate-400 text-sm">{loading ? t('shared:loading') : t('equipment.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={key} cells={viewCells} />
+          <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={key} cells={viewCells} />
         ) : (
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={key} cells={viewCells} actionsIndex={6} /></div>
         )}
@@ -281,7 +294,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
           </div>
         )}
 
-        <TablePagination pinToBottom {...pager} />
+        <TablePagination pinToBottom loading={loading} {...pager} />
       </div>
 
       <MasterAddEquipmentModal
@@ -293,6 +306,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
         clients={clients}
         onListPlantsForTenant={onListPlantsForTenant}
         existingEquipment={editingEquipment}
+        allEquipment={equipment}
       />
     </div>
   );

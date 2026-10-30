@@ -56,6 +56,7 @@ interface AdminPageProps {
   onReplaceSignalStates: (role: string, states: SignalStateCode[]) => Promise<SignalStateVocabEntry[]>;
   devicePool: PooledDevice[];
   devicePoolError?: string;
+  devicePoolLoading?: boolean;
   onRegisterDevices: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
@@ -92,6 +93,7 @@ interface AdminPageProps {
   realEquipmentLoading?: boolean;
   allEquipment: EquipmentProfile[];
   allEquipmentError?: string;
+  allEquipmentLoading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -209,6 +211,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onReplaceSignalStates={props.onReplaceSignalStates}
       devicePool={props.devicePool}
       devicePoolError={props.devicePoolError}
+      devicePoolLoading={props.devicePoolLoading}
       onRegisterDevices={props.onRegisterDevices}
       onAssignDevice={props.onAssignDevice}
       onReleaseDevice={props.onReleaseDevice}
@@ -248,6 +251,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       realEquipmentLoading={props.realEquipmentLoading}
       allEquipment={props.allEquipment}
       allEquipmentError={props.allEquipmentError}
+      allEquipmentLoading={props.allEquipmentLoading}
       onListPlantsForTenant={props.onListPlantsForTenant}
       onCreateEquipment={props.onCreateEquipment}
       onUpdateEquipment={props.onUpdateEquipment}

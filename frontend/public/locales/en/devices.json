@@ -155,6 +155,7 @@
     "serviceTier": "Service Tier",
     "machineType": "Machine type",
     "unclassified": "Unclassified",
-    "noGrantedTypes": "No machine types are granted to this client yet. Grant one on the Clients page first."
+    "noGrantedTypes": "No machine types are granted to this client yet. Grant one on the Clients page first.",
+    "codeTaken": "This code is already used by {{name}}."
   }
 }

@@ -189,6 +189,7 @@ function AppData() {
   // and empty for a platform role.
   const [allEquipment, setAllEquipment] = useState<EquipmentProfile[]>([]);
   const [allEquipmentError, setAllEquipmentError] = useState<string | undefined>(undefined);
+  const [allEquipmentLoaded, setAllEquipmentLoaded] = useState(false);
   // The account's own class copies, the ones machines are registered against and
   // scenarios are copied for — not the library entitlements, which offered the demo
   // tenant one seed-only class with no scenarios (test report OB-1, OB-4).
@@ -219,6 +220,7 @@ function AppData() {
   const [signalStatesError, setSignalStatesError] = useState<string | undefined>(undefined);
   const [devicePool, setDevicePool] = useState<PooledDevice[]>([]);
   const [devicePoolError, setDevicePoolError] = useState<string | undefined>(undefined);
+  const [devicePoolLoaded, setDevicePoolLoaded] = useState(false);
   // The signed-in client's own real roles/users (/identity/roles, /identity/users).
   // Master Admin has no cross-client view of them: the mock one was removed 2026-10-21,
   // because only a client's own super admin may list its people.
@@ -318,6 +320,8 @@ function AppData() {
       setAllEquipmentError(undefined);
     } catch (err) {
       setAllEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+    } finally {
+      setAllEquipmentLoaded(true);
     }
   };
 
@@ -453,6 +457,8 @@ function AppData() {
       setDevicePoolError(undefined);
     } catch (err) {
       setDevicePoolError(err instanceof ApiError ? err.message : 'Could not load the device pool.');
+    } finally {
+      setDevicePoolLoaded(true);
     }
   };
 
@@ -1249,6 +1255,7 @@ function AppData() {
                   onReplaceSignalStates={handleReplaceSignalStates}
                   devicePool={devicePool}
                   devicePoolError={devicePoolError}
+                  devicePoolLoading={!devicePoolLoaded}
                   onRegisterDevices={handleRegisterDevices}
                   onAssignDevice={handleAssignDevice}
                   onReleaseDevice={handleReleaseDevice}
@@ -1284,6 +1291,7 @@ function AppData() {
                   realEquipmentLoading={!realEquipmentLoaded}
                   allEquipment={allEquipment}
                   allEquipmentError={allEquipmentError}
+                  allEquipmentLoading={!allEquipmentLoaded}
                   onListPlantsForTenant={handleListPlantsForTenant}
                   onCreateEquipment={handleCreateEquipmentProfile}
                   onUpdateEquipment={handleUpdateEquipmentProfile}

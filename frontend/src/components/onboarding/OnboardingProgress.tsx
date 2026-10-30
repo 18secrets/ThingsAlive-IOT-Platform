@@ -199,12 +199,12 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
           </button>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 w-full sm:w-auto sm:shrink-0">
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           id="add-onboarding-btn"
           onClick={onAddNew}
-          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="flex-1 sm:flex-none px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t('progress.newOnboarding')}</span>

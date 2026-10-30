@@ -17,6 +17,8 @@ import {
   apiListIncidentRecords, apiListIncidentSlaPolicies, apiListIncidentView, apiListPlants, apiListWorkOrderPeople,
   apiRaiseIncidentWorkOrder, apiResolveIncident, apiSetIncidentSlaPolicy,
 } from '../lib/api';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 
 /**
  * Incident Management on the incident entity (3d83cec): one live incident per machine,
@@ -26,6 +28,8 @@ import {
  * a copy of its own.
  */
 
+const SEVERITY_ORDER: IncidentSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
+const STATUS_ORDER: IncidentStatus[] = ['open', 'acknowledged', 'resolved'];
 const SEVERITY_TONE = (s: string) => severityTone(s);
 const STATUS_TONE: Record<IncidentStatus, StatusTone> = { open: statusTone('open'), acknowledged: statusTone('acknowledged'), resolved: statusTone('resolved') };
 const SLA_TONE: Record<SlaState, 'slate' | 'sky' | 'emerald' | 'rose'> = { no_policy: 'slate', on_track: 'sky', met: 'emerald', breached: 'rose' };
@@ -36,7 +40,7 @@ const PRIORITIES: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 type StatusFilter = 'live' | IncidentStatus;
 
 export const IncidentManagementPage: React.FC = () => {
-  const { t } = useTranslation('incidents');
+  const { t } = useTranslation(['incidents', 'shared']);
   const [viewMode, setViewMode] = useViewMode('incident-management');
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [records, setRecords] = useState<IncidentRecord[]>([]);
@@ -117,7 +121,16 @@ export const IncidentManagementPage: React.FC = () => {
   };
 
   // The shared rsuite pager, in both views; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(visible, 12);
+  // Most severe first: the page exists to say which incident to pick up (test report MAJ-9).
+  const { sort, setSort, toggle } = useSort<'machine' | 'severity' | 'status' | 'opened'>({ key: 'severity', dir: 'desc' });
+  const sorted = useMemo(() => sortRows(visible, sort, {
+    machine: (r) => machineName(r.machine),
+    severity: (r) => SEVERITY_ORDER.indexOf(r.severity),
+    status: (r) => STATUS_ORDER.indexOf(r.status),
+    opened: (r) => r.openedAt,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [visible, sort, equipment]);
+  const { pageItems, ...pager } = usePagination(sorted, 12);
 
   return (
     <div id="incident-management-view" className="space-y-3">
@@ -178,7 +191,17 @@ export const IncidentManagementPage: React.FC = () => {
         <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" loading={loading} />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <SortSelect
+          sort={sort}
+          onChange={(next) => { setSort(next); pager.setPage(1); }}
+          options={[
+            { key: 'severity', dir: 'desc', label: t('shared:sort.severityHigh') },
+            { key: 'opened', dir: 'desc', label: t('shared:sort.newest') },
+            { key: 'opened', dir: 'asc', label: t('shared:sort.oldest') },
+            { key: 'machine', dir: 'asc', label: t('shared:sort.nameAz') },
+          ]}
+        />
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
@@ -193,9 +216,11 @@ export const IncidentManagementPage: React.FC = () => {
         ) : viewMode === 'list' ? (
           <ListTable bare
             columns={[
-              { label: t('listCol.machine') }, { label: t('listCol.severity') }, { label: t('listCol.status') },
-              { label: t('listCol.owner') }, { label: t('listCol.ack') }, { label: t('listCol.resolve') }, { label: t('listCol.opened') },
+              { label: t('listCol.machine'), sortKey: 'machine' }, { label: t('listCol.severity'), sortKey: 'severity' }, { label: t('listCol.status'), sortKey: 'status' },
+              { label: t('listCol.owner') }, { label: t('listCol.ack') }, { label: t('listCol.resolve') }, { label: t('listCol.opened'), sortKey: 'opened' },
             ]}
+            sort={sort}
+            onSort={(key) => { toggle(key as typeof sort.key, key === 'severity' || key === 'opened' ? 'desc' : 'asc'); pager.setPage(1); }}
             rows={pageItems}
             rowKey={(r) => r.id}
             cells={(r) => [

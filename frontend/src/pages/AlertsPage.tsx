@@ -18,6 +18,7 @@ import {
   apiAcknowledgeAlert, apiCreateAlertRule, apiDisableAlertRule, apiEnableAlertRule, apiListAlertRules,
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
+import { sortRows, useSort } from '../lib/useSort';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
@@ -139,7 +140,16 @@ export const AlertsPage: React.FC = () => {
   // Both lists are paged, in both views.
   const { pageItems: ruleItems, ...rulePager } = usePagination(rules);
   const rulePage = { pageItems: ruleItems };
-  const { pageItems: eventItems, ...eventPager } = usePagination(shown);
+  // Sortable headers on the alerts (test report MAJ-9); newest first, as the list already ran.
+  const { sort: eventSort, toggle: toggleEventSort } = useSort<'severity' | 'state' | 'name' | 'machine' | 'fired'>({ key: 'fired', dir: 'desc' });
+  const sortedEvents = useMemo(() => sortRows(shown, eventSort, {
+    severity: (e) => SEVERITY_OPTIONS.indexOf(e.severity as AlertRuleSeverity),
+    state: (e) => e.state,
+    name: (e) => e.ruleName,
+    machine: (e) => equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
+    fired: (e) => e.firedAt,
+  }), [shown, eventSort, equipment]);
+  const { pageItems: eventItems, ...eventPager } = usePagination(sortedEvents);
   const eventPage = { pageItems: eventItems };
 
   type Rule = (typeof rules)[number];
@@ -205,7 +215,7 @@ export const AlertsPage: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('rules.heading')}</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <ViewModeToggle mode={viewMode} onChange={setViewMode} />
             <button
               onClick={() => setEditingRule('new')}
@@ -280,7 +290,7 @@ export const AlertsPage: React.FC = () => {
             name="alerts"
             disabled={!shown.length}
             headers={['fired', 'machine', 'rule', 'severity', 'state', 'summary', 'acknowledgedAt'].map((c) => t(`events.col.${c}`))}
-            rows={() => shown.map((e) => [
+            rows={() => sortedEvents.map((e) => [
               e.firedAt, equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
               e.ruleName, t(`severity.${e.severity}`), t(`state.${e.state}`), e.summary, e.acknowledgedAt,
             ])}
@@ -298,9 +308,11 @@ export const AlertsPage: React.FC = () => {
             </div>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              sort={eventSort}
+              onSort={(key) => { toggleEventSort(key as typeof eventSort.key, key === 'fired' || key === 'severity' ? 'desc' : 'asc'); eventPager.setPage(1); }}
               columns={[
-                { label: ts('listCol.severity') }, { label: ts('listCol.state') }, { label: ts('listCol.name') },
-                { label: ts('listCol.machine') }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt') },
+                { label: ts('listCol.severity'), sortKey: 'severity' }, { label: ts('listCol.state'), sortKey: 'state' }, { label: ts('listCol.name'), sortKey: 'name' },
+                { label: ts('listCol.machine'), sortKey: 'machine' }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt'), sortKey: 'fired' },
                 { label: ts('listCol.actions'), width: 310 },
               ]}
               rows={eventPage.pageItems}

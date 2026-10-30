@@ -13,6 +13,8 @@ import {
   ApiError, Plant, SHIELD_CATEGORIES, ShieldMachine, ShieldStatus, ShieldSummary,
   apiGetShieldSummary, apiListPlants,
 } from '../lib/api';
+import { sortRows, useSort, SortValue } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 
 const PAGE_SIZE = 12;
 
@@ -20,11 +22,15 @@ const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> 
   current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate',
 };
 
+// How much a status asks of someone, for sorting: the two that need action first.
+const URGENCY: Record<ShieldStatus, number> = { action_required: 4, overdue: 4, due_soon: 2, not_recorded: 1, current: 0 };
+const worstUrgency = (m: ShieldMachine) => Math.max(...SHIELD_CATEGORIES.map((c) => URGENCY[m.categories[c].status]));
+
 const needsAttention = (m: ShieldMachine) =>
   SHIELD_CATEGORIES.some((c) => ['action_required', 'overdue'].includes(m.categories[c].status));
 
 export const ThingsShieldPage: React.FC = () => {
-  const { t } = useTranslation('shield');
+  const { t } = useTranslation(['shield', 'shared']);
   const [viewMode, setViewMode] = useViewMode('things-shield');
   usePageHeader({ title: 'ThingsShield', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
@@ -75,7 +81,15 @@ export const ThingsShieldPage: React.FC = () => {
   }, [matching]);
 
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(matching, PAGE_SIZE);
+  // Needs attention first, in both views (test report MAJ-9); a category header sorts by that category.
+  const { sort, setSort, toggle } = useSort<string>({ key: 'attention', dir: 'desc' });
+  const sorted = useMemo(() => sortRows(matching, sort, {
+    attention: (m: ShieldMachine) => worstUrgency(m),
+    name: (m: ShieldMachine) => m.machine.name ?? m.machine.externalId,
+    code: (m: ShieldMachine) => m.machine.externalId,
+    ...Object.fromEntries(SHIELD_CATEGORIES.map((c) => [c, (m: ShieldMachine): SortValue => URGENCY[m.categories[c].status]])),
+  }), [matching, sort]);
+  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
   const open = (m: ShieldMachine) => navigate(`/things-shield/${encodeURIComponent(m.machine.sourceSystem)}/${encodeURIComponent(m.machine.externalId)}`);
 
   return (
@@ -117,10 +131,19 @@ export const ThingsShieldPage: React.FC = () => {
       <p className="text-[11px] text-slate-400">{t('page.countNote')}</p>
 
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.machines')}</h3>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
+            <SortSelect
+              sort={sort}
+              onChange={(next) => { setSort(next); pager.setPage(1); }}
+              options={[
+                { key: 'attention', dir: 'desc', label: t('shared:sort.attentionFirst') },
+                { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+              ]}
+            />
             <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           </div>
         </div>
@@ -134,7 +157,9 @@ export const ThingsShieldPage: React.FC = () => {
             </div>
           ) : viewMode === 'list' ? (
             <ListTable bare
-              columns={[{ label: t('listCol.machine') }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`) }))]}
+              columns={[{ label: t('listCol.machine'), sortKey: 'name' }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`), sortKey: c }))]}
+              sort={sort}
+              onSort={(key) => { toggle(key, key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
               rows={pageItems}
               rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
               cells={(m) => [
