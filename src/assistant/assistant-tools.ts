@@ -333,15 +333,29 @@ export class AssistantTools {
       },
       {
         name: 'logger_health',
-        description: 'The newest link verdict per logger (online, late, silent and so on), worst first.',
+        // The states named, and counted here: given only the list, the model answered
+        // "which devices are offline?" correctly but hedged and gave no number, not knowing
+        // which state meant offline nor wanting to count (test report MIN-10).
+        description: 'The newest link verdict per logger, worst first, with how many loggers are in each state. '
+          + 'States: "dark" is offline (nothing received); "partial" reports but some sensors are silent; '
+          + '"intermittent" keeps dropping; "buffering" is holding data that will arrive late; "weak-signal" '
+          + 'reports on a poor link; "healthy" is online and complete; "unknown" has no verdict yet. Every '
+          + 'state except "dark" and "unknown" is reporting.',
         parameters: { type: 'object', properties: { state: { type: 'array', items: { type: 'string' } } } },
         capability: 'device.read',
         profiles: BOTH,
-        run: async (scope, a) => (await health.fleet(scope, { states: strs(a.state) as LinkState[] | undefined }))
-          .map((r) => ({
-            imei: r.imei, machine: r.externalId, state: r.state, detail: r.detail, since: r.windowStart,
-            longestGapSeconds: r.longestGapSeconds, missingSignals: r.missingSignals,
-          })),
+        run: async (scope, a) => {
+          const rows = await health.fleet(scope, { states: strs(a.state) as LinkState[] | undefined });
+          const byState: Record<string, number> = {};
+          for (const r of rows) byState[r.state] = (byState[r.state] ?? 0) + 1;
+          return {
+            total: rows.length, byState,
+            loggers: rows.map((r) => ({
+              imei: r.imei, machine: r.externalId, state: r.state, detail: r.detail, since: r.windowStart,
+              longestGapSeconds: r.longestGapSeconds, missingSignals: r.missingSignals,
+            })),
+          };
+        },
       },
       {
         name: 'list_incidents',
