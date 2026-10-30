@@ -110,6 +110,35 @@ export const ProductionMonitoringPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availability, equipment, linkHealth, scope, selectedKey]);
 
+  // The tiles describe what the list shows. Unfiltered, that is the server's own fleet
+  // figure; filtered, the same rule (hours summed, never ratios averaged — see
+  // aggregateAvailability) over the machines left, as ThingsCare and Incidents do.
+  const filtered = selectedKey !== 'all' || scope.plantId !== 'all' || scope.classSlug !== 'all'
+    || scope.connection !== 'all' || scope.query.trim() !== '';
+  const headline = useMemo(() => {
+    if (!filtered) {
+      return {
+        measured: availability?.machinesMeasured ?? 0, availability: availability?.availability ?? null,
+        uptime: availability?.uptimeHours ?? null, downtime: availability?.downtimeHours ?? null,
+        excluded: availability?.excluded ?? { noShiftSchedule: 0, noReadings: 0 },
+      };
+    }
+    const ready = machines.filter((m) => m.readiness === 'ready');
+    const sum = (pick: (m: (typeof ready)[number]) => number | null) => ready.reduce((s, m) => s + (pick(m) ?? 0), 0);
+    const scheduled = sum((m) => m.scheduledHours);
+    const uptime = sum((m) => m.uptimeHours);
+    return {
+      measured: ready.length,
+      availability: ready.length && scheduled > 0 ? Math.min(1, uptime / scheduled) : null,
+      uptime: ready.length ? uptime : null,
+      downtime: ready.length ? sum((m) => m.downtimeHours) : null,
+      excluded: {
+        noShiftSchedule: machines.filter((m) => m.reason === 'no_shift_schedule').length,
+        noReadings: machines.filter((m) => m.reason === 'no_readings').length,
+      },
+    };
+  }, [filtered, availability, machines]);
+
   const pageCount = Math.max(1, Math.ceil(machines.length / PAGE_SIZE));
   const pageSafe = Math.min(page, pageCount);
   const pageItems = machines.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
@@ -148,10 +177,10 @@ export const ProductionMonitoringPage: React.FC = () => {
       ) : (
         <>
           <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>
-            <KpiTile label={t('kpi.machinesMeasured')} value={String(availability?.machinesMeasured ?? 0)} />
-            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${(availability.availability * 100).toFixed(0)}%` : '—'} />
-            <KpiTile label={t('kpi.uptime')} value={availability?.uptimeHours != null ? `${availability.uptimeHours.toFixed(0)}h` : '—'} />
-            <KpiTile label={t('kpi.downtime')} value={availability?.downtimeHours != null ? `${availability.downtimeHours.toFixed(0)}h` : '—'} tone="warn" />
+            <KpiTile label={t('kpi.machinesMeasured')} value={String(headline.measured)} />
+            <KpiTile label={t('kpi.fleetAvailability')} value={headline.availability != null ? `${(headline.availability * 100).toFixed(0)}%` : '—'} />
+            <KpiTile label={t('kpi.uptime')} value={headline.uptime != null ? `${headline.uptime.toFixed(0)}h` : '—'} />
+            <KpiTile label={t('kpi.downtime')} value={headline.downtime != null ? `${headline.downtime.toFixed(0)}h` : '—'} tone="warn" />
             {selectedSiteOee && (
               <KpiTile
                 label={t('kpi.siteOee', { count: selectedSiteOee.machinesIncluded })}
@@ -159,9 +188,9 @@ export const ProductionMonitoringPage: React.FC = () => {
               />
             )}
           </div>
-          {(availability?.excluded.noShiftSchedule || availability?.excluded.noReadings) ? (
+          {(headline.excluded.noShiftSchedule || headline.excluded.noReadings) ? (
             <p className="text-xs text-slate-400">
-              {t('list.excluded', { noShift: availability.excluded.noShiftSchedule, noReadings: availability.excluded.noReadings })}
+              {t('list.excluded', { noShift: headline.excluded.noShiftSchedule, noReadings: headline.excluded.noReadings })}
             </p>
           ) : null}
 
