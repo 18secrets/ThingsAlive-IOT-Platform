@@ -9,6 +9,7 @@ import {
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
+import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { SortLabel } from '../common/ListTable';
 import { sortRows, useSort } from '../../lib/useSort';
@@ -97,6 +98,11 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   const [retireError, setRetireError] = useState<string | undefined>(undefined);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | undefined>(undefined);
+  // In the page, not window.prompt/alert: a dialog the browser draws is one an automated
+  // tester never sees, and "Import from Legacy" looked like it did nothing (test report OB-8).
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSource, setImportSource] = useState('iot-platform-1');
+  const [importResult, setImportResult] = useState<string[] | null>(null);
 
   const classBySlug = useMemo(
     () => new Map(equipmentClasses.map((ec) => [ec.slug, ec])),
@@ -174,21 +180,19 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     }
   };
 
-  const handleImport = async () => {
-    const sourceSystem = window.prompt(
-      t('equipmentList.importPrompt'),
-      'iot-platform-1',
-    );
-    if (!sourceSystem?.trim()) return;
+  const handleImport = () => { setImportResult(null); setImportError(undefined); setImportOpen(true); };
+
+  const runImport = async () => {
+    if (!importSource.trim()) return;
     setImporting(true);
     setImportError(undefined);
     try {
-      const result = await onImportEquipmentFromMirror(sourceSystem.trim());
-      window.alert(
-        `${t('equipmentList.imported', { count: result.imported })}\n`
-        + `${t('equipmentList.alreadyKnown', { count: result.alreadyKnown })}\n`
-        + t('equipmentList.importedUnplaced', { count: result.unplaced }),
-      );
+      const result = await onImportEquipmentFromMirror(importSource.trim());
+      setImportResult([
+        t('equipmentList.imported', { count: result.imported }),
+        t('equipmentList.alreadyKnown', { count: result.alreadyKnown }),
+        ...(result.unplaced ? [t('equipmentList.importedUnplaced', { count: result.unplaced })] : []),
+      ]);
     } catch (err) {
       setImportError(err instanceof ApiError ? err.message : t('equipmentList.importFailed'));
     } finally {
@@ -437,6 +441,27 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
       </div>
 
       {/* Add / Edit Equipment Modal */}
+      <Modal isOpen={importOpen} onClose={() => setImportOpen(false)} title={t('equipmentList.importFromLegacy')} subtitle={t('equipmentList.importTitle')}>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('equipmentList.importPrompt')}</span>
+          <Input value={importSource} onChange={(v) => setImportSource(v)} className="font-mono text-xs" />
+        </label>
+        {importError && <p className="text-xs text-rose-600 dark:text-rose-400">{importError}</p>}
+        {importResult && (
+          <div className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2 space-y-0.5">
+            {importResult.map((line) => <p key={line}>{line}</p>)}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={() => setImportOpen(false)} className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm cursor-pointer">
+            {t('common.close')}
+          </button>
+          <button type="button" disabled={importing || !importSource.trim()} onClick={runImport} className="px-4 py-2 rounded-lg bg-[#0B7285] hover:bg-[#095C6B] text-white text-sm font-semibold disabled:opacity-60 cursor-pointer">
+            {importing ? t('equipmentList.importing') : t('equipmentList.importFromLegacy')}
+          </button>
+        </div>
+      </Modal>
+
       <AddEquipmentModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEquipment(null); }}

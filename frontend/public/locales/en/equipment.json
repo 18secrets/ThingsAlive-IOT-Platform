@@ -15,7 +15,8 @@
     "allStatuses": "All statuses",
     "unnamed": "Unnamed",
     "unclassified": "Unclassified",
-    "unassigned": "Unassigned"
+    "unassigned": "Unassigned",
+    "close": "Close"
   },
   "status": {
     "active": "Active",

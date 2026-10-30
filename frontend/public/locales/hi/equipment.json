@@ -15,7 +15,8 @@
     "allStatuses": "सभी स्थितियाँ",
     "unnamed": "बेनाम",
     "unclassified": "अवर्गीकृत",
-    "unassigned": "असाइन नहीं"
+    "unassigned": "असाइन नहीं",
+    "close": "बंद करें"
   },
   "status": {
     "active": "सक्रिय",

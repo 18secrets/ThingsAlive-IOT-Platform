@@ -15,7 +15,8 @@
     "allStatuses": "அனைத்து நிலைகளும்",
     "unnamed": "பெயரிடப்படாதது",
     "unclassified": "வகைப்படுத்தப்படாதது",
-    "unassigned": "ஒதுக்கப்படவில்லை"
+    "unassigned": "ஒதுக்கப்படவில்லை",
+    "close": "மூடு"
   },
   "status": {
     "active": "செயலில்",

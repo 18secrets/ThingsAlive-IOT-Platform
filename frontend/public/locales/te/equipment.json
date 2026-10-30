@@ -15,7 +15,8 @@
     "allStatuses": "అన్ని స్థితులు",
     "unnamed": "పేరు లేదు",
     "unclassified": "వర్గీకరించబడలేదు",
-    "unassigned": "కేటాయించబడలేదు"
+    "unassigned": "కేటాయించబడలేదు",
+    "close": "మూసివేయి"
   },
   "status": {
     "active": "సక్రియం",
