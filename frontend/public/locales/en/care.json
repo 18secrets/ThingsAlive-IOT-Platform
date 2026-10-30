@@ -17,7 +17,7 @@
     "pageOf": "Page {{page}} of {{total}}",
     "details": "Details",
     "createWorkOrder": "Create work order",
-    "viewEquipmentPage": "View equipment page"
+    "viewEquipmentPage": "View machine page"
   },
   "kpi": {
     "inScope": "Machines in scope",

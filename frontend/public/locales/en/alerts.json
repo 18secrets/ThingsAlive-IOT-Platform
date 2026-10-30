@@ -37,7 +37,7 @@
     "chain-origin": "Chain origin"
   },
   "scope": {
-    "unknownPlant": "Unknown plant",
+    "unknownPlant": "Unknown site",
     "equipmentClass": "Equipment class",
     "account": "Whole account",
     "oneSite": "One site",
@@ -132,7 +132,7 @@
   "assistant": {
     "heroTitle": "Describe your alarm in natural language",
     "heroBody": "ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust, industrial-grade monitoring workflows.",
-    "selectEquipment": "Select equipment…",
+    "selectEquipment": "Select a machine…",
     "createCustom": "Create Custom",
     "selectThingFirst": "Select a Thing before describing or generating an alert.",
     "aiPrompt": "AI PROMPT",

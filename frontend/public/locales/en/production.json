@@ -17,7 +17,7 @@
     "pageOf": "Page {{page}} of {{total}}",
     "details": "Details",
     "createWorkOrder": "Create work order",
-    "viewEquipmentPage": "View equipment page",
+    "viewEquipmentPage": "View machine page",
     "notAvailable": "Not available",
     "oeeNotAvailable": "OEE not available",
     "uptimeTitle": "Uptime hours",

@@ -115,7 +115,7 @@
       "ask": {
         "title": "Ask anything",
         "description": "Plain English queries.",
-        "prompt": "Which equipment is due for maintenance this week?"
+        "prompt": "Which machines are due for maintenance this week?"
       },
       "alerts": {
         "title": "Auto-alerts",

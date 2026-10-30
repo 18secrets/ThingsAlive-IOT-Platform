@@ -1,6 +1,6 @@
 {
   "hero": {
-    "subtitle": "Jobs raised against your equipment"
+    "subtitle": "Jobs raised against your machines"
   },
   "loading": "Loading…",
   "empty": "No work orders for this selection.",
@@ -98,7 +98,7 @@
   "form": {
     "task": "Task",
     "taskPlaceholder": "e.g. Inspect coolant sensor",
-    "selectEquipment": "Select equipment",
+    "selectEquipment": "Select a machine",
     "priority": "Priority",
     "dueDate": "Due date",
     "description": "Description",

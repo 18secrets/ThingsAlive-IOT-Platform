@@ -73,7 +73,7 @@
     "save": "Save access"
   },
   "roles": {
-    "adminTab": "Administration (Plants, Devices, Equipment)",
+    "adminTab": "Administration (Sites, Devices, Equipment)",
     "intro": "A role decides which pages its users can open; that is what this editor changes. What they can do on those pages comes with the role a custom role is based on. Anyone who manages both users and roles is a Super Admin and opens every page, whatever their role lists.",
     "add": "Add Role",
     "edit": "Edit Role",
