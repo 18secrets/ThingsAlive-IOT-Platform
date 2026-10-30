@@ -58,7 +58,8 @@
     "edited": "திருத்தப்பட்டது"
   },
   "filters": {
-    "allStatuses": "அனைத்து நிலைகளும்"
+    "allStatuses": "அனைத்து நிலைகளும்",
+    "allPriorities": "அனைத்து முன்னுரிமைகளும்"
   },
   "actions": {
     "create": "பணி ஆணை உருவாக்கு",

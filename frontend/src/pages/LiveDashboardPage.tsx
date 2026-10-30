@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, ShieldCheck,
+  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
   Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -232,11 +232,28 @@ const MachineCards: React.FC<{
   onOpen: (m: EquipmentProfile) => void;
 }> = ({ machines, plantName, connectionOf, availabilityOf, onOpen }) => {
   const { t } = useTranslation('dashboard');
-  const { pageItems, ...pager } = usePagination(machines, 12);
+  // Eighty-odd machines over seven pages had no way to find one (test report MIN-7).
+  const [query, setQuery] = useState('');
+  const matching = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return !q ? machines : machines.filter((m) =>
+      (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q) || plantName(m.plantId).toLowerCase().includes(q));
+  }, [machines, query, plantName]);
+  const { pageItems, ...pager } = usePagination(matching, 12);
   const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
   // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
   return (
     <div className="space-y-3">
+      <div className="relative max-w-sm">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('live.searchMachines')}
+          className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+        />
+      </div>
+      {matching.length === 0 && <Muted>{t('live.noMachineMatches')}</Muted>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {pageItems.map((m) => {
           const a = availabilityOf(m);

@@ -48,6 +48,7 @@ export const WorkOrdersPage: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | WorkOrderPriority>('all');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
@@ -130,7 +131,8 @@ export const WorkOrdersPage: React.FC = () => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
       const matchesSelected = selectedKey === 'all' || key === selectedKey;
-      const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+      const matchesStatus = (statusFilter === 'all' || o.status === statusFilter)
+        && (priorityFilter === 'all' || o.priority === priorityFilter);
       const matchesPlant = scope.plantId === 'all' || profile?.plantId === scope.plantId;
       const matchesClass = scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug;
       const matchesConnection = scope.connection === 'all' || connectionOf(o.externalId) === scope.connection;
@@ -144,7 +146,7 @@ export const WorkOrdersPage: React.FC = () => {
       status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, scope, selectedKey, sort]);
+  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
@@ -307,6 +309,14 @@ export const WorkOrdersPage: React.FC = () => {
           searchable={false}
           cleanable={false}
           className="min-w-[180px]"
+        />
+        <SelectPicker
+          data={[{ label: t('filters.allPriorities'), value: 'all' }, ...PRIORITY_OPTIONS.map((p) => ({ label: t(`priority.${p}`, { defaultValue: p }), value: p }))]}
+          value={priorityFilter}
+          onChange={(value) => setPriorityFilter((value ?? 'all') as 'all' | WorkOrderPriority)}
+          searchable={false}
+          cleanable={false}
+          className="min-w-[160px]"
         />
       </div>
 

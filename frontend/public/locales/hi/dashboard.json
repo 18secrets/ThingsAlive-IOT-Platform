@@ -124,7 +124,9 @@
       "not_recorded": "{{count}} दर्ज नहीं"
     },
     "onboarding": "ऑनबोर्डिंग",
-    "onboarded": "{{done}}/{{total}} मशीनें पूरी तरह ऑनबोर्ड"
+    "onboarded": "{{done}}/{{total}} मशीनें पूरी तरह ऑनबोर्ड",
+    "searchMachines": "नाम, कोड या साइट से मशीन खोजें",
+    "noMachineMatches": "कोई मशीन इस खोज से मेल नहीं खाती।"
   },
   "classic": {
     "title": "एंटरप्राइज़ कमांड सेंटर",

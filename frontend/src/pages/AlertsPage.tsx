@@ -128,6 +128,9 @@ export const AlertsPage: React.FC = () => {
   }
 
   const openCount = useMemo(() => events.filter((e) => e.state === 'open').length, [events]);
+  // The list holds open and acknowledged alerts; this narrows it to one (test report MIN-7, MIN-9).
+  const [stateFilter, setStateFilter] = useState<'all' | 'open' | 'acknowledged'>('all');
+  const shown = useMemo(() => events.filter((e) => stateFilter === 'all' || e.state === stateFilter), [events, stateFilter]);
 
   return (
     <div id="alerts-view" className="space-y-3">
@@ -200,27 +203,38 @@ export const AlertsPage: React.FC = () => {
       <div>
         <div className="flex items-center justify-between gap-2 mb-1">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
+          <span className="flex items-center gap-2">
+          <SelectPicker
+            size="sm"
+            data={(['all', 'open', 'acknowledged'] as const).map((s) => ({ label: s === 'all' ? t('events.allStates') : t(`state.${s}`), value: s }))}
+            value={stateFilter}
+            onChange={(v) => setStateFilter((v ?? 'all') as 'all' | 'open' | 'acknowledged')}
+            searchable={false}
+            cleanable={false}
+            className="min-w-[150px]"
+          />
           <ExportCsvButton
             name="alerts"
-            disabled={!events.length}
+            disabled={!shown.length}
             headers={['fired', 'machine', 'rule', 'severity', 'state', 'summary', 'acknowledgedAt'].map((c) => t(`events.col.${c}`))}
-            rows={() => events.map((e) => [
+            rows={() => shown.map((e) => [
               e.firedAt, equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
               e.ruleName, t(`severity.${e.severity}`), t(`state.${e.state}`), e.summary, e.acknowledgedAt,
             ])}
           />
+          </span>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
         {loading ? (
           <p className="text-sm text-slate-500">{t('loading')}</p>
-        ) : events.length === 0 ? (
+        ) : shown.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
             <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((e) => {
+            {shown.map((e) => {
               const name = equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
               return (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">

@@ -58,7 +58,8 @@
     "edited": "Edited"
   },
   "filters": {
-    "allStatuses": "All statuses"
+    "allStatuses": "All statuses",
+    "allPriorities": "All priorities"
   },
   "actions": {
     "create": "Create work order",

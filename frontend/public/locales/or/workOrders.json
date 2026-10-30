@@ -58,7 +58,8 @@
     "edited": "ସମ୍ପାଦିତ ହେଲା"
   },
   "filters": {
-    "allStatuses": "ସମସ୍ତ ସ୍ଥିତି"
+    "allStatuses": "ସମସ୍ତ ସ୍ଥିତି",
+    "allPriorities": "ସମସ୍ତ ପ୍ରାଥମିକତା"
   },
   "actions": {
     "create": "କାର୍ଯ୍ୟ ଆଦେଶ ସୃଷ୍ଟି କରନ୍ତୁ",

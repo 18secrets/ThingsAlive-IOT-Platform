@@ -58,7 +58,8 @@
     "edited": "संपादित किया गया"
   },
   "filters": {
-    "allStatuses": "सभी स्थितियाँ"
+    "allStatuses": "सभी स्थितियाँ",
+    "allPriorities": "सभी प्राथमिकताएँ"
   },
   "actions": {
     "create": "कार्य आदेश बनाएँ",

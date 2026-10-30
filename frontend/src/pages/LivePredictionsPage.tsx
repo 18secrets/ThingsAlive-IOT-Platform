@@ -6,6 +6,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
 import { sortRows, useSort } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
+import { TablePagination, usePagination } from '../components/common/TablePagination';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import {
@@ -82,6 +83,8 @@ export const LivePredictionsPage: React.FC = () => {
       risk: (m) => worstOf(m)?.riskScore, name: (m) => m.name ?? m.externalId, code: (m) => m.externalId,
     });
   }, [visible, predictions, sort]);
+  // Eighty-three cards on one page (test report MIN-7); twelve at a time, highest risk first.
+  const { pageItems, ...pager } = usePagination(sorted, 12);
   // Scenarios follow the filters: those for the classes of the machines on screen. With
   // no machines registered yet there is nothing to narrow by, so all of them show.
   const visibleClasses = new Set(visible.map((e) => e.equipmentClassSlug));
@@ -189,7 +192,7 @@ export const LivePredictionsPage: React.FC = () => {
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">{t('kpis.noMatch')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sorted.map((m) => {
+            {pageItems.map((m) => {
               const key = `${m.sourceSystem}|${m.externalId}`;
               const p = predictions.get(key);
               const worst = Array.isArray(p) && p.length
@@ -234,6 +237,7 @@ export const LivePredictionsPage: React.FC = () => {
             })}
           </div>
         )}
+        {pager.totalPages > 1 && <div className="mt-4"><TablePagination bare compact {...pager} /></div>}
       </div>
     </div>
   );

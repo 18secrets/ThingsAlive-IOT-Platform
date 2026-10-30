@@ -54,7 +54,7 @@
     "edit": "Edit"
   },
   "events": {
-    "heading": "Open alerts",
+    "heading": "Live alerts",
     "counts": "{{open}} open · {{acknowledged}} acknowledged",
     "empty": "No open alerts.",
     "acknowledge": "Acknowledge",
@@ -68,7 +68,8 @@
       "state": "State",
       "summary": "Summary",
       "acknowledgedAt": "Acknowledged at"
-    }
+    },
+    "allStates": "Open and acknowledged"
   },
   "form": {
     "editTitle": "Edit alert rule",

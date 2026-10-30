@@ -58,7 +58,8 @@
     "edited": "సవరించారు"
   },
   "filters": {
-    "allStatuses": "అన్ని స్థితులు"
+    "allStatuses": "అన్ని స్థితులు",
+    "allPriorities": "అన్ని ప్రాధాన్యతలు"
   },
   "actions": {
     "create": "పని ఆర్డర్ సృష్టించు",
