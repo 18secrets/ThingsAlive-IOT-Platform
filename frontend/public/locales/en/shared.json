@@ -109,5 +109,18 @@
   "export": {
     "csv": "Export CSV",
     "title": "Download every row this list is showing, with its filters applied"
+  },
+  "sort": {
+    "riskHigh": "Highest risk first",
+    "riskLow": "Lowest risk first",
+    "nameAz": "Name A–Z",
+    "codeAz": "Code A–Z",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "dueSoonest": "Due soonest",
+    "priorityHigh": "Highest priority first",
+    "availabilityLow": "Lowest availability first",
+    "availabilityHigh": "Highest availability first",
+    "downtimeHigh": "Most downtime first"
   }
 }

@@ -9,6 +9,8 @@ import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { ExportCsvButton } from '../components/common/ExportCsvButton';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus,
@@ -22,6 +24,8 @@ const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'eme
 };
 
 const STATUS_OPTIONS: WorkOrderStatus[] = ['created', 'in-progress', 'completed', 'cancelled'];
+type WorkOrderSort = 'reference' | 'due' | 'priority' | 'status' | 'machine';
+const PRIORITY_RANK: Record<WorkOrderPriority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
 const STATUS_STYLE: Record<WorkOrderStatus, string> = {
   created: 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
   'in-progress': 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
@@ -31,8 +35,9 @@ const STATUS_STYLE: Record<WorkOrderStatus, string> = {
 const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 
 export const WorkOrdersPage: React.FC = () => {
-  const { t } = useTranslation('workOrders');
+  const { t } = useTranslation(['workOrders', 'shared']);
   const [viewMode, setViewMode] = useViewMode('work-orders');
+  const { sort, setSort, toggle } = useSort<WorkOrderSort>({ key: 'reference', dir: 'desc' });
   usePageHeader({ title: t('translation:pages.workOrders.title'), subtitle: t('translation:pages.workOrders.subtitle') });
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -121,7 +126,7 @@ export const WorkOrdersPage: React.FC = () => {
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
-    return orders.filter((o) => {
+    const matching = orders.filter((o) => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
       const matchesSelected = selectedKey === 'all' || key === selectedKey;
@@ -132,8 +137,14 @@ export const WorkOrdersPage: React.FC = () => {
       const matchesQuery = !term || o.title.toLowerCase().includes(term) || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
       return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery;
     });
+    // By reference, not the API's created-at: seeded and imported jobs carry backdated
+    // creation times, which put WO-000003 ahead of 6, 5 and 4 (test report MIN-8).
+    return sortRows(matching, sort, {
+      reference: (o) => o.reference, due: (o) => o.dueAt, priority: (o) => PRIORITY_RANK[o.priority],
+      status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, scope, selectedKey]);
+  }, [orders, equipment, linkHealth, statusFilter, scope, selectedKey, sort]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
@@ -299,7 +310,17 @@ export const WorkOrdersPage: React.FC = () => {
         />
       </div>
 
-      <div className="flex justify-end items-center gap-2">
+      <div className="flex justify-end items-center gap-2 flex-wrap">
+        <SortSelect
+          sort={sort}
+          onChange={setSort}
+          options={[
+            { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
+            { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
+            { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
+            { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
+          ]}
+        />
         <ExportCsvButton
           name="work-orders"
           disabled={!visible.length}
@@ -323,10 +344,12 @@ export const WorkOrdersPage: React.FC = () => {
       ) : viewMode === 'list' ? (
         <ListTable
           columns={[
-            { label: t('listCol.reference') }, { label: t('listCol.title') }, { label: t('listCol.machine') },
-            { label: t('listCol.status') }, { label: t('listCol.assignee') }, { label: t('listCol.priority') },
-            { label: t('listCol.due') }, { label: t('listCol.actions') },
+            { label: t('listCol.reference'), sortKey: 'reference' }, { label: t('listCol.title') }, { label: t('listCol.machine'), sortKey: 'machine' },
+            { label: t('listCol.status'), sortKey: 'status' }, { label: t('listCol.assignee') }, { label: t('listCol.priority'), sortKey: 'priority' },
+            { label: t('listCol.due'), sortKey: 'due' }, { label: t('listCol.actions') },
           ]}
+          sort={sort}
+          onSort={(key) => toggle(key as WorkOrderSort, key === 'priority' ? 'desc' : 'asc')}
           rows={visible}
           rowKey={(o) => o.id}
           cells={(o) => [

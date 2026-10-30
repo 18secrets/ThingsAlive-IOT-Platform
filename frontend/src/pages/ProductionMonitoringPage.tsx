@@ -8,6 +8,8 @@ import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
@@ -24,8 +26,10 @@ function periodLastNDays(days: number): { from: string; to: string } {
 }
 
 export const ProductionMonitoringPage: React.FC = () => {
-  const { t } = useTranslation('production');
+  const { t } = useTranslation(['production', 'shared']);
   const [viewMode, setViewMode] = useViewMode('production-monitoring');
+  // Lowest availability first: the machines losing the most time are the ones to look at.
+  const { sort, setSort, toggle } = useSort<'availability' | 'downtime' | 'name'>({ key: 'availability', dir: 'asc' });
   usePageHeader({ title: t('translation:pages.productionMonitoring.title'), subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -139,9 +143,16 @@ export const ProductionMonitoringPage: React.FC = () => {
     };
   }, [filtered, availability, machines]);
 
-  const pageCount = Math.max(1, Math.ceil(machines.length / PAGE_SIZE));
+  const sorted = useMemo(() => sortRows(machines, sort, {
+    availability: (m) => (m.readiness === 'ready' ? m.availability : null),
+    downtime: (m) => (m.readiness === 'ready' ? m.downtimeHours : null),
+    name: (m) => name(m.sourceSystem, m.externalId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [machines, sort, equipment]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageSafe = Math.min(page, pageCount);
-  const pageItems = machines.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const pageItems = sorted.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   return (
     <div id="production-monitoring-view" className="space-y-3">
@@ -199,6 +210,16 @@ export const ProductionMonitoringPage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
+                <SortSelect
+                  sort={sort}
+                  onChange={(next) => { setSort(next); setPage(1); }}
+                  options={[
+                    { key: 'availability', dir: 'asc', label: t('shared:sort.availabilityLow') },
+                    { key: 'availability', dir: 'desc', label: t('shared:sort.availabilityHigh') },
+                    { key: 'downtime', dir: 'desc', label: t('shared:sort.downtimeHigh') },
+                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                  ]}
+                />
                 <ViewModeToggle mode={viewMode} onChange={setViewMode} />
               </div>
             </div>
@@ -210,10 +231,12 @@ export const ProductionMonitoringPage: React.FC = () => {
             ) : viewMode === 'list' ? (
               <ListTable
                 columns={[
-                  { label: t('listCol.machine') }, { label: t('listCol.connection') },
-                  { label: t('listCol.availability'), align: 'right' }, { label: t('listCol.oeeWeek'), align: 'right' },
-                  { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right' },
+                  { label: t('listCol.machine'), sortKey: 'name' }, { label: t('listCol.connection') },
+                  { label: t('listCol.availability'), align: 'right', sortKey: 'availability' }, { label: t('listCol.oeeWeek'), align: 'right' },
+                  { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right', sortKey: 'downtime' },
                 ]}
+                sort={sort}
+                onSort={(key) => { toggle(key as 'availability' | 'downtime' | 'name', key === 'downtime' ? 'desc' : 'asc'); setPage(1); }}
                 rows={pageItems}
                 rowKey={(m) => `${m.sourceSystem}/${m.externalId}`}
                 cells={(m) => {

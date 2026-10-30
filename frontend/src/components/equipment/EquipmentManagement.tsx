@@ -10,6 +10,8 @@ import {
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
+import { SortLabel } from '../common/ListTable';
+import { sortRows, useSort } from '../../lib/useSort';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -119,10 +121,20 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     });
   }, [equipment, searchTerm, selectedStatus, classBySlug]);
 
+  const { sort, toggle } = useSort<'code' | 'name' | 'class' | 'plant' | 'status'>({ key: 'code', dir: 'asc' });
+  const sortedList = useMemo(() => sortRows(filteredList, sort, {
+    code: (e) => e.externalId,
+    name: (e) => e.name ?? e.externalId,
+    class: (e) => (e.equipmentClassSlug ? classBySlug.get(e.equipmentClassSlug)?.name ?? e.equipmentClassSlug : null),
+    plant: (e) => (e.plantId ? plantById.get(e.plantId)?.name ?? null : null),
+    status: (e) => e.status,
+  }), [filteredList, sort, classBySlug, plantById]);
+  const onSort = (key: string) => { toggle(key as typeof sort.key); setCurrentPage(1); };
+
   const totalRows = filteredList.length;
   const totalPages = Math.ceil(totalRows / rowsPerPage) || 1;
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedList = filteredList.slice(startIndex, startIndex + rowsPerPage);
+  const paginatedList = sortedList.slice(startIndex, startIndex + rowsPerPage);
 
   const handleCreate = async (input: EquipmentInput) => {
     await onCreateEquipment(input);
@@ -226,7 +238,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             name="equipment"
             disabled={!filteredList.length}
             headers={['code', 'name', 'class', 'plant', 'manufacturer', 'model', 'serial', 'tier', 'status'].map((c) => t(`equipmentList.col.${c}`))}
-            rows={() => filteredList.map((e) => [
+            rows={() => sortedList.map((e) => [
               e.externalId, e.name, e.equipmentClassSlug ? (classBySlug.get(e.equipmentClassSlug)?.name ?? e.equipmentClassSlug) : '',
               e.plantId ? (plantById.get(e.plantId)?.name ?? '') : '', e.manufacturer, e.modelNumber, e.serialNumber, e.tier,
               t(`status.${e.status}`),
@@ -268,15 +280,15 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-3.5">{t('equipmentList.col.code')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.name')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.class')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.plant')}</th>
+                <th className="py-3 px-3.5"><SortLabel label={t('equipmentList.col.code')} sortKey="code" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.name')} sortKey="name" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.class')} sortKey="class" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.plant')} sortKey="plant" sort={sort} onSort={onSort} /></th>
                 <th className="py-3 px-4">{t('equipmentList.col.manufacturer')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.model')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.serial')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.tier')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.status')}</th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.status')} sortKey="status" sort={sort} onSort={onSort} /></th>
                 <th className="py-3 px-4"></th>
               </tr>
             </thead>

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import {
@@ -23,7 +25,9 @@ const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'r
  * real prediction severity instead.
  */
 export const LivePredictionsPage: React.FC = () => {
-  const { t } = useTranslation('predictions');
+  const { t } = useTranslation(['predictions', 'shared']);
+  // Highest risk first, as on ThingsCare; a machine still loading or unscored goes last.
+  const { sort, setSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
@@ -69,6 +73,15 @@ export const LivePredictionsPage: React.FC = () => {
       && (scope.classSlug === 'all' || e.equipmentClassSlug === scope.classSlug)
       && (!term || (e.name ?? '').toLowerCase().includes(term) || e.externalId.toLowerCase().includes(term)));
   }, [equipment, scope, selectedKey]);
+  const sorted = useMemo(() => {
+    const worstOf = (m: EquipmentProfile) => {
+      const p = predictions.get(`${m.sourceSystem}|${m.externalId}`);
+      return Array.isArray(p) ? worstPrediction(p) : null;
+    };
+    return sortRows(visible, sort, {
+      risk: (m) => worstOf(m)?.riskScore, name: (m) => m.name ?? m.externalId, code: (m) => m.externalId,
+    });
+  }, [visible, predictions, sort]);
   // Scenarios follow the filters: those for the classes of the machines on screen. With
   // no machines registered yet there is nothing to narrow by, so all of them show.
   const visibleClasses = new Set(visible.map((e) => e.equipmentClassSlug));
@@ -156,15 +169,27 @@ export const LivePredictionsPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
+          <SortSelect
+            sort={sort}
+            onChange={setSort}
+            options={[
+              { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+              { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+              { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+              { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+            ]}
+          />
+        </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('kpis.subtitle')}</p>
         {!equipmentLoaded ? (
           <p className="text-sm text-slate-400">{t('common.loading')}</p>
-        ) : visible.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">{t('kpis.noMatch')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map((m) => {
+            {sorted.map((m) => {
               const key = `${m.sourceSystem}|${m.externalId}`;
               const p = predictions.get(key);
               const worst = Array.isArray(p) && p.length

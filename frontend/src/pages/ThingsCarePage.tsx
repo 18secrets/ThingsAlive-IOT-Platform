@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Bell, Gauge, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
@@ -25,8 +27,12 @@ const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gau
 };
 const NO_PREDICTION_STYLE = { ring: 'border-slate-200 dark:border-slate-800', bg: 'bg-slate-50/60 dark:bg-slate-900/40', gauge: 'text-slate-400' };
 
+type CareSort = 'risk' | 'name' | 'code' | 'abnormal';
+
 export const ThingsCarePage: React.FC = () => {
-  const { t } = useTranslation('care');
+  const { t } = useTranslation(['care', 'shared']);
+  // Highest risk first: the page exists to find the machine that needs attention.
+  const { sort, setSort, toggle } = useSort<CareSort>({ key: 'risk', dir: 'desc' });
   const [viewMode, setViewMode] = useViewMode('things-care');
   usePageHeader({ title: 'ThingsCare', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
@@ -103,9 +109,16 @@ export const ThingsCarePage: React.FC = () => {
   const meanRisk = withPrediction.length ? withPrediction.reduce((a, r) => a + r.worst!.riskScore, 0) / withPrediction.length : null;
   const highOrCritical = rows.filter((r) => r.worst && (r.worst.severity === 'high' || r.worst.severity === 'critical')).length;
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const sorted = useMemo(() => sortRows(rows, sort, {
+    risk: (r) => r.worst?.riskScore,
+    name: (r) => r.equipment.name ?? r.equipment.externalId,
+    code: (r) => r.equipment.externalId,
+    abnormal: (r) => r.worst?.abnormalCount,
+  }), [rows, sort]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageSafe = Math.min(page, pageCount);
-  const pageItems = rows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const pageItems = sorted.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   return (
     <div id="things-care-view" className="space-y-3">
@@ -151,6 +164,16 @@ export const ThingsCarePage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
+                <SortSelect
+                  sort={sort}
+                  onChange={(next) => { setSort(next); setPage(1); }}
+                  options={[
+                    { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+                    { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                    { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+                  ]}
+                />
                 <ViewModeToggle mode={viewMode} onChange={setViewMode} />
               </div>
             </div>
@@ -162,10 +185,12 @@ export const ThingsCarePage: React.FC = () => {
             ) : viewMode === 'list' ? (
               <ListTable
                 columns={[
-                  { label: t('listCol.machine') }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
-                  { label: t('listCol.risk'), align: 'right' }, { label: t('listCol.confidence') },
-                  { label: t('listCol.abnormal'), align: 'right' },
+                  { label: t('listCol.machine'), sortKey: 'name' }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
+                  { label: t('listCol.risk'), align: 'right', sortKey: 'risk' }, { label: t('listCol.confidence') },
+                  { label: t('listCol.abnormal'), align: 'right', sortKey: 'abnormal' },
                 ]}
+                sort={sort}
+                onSort={(key) => { toggle(key as CareSort, key === 'name' ? 'asc' : 'desc'); setPage(1); }}
                 rows={pageItems}
                 rowKey={({ equipment: e }) => `${e.sourceSystem}/${e.externalId}`}
                 cells={({ equipment: e, worst }) => [
