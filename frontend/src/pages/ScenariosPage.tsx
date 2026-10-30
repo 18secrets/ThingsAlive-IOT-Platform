@@ -7,6 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { AnchorEditor } from '../components/visual/AnchorEditor';
 import { ModelAnchorEditor } from '../components/visual/ModelAnchorEditor';
 import {
@@ -23,6 +26,8 @@ const SEVERITY_TONE = (s: string) => severityTone(s);
 
 export const ScenariosPage: React.FC = () => {
   const { t } = useTranslation('scenarios');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('scenarios');
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [scenarios, setScenarios] = useState<ClientScenario[]>([]);
   const [classFilter, setClassFilter] = useState('all');
@@ -76,6 +81,40 @@ export const ScenariosPage: React.FC = () => {
     }
   }
 
+  // Paged like every other list, in both views.
+  const { pageItems, ...pager } = usePagination(visible);
+  type Scenario = (typeof visible)[number];
+  // The card's controls, shared with the list row.
+  const enabledToggle = (s: Scenario) => (
+                  <button
+                    disabled={busySlug === s.slug}
+                    onClick={() => toggle(s)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${s.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    title={s.enabled ? t('page.disable') : t('page.enable')}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                  </button>
+  );
+  const tagChips = (s: Scenario) => (
+    <>
+                  <Chip tone={SEVERITY_TONE(s.severity)}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone="slate">{t('page.tier', { tier: s.tier })}</Chip>
+                  <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
+                  {s.templateSlug ? (
+                    <Chip tone="slate" title={t('page.fromTemplateTitle')}>
+                      {t('page.fromTemplate', { template: `${s.templateSlug}${s.templateVersion != null ? ` v${s.templateVersion}` : ''}` })}
+                    </Chip>
+                  ) : (
+                    <Chip tone="slate" title={t('page.selfAuthoredTitle')}>{t('page.selfAuthored')}</Chip>
+                  )}
+    </>
+  );
+  const editButton = (s: Scenario) => (
+                <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+                  {t('page.edit')}
+                </button>
+  );
+
   return (
     <div id="scenarios-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
@@ -108,51 +147,53 @@ export const ScenariosPage: React.FC = () => {
             <Settings className="w-3.5 h-3.5" /> {t('page.manageClass')}
           </button>
         )}
+        <div className="ml-auto"><ViewModeToggle mode={viewMode} onChange={setViewMode} /></div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('page.loading')}</p>
-        ) : visible.length === 0 ? (
-          <p className="text-sm text-slate-400">{t('page.empty')}</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {visible.map((s) => (
-              <div key={s.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{s.name}</h4>
-                  <button
-                    disabled={busySlug === s.slug}
-                    onClick={() => toggle(s)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${s.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                    title={s.enabled ? t('page.disable') : t('page.enable')}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                  </button>
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('page.loading')}</p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">{t('page.empty')}</p>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[
+                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.needs') },
+                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+              ]}
+              rows={pageItems}
+              rowKey={(s) => s.id}
+              cells={(s) => [
+                <span className="font-medium">{s.name}</span>,
+                <div className="flex items-center gap-1.5 flex-wrap">{tagChips(s)}</div>,
+                <span className="text-[11px] text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
+                enabledToggle(s),
+                editButton(s),
+              ]}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pageItems.map((s) => (
+                <div key={s.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{s.name}</h4>
+                    {enabledToggle(s)}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {tagChips(s)}
+                  </div>
+                  {s.description && <p className="text-xs text-slate-400 dark:text-slate-500">{s.description}</p>}
+                  <p className="text-[11px] text-slate-400">
+                    {t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}
+                  </p>
+                  {editButton(s)}
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE(s.severity)}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
-                  <Chip tone="slate">{t('page.tier', { tier: s.tier })}</Chip>
-                  <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
-                  {s.templateSlug ? (
-                    <Chip tone="slate" title={t('page.fromTemplateTitle')}>
-                      {t('page.fromTemplate', { template: `${s.templateSlug}${s.templateVersion != null ? ` v${s.templateVersion}` : ''}` })}
-                    </Chip>
-                  ) : (
-                    <Chip tone="slate" title={t('page.selfAuthoredTitle')}>{t('page.selfAuthored')}</Chip>
-                  )}
-                </div>
-                {s.description && <p className="text-xs text-slate-400 dark:text-slate-500">{s.description}</p>}
-                <p className="text-[11px] text-slate-400">
-                  {t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}
-                </p>
-                <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                  {t('page.edit')}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          {!loading && visible.length > 0 && <TablePagination pinToBottom {...pager} />}
+        </div>
       </div>
 
       <Modal isOpen={editing !== null} onClose={() => setEditing(null)} title={t('edit.title')} subtitle={t('edit.subtitle')} maxWidth="max-w-xl">

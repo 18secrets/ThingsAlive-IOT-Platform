@@ -38,7 +38,8 @@
     "risk": "{{score}} risk",
     "confidenceTitle": "How much of the picture was available",
     "abnormalTitle": "Signals outside baseline",
-    "na": "n/a"
+    "na": "n/a",
+    "scoredAt": "Scored {{time}}"
   },
   "severity": {
     "none": "Healthy",

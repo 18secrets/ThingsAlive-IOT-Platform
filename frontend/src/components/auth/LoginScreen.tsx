@@ -26,7 +26,9 @@ export const LoginScreen: React.FC = () => {
 
   // Said under the field, before asking the API: its answer to a malformed address is
   // the generic "Request validation failed." (test report MIN-2).
-  const emailMalformed = identifier.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim());
+  // As strict as the API's @IsEmail on the last part: a one-letter ending such as "a@b.c"
+  // passed here and then came back as the generic banner (test report P4-LOGIN).
+  const emailMalformed = identifier.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@.]{2,}$/.test(identifier.trim());
   const [triedSubmit, setTriedSubmit] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -2,16 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { shieldStatusLabel } from '../components/shield/shieldStatusLabel';
-import { AlertCircle, ChevronLeft, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
+import { AlertCircle, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   ApiError, Plant, SHIELD_CATEGORIES, ShieldMachine, ShieldStatus, ShieldSummary,
   apiGetShieldSummary, apiListPlants,
 } from '../lib/api';
+import { sortRows, useSort, SortValue } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 
 const PAGE_SIZE = 12;
 
@@ -19,11 +22,15 @@ const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> 
   current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate',
 };
 
+// How much a status asks of someone, for sorting: the two that need action first.
+const URGENCY: Record<ShieldStatus, number> = { action_required: 4, overdue: 4, due_soon: 2, not_recorded: 1, current: 0 };
+const worstUrgency = (m: ShieldMachine) => Math.max(...SHIELD_CATEGORIES.map((c) => URGENCY[m.categories[c].status]));
+
 const needsAttention = (m: ShieldMachine) =>
   SHIELD_CATEGORIES.some((c) => ['action_required', 'overdue'].includes(m.categories[c].status));
 
 export const ThingsShieldPage: React.FC = () => {
-  const { t } = useTranslation('shield');
+  const { t } = useTranslation(['shield', 'shared']);
   const [viewMode, setViewMode] = useViewMode('things-shield');
   usePageHeader({ title: 'ThingsShield', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
@@ -33,7 +40,6 @@ export const ThingsShieldPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let live = true;
@@ -74,9 +80,16 @@ export const ThingsShieldPage: React.FC = () => {
     return n;
   }, [matching]);
 
-  const pageCount = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
-  const pageSafe = Math.min(page, pageCount);
-  const pageItems = matching.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
+  // Needs attention first, in both views (test report MAJ-9); a category header sorts by that category.
+  const { sort, setSort, toggle } = useSort<string>({ key: 'attention', dir: 'desc' });
+  const sorted = useMemo(() => sortRows(matching, sort, {
+    attention: (m: ShieldMachine) => worstUrgency(m),
+    name: (m: ShieldMachine) => m.machine.name ?? m.machine.externalId,
+    code: (m: ShieldMachine) => m.machine.externalId,
+    ...Object.fromEntries(SHIELD_CATEGORIES.map((c) => [c, (m: ShieldMachine): SortValue => URGENCY[m.categories[c].status]])),
+  }), [matching, sort]);
+  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
   const open = (m: ShieldMachine) => navigate(`/things-shield/${encodeURIComponent(m.machine.sourceSystem)}/${encodeURIComponent(m.machine.externalId)}`);
 
   return (
@@ -100,12 +113,12 @@ export const ThingsShieldPage: React.FC = () => {
       <EquipmentFilters
         showConnection={false}
         scope={scope}
-        onChange={(next) => { setScope(next); setPage(1); }}
+        onChange={setScope}
         plants={plants}
         classes={classes}
         equipmentOptions={equipmentOptions}
         selectedKey={selectedKey}
-        onSelect={(key) => { setSelectedKey(key); setPage(1); }}
+        onSelect={setSelectedKey}
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -118,57 +131,60 @@ export const ThingsShieldPage: React.FC = () => {
       <p className="text-[11px] text-slate-400">{t('page.countNote')}</p>
 
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.machines')}</h3>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
+            <SortSelect
+              sort={sort}
+              onChange={(next) => { setSort(next); pager.setPage(1); }}
+              options={[
+                { key: 'attention', dir: 'desc', label: t('shared:sort.attentionFirst') },
+                { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+              ]}
+            />
             <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           </div>
         </div>
 
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('page.loading')}</p>
-        ) : pageItems.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-            {t('page.noMatch')}
-          </div>
-        ) : viewMode === 'list' ? (
-          <ListTable
-            columns={[{ label: t('listCol.machine') }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`) }))]}
-            rows={pageItems}
-            rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
-            cells={(m) => [
-              <span className="inline-flex items-center gap-2">
-                {needsAttention(m)
-                  ? <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  : <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
-                <span className="font-medium">{m.machine.name ?? m.machine.externalId}</span>
-                <span className="text-slate-400">{m.machine.externalId}</span>
-              </span>,
-              ...SHIELD_CATEGORIES.map((c) => (
-                <Chip tone={STATUS_TONE[m.categories[c].status]}>{shieldStatusLabel(t, m.categories[c])}</Chip>
-              )),
-            ]}
-            onOpen={open}
-          />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pageItems.map((m) => (
-              <ShieldCard key={`${m.machine.sourceSystem}/${m.machine.externalId}`} machine={m} onOpen={() => open(m)} />
-            ))}
-          </div>
-        )}
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('page.loading')}</p>
+          ) : pageItems.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm">
+              {t('page.noMatch')}
+            </div>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[{ label: t('listCol.machine'), sortKey: 'name' }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`), sortKey: c }))]}
+              sort={sort}
+              onSort={(key) => { toggle(key, key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
+              rows={pageItems}
+              rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
+              cells={(m) => [
+                <span className="inline-flex items-center gap-2">
+                  {needsAttention(m)
+                    ? <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                    : <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                  <span className="font-medium">{m.machine.name ?? m.machine.externalId}</span>
+                  <span className="text-slate-400">{m.machine.externalId}</span>
+                </span>,
+                ...SHIELD_CATEGORIES.map((c) => (
+                  <Chip tone={STATUS_TONE[m.categories[c].status]}>{shieldStatusLabel(t, m.categories[c])}</Chip>
+                )),
+              ]}
+              onOpen={open}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pageItems.map((m) => (
+                <ShieldCard key={`${m.machine.sourceSystem}/${m.machine.externalId}`} machine={m} onOpen={() => open(m)} />
+              ))}
+            </div>
+          )}
 
-        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-          <span>{t('page.pageOf', { page: pageSafe, count: pageCount })}</span>
-          <div className="flex items-center gap-2">
-            <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              <ChevronLeft className="w-4 h-4" /> {t('page.prev')}
-            </button>
-            <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              {t('page.next')} <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <TablePagination pinToBottom {...pager} />
         </div>
       </div>
 

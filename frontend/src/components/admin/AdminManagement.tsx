@@ -81,6 +81,8 @@ interface AdminManagementProps {
    *  the client's own still-mock Devices tab. */
   devicePool: PooledDevice[];
   devicePoolError?: string;
+  /** True until the pool's first answer: the list is unknown then, not empty. */
+  devicePoolLoading?: boolean;
   onRegisterDevices: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
@@ -125,6 +127,8 @@ interface AdminManagementProps {
    *  tenant-scoped and empty for them. */
   allEquipment: EquipmentProfile[];
   allEquipmentError?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  allEquipmentLoading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -246,6 +250,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateDevice,
   onReturnDeviceToStock,
   devicePoolError,
+  devicePoolLoading,
   onRegisterDevices,
   onAssignDevice,
   equipmentClasses,
@@ -280,6 +285,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   realEquipmentLoading,
   allEquipment,
   allEquipmentError,
+  allEquipmentLoading,
   onListPlantsForTenant,
   onCreateEquipment,
   onUpdateEquipment,
@@ -508,6 +514,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <DevicePoolManagement
             pool={devicePool}
             error={devicePoolError}
+            loading={devicePoolLoading}
             clients={clients}
             toolMappings={realToolMappings}
             onRegister={onRegisterDevices}
@@ -553,6 +560,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <MasterEquipmentManagement
             equipment={allEquipment}
             error={allEquipmentError}
+            loading={allEquipmentLoading}
             clients={clients}
             onCreateEquipment={onCreateEquipment}
             onUpdateEquipment={onUpdateEquipment}

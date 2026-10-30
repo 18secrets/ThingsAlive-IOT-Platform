@@ -38,7 +38,8 @@
     "scenariosScored_one": "{{count}} scenario scored",
     "scenariosScored_other": "{{count}} scenarios scored",
     "scoredAt_one": "Scored {{time}} over {{count}} day",
-    "scoredAt_other": "Scored {{time}} over {{count}} days"
+    "scoredAt_other": "Scored {{time}} over {{count}} days",
+    "bands": "Each machine shows its most severe scenario, and the highest score among equally severe ones — the same score ThingsCare shows. Severity: Critical from 85 or with any signal in its critical band; otherwise High from 60, Medium from 40, Low below. A machine with no signal outside its baseline reads Healthy whatever its score."
   },
   "severity": {
     "none": "none",

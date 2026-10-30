@@ -66,7 +66,8 @@
   },
   "filters": {
     "allStatuses": "सभी स्थितियाँ",
-    "allPriorities": "सभी प्राथमिकताएँ"
+    "allPriorities": "सभी प्राथमिकताएँ",
+    "search": "संदर्भ, शीर्षक या मशीन से खोजें"
   },
   "actions": {
     "create": "कार्य आदेश बनाएँ",

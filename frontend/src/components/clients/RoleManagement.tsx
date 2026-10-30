@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, X, Check, Shield, Info } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { TablePagination, usePagination } from '../common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { NavigationTab, CLIENT_ASSIGNABLE_TABS } from '../../types';
 import { ApiError, RoleInput, RolePatchInput, TenantRole, TenantUser } from '../../lib/api';
 
@@ -51,6 +53,8 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
   roles, users, error, onCreateRole, onUpdateRole, onDeleteRole,
 }) => {
   const { t } = useTranslation('users');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('roles');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<TenantRole | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -65,38 +69,9 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(roles);
 
-  return (
-    <div id="role-management-view" className="space-y-3">
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t('roles.intro')}
-        </p>
-        <button
-          onClick={() => { setEditingRole(null); setIsModalOpen(true); }}
-          className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t('roles.add')}</span>
-        </button>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {pagedRows.map((role) => {
-          const holders = usersInRole(role.slug);
-          return (
-            <div key={role.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
-                  {role.name}
-                  {role.isBuiltIn && <span title={t('roles.builtIn')}><Shield className="w-4 h-4 text-sky-500" /></span>}
-                </h4>
+  type Role = (typeof pagedRows)[number];
+  // The card's controls, shared with the list row.
+  const actions = (role: Role, holders: number) => (
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => { setEditingRole(role); setIsModalOpen(true); }}
@@ -114,8 +89,9 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
+  );
+  const pageChips = (role: Role) => (
+    <>
                 {/* Only ever shows pages still in CLIENT_ASSIGNABLE_TABS — a role
                     saved before a page was retired (e.g. 'alert-agent', which lost
                     its sidebar entry) can still have it sitting in its stored
@@ -132,22 +108,86 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                       </span>
                     ))
                 )}
-              </div>
-              <p className="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {t('roles.usersAssigned', { count: holders })}
-              </p>
-            </div>
-          );
-        })}
+    </>
+  );
 
-        {roles.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('roles.empty')}</span>
-          </div>
-        )}
+  return (
+    <div id="role-management-view" className="space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('roles.intro')}
+        </p>
+        <div className="flex items-center gap-3 shrink-0">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <button
+          onClick={() => { setEditingRole(null); setIsModalOpen(true); }}
+          className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{t('roles.add')}</span>
+        </button>
+        </div>
       </div>
-      {roles.length > 0 && <TablePagination bare pinToBottom {...pager} />}
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && roles.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.name') }, { label: ts('listCol.pages') }, { label: ts('listCol.users'), align: 'right' },
+              { label: ts('listCol.actions') },
+            ]}
+            rows={pagedRows}
+            rowKey={(role) => role.id}
+            cells={(role) => [
+              <span className="font-medium inline-flex items-center gap-1.5">
+                {role.name}
+                {role.isBuiltIn && <span title={t('roles.builtIn')}><Shield className="w-4 h-4 text-sky-500" /></span>}
+              </span>,
+              <div className="flex flex-wrap gap-1.5">{pageChips(role)}</div>,
+              usersInRole(role.slug),
+              actions(role, usersInRole(role.slug)),
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {pagedRows.map((role) => {
+            const holders = usersInRole(role.slug);
+            return (
+              <div key={role.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
+                    {role.name}
+                    {role.isBuiltIn && <span title={t('roles.builtIn')}><Shield className="w-4 h-4 text-sky-500" /></span>}
+                  </h4>
+                  {actions(role, holders)}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {pageChips(role)}
+                </div>
+                <p className="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  {t('roles.usersAssigned', { count: holders })}
+                </p>
+              </div>
+            );
+          })}
+
+          {roles.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('roles.empty')}</span>
+            </div>
+          )}
+        </div>
+        )}
+        {roles.length > 0 && <TablePagination pinToBottom {...pager} />}
+      </div>
 
       <AddRoleModal
         isOpen={isModalOpen}

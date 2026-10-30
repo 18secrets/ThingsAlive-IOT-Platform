@@ -108,6 +108,40 @@
     "cards": "कार्ड दृश्य",
     "list": "सूची दृश्य"
   },
+  "listCol": {
+    "actions": "कार्रवाई",
+    "address": "पता",
+    "code": "कोड",
+    "connection": "कनेक्शन",
+    "contact": "संपर्क",
+    "created": "बनाया गया",
+    "details": "विवरण",
+    "email": "ईमेल",
+    "enabled": "चालू",
+    "expression": "सूत्र",
+    "failureModes": "विफलता के प्रकार",
+    "firedAt": "कब हुआ",
+    "machine": "मशीन",
+    "name": "नाम",
+    "needs": "ज़रूरतें",
+    "pages": "पेज",
+    "phone": "फ़ोन",
+    "risk": "जोखिम",
+    "role": "भूमिका",
+    "scope": "लागू",
+    "severity": "गंभीरता",
+    "signIn": "साइन-इन",
+    "signals": "सिग्नल",
+    "site": "साइट",
+    "state": "स्थिति",
+    "status": "स्थिति",
+    "summary": "सारांश",
+    "type": "मशीन प्रकार",
+    "users": "उपयोगकर्ता",
+    "version": "संस्करण",
+    "partition": "विभाजन",
+    "droppedAt": "हटाया गया"
+  },
   "export": {
     "csv": "CSV निर्यात करें",
     "title": "फ़िल्टर लागू करके इस सूची की हर पंक्ति डाउनलोड करें"
@@ -123,6 +157,8 @@
     "priorityHigh": "सबसे ऊँची प्राथमिकता पहले",
     "availabilityLow": "सबसे कम उपलब्धता पहले",
     "availabilityHigh": "सबसे अधिक उपलब्धता पहले",
-    "downtimeHigh": "सबसे अधिक डाउनटाइम पहले"
+    "downtimeHigh": "सबसे अधिक डाउनटाइम पहले",
+    "severityHigh": "सबसे गंभीर पहले",
+    "attentionFirst": "ध्यान चाहिए वाले पहले"
   }
 }

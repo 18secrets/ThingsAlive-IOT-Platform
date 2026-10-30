@@ -14,7 +14,9 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, GeoJsonPolygon, IndustryType, IndustryTypeInput, Plant, PlantInput, UnmatchedIndustry,
 } from '../../lib/api';
-import { TablePagination, usePagination } from '../common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { AddIndustryTypeModal } from './AddIndustryTypeModal';
 import { AddPlantModal } from './AddPlantModal';
 import { EditPlantBoundaryModal } from './EditPlantBoundaryModal';
@@ -40,6 +42,8 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
   onRematchIndustries,
 }) => {
   const { t } = useTranslation('equipment');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('admin-industry');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | IndustryType['status']>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,6 +99,40 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
 
   const { pageItems: pagedItems, ...pager } = usePagination(filteredItems);
 
+  // One set of buttons for the card and the list row, so the two views never offer different things.
+  const actions = (item: IndustryType) => (
+    <div className="flex items-center gap-1.5">
+      {onUpdateIndustryType && (
+        <button
+          onClick={() => openModal(item)}
+          disabled={busyId === item.id}
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer disabled:opacity-50"
+          title={t('industry.edit')}
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {onDeleteIndustryType && (
+        <button
+          onClick={() => handleDelete(item)}
+          disabled={busyId === item.id}
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
+          title={t('industry.delete')}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+  const createdOn = (item: IndustryType) =>
+    new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const statusLabel = (item: IndustryType) => (
+    <span className={`font-semibold text-xs ${item.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+      • {item.status === 'active' ? t('status.active') : t('status.inactive')}
+    </span>
+  );
+
   return (
     <div id="industry-type-management-view" className="space-y-3">
 
@@ -130,16 +168,19 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
         />
         </div>
 
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         {onCreateIndustryType && (
           <button
             id="add-industry-type-btn"
             onClick={() => openModal(null)}
-            className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+            className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>{t('industry.add')}</span>
           </button>
         )}
+        </div>
       </div>
 
       {/* Tool mappings saved before industry types existed carry free text. It is kept,
@@ -178,68 +219,63 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
         </div>
       )}
 
-      {/* Industry Type Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedItems.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
-                  #{item.code}
-                </span>
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && filteredItems.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.code') }, { label: ts('listCol.name') }, { label: ts('listCol.created') },
+              { label: ts('listCol.status') }, { label: ts('listCol.actions') },
+            ]}
+            rows={pagedItems}
+            rowKey={(item) => item.id}
+            cells={(item) => [
+              <span className="font-mono">{item.code}</span>,
+              <span className="font-medium">{item.name}</span>,
+              createdOn(item),
+              statusLabel(item),
+              actions(item),
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pagedItems.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
+                    #{item.code}
+                  </span>
 
-                <div className="flex items-center gap-1.5">
-                  {onUpdateIndustryType && (
-                    <button
-                      onClick={() => openModal(item)}
-                      disabled={busyId === item.id}
-                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer disabled:opacity-50"
-                      title={t('industry.edit')}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
-                  {onDeleteIndustryType && (
-                    <button
-                      onClick={() => handleDelete(item)}
-                      disabled={busyId === item.id}
-                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
-                      title={t('industry.delete')}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  {actions(item)}
                 </div>
+
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
+                  {item.name}
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {t('industry.created', { date: createdOn(item) })}
+                </p>
               </div>
 
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
-                {item.name}
-              </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {t('industry.created', { date: new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) })}
-              </p>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
+                {statusLabel(item)}
+              </div>
             </div>
+          ))}
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
-              <span className={`font-semibold text-xs ${item.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                • {item.status === 'active' ? t('status.active') : t('status.inactive')}
-              </span>
+          {filteredItems.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('industry.empty')}</span>
             </div>
-          </div>
-        ))}
-
-        {filteredItems.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('industry.empty')}</span>
-          </div>
+          )}
+        </div>
         )}
+        {filteredItems.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
-      {filteredItems.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddIndustryTypeModal
         key={modalKey}
@@ -272,6 +308,8 @@ export const PlantView: React.FC<PlantViewProps> = ({
   plants, error, onCreatePlant, onUpdatePlant, onToggleStatus, onOpenSitePage, onSetPlantBoundary,
 }) => {
   const { t } = useTranslation('equipment');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('admin-plant');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
@@ -287,6 +325,63 @@ export const PlantView: React.FC<PlantViewProps> = ({
   }, [plants, searchTerm]);
 
   const { pageItems: pagedItems, ...pager } = usePagination(filteredItems);
+
+  // The card's controls, shared with the list row.
+  const statusToggle = (plant: Plant) => (
+    <button
+      onClick={() => onToggleStatus(plant.id, plant.status)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+        plant.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
+      }`}
+      title={plant.status === 'active' ? t('plants.retireSite') : t('plants.reopenSite')}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+          plant.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+  const editButton = (plant: Plant) => (
+    <button
+      onClick={() => {
+        setEditingPlant(plant);
+        setIsModalOpen(true);
+      }}
+      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+      title={t('plants.edit')}
+    >
+      <Edit2 className="w-3.5 h-3.5" />
+    </button>
+  );
+  const sitePageButton = (plant: Plant) => (
+    <button
+      onClick={() => onOpenSitePage(plant.id)}
+      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
+    >
+      <LayoutDashboard className="w-3.5 h-3.5" />
+      <span>{t('plants.sitePage')}</span>
+    </button>
+  );
+  const boundaryButton = (plant: Plant) => (
+    <button
+      onClick={() => setBoundaryPlant(plant)}
+      className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+        plant.boundary
+          ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
+          : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
+      }`}
+      title={plant.boundary ? t('plants.boundarySetTitle') : t('plants.noBoundaryTitle')}
+    >
+      <Hexagon className="w-3.5 h-3.5" />
+      <span>{plant.boundary ? t('plants.boundarySet') : t('plants.setBoundary')}</span>
+    </button>
+  );
+  const statusLabel = (plant: Plant) => (
+    <span className={`font-semibold text-xs ${plant.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+      • {plant.status === 'active' ? t('status.active') : t('status.retired')}
+    </span>
+  );
 
   return (
     <div id="plant-management-view" className="space-y-3">
@@ -304,17 +399,20 @@ export const PlantView: React.FC<PlantViewProps> = ({
           />
         </div>
 
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           id="add-plant-btn"
           onClick={() => {
             setEditingPlant(null);
             setIsModalOpen(true);
           }}
-          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+          className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t('plants.add')}</span>
         </button>
+        </div>
       </div>
 
       {error && (
@@ -324,96 +422,76 @@ export const PlantView: React.FC<PlantViewProps> = ({
         </div>
       )}
 
-      {/* Plant Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedItems.map((plant) => (
-          <div
-            key={plant.id}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
-                  #{plant.code}
-                </span>
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && filteredItems.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.code') }, { label: ts('listCol.name') }, { label: ts('listCol.address') },
+              { label: ts('listCol.status') }, { label: ts('listCol.actions'), width: 360 },
+            ]}
+            rows={pagedItems}
+            rowKey={(plant) => plant.id}
+            cells={(plant) => [
+              <span className="font-mono">{plant.code}</span>,
+              <span className="font-medium">{plant.name}</span>,
+              plant.address ?? '—',
+              statusLabel(plant),
+              <div className="flex flex-wrap items-center gap-1.5">
+                {statusToggle(plant)}{editButton(plant)}{sitePageButton(plant)}{boundaryButton(plant)}
+              </div>,
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pagedItems.map((plant) => (
+            <div
+              key={plant.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
+                    #{plant.code}
+                  </span>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onToggleStatus(plant.id, plant.status)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
-                      plant.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
-                    }`}
-                    title={plant.status === 'active' ? t('plants.retireSite') : t('plants.reopenSite')}
-                  >
-                    <span
-                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                        plant.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setEditingPlant(plant);
-                      setIsModalOpen(true);
-                    }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={t('plants.edit')}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {statusToggle(plant)}
+                    {editButton(plant)}
+                  </div>
                 </div>
+
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
+                  {plant.name}
+                </h4>
+                {plant.address && (
+                  <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-rose-500" />
+                    {plant.address}
+                  </p>
+                )}
               </div>
 
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
-                {plant.name}
-              </h4>
-              {plant.address && (
-                <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-rose-500" />
-                  {plant.address}
-                </p>
-              )}
-            </div>
+              <div className="grid grid-cols-2 gap-2">
+                {sitePageButton(plant)}
+                {boundaryButton(plant)}
+              </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => onOpenSitePage(plant.id)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>{t('plants.sitePage')}</span>
-              </button>
-              <button
-                onClick={() => setBoundaryPlant(plant)}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
-                  plant.boundary
-                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
-                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
-                }`}
-                title={plant.boundary ? t('plants.boundarySetTitle') : t('plants.noBoundaryTitle')}
-              >
-                <Hexagon className="w-3.5 h-3.5" />
-                <span>{plant.boundary ? t('plants.boundarySet') : t('plants.setBoundary')}</span>
-              </button>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
+                {statusLabel(plant)}
+              </div>
             </div>
+          ))}
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400">
-              <span className={`font-semibold text-xs ${plant.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                • {plant.status === 'active' ? t('status.active') : t('status.retired')}
-              </span>
+          {filteredItems.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('plants.empty')}</span>
             </div>
-          </div>
-        ))}
-
-        {filteredItems.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('plants.empty')}</span>
-          </div>
+          )}
+        </div>
         )}
+        {filteredItems.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
-      {filteredItems.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       {/* No delete here — the API only ever retires a site, since anything
           that once stood there (work orders, alerts) still needs it to exist. */}
