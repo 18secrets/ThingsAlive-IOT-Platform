@@ -7,6 +7,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { statusTone, severityTone } from '../components/common/statusTone';
 import { ExportCsvButton } from '../components/common/ExportCsvButton';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
@@ -15,9 +16,7 @@ import {
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 
-const SEVERITY_TONE: Record<AlertRuleSeverity, 'slate' | 'sky' | 'amber' | 'rose'> = {
-  none: 'slate', low: 'sky', medium: 'sky', high: 'amber', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
 // The real backend whitelist for POST/PATCH /alerts/rules (alert.controller.ts's own
 // TRIGGERS) excludes fuel-loss and chain-origin from tenant-authored rules entirely —
@@ -184,7 +183,7 @@ export const AlertsPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+                  <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
                   <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
                   {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
                 </div>
@@ -239,8 +238,8 @@ export const AlertsPage: React.FC = () => {
               return (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
-                    <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
+                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
+                    <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{name}</p>

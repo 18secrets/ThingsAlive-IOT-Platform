@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,9 +21,7 @@ import {
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
 
-const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
-  none: 'emerald', low: 'emerald', medium: 'amber', high: 'rose', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   normal: 'emerald', warning: 'amber', critical: 'rose', unscored: 'slate',
 };
@@ -266,7 +265,7 @@ export const ThingsCareDetailPage: React.FC = () => {
             {predictions.map((p) => {
               const occurred = p.occurredAt ? new Date(p.occurredAt) : null;
               const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString() : '—';
-              const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE[p.severity] : 'slate';
+              const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE(p.severity) : 'slate';
               const signals = (p.signals ?? []).slice().sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9));
               const healthy = signals.filter((s) => s.state === 'normal').length;
               const abnormal = signals.filter((s) => s.state === 'warning' || s.state === 'critical');

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
@@ -14,9 +15,7 @@ import {
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
 
-const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'rose' | 'slate'> = {
-  none: 'emerald', low: 'sky', medium: 'amber', high: 'rose', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
 /**
  * Live Predictions on the backend: the account's prediction scenarios, and each
@@ -158,7 +157,7 @@ export const LivePredictionsPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[s.severity]}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone={SEVERITY_TONE(s.severity)}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
                   <Chip tone="slate">{t('scenarios.tier', { tier: s.tier })}</Chip>
                   <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
                 </div>
@@ -202,7 +201,7 @@ export const LivePredictionsPage: React.FC = () => {
                 <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{m.name ?? m.externalId}</h4>
-                    {worst && <Chip tone={SEVERITY_TONE[worst.severity]}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip>}
+                    {worst && <Chip tone={SEVERITY_TONE(worst.severity)}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip>}
                   </div>
                   {p === undefined ? (
                     <p className="text-xs text-slate-400">{t('common.loading')}</p>

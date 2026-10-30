@@ -6,6 +6,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { statusTone } from '../components/common/statusTone';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
@@ -376,7 +377,7 @@ export const WorkOrdersPage: React.FC = () => {
               <button type="button" onClick={() => openMachine(o)} className="hover:text-sky-600 hover:underline cursor-pointer">{equipmentName(o.sourceSystem, o.externalId)}</button>
               <ConnectionBadge state={connectionOf(o.externalId)} />
             </span>,
-            <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+            <Chip tone={statusTone(o.status)}>
               {t(`status.${o.status}`, { defaultValue: o.status })}
             </Chip>,
             o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
@@ -391,7 +392,7 @@ export const WorkOrdersPage: React.FC = () => {
             <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-slate-400">{o.reference}</span>
-                <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+                <Chip tone={statusTone(o.status)}>
                   {t(`status.${o.status}`, { defaultValue: o.status })}
                 </Chip>
               </div>

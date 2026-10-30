@@ -1,4 +1,5 @@
 import React from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
@@ -18,9 +19,7 @@ import {
 const DAY = 86_400_000;
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
 
-const SEVERITY_TONE: Record<string, 'rose' | 'amber' | 'sky' | 'emerald' | 'slate'> = {
-  critical: 'rose', high: 'rose', medium: 'amber', low: 'sky', none: 'emerald',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
 /**
  * One machine at a glance, from live data (the live dashboard's drill-down): status,
@@ -108,11 +107,11 @@ export const ThingDetailLivePage: React.FC = () => {
         <Panel title={t('thingLive.predictions')} icon={<Activity className="w-4 h-4" />} slot={predictions} empty={t('thingLive.predictionsEmpty')}
           render={(d) => d.map((x) => (
             <Row key={x.id} left={x.clientScenarioSlug}
-              right={<><Chip tone={SEVERITY_TONE[x.severity] ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip><span className="text-slate-400">{t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}</span></>} />
+              right={<><Chip tone={SEVERITY_TONE(x.severity) ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip><span className="text-slate-400">{t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}</span></>} />
           ))} />
         <Panel title={t('thingLive.openAlerts')} icon={<Bell className="w-4 h-4" />} slot={alerts} empty={t('thingLive.openAlertsEmpty')}
           render={(d) => d.map((a) => (
-            <Row key={a.id} left={a.summary} right={<><Chip tone={SEVERITY_TONE[a.severity] ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip><span className="text-slate-400">{t(`state.${a.state}`, { defaultValue: a.state })}</span></>} />
+            <Row key={a.id} left={a.summary} right={<><Chip tone={SEVERITY_TONE(a.severity) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip><span className="text-slate-400">{t(`state.${a.state}`, { defaultValue: a.state })}</span></>} />
           ))} />
         <Panel title={t('thingLive.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} slot={orders} empty={t('thingLive.openWorkOrdersEmpty')}
           action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
