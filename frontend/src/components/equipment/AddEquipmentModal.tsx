@@ -230,6 +230,13 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                   {t('equipmentForm.noClasses')}
                 </p>
               )}
+              {/* A machine with no library class registered silently as Unclassified, with
+                  nothing saying what it would not get or what to do next (test report OB-6). */}
+              {!equipmentClassSlug && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
+                  {t('equipmentForm.noLibraryClass')}
+                </p>
+              )}
             </div>
 
             <div>

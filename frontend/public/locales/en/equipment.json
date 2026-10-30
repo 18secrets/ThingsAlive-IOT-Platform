@@ -279,7 +279,8 @@
     "serviceTier": "Service Tier",
     "registering": "Registering…",
     "register": "Register Equipment",
-    "codeTaken": "This code is already used by {{name}}."
+    "codeTaken": "This code is already used by {{name}}.",
+    "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library."
   },
   "bindings": {
     "title": "Signal Bindings",
