@@ -7,6 +7,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { ExportCsvButton } from '../components/common/ExportCsvButton';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
@@ -197,7 +198,18 @@ export const AlertsPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-1">{t('events.heading')}</h3>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
+          <ExportCsvButton
+            name="alerts"
+            disabled={!events.length}
+            headers={['fired', 'machine', 'rule', 'severity', 'state', 'summary', 'acknowledgedAt'].map((c) => t(`events.col.${c}`))}
+            rows={() => events.map((e) => [
+              e.firedAt, equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
+              e.ruleName, t(`severity.${e.severity}`), t(`state.${e.state}`), e.summary, e.acknowledgedAt,
+            ])}
+          />
+        </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
         {loading ? (

@@ -105,5 +105,9 @@
   "viewMode": {
     "cards": "Card view",
     "list": "List view"
+  },
+  "export": {
+    "csv": "Export CSV",
+    "title": "Download every row this list is showing, with its filters applied"
   }
 }

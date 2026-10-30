@@ -9,6 +9,7 @@ import {
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
+import { ExportCsvButton } from '../common/ExportCsvButton';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -218,6 +219,16 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <ExportCsvButton
+            name="equipment"
+            disabled={!filteredList.length}
+            headers={['code', 'name', 'class', 'plant', 'manufacturer', 'model', 'serial', 'tier', 'status'].map((c) => t(`equipmentList.col.${c}`))}
+            rows={() => filteredList.map((e) => [
+              e.externalId, e.name, e.equipmentClassSlug ? (classBySlug.get(e.equipmentClassSlug)?.name ?? e.equipmentClassSlug) : '',
+              e.plantId ? (plantById.get(e.plantId)?.name ?? '') : '', e.manufacturer, e.modelNumber, e.serialNumber, e.tier,
+              t(`status.${e.status}`),
+            ])}
+          />
           <button
             id="import-equipment-btn"
             disabled={importing}

@@ -59,7 +59,16 @@
     "empty": "No open alerts.",
     "acknowledge": "Acknowledge",
     "resolve": "Resolve",
-    "viewMachine": "View machine"
+    "viewMachine": "View machine",
+    "col": {
+      "fired": "Fired at",
+      "machine": "Machine",
+      "rule": "Rule",
+      "severity": "Severity",
+      "state": "State",
+      "summary": "Summary",
+      "acknowledgedAt": "Acknowledged at"
+    }
   },
   "form": {
     "editTitle": "Edit alert rule",

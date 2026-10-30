@@ -7,6 +7,7 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ApiError, DeviceHealthWindow, DeviceLinkState, EquipmentProfile, MyDevice, apiGetDeviceHealth } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
+import { ExportCsvButton } from '../common/ExportCsvButton';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -91,6 +92,12 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
             size="sm"
           />
         </div>
+        <ExportCsvButton
+          name="devices"
+          disabled={!filtered.length}
+          headers={['IMEI', t('devices.col.model'), t('devices.col.state'), t('devices.col.fittedTo')]}
+          rows={() => filtered.map((d) => [d.imei, d.model, t(`deviceState.${d.state}`), equipmentName(d.equipmentExternalId)])}
+        />
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">

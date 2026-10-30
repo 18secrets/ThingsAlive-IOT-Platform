@@ -8,6 +8,7 @@ import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { ExportCsvButton } from '../components/common/ExportCsvButton';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus,
@@ -298,7 +299,17 @@ export const WorkOrdersPage: React.FC = () => {
         />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2">
+        <ExportCsvButton
+          name="work-orders"
+          disabled={!visible.length}
+          headers={['reference', 'title', 'machine', 'status', 'assignee', 'priority', 'due'].map((c) => t(`listCol.${c}`))}
+          rows={() => visible.map((o) => [
+            o.reference, o.title, equipmentName(o.sourceSystem, o.externalId), t(`status.${o.status}`, { defaultValue: o.status }),
+            o.assignedToUserId ? personName(o.assignedToUserId) : '', t(`priority.${o.priority}`, { defaultValue: o.priority }),
+            o.dueAt ? o.dueAt.slice(0, 10) : '',
+          ])}
+        />
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
 

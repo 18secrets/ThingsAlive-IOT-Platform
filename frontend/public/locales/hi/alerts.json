@@ -59,7 +59,16 @@
     "empty": "कोई खुला अलर्ट नहीं।",
     "acknowledge": "स्वीकार करें",
     "resolve": "हल करें",
-    "viewMachine": "मशीन देखें"
+    "viewMachine": "मशीन देखें",
+    "col": {
+      "fired": "कब आया",
+      "machine": "मशीन",
+      "rule": "नियम",
+      "severity": "गंभीरता",
+      "state": "स्थिति",
+      "summary": "सारांश",
+      "acknowledgedAt": "स्वीकार किया गया"
+    }
   },
   "form": {
     "editTitle": "अलर्ट नियम संपादित करें",
