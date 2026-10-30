@@ -86,7 +86,9 @@ export const TablePagination: React.FC<{
   compact?: boolean;
   /** Keep the footer at the foot of the screen when the list is short (see usePinToBottom). */
   pinToBottom?: boolean;
-}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact, pinToBottom = false }) => {
+  /** Before the first answer: the count is not known yet, and a 0 would say "none" (test report MAJ-6). */
+  loading?: boolean;
+}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact, pinToBottom = false, loading }) => {
   const { t } = useTranslation('shared');
   const pin = usePinToBottom(pinToBottom);
   return (
@@ -101,7 +103,7 @@ export const TablePagination: React.FC<{
       compact ? '' : bare ? 'border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900' : 'border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30'
     }`}>
       <div>
-        {t('pagination.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{total}</span>
+        {t('pagination.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{loading ? '—' : total}</span>
       </div>
       <div className="flex items-center gap-4 flex-wrap justify-center">
         {!compact && <div className="flex items-center gap-2">

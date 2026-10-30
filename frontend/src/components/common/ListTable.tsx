@@ -1,6 +1,7 @@
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { Table } from 'rsuite';
+import type { SortState } from '../../lib/useSort';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -12,7 +13,21 @@ export interface ListColumn {
   width?: number;
   /** Narrowest a shared-width column may get; past it the table scrolls sideways instead. */
   minWidth?: number;
+  /** Makes the header a sort control for that key; the page sorts its full set. */
+  sortKey?: string;
 }
+
+/** A header that sorts by its key; shared with the admin tables that draw their own <th>. */
+export const SortLabel: React.FC<{ label: string; sortKey: string; sort?: SortState<string>; onSort: (key: string) => void }> = ({
+  label, sortKey, sort, onSort,
+}) => (
+  <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center gap-1 cursor-pointer hover:text-sky-600 dark:hover:text-sky-400">
+    {label}
+    {sort?.key === sortKey
+      ? (sort.dir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
+      : <ChevronDown className="w-3 h-3 opacity-25" />}
+  </button>
+);
 
 type Row<T> = { key: string; row: T };
 
@@ -26,7 +41,7 @@ const fromControl = (event: React.MouseEvent) =>
  * moving to. Every row opens what its card opens, so switching view never changes what
  * a click does; the buttons in an actions column act on their own.
  */
-export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare }: {
+export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort, onSort }: {
   columns: ListColumn[];
   rows: T[];
   rowKey: (row: T) => string;
@@ -34,6 +49,8 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare }: {
   onOpen?: (row: T) => void;
   /** Inside a card that already has a border: no frame of its own. */
   bare?: boolean;
+  sort?: SortState<string>;
+  onSort?: (key: string) => void;
 }) {
   const data: Row<T>[] = rows.map((row) => ({ key: rowKey(row), row }));
   return (
@@ -55,7 +72,9 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare }: {
             verticalAlign="middle"
             fullText={false}
           >
-            <HeaderCell className="font-semibold">{c.label}</HeaderCell>
+            <HeaderCell className="font-semibold">
+              {c.sortKey && onSort ? <SortLabel label={c.label} sortKey={c.sortKey} sort={sort} onSort={onSort} /> : c.label}
+            </HeaderCell>
             <Cell>{(r: Row<T>) => cells(r.row)[i]}</Cell>
           </Column>
         ))}

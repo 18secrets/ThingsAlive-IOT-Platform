@@ -50,6 +50,15 @@ describe('the signal-threshold window', () => {
     expect(firing!.evidence).toMatchObject({ worstValue: 120, direction: 'above', bound: 105, breaches: 6 });
   });
 
+  it('the sentence rounds the worst reading to two decimals; the evidence keeps it exact', () => {
+    const readings = [...[9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map((m) => r('coolant_temp_c', 397.4071110816279, m))];
+    const firing = evaluateRule({
+      trigger: 'signal-threshold', params: { signal: 'coolant_temp_c', max: 105 }, readings, predictions: [],
+    });
+    expect(firing!.summary).toMatch(/worst was 397\.41 degC$/);
+    expect(firing!.evidence).toMatchObject({ worstValue: 397.4071110816279 });
+  });
+
   it('1c. one short of the boundary — five of the last ten breached — does not fire', () => {
     const readings = [
       ...[9, 8, 7, 6, 3].map((m) => r('coolant_temp_c', 95, m)),
@@ -160,6 +169,18 @@ describe('the signal-threshold window', () => {
       .toMatch(/lookback_readings has to be a whole number/);
     expect(validateParams('signal-threshold', { signal: 'x', max: 1, lookbackReadings: 1 })).toBeNull();
     expect(validateParams('signal-threshold', { signal: 'x', max: 1, lookbackReadings: 1000 })).toBeNull();
+  });
+
+  it('a bound that is not a number is refused at write time — compared against a reading it is never true, so the rule could never fire', () => {
+    // The form now refuses "abc" too; this is the API taking it directly.
+    expect(validateParams('signal-threshold', { signal: 'x', max: 'abc' as unknown as number }))
+      .toMatch(/maximum has to be a number/);
+    expect(validateParams('signal-threshold', { signal: 'x', max: 10, min: 'xyz' as unknown as number }))
+      .toMatch(/minimum has to be a number/);
+    expect(validateParams('signal-threshold', { signal: 'x', max: Infinity })).toMatch(/maximum has to be a number/);
+    // A negative bound is a real one: ambient and coolant temperatures go below zero.
+    expect(validateParams('signal-threshold', { signal: 'x', min: -10, max: 10 })).toBeNull();
+    expect(validateParams('signal-threshold', { signal: 'x', min: 100, max: 10 })).toMatch(/minimum has to be below the maximum/);
   });
 
   it('8b. requiredBreaches below 1, non-integer, or above this rule\'s own lookbackReadings is refused; the boundary values are allowed', () => {

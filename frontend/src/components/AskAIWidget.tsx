@@ -10,7 +10,9 @@ interface AskAIWidgetProps {
 }
 
 // A chip sends its text in the reader's language; the model answers in it.
-const QUICK_PROMPTS = ['offline', 'dust', 'volvo'];
+// Questions about whatever fleet the account has; two named equipment this tenant
+// does not own (a dust collector, a Volvo EC210) read as a demo of somebody else's (MIN-10).
+const QUICK_PROMPTS = ['offline', 'highestRisk', 'serviceDue'];
 
 const HELP_TOPICS = [
   { icon: LayoutGrid, key: 'admin' },

@@ -11,17 +11,17 @@
   "backToClients": "Back to Clients",
   "filters": {
     "button": "Filters",
-    "selectedEquipment": "Selected equipment",
-    "allMatchingEquipment": "All matching equipment",
-    "title": "Filter Equipment",
+    "selectedEquipment": "Selected machine",
+    "allMatchingEquipment": "All matching machines",
+    "title": "Filter machines",
     "intro": "Choose your scope, then apply.",
-    "sitePlant": "Site / Plant",
-    "allSitesPlants": "All sites / plants",
+    "sitePlant": "Site",
+    "allSitesPlants": "All sites",
     "equipmentClass": "Equipment class",
     "allClasses": "All classes",
     "connectionStatus": "Connection status",
     "allConnections": "All connections",
-    "findEquipment": "Find equipment",
+    "findEquipment": "Find a machine",
     "findPlaceholder": "Name or machine code",
     "clear": "Clear selections",
     "apply": "Apply filters"
@@ -57,12 +57,14 @@
     "prompts": {
       "offline": "Which devices are offline?",
       "dust": "Show Dust Collector status",
-      "volvo": "Volvo EC210 service status"
+      "volvo": "Volvo EC210 service status",
+      "highestRisk": "Which machine has the highest risk right now?",
+      "serviceDue": "Which machines are due for service?"
     },
     "topics": {
       "admin": {
         "title": "Admin Console & Sub-tabs",
-        "body": "Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Plants, and Tool Mappings."
+        "body": "Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Sites, and Tool Mappings."
       },
       "equipment": {
         "title": "Equipment & Categorization",
@@ -139,5 +141,22 @@
     "version": "Version",
     "partition": "Partition",
     "droppedAt": "Dropped at"
+  },
+  "export": {
+    "csv": "Export CSV",
+    "title": "Download every row this list is showing, with its filters applied"
+  },
+  "sort": {
+    "riskHigh": "Highest risk first",
+    "riskLow": "Lowest risk first",
+    "nameAz": "Name A–Z",
+    "codeAz": "Code A–Z",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "dueSoonest": "Due soonest",
+    "priorityHigh": "Highest priority first",
+    "availabilityLow": "Lowest availability first",
+    "availabilityHigh": "Highest availability first",
+    "downtimeHigh": "Most downtime first"
   }
 }

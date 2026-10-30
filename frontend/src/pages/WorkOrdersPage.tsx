@@ -1,14 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { statusTone } from '../components/common/statusTone';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { ExportCsvButton } from '../components/common/ExportCsvButton';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, AssetForecast, EditWorkOrderInput, EquipmentProfile, FleetLinkRow, Plant, RaiseWorkOrderInput, ServiceStatus,
@@ -22,6 +27,8 @@ const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'eme
 };
 
 const STATUS_OPTIONS: WorkOrderStatus[] = ['created', 'in-progress', 'completed', 'cancelled'];
+type WorkOrderSort = 'reference' | 'due' | 'priority' | 'status' | 'machine';
+const PRIORITY_RANK: Record<WorkOrderPriority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
 const STATUS_STYLE: Record<WorkOrderStatus, string> = {
   created: 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
   'in-progress': 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
@@ -31,8 +38,10 @@ const STATUS_STYLE: Record<WorkOrderStatus, string> = {
 const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 
 export const WorkOrdersPage: React.FC = () => {
-  const { t } = useTranslation('workOrders');
+  const { t } = useTranslation(['workOrders', 'shared']);
   const [viewMode, setViewMode] = useViewMode('work-orders');
+  const navigate = useNavigate();
+  const { sort, setSort, toggle } = useSort<WorkOrderSort>({ key: 'reference', dir: 'desc' });
   usePageHeader({ title: t('translation:pages.workOrders.title'), subtitle: t('translation:pages.workOrders.subtitle') });
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -43,6 +52,7 @@ export const WorkOrdersPage: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | WorkOrderPriority>('all');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
@@ -81,8 +91,13 @@ export const WorkOrdersPage: React.FC = () => {
 
   // Names for ids. Somebody no longer active (suspended, or never joined) still shows
   // up in old history, so an unknown id reads as "someone else" rather than a raw uuid.
+  // The platform's own actors ("system:prediction") are named for what they are; read
+  // as "someone else" they made an automatic job look like an unknown person's (MIN-8).
   const personName = (userId: string | null) =>
-    userId ? people.find((p) => p.id === userId)?.fullName ?? t('people.someoneElse') : t('people.nobody');
+    !userId ? t('people.nobody')
+      : userId.startsWith('system:') ? t(`people.system.${userId.slice(7)}`, { defaultValue: t('people.system.other') })
+      : people.find((p) => p.id === userId)?.fullName ?? t('people.someoneElse');
+  const openMachine = (o: WorkOrder) => navigate(`/dashboard/${encodeURIComponent(o.sourceSystem)}/${encodeURIComponent(o.externalId)}`);
 
   const profileOf = (sourceSystem: string, externalId: string) =>
     equipment.find((e) => e.sourceSystem === sourceSystem && e.externalId === externalId);
@@ -121,22 +136,31 @@ export const WorkOrdersPage: React.FC = () => {
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
-    return orders.filter((o) => {
+    const matching = orders.filter((o) => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
       const matchesSelected = selectedKey === 'all' || key === selectedKey;
-      const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+      const matchesStatus = (statusFilter === 'all' || o.status === statusFilter)
+        && (priorityFilter === 'all' || o.priority === priorityFilter);
       const matchesPlant = scope.plantId === 'all' || profile?.plantId === scope.plantId;
       const matchesClass = scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug;
       const matchesConnection = scope.connection === 'all' || connectionOf(o.externalId) === scope.connection;
       const matchesQuery = !term || o.title.toLowerCase().includes(term) || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
       return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery;
     });
+    // By reference, not the API's created-at: seeded and imported jobs carry backdated
+    // creation times, which put WO-000003 ahead of 6, 5 and 4 (test report MIN-8).
+    return sortRows(matching, sort, {
+      reference: (o) => o.reference, due: (o) => o.dueAt, priority: (o) => PRIORITY_RANK[o.priority],
+      status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, scope, selectedKey]);
+  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
+    // Start has no note to ask for, which made it the one transition a single click committed.
+    if (action === 'start' && !window.confirm(t('prompts.start', { reference: order.reference }))) return;
     if (action !== 'start') {
       const prompt = { complete: t('prompts.complete'), cancel: t('prompts.cancel'), reopen: t('prompts.reopen') }[action];
       const entered = window.prompt(prompt);
@@ -230,7 +254,7 @@ export const WorkOrdersPage: React.FC = () => {
     <div id="work-orders-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-bold">{t('translation:sidebar.workOrders')}</h2>
+          <h2 className="text-xl font-bold">{t('hero.heading')}</h2>
           <p className="text-sm text-sky-100">{t('hero.subtitle')}</p>
         </div>
         <button
@@ -298,9 +322,37 @@ export const WorkOrdersPage: React.FC = () => {
           cleanable={false}
           className="min-w-[180px]"
         />
+        <SelectPicker
+          data={[{ label: t('filters.allPriorities'), value: 'all' }, ...PRIORITY_OPTIONS.map((p) => ({ label: t(`priority.${p}`, { defaultValue: p }), value: p }))]}
+          value={priorityFilter}
+          onChange={(value) => setPriorityFilter((value ?? 'all') as 'all' | WorkOrderPriority)}
+          searchable={false}
+          cleanable={false}
+          className="min-w-[160px]"
+        />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2 flex-wrap">
+        <SortSelect
+          sort={sort}
+          onChange={setSort}
+          options={[
+            { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
+            { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
+            { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
+            { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
+          ]}
+        />
+        <ExportCsvButton
+          name="work-orders"
+          disabled={!visible.length}
+          headers={['reference', 'title', 'machine', 'status', 'assignee', 'priority', 'due'].map((c) => t(`listCol.${c}`))}
+          rows={() => visible.map((o) => [
+            o.reference, o.title, equipmentName(o.sourceSystem, o.externalId), t(`status.${o.status}`, { defaultValue: o.status }),
+            o.assignedToUserId ? personName(o.assignedToUserId) : '', t(`priority.${o.priority}`, { defaultValue: o.priority }),
+            o.dueAt ? o.dueAt.slice(0, 10) : '',
+          ])}
+        />
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
@@ -315,17 +367,22 @@ export const WorkOrdersPage: React.FC = () => {
         ) : viewMode === 'list' ? (
           <ListTable bare
             columns={[
-              { label: t('listCol.reference') }, { label: t('listCol.title') }, { label: t('listCol.machine') },
-              { label: t('listCol.status') }, { label: t('listCol.assignee') }, { label: t('listCol.priority') },
-              { label: t('listCol.due') }, { label: t('listCol.actions') },
+              { label: t('listCol.reference'), sortKey: 'reference' }, { label: t('listCol.title') }, { label: t('listCol.machine'), sortKey: 'machine' },
+              { label: t('listCol.status'), sortKey: 'status' }, { label: t('listCol.assignee') }, { label: t('listCol.priority'), sortKey: 'priority' },
+              { label: t('listCol.due'), sortKey: 'due' }, { label: t('listCol.actions') },
             ]}
+            sort={sort}
+            onSort={(key) => { toggle(key as WorkOrderSort, key === 'priority' ? 'desc' : 'asc'); pager.setPage(1); }}
             rows={pageItems}
             rowKey={(o) => o.id}
             cells={(o) => [
               <span className="font-mono text-slate-400">{o.reference}</span>,
               <span className="font-medium">{o.title}</span>,
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{equipmentName(o.sourceSystem, o.externalId)} <ConnectionBadge state={connectionOf(o.externalId)} /></span>,
-              <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <button type="button" onClick={() => openMachine(o)} className="hover:text-sky-600 hover:underline cursor-pointer">{equipmentName(o.sourceSystem, o.externalId)}</button>
+                <ConnectionBadge state={connectionOf(o.externalId)} />
+              </span>,
+              <Chip tone={statusTone(o.status)}>
                 {t(`status.${o.status}`, { defaultValue: o.status })}
               </Chip>,
               o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
@@ -340,13 +397,15 @@ export const WorkOrdersPage: React.FC = () => {
               <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono text-slate-400">{o.reference}</span>
-                  <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+                  <Chip tone={statusTone(o.status)}>
                     {t(`status.${o.status}`, { defaultValue: o.status })}
                   </Chip>
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400 truncate">{equipmentName(o.sourceSystem, o.externalId)}</p>
+                  <button type="button" onClick={() => openMachine(o)} className="text-sm text-slate-500 dark:text-slate-400 truncate hover:text-sky-600 hover:underline cursor-pointer text-left">
+                    {equipmentName(o.sourceSystem, o.externalId)}
+                  </button>
                   <ConnectionBadge state={connectionOf(o.externalId)} />
                 </div>
                 {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}
@@ -397,6 +456,20 @@ export const WorkOrdersPage: React.FC = () => {
   );
 };
 
+/** The API's own limit (MAX_TITLE_LENGTH); the rest of the detail goes in the description. */
+const MAX_TITLE = 200;
+/** Today as the date input writes it, in the viewer's own calendar. */
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const TitleCounter: React.FC<{ title: string }> = ({ title }) => (
+  <span className={`text-[11px] ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+    {title.length}/{MAX_TITLE}
+  </span>
+);
+
 const CreateWorkOrderForm: React.FC<{
   equipment: EquipmentProfile[];
   initial?: { equipmentKey: string; title: string } | null;
@@ -409,13 +482,15 @@ const CreateWorkOrderForm: React.FC<{
   const [priority, setPriority] = useState<WorkOrderPriority>('normal');
   const [description, setDescription] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const pastDue = !!dueAt && dueAt < todayLocal();
+  const canCreate = !!title.trim() && title.trim().length <= MAX_TITLE && !!equipmentKey && !pastDue;
 
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim() || !equipmentKey) return;
+        if (!canCreate || !equipmentKey) return;
         const [sourceSystem, externalId] = equipmentKey.split('|');
         onCreate({
           sourceSystem, externalId, title: title.trim(), priority,
@@ -425,7 +500,10 @@ const CreateWorkOrderForm: React.FC<{
       }}
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.task')}</span>
+        <span className="flex items-center justify-between">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.task')}</span>
+          <TitleCounter title={title} />
+        </span>
         <Input required value={title} onChange={(value) => setTitle(value)} placeholder={t('form.taskPlaceholder')} />
       </label>
       <div className="block space-y-1">
@@ -456,10 +534,12 @@ const CreateWorkOrderForm: React.FC<{
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.dueDate')}</span>
           <input
             type="date"
+            min={todayLocal()}
             value={dueAt}
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
+          {pastDue && <span className="text-[11px] text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -470,7 +550,7 @@ const CreateWorkOrderForm: React.FC<{
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
           {t('actions.cancel')}
         </button>
-        <button type="submit" disabled={!equipmentKey} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
+        <button type="submit" disabled={!canCreate} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
           {t('actions.create')}
         </button>
       </div>
@@ -493,13 +573,16 @@ const EditWorkOrderForm: React.FC<{
   const [description, setDescription] = useState(order.description ?? '');
   const [priority, setPriority] = useState<WorkOrderPriority>(order.priority);
   const [dueAt, setDueAt] = useState(order.dueAt ? order.dueAt.slice(0, 10) : '');
+  // Warned, not refused: an overdue job keeps its date when only its title is edited.
+  const movedIntoPast = !!dueAt && dueAt !== (order.dueAt ?? '').slice(0, 10) && dueAt < todayLocal();
+  const canSave = !!title.trim() && title.trim().length <= MAX_TITLE;
 
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim()) return;
+        if (!canSave) return;
         onSave({
           title: title.trim(),
           description: description.trim(),
@@ -509,7 +592,10 @@ const EditWorkOrderForm: React.FC<{
       }}
     >
       <label className="block space-y-1">
-        <span className={FIELD_LABEL}>{t('form.task')}</span>
+        <span className="flex items-center justify-between">
+          <span className={FIELD_LABEL}>{t('form.task')}</span>
+          <TitleCounter title={title} />
+        </span>
         <Input required value={title} onChange={(value) => setTitle(value)} />
       </label>
       <div className="grid grid-cols-2 gap-3">
@@ -532,6 +618,7 @@ const EditWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
+          {movedIntoPast && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -540,7 +627,7 @@ const EditWorkOrderForm: React.FC<{
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className={CANCEL_BTN}>{t('actions.cancel')}</button>
-        <button type="submit" disabled={!title.trim()} className={SAVE_BTN}>{t('actions.save')}</button>
+        <button type="submit" disabled={!canSave} className={SAVE_BTN}>{t('actions.save')}</button>
       </div>
     </form>
   );

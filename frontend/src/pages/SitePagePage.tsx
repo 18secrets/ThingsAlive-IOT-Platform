@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, MapPinned } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { ApiError, SitePage, apiGetSitePage } from '../lib/api';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
@@ -9,15 +10,17 @@ import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidge
 export const SitePagePage: React.FC = () => {
   const { plantId } = useParams<{ plantId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/admin/plant');
   const { t } = useTranslation('equipment');
   const [page, setPage] = useState<SitePage | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   usePageHeader({
+    breadcrumb: t('translation:breadcrumb.sites'),
     title: page?.site.name ?? t('sitePage.site'),
     subtitle: t('sitePage.title'),
-    onBack: () => navigate('/admin/plant'),
+    onBack: goBack,
   });
 
   useEffect(() => {

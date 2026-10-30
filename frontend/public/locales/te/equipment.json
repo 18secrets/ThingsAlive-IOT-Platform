@@ -15,7 +15,8 @@
     "allStatuses": "అన్ని స్థితులు",
     "unnamed": "పేరు లేదు",
     "unclassified": "వర్గీకరించబడలేదు",
-    "unassigned": "కేటాయించబడలేదు"
+    "unassigned": "కేటాయించబడలేదు",
+    "close": "మూసివేయి"
   },
   "status": {
     "active": "సక్రియం",
@@ -196,7 +197,8 @@
     "end": "ముగింపు (HH:MM)",
     "days": "రోజులు",
     "timeZone": "టైమ్ జోన్ (IANA)",
-    "timeZonePlaceholder": "ఉదా. Asia/Kolkata"
+    "timeZonePlaceholder": "ఉదా. Asia/Kolkata",
+    "allDay": "{{from}} నుండి 24 గంటలు"
   },
   "runStatus": {
     "scored": "స్కోర్ చేయబడింది",
@@ -277,7 +279,9 @@
     "serialNumber": "సీరియల్ నంబర్",
     "serviceTier": "సర్వీస్ టైర్",
     "registering": "నమోదు అవుతోంది…",
-    "register": "యంత్రాన్ని నమోదు చేయండి"
+    "register": "యంత్రాన్ని నమోదు చేయండి",
+    "codeTaken": "ఈ కోడ్‌ను ఇప్పటికే {{name}} ఉపయోగిస్తోంది.",
+    "noLibraryClass": "లైబ్రరీ తరగతి ఎంచుకోలేదు: ఈ యంత్రానికి KPIలు, దృశ్యాలు లేదా అంచనాలు స్వయంచాలకంగా రావు. జాబితాలో ఉంటే దాని తరగతిని ఎంచుకోండి. లేకపోతే, నమోదు చేసి, Signal Bindings లో సిగ్నల్‌లను మ్యాప్ చేసి, దాని తరగతిని లైబ్రరీకి జోడించమని Things Alive ని అడగండి."
   },
   "bindings": {
     "title": "సిగ్నల్ బైండింగ్‌లు",

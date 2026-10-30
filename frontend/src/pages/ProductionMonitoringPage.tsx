@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { DateRangePicker } from 'rsuite';
 import { AlertCircle, ChevronRight, Clock3, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
@@ -9,6 +10,8 @@ import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
@@ -25,8 +28,10 @@ function periodLastNDays(days: number): { from: string; to: string } {
 }
 
 export const ProductionMonitoringPage: React.FC = () => {
-  const { t } = useTranslation('production');
+  const { t } = useTranslation(['production', 'shared']);
   const [viewMode, setViewMode] = useViewMode('production-monitoring');
+  // Lowest availability first: the machines losing the most time are the ones to look at.
+  const { sort, setSort, toggle } = useSort<'availability' | 'downtime' | 'name'>({ key: 'availability', dir: 'asc' });
   usePageHeader({ title: t('translation:pages.productionMonitoring.title'), subtitle: t('page.subtitle') });
   const navigate = useNavigate();
   const [availability, setAvailability] = useState<FleetAvailability | null>(null);
@@ -40,10 +45,13 @@ export const ProductionMonitoringPage: React.FC = () => {
   // OEE comes per site (GET /plants/:id/oee), which carries every machine's own OEE too —
   // one call per site instead of one per machine. A machine on no site has none here.
   const [siteOee, setSiteOee] = useState<Record<string, SiteOee>>({});
+  // The availability period: the last seven days, or a range the person picks — the page
+  // offered no other window (test report MIN-7 / P3-D4). OEE stays per calendar week.
+  const [range, setRange] = useState<[Date, Date] | null>(null);
+  const period = range ? { from: range[0].toISOString(), to: range[1].toISOString() } : null;
 
   useEffect(() => {
     let live = true;
-    const { from, to } = periodLastNDays(DAYS);
     apiListEquipment().then((e) => { if (live) setEquipment(e); }).catch(() => {});
     apiListPlants().then((p) => {
       if (!live) return;
@@ -55,12 +63,20 @@ export const ProductionMonitoringPage: React.FC = () => {
       }
     }).catch(() => {});
     apiGetDeviceHealthFleet({ days: DAYS }).then((rows) => { if (live) setLinkHealth(rows); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const { from, to } = period ?? periodLastNDays(DAYS);
+    setLoading(true);
     apiGetFleetAvailability(from, to)
       .then((a) => { if (live) { setAvailability(a); setError(undefined); } })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadAvailability')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period?.from, period?.to]);
 
   const profileOf = (sourceSystem: string, externalId: string) =>
     equipment.find((e) => e.sourceSystem === sourceSystem && e.externalId === externalId);
@@ -110,14 +126,52 @@ export const ProductionMonitoringPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availability, equipment, linkHealth, scope, selectedKey]);
 
+  // The tiles describe what the list shows. Unfiltered, that is the server's own fleet
+  // figure; filtered, the same rule (hours summed, never ratios averaged — see
+  // aggregateAvailability) over the machines left, as ThingsCare and Incidents do.
+  const filtered = selectedKey !== 'all' || scope.plantId !== 'all' || scope.classSlug !== 'all'
+    || scope.connection !== 'all' || scope.query.trim() !== '';
+  const headline = useMemo(() => {
+    if (!filtered) {
+      return {
+        measured: availability?.machinesMeasured ?? 0, availability: availability?.availability ?? null,
+        uptime: availability?.uptimeHours ?? null, downtime: availability?.downtimeHours ?? null,
+        excluded: availability?.excluded ?? { noShiftSchedule: 0, noReadings: 0 },
+      };
+    }
+    const ready = machines.filter((m) => m.readiness === 'ready');
+    const sum = (pick: (m: (typeof ready)[number]) => number | null) => ready.reduce((s, m) => s + (pick(m) ?? 0), 0);
+    const scheduled = sum((m) => m.scheduledHours);
+    const uptime = sum((m) => m.uptimeHours);
+    return {
+      measured: ready.length,
+      availability: ready.length && scheduled > 0 ? Math.min(1, uptime / scheduled) : null,
+      uptime: ready.length ? uptime : null,
+      downtime: ready.length ? sum((m) => m.downtimeHours) : null,
+      excluded: {
+        noShiftSchedule: machines.filter((m) => m.reason === 'no_shift_schedule').length,
+        noReadings: machines.filter((m) => m.reason === 'no_readings').length,
+      },
+    };
+  }, [filtered, availability, machines]);
+
+  const sorted = useMemo(() => sortRows(machines, sort, {
+    availability: (m) => (m.readiness === 'ready' ? m.availability : null),
+    downtime: (m) => (m.readiness === 'ready' ? m.downtimeHours : null),
+    name: (m) => name(m.sourceSystem, m.externalId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [machines, sort, equipment]);
+
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(machines, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
 
   return (
     <div id="production-monitoring-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('hero.lastDays', { count: DAYS })}</span>
+          <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">
+            {range ? `${range[0].toLocaleDateString()} – ${range[1].toLocaleDateString()}` : t('hero.lastDays', { count: DAYS })}
+          </span>
           <span title={t('hero.tooltip')}>
             <Info className="w-4 h-4 text-sky-200" />
           </span>
@@ -131,6 +185,19 @@ export const ProductionMonitoringPage: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t('period.label')}</span>
+        <DateRangePicker
+          size="sm"
+          format="yyyy-MM-dd"
+          value={range}
+          onChange={(v) => { setRange(v as [Date, Date] | null); pager.setPage(1); }}
+          shouldDisableDate={(date) => date.getTime() > Date.now()}
+          placeholder={t('hero.lastDays', { count: DAYS })}
+          cleanable
+        />
+      </div>
 
       <EquipmentFilters
         scope={scope}
@@ -147,10 +214,10 @@ export const ProductionMonitoringPage: React.FC = () => {
       ) : (
         <>
           <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>
-            <KpiTile label={t('kpi.machinesMeasured')} value={String(availability?.machinesMeasured ?? 0)} />
-            <KpiTile label={t('kpi.fleetAvailability')} value={availability?.availability != null ? `${(availability.availability * 100).toFixed(0)}%` : '—'} />
-            <KpiTile label={t('kpi.uptime')} value={availability?.uptimeHours != null ? `${availability.uptimeHours.toFixed(0)}h` : '—'} />
-            <KpiTile label={t('kpi.downtime')} value={availability?.downtimeHours != null ? `${availability.downtimeHours.toFixed(0)}h` : '—'} tone="warn" />
+            <KpiTile label={t('kpi.machinesMeasured')} value={String(headline.measured)} />
+            <KpiTile label={t('kpi.fleetAvailability')} value={headline.availability != null ? `${(headline.availability * 100).toFixed(0)}%` : '—'} />
+            <KpiTile label={t('kpi.uptime')} value={headline.uptime != null ? `${headline.uptime.toFixed(0)}h` : '—'} />
+            <KpiTile label={t('kpi.downtime')} value={headline.downtime != null ? `${headline.downtime.toFixed(0)}h` : '—'} tone="warn" />
             {selectedSiteOee && (
               <KpiTile
                 label={t('kpi.siteOee', { count: selectedSiteOee.machinesIncluded })}
@@ -158,9 +225,9 @@ export const ProductionMonitoringPage: React.FC = () => {
               />
             )}
           </div>
-          {(availability?.excluded.noShiftSchedule || availability?.excluded.noReadings) ? (
+          {(headline.excluded.noShiftSchedule || headline.excluded.noReadings) ? (
             <p className="text-xs text-slate-400">
-              {t('list.excluded', { noShift: availability.excluded.noShiftSchedule, noReadings: availability.excluded.noReadings })}
+              {t('list.excluded', { noShift: headline.excluded.noShiftSchedule, noReadings: headline.excluded.noReadings })}
             </p>
           ) : null}
 
@@ -169,6 +236,16 @@ export const ProductionMonitoringPage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
+                <SortSelect
+                  sort={sort}
+                  onChange={(next) => { setSort(next); pager.setPage(1); }}
+                  options={[
+                    { key: 'availability', dir: 'asc', label: t('shared:sort.availabilityLow') },
+                    { key: 'availability', dir: 'desc', label: t('shared:sort.availabilityHigh') },
+                    { key: 'downtime', dir: 'desc', label: t('shared:sort.downtimeHigh') },
+                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                  ]}
+                />
                 <ViewModeToggle mode={viewMode} onChange={setViewMode} />
               </div>
             </div>
@@ -181,10 +258,12 @@ export const ProductionMonitoringPage: React.FC = () => {
               ) : viewMode === 'list' ? (
                 <ListTable bare
                   columns={[
-                    { label: t('listCol.machine') }, { label: t('listCol.connection') },
-                    { label: t('listCol.availability'), align: 'right' }, { label: t('listCol.oeeWeek'), align: 'right' },
-                    { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right' },
+                    { label: t('listCol.machine'), sortKey: 'name' }, { label: t('listCol.connection') },
+                    { label: t('listCol.availability'), align: 'right', sortKey: 'availability' }, { label: t('listCol.oeeWeek'), align: 'right' },
+                    { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right', sortKey: 'downtime' },
                   ]}
+                  sort={sort}
+                  onSort={(key) => { toggle(key as 'availability' | 'downtime' | 'name', key === 'downtime' ? 'desc' : 'asc'); pager.setPage(1); }}
                   rows={pageItems}
                   rowKey={(m) => `${m.sourceSystem}/${m.externalId}`}
                   cells={(m) => {

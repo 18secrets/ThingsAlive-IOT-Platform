@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
   ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
@@ -116,7 +117,11 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
                 <p className="text-[11px] text-slate-400">
-                  {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {minutesToClock(s.startMinute)}–{minutesToClock(s.endMinute)} ({s.timeZone})
+                  {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
+                    // 0–1440, or an end at its own start the next day, is round the clock;
+                    // both printed "00:00–00:00", which read as no shift at all (MIN-14).
+                    ? t('shifts.allDay', { from: minutesToClock(s.startMinute) })
+                    : `${minutesToClock(s.startMinute)}–${minutesToClock(s.endMinute)}`} ({s.timeZone})
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -397,6 +402,7 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/admin/equipment');
   const [page, setPage] = useState<MachinePage | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -407,9 +413,10 @@ export const EquipmentPagePage: React.FC = () => {
   const { t } = useTranslation(['equipment', 'drafts']);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.equipment'),
     title: page?.equipment.name ?? externalId ?? t('translation:sidebar.equipment'),
     subtitle: t('equipmentPage.title'),
-    onBack: () => navigate('/admin/equipment'),
+    onBack: goBack,
   });
 
   useEffect(() => {

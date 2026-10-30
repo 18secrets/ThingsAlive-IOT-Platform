@@ -131,6 +131,17 @@ describeDb('work orders', () => {
         .rejects.toThrow(/retired/);
     });
 
+    it('refuses a title past 200 characters and a due date already gone; today stays choosable', async () => {
+      const now = new Date('2026-10-30T09:00:00.000Z');
+      await expect(orders.raise(boss, { ...ref, title: 'x'.repeat(201) }, now)).rejects.toThrow(/at most 200 characters/);
+      await expect(orders.raise(boss, { ...ref, title: 'Belt check', dueAt: new Date('2020-01-01') }, now))
+        .rejects.toThrow(/cannot be due in the past/);
+      // A date picked as "today" arrives as UTC midnight, hours behind now in India.
+      const today = await orders.raise(boss, { ...ref, title: 'x'.repeat(200), dueAt: new Date('2026-10-30') }, now);
+      expect(today.dueAt).toEqual(new Date('2026-10-30'));
+      await expect(orders.update(boss, today.id, { title: 'y'.repeat(201) })).rejects.toThrow(/at most 200 characters/);
+    });
+
     it('will not hand a job to somebody who cannot open it', async () => {
       // DG-2 is not assigned to the operator. Assigning anyway would leave a job
       // sitting in a queue looking like work in hand, that nobody can see.

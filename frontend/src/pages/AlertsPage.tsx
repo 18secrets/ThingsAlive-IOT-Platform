@@ -10,6 +10,8 @@ import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { statusTone, severityTone } from '../components/common/statusTone';
+import { ExportCsvButton } from '../components/common/ExportCsvButton';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
@@ -17,9 +19,7 @@ import {
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 
-const SEVERITY_TONE: Record<AlertRuleSeverity, 'slate' | 'sky' | 'amber' | 'rose'> = {
-  none: 'slate', low: 'sky', medium: 'sky', high: 'amber', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
 // The real backend whitelist for POST/PATCH /alerts/rules (alert.controller.ts's own
 // TRIGGERS) excludes fuel-loss and chain-origin from tenant-authored rules entirely —
@@ -76,6 +76,8 @@ export const AlertsPage: React.FC = () => {
   }, []);
 
   async function acknowledge(id: string) {
+    // There is no un-acknowledge, so a stray click must not be the whole decision.
+    if (!window.confirm(t('prompts.acknowledgeConfirm'))) return;
     setBusyId(id);
     try {
       await apiAcknowledgeAlert(id);
@@ -102,6 +104,8 @@ export const AlertsPage: React.FC = () => {
   }
 
   async function toggleRule(rule: AlertRule) {
+    // Switching a rule off silences it for every machine it covers; switching on is harmless.
+    if (rule.enabled && !window.confirm(t('prompts.disableRuleConfirm', { name: rule.name }))) return;
     setBusyId(rule.id);
     try {
       if (rule.enabled) await apiDisableAlertRule(rule.id); else await apiEnableAlertRule(rule.id);
@@ -128,11 +132,14 @@ export const AlertsPage: React.FC = () => {
   }
 
   const openCount = useMemo(() => events.filter((e) => e.state === 'open').length, [events]);
+  // The list holds open and acknowledged alerts; this narrows it to one (test report MIN-7, MIN-9).
+  const [stateFilter, setStateFilter] = useState<'all' | 'open' | 'acknowledged'>('all');
+  const shown = useMemo(() => events.filter((e) => stateFilter === 'all' || e.state === stateFilter), [events, stateFilter]);
 
   // Both lists are paged, in both views.
   const { pageItems: ruleItems, ...rulePager } = usePagination(rules);
   const rulePage = { pageItems: ruleItems };
-  const { pageItems: eventItems, ...eventPager } = usePagination(events);
+  const { pageItems: eventItems, ...eventPager } = usePagination(shown);
   const eventPage = { pageItems: eventItems };
 
   type Rule = (typeof rules)[number];
@@ -150,7 +157,7 @@ export const AlertsPage: React.FC = () => {
   );
   const ruleChips = (r: Rule) => (
     <>
-      <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+      <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
       <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
       {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
     </>
@@ -257,13 +264,35 @@ export const AlertsPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-1">{t('events.heading')}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
+          <span className="flex items-center gap-2">
+          <SelectPicker
+            size="sm"
+            data={(['all', 'open', 'acknowledged'] as const).map((s) => ({ label: s === 'all' ? t('events.allStates') : t(`state.${s}`), value: s }))}
+            value={stateFilter}
+            onChange={(v) => setStateFilter((v ?? 'all') as 'all' | 'open' | 'acknowledged')}
+            searchable={false}
+            cleanable={false}
+            className="min-w-[150px]"
+          />
+          <ExportCsvButton
+            name="alerts"
+            disabled={!shown.length}
+            headers={['fired', 'machine', 'rule', 'severity', 'state', 'summary', 'acknowledgedAt'].map((c) => t(`events.col.${c}`))}
+            rows={() => shown.map((e) => [
+              e.firedAt, equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
+              e.ruleName, t(`severity.${e.severity}`), t(`state.${e.state}`), e.summary, e.acknowledgedAt,
+            ])}
+          />
+          </span>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
         <div className={LIST_PANEL}>
           {loading ? (
             <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
-          ) : events.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
               <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
             </div>
@@ -277,8 +306,8 @@ export const AlertsPage: React.FC = () => {
               rows={eventPage.pageItems}
               rowKey={(e) => e.id}
               cells={(e) => [
-                <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
-                <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
+                <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
+                <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
                 <span className="font-medium">{e.ruleName}</span>,
                 machineName(e),
                 e.summary,
@@ -291,11 +320,11 @@ export const AlertsPage: React.FC = () => {
               {eventPage.pageItems.map((e) => (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
-                    <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
+                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
+                    <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
-                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString()}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -305,7 +334,7 @@ export const AlertsPage: React.FC = () => {
               ))}
             </div>
           )}
-          {!loading && events.length > 0 && <TablePagination pinToBottom {...eventPager} />}
+          {!loading && shown.length > 0 && <TablePagination pinToBottom {...eventPager} />}
         </div>
       </div>
 
@@ -361,8 +390,8 @@ const AlertRuleForm: React.FC<{
     if (trigger === 'signal-threshold') {
       return {
         signal: signal.trim(),
-        min: min.trim() ? Number(min) : null,
-        max: max.trim() ? Number(max) : null,
+        min: minValue,
+        max: maxValue,
       };
     }
     if (trigger === 'prediction-severity') {
@@ -371,9 +400,19 @@ const AlertRuleForm: React.FC<{
     return {};
   }
 
+  // An unreadable bound would go out as null (JSON has no NaN) and the rule would save
+  // watching one side only, so each is checked here and the reason shown under it.
+  const asNumber = (raw: string) => (raw.trim() === '' ? null : Number(raw.trim()));
+  const minValue = asNumber(min);
+  const maxValue = asNumber(max);
+  const minError = minValue !== null && !Number.isFinite(minValue) ? t('form.notANumber') : undefined;
+  const maxError = maxValue !== null && !Number.isFinite(maxValue) ? t('form.notANumber')
+    : minValue !== null && maxValue !== null && !minError && minValue >= maxValue ? t('form.minBelowMax') : undefined;
+
   function valid(): boolean {
     if (!name.trim()) return false;
     if (trigger === 'signal-threshold' && (!signal.trim() || (!min.trim() && !max.trim()))) return false;
+    if (trigger === 'signal-threshold' && (minError || maxError)) return false;
     if (appliesTo === 'plant' && !plantId) return false;
     if (appliesTo === 'equipment' && !equipmentKey) return false;
     return true;
@@ -426,11 +465,13 @@ const AlertRuleForm: React.FC<{
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.min')}</span>
-            <Input value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            {minError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{minError}</span>}
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.max')}</span>
-            <Input value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            {maxError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
         </div>
       )}

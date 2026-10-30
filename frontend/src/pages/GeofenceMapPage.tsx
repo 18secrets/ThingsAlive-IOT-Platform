@@ -28,21 +28,33 @@ function stateOf(m: GeofenceFleetMachine): MachineState {
 }
 
 /**
- * Metres east and north of an origin. A site is a few kilometres across, where a flat
- * projection is off by far less than a GPS fix — and it lets the SVG draw a circle's
- * radius and a corridor's width in their own units.
+ * Web Mercator metres from an origin — the projection map tiles are drawn in, so the fences
+ * and machines sit exactly on the streets beneath them. Mercator stretches distances by
+ * 1/cos(latitude); `metres` is that factor at the origin, for anything sized in real metres
+ * (a circle's radius, a corridor's width, the scale bar). Over a site a few kilometres
+ * across, it varies by far less than a GPS fix.
  */
+const EARTH_R = 6_378_137;
+const WORLD = 2 * Math.PI * EARTH_R;
+const mercX = (lng: number) => (EARTH_R * lng * Math.PI) / 180;
+const mercY = (lat: number) => EARTH_R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+
 function projector([lng0, lat0]: [number, number]) {
-  const kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
-  return ([lng, lat]: [number, number]): [number, number] => [(lng - lng0) * kx, -(lat - lat0) * 110_574];
+  const x0 = mercX(lng0);
+  const y0 = mercY(lat0);
+  return ([lng, lat]: [number, number]): [number, number] => [mercX(lng) - x0, -(mercY(lat) - y0)];
 }
 
 function unprojector([lng0, lat0]: [number, number]) {
-  const kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
+  const x0 = mercX(lng0);
+  const y0 = mercY(lat0);
   return ([x, y]: [number, number]): [number, number] => [
-    Math.round((lng0 + x / kx) * 1e6) / 1e6, Math.round((lat0 - y / 110_574) * 1e6) / 1e6,
+    Math.round((((x + x0) / EARTH_R) * 180 / Math.PI) * 1e6) / 1e6,
+    Math.round(((2 * Math.atan(Math.exp((y0 - y) / EARTH_R)) - Math.PI / 2) * 180 / Math.PI) * 1e6) / 1e6,
   ];
 }
+
+const metresAt = (lat: number) => 1 / Math.cos((lat * Math.PI) / 180);
 
 interface PlanView { centre: [number, number]; half: number }
 
@@ -56,13 +68,13 @@ function planView(zones: GeofenceFleetZone[], machines: GeofenceFleetMachine[], 
   const fence = (boundary ? [boundary] : zones).flatMap((z) => shapePoints(z.shape));
   const anchor: [number, number][] = fence.length ? fence
     : machines.filter((m) => m.position).map((m) => [m.position!.lng, m.position!.lat]);
-  if (!anchor.length) return fallback ? { centre: fallback, half: 600 } : null;
+  if (!anchor.length) return fallback ? { centre: fallback, half: 600 * metresAt(fallback[1]) } : null;
   const centre: [number, number] = [
     anchor.reduce((a, p) => a + p[0], 0) / anchor.length,
     anchor.reduce((a, p) => a + p[1], 0) / anchor.length,
   ];
   const project = projector(centre);
-  const half = Math.max(400, ...anchor.map(project).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) * 1.25;
+  const half = Math.max(400 * metresAt(centre[1]), ...anchor.map(project).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) * 1.25;
   return { centre, half };
 }
 
@@ -84,7 +96,14 @@ export const GeofenceMapPage: React.FC = () => {
 
   const [status, setStatus] = useState<GeofenceFleetStatus | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [siteId, setSiteId] = useState<string | null>(null);
+  // The last site this browser looked at, so the map opens on it at once instead of on
+  // "Loading positions…" with nothing chosen (test report MIN-13). A preference, so any
+  // storage failure just means no memory.
+  const [siteId, setSiteIdState] = useState<string | null>(() => { try { return localStorage.getItem(SITE_KEY); } catch { return null; } });
+  const setSiteId = (id: string | null) => {
+    setSiteIdState(id);
+    try { if (id) localStorage.setItem(SITE_KEY, id); } catch { /* a preference, nothing lost */ }
+  };
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'machines' | 'zones'>('machines');
@@ -120,9 +139,11 @@ export const GeofenceMapPage: React.FC = () => {
     return [...bySite.values()].sort((a, b) => b.violating - a.violating || a.name.localeCompare(b.name));
   }, [status]);
 
-  // Open on the site with the most machines breaking a rule; keep the person's choice after.
+  // Open on the remembered site if it still has machines, else the one with the most
+  // machines breaking a rule; keep the person's choice after.
   useEffect(() => {
-    if (!siteId && sites.length) setSiteId(sites[0].id);
+    if (sites.length && (!siteId || !sites.some((s) => s.id === siteId))) setSiteId(sites[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, siteId]);
 
   const here = useMemo(
@@ -178,7 +199,7 @@ export const GeofenceMapPage: React.FC = () => {
           onChange={(v) => { setSiteId(v); setSelected(null); setDraft(null); setManualCentre(null); }}
           cleanable={false}
           searchable={sites.length > 8}
-          placeholder={t('geofence.pickSite')}
+          placeholder={status ? t('geofence.pickSite') : t('geofence.loadingSites')}
           style={{ minWidth: 280 }}
         />
         <button
@@ -207,7 +228,8 @@ export const GeofenceMapPage: React.FC = () => {
             draftPoints={draft?.points ?? []}
             onPick={draft ? (p) => setDraft({ ...draft, mode: draft.mode, points: draft.mode === 'circle' ? [p] : [...draft.points, p] }) : undefined}
             onCentre={setManualCentre}
-            emptyText={status ? t('geofence.noSites') : t('geofence.loading')}
+            // A failed load is said as one; "Loading" under an error reads as a page still working.
+            emptyText={status ? t('geofence.noSites') : error ? t('geofence.notLoaded') : t('geofence.loading')}
           />
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
             <Legend fill="bg-emerald-500" label={t('geofence.legend.ok')} />
@@ -340,6 +362,7 @@ const SiteMap: React.FC<{
 }> = ({ view, zones, machines, selected, onSelect, preview, draftPoints, onPick, onCentre, emptyText }) => {
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [centreText, setCentreText] = useState('');
 
   if (!view) {
@@ -369,9 +392,10 @@ const SiteMap: React.FC<{
   // does not shrink the site to a dot.
   const edge = half * 0.94;
   const clamp = (v: number) => Math.max(-edge, Math.min(edge, v));
-  const grid = half > 2000 ? 1000 : half > 800 ? 500 : 200;
-  const lines: number[] = [];
-  for (let v = -Math.floor(half / grid) * grid; v <= half; v += grid) lines.push(v);
+  const k = metresAt(view.centre[1]);
+  const tiles = tilesFor(view);
+  // A scale bar of a round length, about a fifth of the plan, in real metres.
+  const barM = [100, 200, 250, 500, 1000, 2000, 5000].find((m) => m * k >= (half * 2) / 6) ?? 5000;
   const r = half / 55;
   const unit = half / 400;
   const order = [...positioned].sort((a, b) => Number(a.violating) - Number(b.violating));
@@ -388,6 +412,7 @@ const SiteMap: React.FC<{
   };
 
   return (
+    <div className="relative">
     <svg
       ref={svgRef}
       viewBox={`${-half} ${-half} ${half * 2} ${half * 2}`}
@@ -395,18 +420,19 @@ const SiteMap: React.FC<{
       role="img"
       onClick={pick}
     >
-      {lines.map((v) => (
-        <g key={v}>
-          <line x1={v} y1={-half} x2={v} y2={half} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={half / 600} />
-          <line x1={-half} y1={v} x2={half} y2={v} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={half / 600} />
-        </g>
-      ))}
-      {zones.map((z) => <ZoneShape key={z.key} zone={z} project={project} unit={unit} />)}
+      {/* OpenStreetMap beneath everything; darkened, not replaced, in the dark theme. */}
+      <g className="dark:[filter:invert(0.9)_hue-rotate(180deg)_brightness(0.85)]" aria-hidden="true">
+        {tiles.map((tl) => (
+          <image key={tl.href} href={tl.href} x={tl.x} y={tl.y} width={tl.size} height={tl.size} preserveAspectRatio="none" />
+        ))}
+      </g>
+      {zones.map((z) => <ZoneShape key={z.key} zone={z} project={project} unit={unit} k={k} />)}
       {preview && (
         <ZoneShape
           zone={{ key: 'draft', id: null, source: 'zone', code: 'draft', name: 'draft', kind: preview.type === 'Corridor' ? 'corridor' : 'restricted', shape: preview, appliesTo: 'plant' }}
           project={project}
           unit={unit}
+          k={k}
           draft
         />
       )}
@@ -429,8 +455,11 @@ const SiteMap: React.FC<{
             tabIndex={0}
             aria-label={`${m.name ?? m.externalId}`}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(key); }}
+            onMouseEnter={() => setHovered(key)}
+            onMouseLeave={() => setHovered((h) => (h === key ? null : h))}
+            onFocus={() => setHovered(key)}
+            onBlur={() => setHovered((h) => (h === key ? null : h))}
           >
-            <title>{`${m.name ?? m.externalId}`}</title>
             <circle
               r={selected === key ? r * 1.5 : r}
               className={`${STATE_FILL[s]} ${selected === key ? 'stroke-slate-900 dark:stroke-white' : 'stroke-white dark:stroke-slate-900'}`}
@@ -438,31 +467,120 @@ const SiteMap: React.FC<{
             />
             {off && (
               <text x={r * 1.6} y={r / 2} fontSize={r * 1.6} className="fill-amber-600 dark:fill-amber-400 font-mono">
-                {`${(Math.hypot(x, y) / 1000).toFixed(1)} km`}
+                {`${(Math.hypot(x, y) / k / 1000).toFixed(1)} km`}
               </text>
             )}
           </g>
         );
       })}
+      {/* The hovered machine's label, else the selected one's, drawn last so nothing covers it. */}
+      {(() => {
+        const key = hovered ?? selected;
+        const m = key ? order.find((x) => `${x.sourceSystem}/${x.externalId}` === key) : undefined;
+        if (!m) return null;
+        const [x0, y0] = project([m.position!.lng, m.position!.lat]);
+        const [x, y] = [clamp(x0), clamp(y0)];
+        const name = (m.name ?? m.externalId).split(' · ')[0];
+        const line2 = `${m.externalId} · ${t(`geofence.state.${stateOf(m)}`)}`;
+        const fs = r * 1.25;
+        const w = Math.max(name.length, line2.length) * fs * 0.56 + fs * 1.4;
+        const h = fs * 3.1;
+        // Flip to the left near the right edge, so the label stays on the plan.
+        const lx = x + w + r * 2 > half ? x - w - r * 1.6 : x + r * 1.6;
+        const ly = Math.max(-half, Math.min(half - h, y - h / 2));
+        return (
+          <g pointerEvents="none">
+            <rect x={lx} y={ly} width={w} height={h} rx={fs * 0.3} className="fill-white dark:fill-slate-900 stroke-slate-300 dark:stroke-slate-600" strokeWidth={unit} />
+            <text x={lx + fs * 0.7} y={ly + fs * 1.3} fontSize={fs} className="fill-slate-900 dark:fill-slate-100 font-semibold">{name}</text>
+            <text x={lx + fs * 0.7} y={ly + fs * 2.55} fontSize={fs * 0.9} className="fill-slate-500 dark:fill-slate-400 font-mono">{line2}</text>
+          </g>
+        );
+      })()}
+      <g transform={`translate(${-half * 0.94},${half * 0.9})`}>
+        <rect x={-unit * 4} y={-unit * 22} width={barM * k + unit * 8} height={unit * 30} className="fill-white/80 dark:fill-slate-900/80" />
+        <line x1={0} y1={0} x2={barM * k} y2={0} className="stroke-slate-800 dark:stroke-slate-100" strokeWidth={unit * 2.5} />
+        <text x={0} y={-unit * 6} fontSize={unit * 13} className="fill-slate-800 dark:fill-slate-100">
+          {barM >= 1000 ? `${barM / 1000} km` : `${barM} m`}
+        </text>
+      </g>
     </svg>
+    <a
+      href="https://www.openstreetmap.org/copyright"
+      target="_blank"
+      rel="noreferrer"
+      className="absolute bottom-1 right-1 rounded bg-white/85 dark:bg-slate-900/85 px-1.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 hover:underline"
+    >
+      © OpenStreetMap contributors
+    </a>
+    </div>
   );
 };
 
+/** Map tiles are 256 px; aim for a few across a plan that renders some 600–800 px wide. */
+const TILE_PX_TARGET = 0.32;
+/** Past 17, OpenStreetMap's standard layer is pale or blank over most sites outside dense
+ *  cities, which drew a washed-out map under one site's fences (test report MIN-13); a
+ *  zoom-17 tile scaled up is coarser but has the ground on it. */
+const MAX_TILE_ZOOM = 17;
+const SITE_KEY = 'geofence-site';
+
+/**
+ * The OpenStreetMap tiles under the plan, placed in its Mercator-metre coordinates. Light use
+ * by a handful of people, inside OSM's tile policy; heavy production use belongs on a tile
+ * provider, which is a change of URL here and nothing else.
+ */
+function tilesFor(view: PlanView): { href: string; x: number; y: number; size: number }[] {
+  const { centre, half } = view;
+  const z = Math.max(3, Math.min(MAX_TILE_ZOOM, Math.round(Math.log2(WORLD / (2 * half * TILE_PX_TARGET)))));
+  const n = 2 ** z;
+  const size = WORLD / n;
+  const cx = mercX(centre[0]);
+  const cy = mercY(centre[1]);
+  const col = (x: number) => Math.floor((x + WORLD / 2) / size);
+  const row = (y: number) => Math.floor((WORLD / 2 - y) / size);
+  const out: { href: string; x: number; y: number; size: number }[] = [];
+  for (let tx = col(cx - half); tx <= col(cx + half); tx += 1) {
+    for (let ty = row(cy + half); ty <= row(cy - half); ty += 1) {
+      if (ty < 0 || ty >= n) continue;
+      const wrapped = ((tx % n) + n) % n;
+      out.push({
+        href: `https://tile.openstreetmap.org/${z}/${wrapped}/${ty}.png`,
+        x: tx * size - WORLD / 2 - cx,
+        y: -((WORLD / 2 - ty * size) - cy),
+        size,
+      });
+    }
+  }
+  return out;
+}
+
 const ZoneShape: React.FC<{
-  zone: GeofenceFleetZone; project: (p: [number, number]) => [number, number]; unit: number; draft?: boolean;
-}> = ({ zone, project, unit, draft }) => {
+  zone: GeofenceFleetZone; project: (p: [number, number]) => [number, number]; unit: number; k: number; draft?: boolean;
+}> = ({ zone, project, unit, k, draft }) => {
   const restricted = zone.kind === 'restricted';
-  // A shape still being drawn is blue, whatever it will be once saved.
-  const stroke = draft ? 'stroke-sky-500' : restricted ? 'stroke-rose-500' : 'stroke-slate-500 dark:stroke-slate-400';
-  const fill = draft ? 'fill-sky-500/15' : restricted ? 'fill-rose-500/15' : 'fill-none';
+  // A shape still being drawn is blue, whatever it will be once saved. A site boundary is
+  // dark and dashed with a faint wash, so it reads over a busy street map.
+  const boundary = zone.source === 'site-boundary';
+  const stroke = draft ? 'stroke-sky-500' : restricted ? 'stroke-rose-600' : boundary ? 'stroke-slate-800 dark:stroke-slate-100' : 'stroke-emerald-600';
+  const fill = draft ? 'fill-sky-500/20' : restricted ? 'fill-rose-500/25' : boundary ? 'fill-slate-900/5 dark:fill-white/5' : 'fill-emerald-500/10';
   const s = zone.shape;
   if (s.type === 'Circle') {
     const [cx, cy] = project(s.center);
-    return <circle cx={cx} cy={cy} r={s.radiusM} className={`${stroke} ${fill}`} strokeWidth={unit * 2} />;
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={s.radiusM * k} className={`${stroke} ${fill}`} strokeWidth={unit * 2} />
+        {restricted && !draft && (
+          // Said on the map, not only in the legend: a red disc alone reads as an alarm, not a place.
+          <text x={cx} y={cy + unit * 4} textAnchor="middle" fontSize={unit * 12} className="fill-rose-700 dark:fill-rose-300 font-semibold" pointerEvents="none">
+            NO-GO
+          </text>
+        )}
+      </g>
+    );
   }
   if (s.type === 'Corridor') {
     const d = s.path.map(project).map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join(' ');
-    return <path d={d} className="stroke-sky-500/25 fill-none" strokeWidth={s.widthM} strokeLinecap="round" strokeLinejoin="round" />;
+    return <path d={d} className="stroke-sky-500/30 fill-none" strokeWidth={s.widthM * k} strokeLinecap="round" strokeLinejoin="round" />;
   }
   const rings = s.coordinates.map((ring) => ring.map(project).map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join(' ') + ' Z');
   return (

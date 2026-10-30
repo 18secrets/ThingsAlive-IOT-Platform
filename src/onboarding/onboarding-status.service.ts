@@ -75,6 +75,8 @@ export interface Facts {
   devices: Map<string, string[]>;
   scenarios: Map<string, { active: number; other: number }>;
   rules: AlertRule[];
+  /** Signals bound and active on each machine, keyed like `scenarios`. */
+  boundSignals: Map<string, Set<string>>;
   equipmentGrants: Map<string, number>;
   plantGrants: Map<string, number>;
 }
@@ -197,6 +199,12 @@ export class OnboardingStatusService {
       select: { sourceSystem: true, externalId: true, state: true },
     });
     const rules = await m.getRepository(AlertRule).find({ where: { tenantId, enabled: true } });
+    const bound: { sourceSystem: string; externalId: string; signalKey: string }[] = await m.query(
+      `SELECT DISTINCT "source_system" AS "sourceSystem", "external_id" AS "externalId", "signal_key" AS "signalKey"
+         FROM "signal_binding_version"
+        WHERE "tenant_id" = $1 AND "external_id" = ANY($2::text[]) AND "status" = 'active' AND "valid_to" IS NULL`,
+      [tenantId, externalIds],
+    );
     // Only users who are not suspended: a grant held by somebody who cannot sign in
     // gives nobody access.
     const equipmentGrants: { sourceSystem: string; externalId: string; users: number }[] = await m.query(
@@ -227,10 +235,16 @@ export class OnboardingStatusService {
       if (s.state === 'active') c.active += 1; else c.other += 1;
       scenarioMap.set(k, c);
     }
+    const boundSignals = new Map<string, Set<string>>();
+    for (const b of bound) {
+      const k = key(b.sourceSystem, b.externalId);
+      boundSignals.set(k, (boundSignals.get(k) ?? new Set()).add(b.signalKey));
+    }
     return {
       devices: deviceMap,
       scenarios: scenarioMap,
       rules,
+      boundSignals,
       equipmentGrants: new Map(equipmentGrants.map((g) => [key(g.sourceSystem, g.externalId), g.users])),
       plantGrants: new Map(plantGrants.map((g) => [g.plantId, g.users])),
     };
@@ -252,7 +266,7 @@ export function machineSteps(p: EquipmentProfile, facts: Facts, coverage: Covera
     device: deviceStep(facts.devices.get(p.externalId) ?? []),
     ...coverageSteps(coverage, at),
     activation: activationStep(facts.scenarios.get(key(p.sourceSystem, p.externalId))),
-    alerts: alertStep(facts.rules, p),
+    alerts: alertStep(facts.rules, p, facts.boundSignals.get(key(p.sourceSystem, p.externalId)) ?? new Set()),
     access: accessStep(
       facts.equipmentGrants.get(key(p.sourceSystem, p.externalId)) ?? 0,
       p.plantId ? facts.plantGrants.get(p.plantId) ?? 0 : 0,
@@ -336,14 +350,25 @@ function activationStep(c: { active: number; other: number } | undefined): Own {
   return evidence.active ? { done: true, evidence } : { done: false, reason: 'no_active_scenario', evidence };
 }
 
-function alertStep(rules: readonly AlertRule[], p: EquipmentProfile): Own {
+/**
+ * Done when a rule can actually fire on this machine. Covering it is not enough: an
+ * account-wide coolant rule "covered" a machine with no logger and no coolant signal, and
+ * the step read done on both test machines while nothing watched them (test report
+ * OB-5). A threshold rule counts once its signal is bound here; a rule on a prediction,
+ * on silence or on fuel needs no one signal and counts when it covers the machine.
+ */
+function alertStep(rules: readonly AlertRule[], p: EquipmentProfile, bound: ReadonlySet<string>): Own {
   const machine = {
     sourceSystem: p.sourceSystem, externalId: p.externalId,
     plantId: p.plantId ?? null, equipmentClassSlug: p.equipmentClassSlug ?? null,
   };
-  const covering = rules.filter((r) => ruleCoversMachine(r, machine)).map((r) => r.slug).sort();
-  return covering.length
-    ? { done: true, evidence: { rules: covering } }
+  const covering = rules.filter((r) => ruleCoversMachine(r, machine));
+  const signalOf = (r: AlertRule) => (r.trigger === 'signal-threshold' ? (r.params as { signal?: string }).signal : undefined);
+  const live = covering.filter((r) => r.trigger !== 'signal-threshold' || bound.has(signalOf(r) ?? '')).map((r) => r.slug).sort();
+  if (live.length) return { done: true, evidence: { rules: live } };
+  const waiting = covering.map((r) => r.slug).sort();
+  return waiting.length
+    ? { done: false, reason: 'alert_signal_unbound', evidence: { rules: [], waitingOnSignals: [...new Set(covering.map(signalOf).filter(Boolean))].sort() } }
     : { done: false, reason: 'no_alert_rule', evidence: { rules: [] } };
 }
 

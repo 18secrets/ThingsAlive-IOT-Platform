@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { shieldStatusLabel } from '../components/shield/shieldStatusLabel';
 import { AlertCircle, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
@@ -145,7 +146,7 @@ export const ThingsShieldPage: React.FC = () => {
                   <span className="text-slate-400">{m.machine.externalId}</span>
                 </span>,
                 ...SHIELD_CATEGORIES.map((c) => (
-                  <Chip tone={STATUS_TONE[m.categories[c].status]}>{t(`status.${m.categories[c].status}`)}</Chip>
+                  <Chip tone={STATUS_TONE[m.categories[c].status]}>{shieldStatusLabel(t, m.categories[c])}</Chip>
                 )),
               ]}
               onOpen={open}
@@ -209,7 +210,7 @@ const ShieldCard: React.FC<{ machine: ShieldMachine; onOpen: () => void }> = ({ 
       <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
         <div className="flex items-center gap-1.5 flex-wrap">
           {SHIELD_CATEGORIES.map((c) => (
-            <Chip key={c} tone={STATUS_TONE[machine.categories[c].status]} title={`${t(`category.${c}`)}: ${t(`status.${machine.categories[c].status}`)}`}>
+            <Chip key={c} tone={STATUS_TONE[machine.categories[c].status]} title={`${t(`category.${c}`)}: ${shieldStatusLabel(t, machine.categories[c])}`}>
               {t(`category.${c}`)}
             </Chip>
           ))}

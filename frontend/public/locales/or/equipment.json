@@ -15,7 +15,8 @@
     "allStatuses": "ସମସ୍ତ ସ୍ଥିତି",
     "unnamed": "ନାମହୀନ",
     "unclassified": "ଅବର୍ଗୀକୃତ",
-    "unassigned": "ଆବଣ୍ଟିତ ନୁହେଁ"
+    "unassigned": "ଆବଣ୍ଟିତ ନୁହେଁ",
+    "close": "ବନ୍ଦ କରନ୍ତୁ"
   },
   "status": {
     "active": "ସକ୍ରିୟ",
@@ -196,7 +197,8 @@
     "end": "ଶେଷ (HH:MM)",
     "days": "ଦିନ",
     "timeZone": "ସମୟ ମଣ୍ଡଳ (IANA)",
-    "timeZonePlaceholder": "ଯେପରି Asia/Kolkata"
+    "timeZonePlaceholder": "ଯେପରି Asia/Kolkata",
+    "allDay": "{{from}} ରୁ 24 ଘଣ୍ଟା"
   },
   "runStatus": {
     "scored": "ସ୍କୋର୍ ହୋଇଛି",
@@ -277,7 +279,9 @@
     "serialNumber": "ସିରିଆଲ୍ ନମ୍ବର",
     "serviceTier": "ସର୍ଭିସ୍ ଟିୟର୍",
     "registering": "ପଞ୍ଜୀକରଣ ହେଉଛି…",
-    "register": "ଉପକରଣ ପଞ୍ଜୀକରଣ କରନ୍ତୁ"
+    "register": "ଉପକରଣ ପଞ୍ଜୀକରଣ କରନ୍ତୁ",
+    "codeTaken": "ଏହି କୋଡ୍ ପୂର୍ବରୁ {{name}} ଦ୍ୱାରା ବ୍ୟବହୃତ।",
+    "noLibraryClass": "କୌଣସି ଲାଇବ୍ରେରୀ ଶ୍ରେଣୀ ବଛାଯାଇନାହିଁ: ଏହି ମେସିନ୍ ସ୍ୱୟଂଚାଳିତ ଭାବେ KPI, ପରିସ୍ଥିତି କିମ୍ବା ପୂର୍ବାନୁମାନ ପାଇବ ନାହିଁ। ତାଲିକାରେ ଥିଲେ ଏହାର ଶ୍ରେଣୀ ବାଛନ୍ତୁ। ନଥିଲେ, ପଞ୍ଜୀକରଣ କରି Signal Bindings ରେ ସିଗନାଲ୍ ମ୍ୟାପ୍ କରନ୍ତୁ ଏବଂ Things Alive କୁ ଏହାର ଶ୍ରେଣୀ ଲାଇବ୍ରେରୀରେ ଯୋଡ଼ିବାକୁ କୁହନ୍ତୁ।"
   },
   "bindings": {
     "title": "ସିଗ୍ନାଲ୍ ବାଇଣ୍ଡିଂ",

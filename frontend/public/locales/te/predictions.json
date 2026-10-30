@@ -24,7 +24,8 @@
     "needs": "అవసరం: {{signals}}",
     "noSignals": "సిగ్నల్స్ లేవు",
     "history_one": "{{count}} రోజు చరిత్ర",
-    "history_other": "{{count}} రోజుల చరిత్ర"
+    "history_other": "{{count}} రోజుల చరిత్ర",
+    "disableConfirm": "“{{name}}” ని నిలిపివేయాలా? మళ్లీ ప్రారంభించే వరకు ఈ తరగతి యంత్రాలకు దీని స్కోర్ ఉండదు."
   },
   "kpis": {
     "title": "అంచనా KPIలు",

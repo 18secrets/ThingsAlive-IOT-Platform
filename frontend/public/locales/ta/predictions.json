@@ -24,7 +24,8 @@
     "needs": "தேவை: {{signals}}",
     "noSignals": "சிக்னல்கள் இல்லை",
     "history_one": "{{count}} நாள் வரலாறு",
-    "history_other": "{{count}} நாள் வரலாறு"
+    "history_other": "{{count}} நாள் வரலாறு",
+    "disableConfirm": "“{{name}}” ஐ முடக்கவா? மீண்டும் இயக்கும் வரை இந்த வகை இயந்திரங்கள் இதற்கு மதிப்பிடப்படாது."
   },
   "kpis": {
     "title": "கணிப்பு KPI-கள்",

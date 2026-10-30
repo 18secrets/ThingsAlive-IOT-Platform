@@ -24,7 +24,8 @@
     "needs": "Needs {{signals}}",
     "noSignals": "no signals",
     "history_one": "{{count}}d history",
-    "history_other": "{{count}}d history"
+    "history_other": "{{count}}d history",
+    "disableConfirm": "Disable “{{name}}”? Machines of this class stop being scored for it until it is enabled again."
   },
   "kpis": {
     "title": "Prediction KPIs",

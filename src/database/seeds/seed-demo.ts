@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { DataSource, EntityManager } from 'typeorm';
 import { topUpDemoPositions } from './demo-geofence';
 import { AlertService } from '../../alert/services/alert.service';
+import { EquipmentServiceRecord } from '../../service/entities/equipment-service-record.entity';
 import { RequestScope } from '../../auth/types/request-scope';
 import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
 import { ClientCatalogEntitlement } from '../../catalog/entities/client-catalog-entitlement.entity';
@@ -480,6 +481,18 @@ async function seedSiteAndMachines(ds: DataSource, now: Date): Promise<void> {
         startMinute: 8 * 60, endMinute: 18 * 60, days: [1, 2, 3, 4, 5], timeZone: TIME_ZONE, status: 'active',
         scoredThrough: now, arrivalsThrough: now, createdBy: SEEDER, updatedBy: SEEDER,
       });
+      // One past scheduled service each, at a different age: the machines had no service
+      // history at all, so every Service panel read empty (test report MIN-14). Inside the
+      // machine's own history, at about the engine hours a weekday shift would have run.
+      const machineIndex = DEMO_MACHINES.indexOf(machine);
+      const serviceDaysAgo = Math.min(machine.historyDays - 1, 12 + machineIndex * 9) + machine.endDaysAgo;
+      const daysRun = machine.historyDays + machine.endDaysAgo - serviceDaysAgo;
+      await m.getRepository(EquipmentServiceRecord).save({
+        tenantId: DEMO_TENANT, sourceSystem: DEMO_SOURCE, externalId: machine.externalId,
+        performedAt: new Date(now.getTime() - serviceDaysAgo * DAY_MS), kind: 'scheduled' as const,
+        meterReading: Math.round(daysRun * (5 / 7) * 10), meterUnit: 'h', workOrderId: null,
+        notes: '250-hour service: engine oil and filters, coolant level, greasing.', recordedBy: SEEDER,
+      });
     }
   });
 }
@@ -503,10 +516,23 @@ export const local = (t: number) => {
   return { hour: d.getUTCHours() + d.getUTCMinutes() / 60, dow: d.getUTCDay(), day: Math.floor((t + TZ_OFFSET_MS) / DAY_MS) };
 };
 
+/**
+ * The live stream forces machines running so a demo always has data, which ran every
+ * machine round the clock and gave every Production card the same hours (test report
+ * MIN-14). Under it each machine still stops once a day, for 0–4 hours at an hour of its
+ * own, both fixed by the digits of its id — the same every day, different between machines.
+ */
+export const forcedStop = (externalId: string, t: number) => {
+  const num = Number(externalId.replace(/[^0-9]/g, '')) || 0;
+  const length = num % 5;
+  const start = (num * 7) % 24;
+  return (local(t).hour - start + 24) % 24 < length;
+};
+
 /** In shift, minus a two-hour stop every Wednesday afternoon — so availability is high,
  * not a suspicious 100%. */
-export const running = (t: number) => {
-  if (process.env.DEMO_FORCE_RUNNING === 'true') return true;
+export const running = (t: number, externalId?: string) => {
+  if (process.env.DEMO_FORCE_RUNNING === 'true') return !externalId || !forcedStop(externalId, t);
   const { hour, dow } = local(t);
   if (dow < 1 || dow > 5 || hour < 8 || hour >= 18) return false;
   return !(dow === 3 && hour >= 13 && hour < 15);
@@ -516,7 +542,7 @@ export const running = (t: number) => {
  * never a straight line, because a flat series makes `baseline_sd` zero and every
  * baseline KPI `undefined_result`, which would look like a bug and is not. */
 export function demoValue(machine: DemoMachine, signal: string, t: number, now: number, noise: () => number): number {
-  const on = running(t);
+  const on = running(t, machine.externalId);
   const { hour } = local(t);
   const n = (scale: number) => (noise() - 0.5) * 2 * scale;
   const cycle = Math.sin((2 * Math.PI * (hour - 8)) / 10);
@@ -927,6 +953,9 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
 
 // ============================================================================ CLI
 
+/** How often the demo's simulated GPS moves: a fix a minute, as a logger reporting position would. */
+const GPS_STEP_MS = 60_000;
+
 async function main() {
   requireEnabled();
   const ds = await new DataSource(dataSourceOptions(process.env, { appRole: null })).initialize();
@@ -938,17 +967,27 @@ async function main() {
         const { written, trimmed } = await topUpDemo(ds);
         // eslint-disable-next-line no-console
         console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
-        // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
-        // readings that say which machines are online.
-        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: STEP_MS });
+      };
+      // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
+      // readings that say which machines are online. Every minute, not with the readings:
+      // a tipper drives a site loop in twelve minutes, so positions at the readings'
+      // ten-minute cadence showed it jumping, not driving.
+      const positions = async () => {
+        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: GPS_STEP_MS });
         // eslint-disable-next-line no-console
         console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
       };
       await once();
+      await positions();
       if (!process.argv.includes('--follow')) return;
+      let lastReadings = Date.now();
       for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, STEP_MS));
-        await once();
+        await new Promise((resolve) => setTimeout(resolve, GPS_STEP_MS));
+        if (Date.now() - lastReadings >= STEP_MS) {
+          await once();
+          lastReadings = Date.now();
+        }
+        await positions();
       }
     }
     if (process.argv.includes('--reset')) {

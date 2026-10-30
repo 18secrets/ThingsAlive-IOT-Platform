@@ -6,6 +6,7 @@ import { Input } from 'rsuite';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/AuthProvider';
 import { PasswordField } from '../common/PasswordField';
+import { PasswordChecklist, passwordMeetsRules } from '../common/PasswordChecklist';
 import logoFull from '../../../assets/logo-icon.png';
 
 export const AcceptInvitationScreen: React.FC = () => {
@@ -27,7 +28,7 @@ export const AcceptInvitationScreen: React.FC = () => {
     e.preventDefault();
     const trimmedToken = token.trim();
     const trimmedNew = password.trim();
-    if (!/[A-Z]/.test(trimmedNew) || !/[a-z]/.test(trimmedNew) || !/[0-9]/.test(trimmedNew) || !/[^A-Za-z0-9]/.test(trimmedNew)) {
+    if (!passwordMeetsRules(trimmedNew)) {
       setError(t('invite.weak'));
       return;
     }
@@ -89,6 +90,7 @@ export const AcceptInvitationScreen: React.FC = () => {
               required
               autoFocus={!!initialToken}
             />
+            <PasswordChecklist password={password.trim()} />
 
             <PasswordField
               label={t('invite.confirmPassword')}
@@ -107,7 +109,7 @@ export const AcceptInvitationScreen: React.FC = () => {
 
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !passwordMeetsRules(password.trim()) || password.trim() !== confirmPassword.trim()}
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />

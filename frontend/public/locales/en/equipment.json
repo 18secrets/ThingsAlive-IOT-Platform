@@ -15,7 +15,8 @@
     "allStatuses": "All statuses",
     "unnamed": "Unnamed",
     "unclassified": "Unclassified",
-    "unassigned": "Unassigned"
+    "unassigned": "Unassigned",
+    "close": "Close"
   },
   "status": {
     "active": "Active",
@@ -45,13 +46,13 @@
     "undefined_result": "Undefined result",
     "parameter_not_set": "Parameter not set",
     "site_boundary_not_set": "Site boundary not set",
-    "unclassified": "Equipment not classified",
+    "unclassified": "Machine not classified",
     "formula_not_in_account": "Formula not in this account's catalog",
     "not_ready": "Not ready",
     "no_requirements": "No signal requirements declared",
     "no_device": "No device assigned",
     "not_forecast": "Not in the service forecast",
-    "no_visual": "No equipment image configured",
+    "no_visual": "No machine image configured",
     "upload_pending": "Image upload pending",
     "assets_unavailable": "Image storage not configured",
     "not_on_this_page": "Not available on this page",
@@ -59,7 +60,7 @@
     "no_forecast_model": "Forecasting is not available yet",
     "window_not_resolved": "The formula's own window can't be resolved yet — pick a range",
     "formula_not_compiled": "Formula not compiled",
-    "not_operating": "Equipment not operating",
+    "not_operating": "Machine not operating",
     "no_shift_schedule": "No shift schedule defined"
   },
   "severity": {
@@ -115,7 +116,7 @@
     "noRecommendations": "No recommendations for this class.",
     "machines": "Machines",
     "schematic": "Schematic",
-    "equipmentSchematic": "Equipment schematic",
+    "equipmentSchematic": "Machine schematic",
     "unplacedSignals_one": "{{count}} signal not placed on the image.",
     "unplacedSignals_other": "{{count}} signals not placed on the image.",
     "parameters": "Parameters",
@@ -162,11 +163,11 @@
     "noWidgets": "No widgets configured for this site's class yet."
   },
   "equipmentPage": {
-    "title": "Equipment page",
-    "loadFailed": "Could not load this equipment page.",
+    "title": "Machine page",
+    "loadFailed": "Could not load this machine page.",
     "notClassified": "Not classified",
     "exploreKpis": "Explore KPIs",
-    "noWidgets": "No widgets configured for this equipment's class yet."
+    "noWidgets": "No widgets configured for this machine's class yet."
   },
   "days": {
     "0": "Sun",
@@ -196,7 +197,8 @@
     "end": "End (HH:MM)",
     "days": "Days",
     "timeZone": "Time zone (IANA)",
-    "timeZonePlaceholder": "e.g. Asia/Kolkata"
+    "timeZonePlaceholder": "e.g. Asia/Kolkata",
+    "allDay": "24 hours from {{from}}"
   },
   "runStatus": {
     "scored": "scored",
@@ -254,7 +256,7 @@
       "code": "Code",
       "name": "Equipment Name",
       "class": "Equipment Class",
-      "plant": "Plant",
+      "plant": "Site",
       "manufacturer": "Manufacturer",
       "model": "Model #",
       "serial": "Serial #",
@@ -277,7 +279,9 @@
     "serialNumber": "Serial Number",
     "serviceTier": "Service Tier",
     "registering": "Registering…",
-    "register": "Register Equipment"
+    "register": "Register Equipment",
+    "codeTaken": "This code is already used by {{name}}.",
+    "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library."
   },
   "bindings": {
     "title": "Signal Bindings",
@@ -338,7 +342,7 @@
     "noScenarios": "No scenarios adopted for this class.",
     "noScenariosUnclassified": "Not classified — no scenarios to activate.",
     "notRequested": "not requested",
-    "noKpis": "No KPIs declared for this equipment's class."
+    "noKpis": "No KPIs declared for this machine's class."
   },
   "activationState": {
     "proposed": "proposed",
@@ -432,30 +436,30 @@
     "save": "Save Industry Type"
   },
   "plants": {
-    "searchPlaceholder": "Search Plant Names, Codes, or Addresses...",
-    "add": "Add Plant",
+    "searchPlaceholder": "Search site names, codes or addresses…",
+    "add": "Add Site",
     "retireSite": "Retire this site",
     "reopenSite": "Reopen this site",
-    "edit": "Edit Plant",
+    "edit": "Edit Site",
     "sitePage": "Site Page",
     "boundarySetTitle": "Boundary set",
     "noBoundaryTitle": "No boundary set",
     "boundarySet": "Boundary Set",
     "setBoundary": "Set Boundary",
-    "empty": "No plants found.",
+    "empty": "No sites found.",
     "saveFailed": "Could not save the site.",
     "registerFailed": "Could not register the site.",
-    "editTitle": "Edit Plant / Depot",
-    "addTitle": "Register New Plant / Depot",
+    "editTitle": "Edit Site / Depot",
+    "addTitle": "Register New Site / Depot",
     "modalSubtitle": "Regional production facility, maintenance depot, or assembly site — in your own account.",
-    "name": "Plant Name",
+    "name": "Site Name",
     "address": "Address",
-    "code": "Plant Code",
+    "code": "Site Code",
     "codeHint": "Letters, digits, dots, hyphens or underscores — unique within your account.",
     "siteArea": "Site Area",
     "siteAreaPlaceholder": "e.g. 12 acres",
-    "save": "Save Plant",
-    "register": "Register Plant"
+    "save": "Save Site",
+    "register": "Register Site"
   },
   "boundary": {
     "title": "Site Boundary",

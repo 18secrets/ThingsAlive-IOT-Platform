@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Clock3, Plus } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { Chip } from '../components/common/Chip';
 import {
-  ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
-  OeeWindow, UtilizationShiftRow, apiGetBreakdowns, apiGetEquipmentAvailability, apiGetEquipmentOee,
+  ApiError, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
+  OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
 
@@ -37,20 +38,18 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
   const { t } = useTranslation('production');
   const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
   const [oee, setOee] = useState<EquipmentOee | null>(null);
-  const [breakdowns, setBreakdowns] = useState<BreakdownEvent[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
+  // The rows the count above was made from, in the same response — a separate fetch
+  // could land late or fail and leave "7 breakdowns" beside "none recorded".
+  const breakdowns = oee?.breakdowns ?? [];
 
   useEffect(() => {
     let live = true;
     setError(undefined);
+    // The previous window's numbers must not stand under the newly selected one.
+    setOee(null);
     apiGetEquipmentOee(sourceSystem, externalId, oeeWindow)
-      .then((result) => {
-        if (!live) return;
-        setOee(result);
-        // Same window the OEE was computed over, so the list explains the number above it.
-        return apiGetBreakdowns(sourceSystem, externalId, result.from, result.to)
-          .then((rows) => { if (live) setBreakdowns(rows); });
-      })
+      .then((result) => { if (live) setOee(result); })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadOee')); });
     return () => { live = false; };
   }, [sourceSystem, externalId, oeeWindow]);
@@ -76,6 +75,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!oee && !error && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
 
       {oee && (
         <>
@@ -158,6 +158,7 @@ function periodLastNDays(days: number): { from: string; to: string } {
 export const ProductionMonitoringDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/production-monitoring');
   const { t } = useTranslation('production');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [availability, setAvailability] = useState<EquipmentAvailability | null>(null);
@@ -166,9 +167,10 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.productionMonitoring'),
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
-    onBack: () => navigate('/production-monitoring'),
+    onBack: goBack,
   });
 
   useEffect(() => {

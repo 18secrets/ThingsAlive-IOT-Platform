@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, ShieldCheck,
+  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
   Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -14,10 +14,10 @@ import { LIST_PANEL, TablePagination, usePagination } from '../components/common
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
-  AlertEvent, AssetForecast, EquipmentAvailability, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, OnboardingSummary,
-  Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
+  AlertEvent, AssetForecast, EquipmentAvailability, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, MyDevice,
+  OnboardingSummary, Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetOnboardingSummary, apiGetServiceForecast, apiGetShieldSummary,
-  apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListPlants, apiListWorkOrders,
+  apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListMyDevices, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
 
 const DAY = 86_400_000;
@@ -36,6 +36,7 @@ export const LiveDashboardPage: React.FC = () => {
   const equipment = useSlot<EquipmentProfile[]>(() => apiListEquipment());
   const plants = useSlot<Plant[]>(() => apiListPlants());
   const health = useSlot<FleetLinkRow[]>(() => apiGetDeviceHealthFleet({ days: 7 }));
+  const devices = useSlot<MyDevice[]>(() => apiListMyDevices());
   const alerts = useSlot<AlertEvent[]>(() => apiListAlerts({ state: ['open'] }));
   const incidents = useSlot<IncidentRecord[]>(() => apiListIncidentRecords({ status: 'live' }));
   const orders = useSlot<WorkOrder[]>(() => apiListWorkOrders({ status: ['created', 'in-progress'] }));
@@ -52,8 +53,19 @@ export const LiveDashboardPage: React.FC = () => {
   const plantName = (id: string | null) =>
     !id ? t('live.noSite') : plants.state === 'ok' ? plants.data.find((p) => p.id === id)?.name ?? id : id;
 
-  const online = health.state === 'ok' ? health.data.filter((r) => r.state !== 'dark').length : null;
-  const offline = health.state === 'ok' ? health.data.filter((r) => r.state === 'dark').length : null;
+  // Counted over the devices fitted now, as the Devices register counts them. Link
+  // health has a row for every IMEI heard in the week, including one taken off its
+  // machine since, which made "83 online" beside a register of 82 (test report MAJ-8).
+  // A fitted device with no window at all is silent, so offline. Without the register
+  // (a role that cannot read it) the week's rows are all there is.
+  const fitted = devices.state === 'ok' ? devices.data.filter((d) => d.state === 'assigned') : null;
+  const latestByImei = health.state === 'ok' ? new Map(health.data.map((r) => [r.imei, r])) : null;
+  const online = !latestByImei ? null
+    : fitted ? fitted.filter((d) => { const r = latestByImei.get(d.imei); return !!r && r.state !== 'dark'; }).length
+    : [...latestByImei.values()].filter((r) => r.state !== 'dark').length;
+  const offline = !latestByImei ? null
+    : fitted ? fitted.length - (online ?? 0)
+    : [...latestByImei.values()].filter((r) => r.state === 'dark').length;
   const overdueOrders = orders.state === 'ok' ? orders.data.filter((o) => o.dueAt && new Date(o.dueAt).getTime() < Date.now()).length : 0;
   const breached = incidents.state === 'ok'
     ? incidents.data.filter((i) => i.sla.acknowledge.state === 'breached' || i.sla.resolve.state === 'breached').length : 0;
@@ -70,7 +82,7 @@ export const LiveDashboardPage: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Tile icon={<Wrench className="w-4 h-4" />} label={t('live.machines')} slot={equipment} value={(d) => d.length}
           note={plants.state === 'ok' ? t('common.sites', { count: plants.data.length }) : undefined} onClick={() => navigate('/admin/equipment')} />
-        <Tile icon={<Cpu className="w-4 h-4" />} label={t('live.devicesOnline')} slot={health} value={() => online ?? 0}
+        <Tile icon={<Cpu className="w-4 h-4" />} label={t('live.devicesOnline')} slot={devices.state === 'loading' ? { state: 'loading' } as Slot<FleetLinkRow[]> : health} value={() => online ?? 0}
           note={offline ? t('live.offlineCount', { count: offline }) : t('live.noneOffline')} tone={offline ? 'warn' : undefined} onClick={() => navigate('/admin/devices')} />
         <Tile icon={<Bell className="w-4 h-4" />} label={t('live.openAlerts')} slot={alerts} value={(d) => d.length}
           tone={alerts.state === 'ok' && alerts.data.length ? 'bad' : undefined} onClick={() => navigate('/alerts')} />
@@ -224,7 +236,14 @@ const MachineCards: React.FC<{
   const { t } = useTranslation('dashboard');
   const { t: ts } = useTranslation('shared');
   const [viewMode, setViewMode] = useViewMode('dashboard-machines');
-  const { pageItems, ...pager } = usePagination(machines, 12);
+  // Eighty-odd machines over seven pages had no way to find one (test report MIN-7).
+  const [query, setQuery] = useState('');
+  const matching = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return !q ? machines : machines.filter((m) =>
+      (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q) || plantName(m.plantId).toLowerCase().includes(q));
+  }, [machines, query, plantName]);
+  const { pageItems, ...pager } = usePagination(matching, 12);
   const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
   // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
   const figures = (m: EquipmentProfile) => {
@@ -240,11 +259,22 @@ const MachineCards: React.FC<{
   };
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('live.searchMachines')}
+            className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+          />
+        </div>
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
       <div className={LIST_PANEL}>
-        {viewMode === 'list' ? (
+        {matching.length === 0 ? (
+          <div className="p-4"><Muted>{t('live.noMachineMatches')}</Muted></div>
+        ) : viewMode === 'list' ? (
           <ListTable bare
             columns={[
               { label: ts('listCol.machine') }, { label: ts('listCol.type') }, { label: ts('listCol.site') },
@@ -279,7 +309,7 @@ const MachineCards: React.FC<{
                   <ConnectionBadge state={connectionOf(m.externalId)} />
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
-                <p className="p-4 text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
                 <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{plantName(m.plantId)}</span></p>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -316,7 +346,7 @@ function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
       <div className={`text-2xl font-bold mt-1 ${color}`}>
         {slot.state === 'ok' ? value(slot.data) : slot.state === 'loading' ? '…' : '—'}
       </div>
-      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : note}</div>
+      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
     </button>
   );
 }

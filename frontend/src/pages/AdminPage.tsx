@@ -13,7 +13,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -89,6 +89,7 @@ interface AdminPageProps {
   onImportEquipmentFromMirror: (sourceSystem: string) => Promise<ImportResult>;
   realEquipment: EquipmentProfile[];
   realEquipmentError?: string;
+  realEquipmentLoading?: boolean;
   allEquipment: EquipmentProfile[];
   allEquipmentError?: string;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
@@ -105,10 +106,11 @@ interface AdminPageProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;
+  myDevicesLoading?: boolean;
   onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
   onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
@@ -243,6 +245,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       }
       realEquipment={props.realEquipment}
       realEquipmentError={props.realEquipmentError}
+      realEquipmentLoading={props.realEquipmentLoading}
       allEquipment={props.allEquipment}
       allEquipmentError={props.allEquipmentError}
       onListPlantsForTenant={props.onListPlantsForTenant}
@@ -255,6 +258,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       myEquipmentClassesError={props.myEquipmentClassesError}
       myDevices={props.myDevices}
       myDevicesError={props.myDevicesError}
+      myDevicesLoading={props.myDevicesLoading}
       onClaimDevice={props.onClaimDevice}
       onUnclaimDevice={props.onUnclaimDevice}
       onGetEquipmentCoverage={props.onGetEquipmentCoverage}

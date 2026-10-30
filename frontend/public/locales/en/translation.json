@@ -39,12 +39,16 @@
   "header": {
     "goBack": "Go Back",
     "notifications": "Notifications",
-    "telemetryNotifications": "Telemetry Notifications",
+    "telemetryNotifications": "Open alerts",
     "newCount": "{{count}} New",
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "profile": "Profile and settings",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "noNotifications": "No open alerts.",
+    "loadingNotifications": "Loading…",
+    "timeZone": "Times in {{zone}}",
+    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}."
   },
   "login": {
     "title": "Sign in",
@@ -54,7 +58,8 @@
     "submitting": "Signing in…",
     "failed": "Sign-in failed.",
     "haveToken": "Have an invitation token? Set your password",
-    "identifierPlaceholder": "you@yourcompany.com"
+    "identifierPlaceholder": "you@yourcompany.com",
+    "emailMalformed": "That is not a complete email address, e.g. name@company.com."
   },
   "forgot": {
     "title": "Forgot your password?",
@@ -94,7 +99,7 @@
     "accountStatus": "Account Status",
     "accessLevel": "Access Level",
     "clientSince": "Client Since",
-    "allPlantsAndClients": "All Plants & Clients",
+    "allPlantsAndClients": "All Sites & Clients",
     "changePassword": "Change Password",
     "changePasswordHint": "Update the password used to sign in",
     "currentPassword": "Current Password",
@@ -108,7 +113,8 @@
     "tooShort": "New password must be at least 8 characters.",
     "sameAsCurrent": "New password must be different from your current password.",
     "mismatch": "New password and confirmation do not match.",
-    "updated": "Your password has been updated. Signing you out for a fresh sign-in…"
+    "updated": "Your password has been updated. Signing you out for a fresh sign-in…",
+    "superAdminNote": "Super Admin: you manage users and roles, so every page opens for you whatever your role lists."
   },
   "passwordField": {
     "show": "Show password",
@@ -368,6 +374,18 @@
       "centreLabel": "Centre the plan on latitude, longitude",
       "centreGo": "Go",
       "centreHint": "Type the site’s latitude and longitude to draw its first fence."
-    }
+    },
+    "notLoaded": "Positions could not be loaded. See the message above, then Refresh.",
+    "loadingSites": "Loading sites…"
+  },
+  "passwordRules": {
+    "length": "At least 8 characters",
+    "upper": "An uppercase letter",
+    "lower": "A lowercase letter",
+    "number": "A number",
+    "special": "A special character"
+  },
+  "breadcrumb": {
+    "sites": "Sites"
   }
 }

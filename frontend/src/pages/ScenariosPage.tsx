@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
@@ -21,9 +22,7 @@ import {
   apiReorderMyCatalogLayout, apiSetMyCatalogWidgetHidden,
 } from '../lib/api';
 
-const SEVERITY_TONE: Record<ClientScenario['severity'], 'slate' | 'sky' | 'amber' | 'rose'> = {
-  none: 'slate', low: 'sky', medium: 'sky', high: 'amber', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s);
 
 export const ScenariosPage: React.FC = () => {
   const { t } = useTranslation('scenarios');
@@ -59,6 +58,8 @@ export const ScenariosPage: React.FC = () => {
   );
 
   async function toggle(scenario: ClientScenario) {
+    // Disabling stops scoring on every machine of the class; enabling only adds work.
+    if (scenario.enabled && !window.confirm(t('page.disableConfirm', { name: scenario.name }))) return;
     setBusySlug(scenario.slug);
     try {
       await apiEditMyCatalogScenario(scenario.slug, { enabled: !scenario.enabled });
@@ -96,7 +97,7 @@ export const ScenariosPage: React.FC = () => {
   );
   const tagChips = (s: Scenario) => (
     <>
-                  <Chip tone={SEVERITY_TONE[s.severity]}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone={SEVERITY_TONE(s.severity)}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
                   <Chip tone="slate">{t('page.tier', { tier: s.tier })}</Chip>
                   <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
                   {s.templateSlug ? (

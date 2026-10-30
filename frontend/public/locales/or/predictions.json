@@ -24,7 +24,8 @@
     "needs": "ଆବଶ୍ୟକ: {{signals}}",
     "noSignals": "କୌଣସି ସିଗନାଲ୍ ନାହିଁ",
     "history_one": "{{count}} ଦିନର ଇତିହାସ",
-    "history_other": "{{count}} ଦିନର ଇତିହାସ"
+    "history_other": "{{count}} ଦିନର ଇତିହାସ",
+    "disableConfirm": "“{{name}}” ବନ୍ଦ କରିବେ? ପୁଣି ଚାଲୁ ନହେବା ପର୍ଯ୍ୟନ୍ତ ଏହି ଶ୍ରେଣୀର ମେସିନଗୁଡ଼ିକର ଏଥିପାଇଁ ସ୍କୋର ହେବ ନାହିଁ।"
   },
   "kpis": {
     "title": "ପୂର୍ବାନୁମାନ KPI",

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Bell, Gauge, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { worstPrediction } from '../lib/worstPrediction';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
@@ -16,7 +19,6 @@ import {
 } from '../lib/api';
 
 const PAGE_SIZE = 12;
-const SEVERITY_RANK: Record<PredictionSeverity, number> = { none: 0, low: 1, medium: 2, high: 3, critical: 4 };
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
   low: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
@@ -26,18 +28,12 @@ const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gau
 };
 const NO_PREDICTION_STYLE = { ring: 'border-slate-200 dark:border-slate-800', bg: 'bg-slate-50/60 dark:bg-slate-900/40', gauge: 'text-slate-400' };
 
-const rankOf = (severity: PredictionSeverity | string | undefined | null) =>
-  severity && severity in SEVERITY_RANK ? SEVERITY_RANK[severity as PredictionSeverity] : 0;
-
-/** Worst-of across a machine's active scenarios, the same pattern the composed page
- *  uses for its own "worst readiness" summaries. */
-function worstOf(predictions: Prediction[]): Prediction | null {
-  if (!predictions.length) return null;
-  return predictions.reduce((worst, p) => (rankOf(p.severity) > rankOf(worst.severity) ? p : worst));
-}
+type CareSort = 'risk' | 'name' | 'code' | 'abnormal';
 
 export const ThingsCarePage: React.FC = () => {
-  const { t } = useTranslation('care');
+  const { t } = useTranslation(['care', 'shared']);
+  // Highest risk first: the page exists to find the machine that needs attention.
+  const { sort, setSort, toggle } = useSort<CareSort>({ key: 'risk', dir: 'desc' });
   const [viewMode, setViewMode] = useViewMode('things-care');
   usePageHeader({ title: 'ThingsCare', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
@@ -96,7 +92,7 @@ export const ThingsCarePage: React.FC = () => {
   const rows = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
     return equipment
-      .map((e) => ({ equipment: e, worst: worstOf(predictionsByEquipment.get(`${e.sourceSystem}|${e.externalId}`) ?? []) }))
+      .map((e) => ({ equipment: e, worst: worstPrediction(predictionsByEquipment.get(`${e.sourceSystem}|${e.externalId}`) ?? []) }))
       .filter(({ equipment: e }) => {
         const key = `${e.sourceSystem}|${e.externalId}`;
         const matchesSelected = selectedKey === 'all' || key === selectedKey;
@@ -113,8 +109,15 @@ export const ThingsCarePage: React.FC = () => {
   const meanRisk = withPrediction.length ? withPrediction.reduce((a, r) => a + r.worst!.riskScore, 0) / withPrediction.length : null;
   const highOrCritical = rows.filter((r) => r.worst && (r.worst.severity === 'high' || r.worst.severity === 'critical')).length;
 
+  const sorted = useMemo(() => sortRows(rows, sort, {
+    risk: (r) => r.worst?.riskScore,
+    name: (r) => r.equipment.name ?? r.equipment.externalId,
+    code: (r) => r.equipment.externalId,
+    abnormal: (r) => r.worst?.abnormalCount,
+  }), [rows, sort]);
+
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(rows, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
 
   return (
     <div id="things-care-view" className="space-y-3">
@@ -150,12 +153,26 @@ export const ThingsCarePage: React.FC = () => {
             <KpiTile label={t('kpi.highCritical')} value={String(highOrCritical)} tone="rose" />
             <KpiTile label={t('kpi.noActive')} value={String(rows.length - withPrediction.length)} />
           </div>
+          <p className="flex items-start gap-1.5 text-xs text-slate-400">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{t('page.bands')}</span>
+          </p>
 
           <div>
             <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
+                <SortSelect
+                  sort={sort}
+                  onChange={(next) => { setSort(next); pager.setPage(1); }}
+                  options={[
+                    { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+                    { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                    { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+                  ]}
+                />
                 <ViewModeToggle mode={viewMode} onChange={setViewMode} />
               </div>
             </div>
@@ -168,10 +185,12 @@ export const ThingsCarePage: React.FC = () => {
               ) : viewMode === 'list' ? (
                 <ListTable bare
                   columns={[
-                    { label: t('listCol.machine') }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
-                    { label: t('listCol.risk'), align: 'right' }, { label: t('listCol.confidence') },
-                    { label: t('listCol.abnormal'), align: 'right' },
+                    { label: t('listCol.machine'), sortKey: 'name' }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
+                    { label: t('listCol.risk'), align: 'right', sortKey: 'risk' }, { label: t('listCol.confidence') },
+                    { label: t('listCol.abnormal'), align: 'right', sortKey: 'abnormal' },
                   ]}
+                  sort={sort}
+                  onSort={(key) => { toggle(key as CareSort, key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
                   rows={pageItems}
                   rowKey={({ equipment: e }) => `${e.sourceSystem}/${e.externalId}`}
                   cells={({ equipment: e, worst }) => [
