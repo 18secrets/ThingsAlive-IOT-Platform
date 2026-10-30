@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { worstPrediction } from '../lib/worstPrediction';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import {
@@ -10,7 +11,6 @@ import {
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
 
-const SEVERITY_ORDER: PredictionSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
 const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'rose' | 'slate'> = {
   none: 'emerald', low: 'sky', medium: 'amber', high: 'rose', critical: 'rose',
 };
@@ -168,7 +168,7 @@ export const LivePredictionsPage: React.FC = () => {
               const key = `${m.sourceSystem}|${m.externalId}`;
               const p = predictions.get(key);
               const worst = Array.isArray(p) && p.length
-                ? p.reduce((a, b) => (SEVERITY_ORDER.indexOf(b.severity) > SEVERITY_ORDER.indexOf(a.severity) || (b.severity === a.severity && b.riskScore > a.riskScore) ? b : a))
+                ? worstPrediction(p)
                 : null;
               return (
                 <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">

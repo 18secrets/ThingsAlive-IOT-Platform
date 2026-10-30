@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Bell, Gauge, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { worstPrediction } from '../lib/worstPrediction';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
@@ -15,7 +16,6 @@ import {
 } from '../lib/api';
 
 const PAGE_SIZE = 12;
-const SEVERITY_RANK: Record<PredictionSeverity, number> = { none: 0, low: 1, medium: 2, high: 3, critical: 4 };
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
   low: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
@@ -24,16 +24,6 @@ const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gau
   critical: { ring: 'border-rose-300 dark:border-rose-800', bg: 'bg-rose-100/60 dark:bg-rose-950/40', gauge: 'text-rose-600 dark:text-rose-400' },
 };
 const NO_PREDICTION_STYLE = { ring: 'border-slate-200 dark:border-slate-800', bg: 'bg-slate-50/60 dark:bg-slate-900/40', gauge: 'text-slate-400' };
-
-const rankOf = (severity: PredictionSeverity | string | undefined | null) =>
-  severity && severity in SEVERITY_RANK ? SEVERITY_RANK[severity as PredictionSeverity] : 0;
-
-/** Worst-of across a machine's active scenarios, the same pattern the composed page
- *  uses for its own "worst readiness" summaries. */
-function worstOf(predictions: Prediction[]): Prediction | null {
-  if (!predictions.length) return null;
-  return predictions.reduce((worst, p) => (rankOf(p.severity) > rankOf(worst.severity) ? p : worst));
-}
 
 export const ThingsCarePage: React.FC = () => {
   const { t } = useTranslation('care');
@@ -96,7 +86,7 @@ export const ThingsCarePage: React.FC = () => {
   const rows = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
     return equipment
-      .map((e) => ({ equipment: e, worst: worstOf(predictionsByEquipment.get(`${e.sourceSystem}|${e.externalId}`) ?? []) }))
+      .map((e) => ({ equipment: e, worst: worstPrediction(predictionsByEquipment.get(`${e.sourceSystem}|${e.externalId}`) ?? []) }))
       .filter(({ equipment: e }) => {
         const key = `${e.sourceSystem}|${e.externalId}`;
         const matchesSelected = selectedKey === 'all' || key === selectedKey;
@@ -151,6 +141,10 @@ export const ThingsCarePage: React.FC = () => {
             <KpiTile label={t('kpi.highCritical')} value={String(highOrCritical)} tone="rose" />
             <KpiTile label={t('kpi.noActive')} value={String(rows.length - withPrediction.length)} />
           </div>
+          <p className="flex items-start gap-1.5 text-xs text-slate-400">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{t('page.bands')}</span>
+          </p>
 
           <div>
             <div className="flex items-center justify-between gap-3 mb-3">
