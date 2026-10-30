@@ -5,7 +5,8 @@
     "intro": "Client-owned operational parameters. No platform default is ever assumed.",
     "loadFailed": "Could not load parameters.",
     "loadEffectiveFailed": "Could not load effective values.",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "heading": "Rates behind every cost figure"
   },
   "currency": {
     "label": "Account currency",

@@ -31,7 +31,8 @@
     "overdue": "காலாவதி",
     "due_soon": "விரைவில் வர உள்ளது",
     "current": "நடப்பில்",
-    "not_recorded": "பதிவு இல்லை"
+    "not_recorded": "பதிவு இல்லை",
+    "alsoOverdue": "தாமதமும் கூட"
   },
   "result": {
     "passed": "தேர்ச்சி",

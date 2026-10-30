@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { shieldStatusLabel } from '../components/shield/shieldStatusLabel';
 import { AlertCircle, ChevronRight, FileCheck2, HardHat, Lock, Plus, Siren } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { EvidenceRecordCard, EvidenceRecordForm } from '../components/shield/EvidenceRecord';
 import { Modal } from '../components/common/Modal';
@@ -23,6 +25,7 @@ const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> 
 export const ThingsShieldDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/things-shield');
   const { t } = useTranslation('shield');
   const [shield, setShield] = useState<ShieldMachine | null>(null);
   const [records, setRecords] = useState<ShieldEvidence[]>([]);
@@ -34,9 +37,10 @@ export const ThingsShieldDetailPage: React.FC = () => {
   const [correcting, setCorrecting] = useState<ShieldEvidence | null>(null);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.thingsShield'),
     title: shield?.machine.name ?? externalId ?? t('detail.notFoundTitle'),
     subtitle: t('detail.subtitle'),
-    onBack: () => navigate('/things-shield'),
+    onBack: goBack,
   });
 
   // Status comes from the summary (it is computed there, with the due-soon window);
@@ -124,7 +128,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
 
         <div className="flex items-center gap-2 flex-wrap">
           <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{t(`category.${category}`)}</h4>
-          <Chip tone={STATUS_TONE[cell.status]} size="md">{t(`status.${cell.status}`)}</Chip>
+          <Chip tone={STATUS_TONE[cell.status]} size="md">{shieldStatusLabel(t, cell)}</Chip>
           <span className="text-[11px] text-slate-400">
             {t('detail.dueSoonWindow', { count: shield.dueSoonWindow.days, source: shield.dueSoonWindow.source === 'default' ? t('detail.windowDefault') : t('detail.windowParameter') })}
           </span>

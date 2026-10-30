@@ -10,7 +10,8 @@
     "empty": "No incidents for this selection.",
     "unassigned": "Unassigned",
     "escalated": "escalated (level {{level}})",
-    "openedAt": "Opened {{date}}"
+    "openedAt": "Opened {{date}}",
+    "heading": "Live incidents and response times"
   },
   "filter": {
     "live": "Live (open + acknowledged)"
@@ -107,7 +108,8 @@
     "alerts": "Alerts ({{count}})",
     "workOrders": "Work orders ({{count}})",
     "noneRaised": "None raised.",
-    "timeline": "Timeline"
+    "timeline": "Timeline",
+    "acknowledgeConfirm": "Acknowledge this incident? Its response clock stops and this cannot be undone."
   },
   "mock": {
     "illustrativeNote": "Illustrative incident for workflow demonstration; no actual event asserted.",

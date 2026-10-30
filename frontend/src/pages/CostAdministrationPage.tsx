@@ -114,7 +114,7 @@ export const CostAdministrationPage: React.FC = () => {
   return (
     <div id="cost-administration-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
-        <h2 className="text-xl font-bold">{t('page.title')}</h2>
+        <h2 className="text-xl font-bold">{t('page.heading')}</h2>
         <p className="text-sm text-sky-100">{t('page.intro')}</p>
       </div>
 
@@ -130,7 +130,7 @@ export const CostAdministrationPage: React.FC = () => {
           <Coins className="w-5 h-5 text-slate-400" />
           <div>
             <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('currency.label')}</p>
-            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currency?.value ? String(currency.value) : t('currency.notSet')}</p>
+            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currency?.value ? String(currency.value) : loading ? t('page.loading') : t('currency.notSet')}</p>
           </div>
         </div>
         <button onClick={changeCurrency} className="px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer">

@@ -31,7 +31,8 @@
     "overdue": "Overdue",
     "due_soon": "Due soon",
     "current": "Current",
-    "not_recorded": "Not recorded"
+    "not_recorded": "Not recorded",
+    "alsoOverdue": "also overdue"
   },
   "result": {
     "passed": "Passed",

@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
+import { worstPrediction } from '../lib/worstPrediction';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
+import { TablePagination, usePagination } from '../components/common/TablePagination';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import {
@@ -10,10 +15,7 @@ import {
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
 
-const SEVERITY_ORDER: PredictionSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
-const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'rose' | 'slate'> = {
-  none: 'emerald', low: 'sky', medium: 'amber', high: 'rose', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
 /**
  * Live Predictions on the backend: the account's prediction scenarios, and each
@@ -23,10 +25,14 @@ const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'sky' | 'amber' | 'r
  * real prediction severity instead.
  */
 export const LivePredictionsPage: React.FC = () => {
-  const { t } = useTranslation('predictions');
+  const { t } = useTranslation(['predictions', 'shared']);
+  // Highest risk first, as on ThingsCare; a machine still loading or unscored goes last.
+  const { sort, setSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
+  // "No machines match" before the list arrived read as a filter that matched nothing.
+  const [equipmentLoaded, setEquipmentLoaded] = useState(false);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [scenarios, setScenarios] = useState<ClientScenario[] | null>(null);
   const [predictions, setPredictions] = useState<Map<string, Prediction[] | 'unavailable'>>(new Map());
@@ -43,6 +49,7 @@ export const LivePredictionsPage: React.FC = () => {
     apiListEquipment().then((list) => {
       if (!live) return;
       setEquipment(list);
+      setEquipmentLoaded(true);
       // One call per machine — there is no fleet-wide predictions route. Each lands as it
       // arrives, so a slow or refused machine never holds the rest back.
       for (const m of list) {
@@ -50,7 +57,7 @@ export const LivePredictionsPage: React.FC = () => {
           .then((p) => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, p)); })
           .catch(() => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, 'unavailable')); });
       }
-    }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadMachines')); });
+    }).catch((err) => { if (live) { setEquipmentLoaded(true); setError(err instanceof ApiError ? err.message : t('errors.loadMachines')); } });
     return () => { live = false; };
   }, []);
 
@@ -66,12 +73,25 @@ export const LivePredictionsPage: React.FC = () => {
       && (scope.classSlug === 'all' || e.equipmentClassSlug === scope.classSlug)
       && (!term || (e.name ?? '').toLowerCase().includes(term) || e.externalId.toLowerCase().includes(term)));
   }, [equipment, scope, selectedKey]);
+  const sorted = useMemo(() => {
+    const worstOf = (m: EquipmentProfile) => {
+      const p = predictions.get(`${m.sourceSystem}|${m.externalId}`);
+      return Array.isArray(p) ? worstPrediction(p) : null;
+    };
+    return sortRows(visible, sort, {
+      risk: (m) => worstOf(m)?.riskScore, name: (m) => m.name ?? m.externalId, code: (m) => m.externalId,
+    });
+  }, [visible, predictions, sort]);
+  // Eighty-three cards on one page (test report MIN-7); twelve at a time, highest risk first.
+  const { pageItems, ...pager } = usePagination(sorted, 12);
   // Scenarios follow the filters: those for the classes of the machines on screen. With
   // no machines registered yet there is nothing to narrow by, so all of them show.
   const visibleClasses = new Set(visible.map((e) => e.equipmentClassSlug));
   const visibleScenarios = (scenarios ?? []).filter((s) => equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug));
 
   async function toggle(s: ClientScenario) {
+    // Disabling stops scoring on every machine of the class; enabling only adds work.
+    if (s.enabled && !window.confirm(t('scenarios.disableConfirm', { name: s.name }))) return;
     setBusySlug(s.slug);
     try {
       await apiEditMyCatalogScenario(s.slug, { enabled: !s.enabled });
@@ -137,7 +157,7 @@ export const LivePredictionsPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[s.severity]}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
+                  <Chip tone={SEVERITY_TONE(s.severity)}>{t(`severity.${s.severity}`, { defaultValue: s.severity })}</Chip>
                   <Chip tone="slate">{t('scenarios.tier', { tier: s.tier })}</Chip>
                   <Chip tone="slate">{s.clientEquipmentClassSlug}</Chip>
                 </div>
@@ -151,23 +171,37 @@ export const LivePredictionsPage: React.FC = () => {
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
+          <SortSelect
+            sort={sort}
+            onChange={setSort}
+            options={[
+              { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+              { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+              { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+              { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+            ]}
+          />
+        </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('kpis.subtitle')}</p>
-        {visible.length === 0 ? (
+        {!equipmentLoaded ? (
+          <p className="text-sm text-slate-400">{t('common.loading')}</p>
+        ) : sorted.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">{t('kpis.noMatch')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map((m) => {
+            {pageItems.map((m) => {
               const key = `${m.sourceSystem}|${m.externalId}`;
               const p = predictions.get(key);
               const worst = Array.isArray(p) && p.length
-                ? p.reduce((a, b) => (SEVERITY_ORDER.indexOf(b.severity) > SEVERITY_ORDER.indexOf(a.severity) || (b.severity === a.severity && b.riskScore > a.riskScore) ? b : a))
+                ? worstPrediction(p)
                 : null;
               return (
                 <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{m.name ?? m.externalId}</h4>
-                    {worst && <Chip tone={SEVERITY_TONE[worst.severity]}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip>}
+                    {worst && <Chip tone={SEVERITY_TONE(worst.severity)}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip>}
                   </div>
                   {p === undefined ? (
                     <p className="text-xs text-slate-400">{t('common.loading')}</p>
@@ -202,6 +236,7 @@ export const LivePredictionsPage: React.FC = () => {
             })}
           </div>
         )}
+        {pager.totalPages > 1 && <div className="mt-4"><TablePagination bare compact {...pager} /></div>}
       </div>
     </div>
   );

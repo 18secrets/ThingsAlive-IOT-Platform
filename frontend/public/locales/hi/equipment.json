@@ -15,7 +15,8 @@
     "allStatuses": "सभी स्थितियाँ",
     "unnamed": "बेनाम",
     "unclassified": "अवर्गीकृत",
-    "unassigned": "असाइन नहीं"
+    "unassigned": "असाइन नहीं",
+    "close": "बंद करें"
   },
   "status": {
     "active": "सक्रिय",
@@ -196,7 +197,8 @@
     "end": "समाप्त (HH:MM)",
     "days": "दिन",
     "timeZone": "समय क्षेत्र (IANA)",
-    "timeZonePlaceholder": "जैसे Asia/Kolkata"
+    "timeZonePlaceholder": "जैसे Asia/Kolkata",
+    "allDay": "{{from}} से 24 घंटे"
   },
   "runStatus": {
     "scored": "स्कोर किया गया",
@@ -277,7 +279,9 @@
     "serialNumber": "सीरियल नंबर",
     "serviceTier": "सर्विस टियर",
     "registering": "दर्ज हो रहा है…",
-    "register": "उपकरण दर्ज करें"
+    "register": "उपकरण दर्ज करें",
+    "codeTaken": "यह कोड पहले से {{name}} द्वारा उपयोग में है।",
+    "noLibraryClass": "कोई लाइब्रेरी वर्ग नहीं चुना गया: इस मशीन को अपने-आप KPI, परिदृश्य या पूर्वानुमान नहीं मिलेंगे। यदि इसका वर्ग सूची में है तो चुनें। यदि नहीं, तो फिर भी पंजीकृत करें, Signal Bindings में इसके सिग्नल मैप करें और Things Alive से इसका वर्ग लाइब्रेरी में जोड़ने को कहें।"
   },
   "bindings": {
     "title": "सिग्नल बाइंडिंग",

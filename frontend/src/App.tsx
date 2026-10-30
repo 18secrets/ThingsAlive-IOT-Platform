@@ -70,7 +70,7 @@ import {
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
   apiApplyCatalogImport, apiDiscardCatalogImport, apiReviewCatalogImportSensors, apiDownloadCatalogTemplate,
   apiListEntitlements, apiGrantEntitlement, apiRevokeEntitlement,
-  apiListMyEquipmentClasses, apiListEquipment, apiListAllEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
+  apiListMyEquipmentClasses, apiListMyCatalogEquipmentClasses, ClassOption, apiListEquipment, apiListAllEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
   apiGetEquipmentPlacementHistory,
   apiListMyDevices, apiClaimDevice, apiUnclaimDevice,
   apiGetEquipmentCoverage, apiGetBindingDiscovery, apiProposeOrActivateBinding,
@@ -181,17 +181,24 @@ function AppData() {
   // caller's own token, so only fetched for the client role, same as realPlants.
   const [realEquipment, setRealEquipment] = useState<EquipmentProfile[]>([]);
   const [realEquipmentError, setRealEquipmentError] = useState<string | undefined>(undefined);
+  // Before the first answer the list is unknown, not empty — "No equipment · 0 rows"
+  // on first paint read as a fleet that had vanished (test report MAJ-6).
+  const [realEquipmentLoaded, setRealEquipmentLoaded] = useState(false);
   // Every account's equipment in one read (GET /equipment/all) — Master Admin's own
   // Equipment sidebar page, separate from realEquipment above which is tenant-scoped
   // and empty for a platform role.
   const [allEquipment, setAllEquipment] = useState<EquipmentProfile[]>([]);
   const [allEquipmentError, setAllEquipmentError] = useState<string | undefined>(undefined);
-  const [myEquipmentClasses, setMyEquipmentClasses] = useState<EquipmentClass[]>([]);
+  // The account's own class copies, the ones machines are registered against and
+  // scenarios are copied for — not the library entitlements, which offered the demo
+  // tenant one seed-only class with no scenarios (test report OB-1, OB-4).
+  const [myEquipmentClasses, setMyEquipmentClasses] = useState<ClassOption[]>([]);
   const [myEquipmentClassesError, setMyEquipmentClassesError] = useState<string | undefined>(undefined);
   // The client's own devices (/inventory/mine) — fitted to a machine or not, for
   // the signal-binding panel's "claim a device" step.
   const [myDevices, setMyDevices] = useState<MyDevice[]>([]);
   const [myDevicesError, setMyDevicesError] = useState<string | undefined>(undefined);
+  const [myDevicesLoaded, setMyDevicesLoaded] = useState(false);
   // Things Alive's own staff (/platform/staff) — master admin only, same reasoning
   // as accounts: real data, not tenant data, so no client-id scoping anywhere here.
   const [platformStaff, setPlatformStaff] = useState<PlatformStaffMember[]>([]);
@@ -300,6 +307,8 @@ function AppData() {
       setRealEquipmentError(undefined);
     } catch (err) {
       setRealEquipmentError(err instanceof ApiError ? err.message : 'Could not load equipment.');
+    } finally {
+      setRealEquipmentLoaded(true);
     }
   };
 
@@ -318,6 +327,8 @@ function AppData() {
       setMyDevicesError(undefined);
     } catch (err) {
       setMyDevicesError(err instanceof ApiError ? err.message : 'Could not load devices.');
+    } finally {
+      setMyDevicesLoaded(true);
     }
   };
 
@@ -427,7 +438,9 @@ function AppData() {
 
   const refreshMyEquipmentClasses = async () => {
     try {
-      setMyEquipmentClasses(await apiListMyEquipmentClasses());
+      setMyEquipmentClasses((await apiListMyCatalogEquipmentClasses())
+        .filter((c) => c.status === 'active').map((c) => ({ slug: c.slug, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)));
       setMyEquipmentClassesError(undefined);
     } catch (err) {
       setMyEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');
@@ -1268,6 +1281,7 @@ function AppData() {
                   onSetPlantBoundary={handleSetPlantBoundary}
                   realEquipment={realEquipment}
                   realEquipmentError={realEquipmentError}
+                  realEquipmentLoading={!realEquipmentLoaded}
                   allEquipment={allEquipment}
                   allEquipmentError={allEquipmentError}
                   onListPlantsForTenant={handleListPlantsForTenant}
@@ -1280,6 +1294,7 @@ function AppData() {
                   myEquipmentClassesError={myEquipmentClassesError}
                   myDevices={myDevices}
                   myDevicesError={myDevicesError}
+                  myDevicesLoading={!myDevicesLoaded}
                   onClaimDevice={handleClaimDevice}
                   onUnclaimDevice={handleUnclaimDevice}
                   onGetEquipmentCoverage={handleGetEquipmentCoverage}

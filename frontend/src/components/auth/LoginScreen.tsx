@@ -6,6 +6,7 @@ import { AlertCircle, Info, MailCheck } from 'lucide-react';
 import { Input } from 'rsuite';
 import { PasswordField } from '../common/PasswordField';
 import { useAuth } from '../../lib/AuthProvider';
+import { useReturnPath } from '../../routes/guards';
 import { ApiError } from '../../lib/api';
 import logoFull from '../../../assets/logo-icon.png';
 
@@ -13,6 +14,7 @@ export const LoginScreen: React.FC = () => {
   const { signIn, sessionEndedReason } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const returnPath = useReturnPath();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showHints, setShowHints] = useState(false);
@@ -22,8 +24,15 @@ export const LoginScreen: React.FC = () => {
   // rather than looking like an ordinary sign-out (tester bugs TC_136, TC_137).
   const shownError = error ?? sessionEndedReason ?? undefined;
 
+  // Said under the field, before asking the API: its answer to a malformed address is
+  // the generic "Request validation failed." (test report MIN-2).
+  const emailMalformed = identifier.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim());
+  const [triedSubmit, setTriedSubmit] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTriedSubmit(true);
+    if (emailMalformed) return;
     // Trim both — copy/pasting a generated password (or the combined
     // "Username: ...\nPassword: ..." clipboard text) easily picks up a
     // stray leading/trailing space or newline that silently breaks the
@@ -35,7 +44,7 @@ export const LoginScreen: React.FC = () => {
       // GuestOnly would also redirect once `authUser` updates, but that only
       // happens on the next render; navigating here means the URL changes in
       // the same tick as the sign-in, not one render later.
-      navigate('/dashboard', { replace: true });
+      navigate(returnPath, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('login.failed'));
     } finally {
@@ -71,8 +80,14 @@ export const LoginScreen: React.FC = () => {
                 autoFocus
                 value={identifier}
                 onChange={(value) => setIdentifier(value)}
+                onBlur={() => setTriedSubmit(true)}
                 placeholder={t('login.identifierPlaceholder')}
+                inputMode="email"
+                aria-invalid={triedSubmit && emailMalformed}
               />
+              {triedSubmit && emailMalformed && (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{t('login.emailMalformed')}</p>
+              )}
             </div>
 
             <PasswordField

@@ -20,7 +20,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -119,6 +119,7 @@ interface AdminManagementProps {
   onNavigateToAISetup?: () => void;
   realEquipment: EquipmentProfile[];
   realEquipmentError?: string;
+  realEquipmentLoading?: boolean;
   /** Every account's register in one read (`GET /equipment/all`) — Master Admin's
    *  own Equipment sidebar page. Separate from `realEquipment`, which is
    *  tenant-scoped and empty for them. */
@@ -140,10 +141,11 @@ interface AdminManagementProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;
+  myDevicesLoading?: boolean;
   onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
   onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
@@ -275,6 +277,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onNavigateToAISetup,
   realEquipment,
   realEquipmentError,
+  realEquipmentLoading,
   allEquipment,
   allEquipmentError,
   onListPlantsForTenant,
@@ -287,6 +290,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   myEquipmentClassesError,
   myDevices,
   myDevicesError,
+  myDevicesLoading,
   onClaimDevice,
   onUnclaimDevice,
   onGetEquipmentCoverage,
@@ -494,6 +498,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <ClientDeviceManagement
             devices={myDevices}
             error={myDevicesError}
+            loading={myDevicesLoading}
             equipment={realEquipment}
             onUnclaimDevice={onUnclaimDevice}
           />
@@ -518,6 +523,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <EquipmentManagement
             equipment={realEquipment}
             error={realEquipmentError}
+            loading={realEquipmentLoading}
             onCreateEquipment={onCreateEquipment}
             onUpdateEquipment={onUpdateEquipment}
             onMoveEquipment={onMoveEquipment}

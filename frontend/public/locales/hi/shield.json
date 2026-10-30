@@ -31,7 +31,8 @@
     "overdue": "अतिदेय",
     "due_soon": "जल्द देय",
     "current": "अद्यतन",
-    "not_recorded": "दर्ज नहीं"
+    "not_recorded": "दर्ज नहीं",
+    "alsoOverdue": "अतिदेय भी"
   },
   "result": {
     "passed": "पास",

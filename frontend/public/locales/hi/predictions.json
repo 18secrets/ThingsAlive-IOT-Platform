@@ -24,7 +24,8 @@
     "needs": "ज़रूरी: {{signals}}",
     "noSignals": "कोई सिग्नल नहीं",
     "history_one": "{{count}} दिन का इतिहास",
-    "history_other": "{{count}} दिन का इतिहास"
+    "history_other": "{{count}} दिन का इतिहास",
+    "disableConfirm": "“{{name}}” को बंद करें? दोबारा चालू होने तक इस वर्ग की मशीनों का इसके लिए स्कोर नहीं होगा।"
   },
   "kpis": {
     "title": "पूर्वानुमान KPI",

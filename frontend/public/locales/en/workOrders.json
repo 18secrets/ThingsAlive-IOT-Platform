@@ -1,6 +1,7 @@
 {
   "hero": {
-    "subtitle": "Jobs raised against your equipment"
+    "subtitle": "Jobs raised against your machines",
+    "heading": "Maintenance jobs"
   },
   "loading": "Loading…",
   "empty": "No work orders for this selection.",
@@ -14,12 +15,19 @@
   },
   "people": {
     "someoneElse": "someone else",
-    "nobody": "nobody"
+    "nobody": "nobody",
+    "system": {
+      "prediction": "Things Alive (automatic, from a critical prediction)",
+      "shift-runner": "Things Alive (shift scoring)",
+      "geofence": "Things Alive (geofence)",
+      "other": "Things Alive (automatic)"
+    }
   },
   "prompts": {
     "complete": "What was done?",
     "cancel": "Why is this being cancelled?",
-    "reopen": "Why is this being reopened?"
+    "reopen": "Why is this being reopened?",
+    "start": "Start {{reference}}? Its clock starts now."
   },
   "service": {
     "heading": "Service due",
@@ -57,7 +65,8 @@
     "edited": "Edited"
   },
   "filters": {
-    "allStatuses": "All statuses"
+    "allStatuses": "All statuses",
+    "allPriorities": "All priorities"
   },
   "actions": {
     "create": "Create work order",
@@ -90,14 +99,16 @@
   "form": {
     "task": "Task",
     "taskPlaceholder": "e.g. Inspect coolant sensor",
-    "selectEquipment": "Select equipment",
+    "selectEquipment": "Select a machine",
     "priority": "Priority",
     "dueDate": "Due date",
     "description": "Description",
     "assignTo": "Assign to",
     "nobodyUnassign": "Nobody (unassign)",
     "noteOptional": "Note (optional)",
-    "notePlaceholder": "Why the change, if it helps whoever reads the history"
+    "notePlaceholder": "Why the change, if it helps whoever reads the history",
+    "pastDue": "A new job cannot be due in the past.",
+    "pastDueWarning": "This date has already passed; the job will show as overdue."
   },
   "history": {
     "empty": "Nothing recorded yet.",

@@ -13,7 +13,9 @@
     "save": "Could not save this rule."
   },
   "prompts": {
-    "resolve": "What was found / done?"
+    "resolve": "What was found / done?",
+    "acknowledgeConfirm": "Acknowledge this alert? This cannot be undone.",
+    "disableRuleConfirm": "Disable “{{name}}”? It stops raising alerts on every machine it covers until it is enabled again."
   },
   "severity": {
     "none": "none",
@@ -35,7 +37,7 @@
     "chain-origin": "Chain origin"
   },
   "scope": {
-    "unknownPlant": "Unknown plant",
+    "unknownPlant": "Unknown site",
     "equipmentClass": "Equipment class",
     "account": "Whole account",
     "oneSite": "One site",
@@ -52,12 +54,22 @@
     "edit": "Edit"
   },
   "events": {
-    "heading": "Open alerts",
+    "heading": "Live alerts",
     "counts": "{{open}} open · {{acknowledged}} acknowledged",
     "empty": "No open alerts.",
     "acknowledge": "Acknowledge",
     "resolve": "Resolve",
-    "viewMachine": "View machine"
+    "viewMachine": "View machine",
+    "col": {
+      "fired": "Fired at",
+      "machine": "Machine",
+      "rule": "Rule",
+      "severity": "Severity",
+      "state": "State",
+      "summary": "Summary",
+      "acknowledgedAt": "Acknowledged at"
+    },
+    "allStates": "Open and acknowledged"
   },
   "form": {
     "editTitle": "Edit alert rule",
@@ -79,7 +91,9 @@
     "site": "Site",
     "description": "Description (optional)",
     "cancel": "Cancel",
-    "save": "Save changes"
+    "save": "Save changes",
+    "notANumber": "Has to be a number.",
+    "minBelowMax": "Has to be above the minimum, or the rule can never fire."
   },
   "agent": {
     "assistantTitle": "AI Assistant",
@@ -118,7 +132,7 @@
   "assistant": {
     "heroTitle": "Describe your alarm in natural language",
     "heroBody": "ThingsAlive AI uses advanced semantic processing to convert your business requirements into robust, industrial-grade monitoring workflows.",
-    "selectEquipment": "Select equipment…",
+    "selectEquipment": "Select a machine…",
     "createCustom": "Create Custom",
     "selectThingFirst": "Select a Thing before describing or generating an alert.",
     "aiPrompt": "AI PROMPT",
@@ -175,7 +189,8 @@
     "proposing": "Proposing…",
     "proposeHint": "Replays it over 90 days on this machine and sends it to your super admin to approve, instead of opening it in the editor.",
     "proposeFailed": "Could not propose this workflow.",
-    "proposeNeedsInput": "The proposal needs more before it can be made:"
+    "proposeNeedsInput": "The proposal needs more before it can be made:",
+    "unmatchedSignal": "\"{{what}}\" matches no signal this machine reports. Choose the signal to watch before saving."
   },
   "workflow": {
     "name": "Workflow name",

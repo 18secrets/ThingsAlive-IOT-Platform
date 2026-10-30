@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
+import { StatusTone, statusTone, severityTone } from '../components/common/statusTone';
 import { ListTable } from '../components/common/ListTable';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { Modal } from '../components/common/Modal';
@@ -24,10 +25,8 @@ import {
  * a copy of its own.
  */
 
-const SEVERITY_TONE: Record<IncidentSeverity, 'rose' | 'amber' | 'sky' | 'slate'> = {
-  critical: 'rose', high: 'amber', medium: 'sky', low: 'slate', none: 'slate',
-};
-const STATUS_TONE: Record<IncidentStatus, 'rose' | 'amber' | 'emerald'> = { open: 'rose', acknowledged: 'amber', resolved: 'emerald' };
+const SEVERITY_TONE = (s: string) => severityTone(s);
+const STATUS_TONE: Record<IncidentStatus, StatusTone> = { open: statusTone('open'), acknowledged: statusTone('acknowledged'), resolved: statusTone('resolved') };
 const SLA_TONE: Record<SlaState, 'slate' | 'sky' | 'emerald' | 'rose'> = { no_policy: 'slate', on_track: 'sky', met: 'emerald', breached: 'rose' };
 // Status, SLA-state, event, severity and priority labels are key maps in incidents.json
 // (status.*, sla.*, event.*, severity.*, priority.*), so logic keeps the raw values.
@@ -126,7 +125,7 @@ export const IncidentManagementPage: React.FC = () => {
               <Info className="w-4 h-4 text-sky-200" />
             </span>
           </div>
-          <h2 className="text-xl font-bold">{t('page.title')}</h2>
+          <h2 className="text-xl font-bold">{t('page.heading')}</h2>
         </div>
         <button
           onClick={() => setPoliciesOpen(true)}
@@ -169,10 +168,10 @@ export const IncidentManagementPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" />
-        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" />
-        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" />
-        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" />
+        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" loading={loading} />
+        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" loading={loading} />
+        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" loading={loading} />
+        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" loading={loading} />
       </div>
 
       <div className="flex justify-end">
@@ -196,7 +195,7 @@ export const IncidentManagementPage: React.FC = () => {
           rowKey={(r) => r.id}
           cells={(r) => [
             <span className="font-medium">{machineName(r.machine)}</span>,
-            <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>,
+            <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>,
             <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>,
             <span>
               {personName(r.ownerUserId) ?? <span className="text-slate-400">{t('page.unassigned')}</span>}
@@ -217,7 +216,7 @@ export const IncidentManagementPage: React.FC = () => {
               className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2 hover:border-sky-300 cursor-pointer"
             >
               <div className="flex items-center justify-between gap-2">
-                <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+                <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
                 <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{machineName(r.machine)}</h4>
@@ -247,7 +246,7 @@ export const IncidentManagementPage: React.FC = () => {
             <div key={`${v.machine.sourceSystem}/${v.machine.externalId}`} className="flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-2">
               <span className="text-slate-700 dark:text-slate-200">{v.machine.name ?? v.machine.externalId}</span>
               <span className="flex items-center gap-1.5">
-                <Chip tone={SEVERITY_TONE[v.worstSeverity]}>{t(`severity.${v.worstSeverity}`, { defaultValue: v.worstSeverity })}</Chip>
+                <Chip tone={SEVERITY_TONE(v.worstSeverity)}>{t(`severity.${v.worstSeverity}`, { defaultValue: v.worstSeverity })}</Chip>
                 <span className="text-slate-400">{t('unrecorded.openAlerts', { count: v.openAlerts.length })}</span>
               </span>
             </div>
@@ -274,11 +273,12 @@ export const IncidentManagementPage: React.FC = () => {
   );
 };
 
-const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad' }> = ({ label, value, tone }) => {
+// A 0 before the first answer reads as "no incidents" — the dash says "not known yet".
+const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad'; loading?: boolean }> = ({ label, value, tone, loading }) => {
   const toneClass = tone === 'bad' ? 'text-rose-600 dark:text-rose-400' : tone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100';
   return (
     <div className="border rounded-xl p-4 shadow-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{loading ? '…' : value}</div>
       <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );
@@ -333,7 +333,7 @@ const IncidentPanel: React.FC<{
   return (
     <div className="space-y-4 text-xs">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Chip tone={SEVERITY_TONE[detail.severity]}>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Chip>
+        <Chip tone={SEVERITY_TONE(detail.severity)}>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Chip>
         <Chip tone={STATUS_TONE[detail.status]}>{t(`status.${detail.status}`)}</Chip>
         <Chip tone={SLA_TONE[detail.sla.acknowledge.state]}>{t('sla.ackChip', { state: t(`sla.state.${detail.sla.acknowledge.state}`) })}</Chip>
         <Chip tone={SLA_TONE[detail.sla.resolve.state]}>{t('sla.resolveChip', { state: t(`sla.state.${detail.sla.resolve.state}`) })}</Chip>
@@ -350,7 +350,7 @@ const IncidentPanel: React.FC<{
       {live && (
         <div className="flex items-center gap-2 flex-wrap">
           {detail.status === 'open' && (
-            <button disabled={busy} onClick={() => run(() => apiAcknowledgeIncident(id))} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
+            <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
           )}
           <SelectPicker
             size="sm"
@@ -397,7 +397,7 @@ const IncidentPanel: React.FC<{
           <div key={a.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg px-2.5 py-1.5">
             <span className="text-slate-700 dark:text-slate-200 truncate">{a.summary}</span>
             <span className="flex items-center gap-1.5 shrink-0">
-              <Chip tone={SEVERITY_TONE[(a.severity as IncidentSeverity)] ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
+              <Chip tone={SEVERITY_TONE((a.severity as IncidentSeverity)) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
               <span className="text-slate-400">{t(`alertState.${a.state}`, { defaultValue: a.state })} · {new Date(a.firedAt).toLocaleString()}</span>
             </span>
           </div>
@@ -477,7 +477,7 @@ const SlaPolicies: React.FC = () => {
         const valid = (d.ack ?? 0) >= 1 && (d.resolve ?? 0) >= 1;
         return (
           <div key={s} className="grid grid-cols-[90px_1fr_1fr_auto] gap-2 items-center">
-            <Chip tone={SEVERITY_TONE[s]}>{t(`severity.${s}`)}</Chip>
+            <Chip tone={SEVERITY_TONE(s)}>{t(`severity.${s}`)}</Chip>
             <InputNumber size="sm" min={1} value={d.ack} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, ack: v == null || v === '' ? null : Number(v) } }))} />
             <InputNumber size="sm" min={1} value={d.resolve} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, resolve: v == null || v === '' ? null : Number(v) } }))} />
             <div className="flex items-center gap-1">

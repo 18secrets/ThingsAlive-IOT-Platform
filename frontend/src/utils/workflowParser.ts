@@ -85,9 +85,21 @@ function extractConditions(text: string): RawMatch[] {
 }
 
 /**
+ * Words that say what kind of measurement, not which one. Sharing only these is no match:
+ * "pump energy consumption" is not fuel_consumption, and "pressure drop across the valves"
+ * is not engine_oil_pressure — the second became a rule that fired on every normal
+ * reading (test report MIN-9).
+ */
+const GENERIC_WORDS = new Set([
+  'temperature', 'temp', 'pressure', 'level', 'oil', 'consumption', 'rate', 'status', 'speed',
+  'engine', 'load', 'flow', 'current', 'voltage', 'value', 'reading',
+]);
+
+/**
  * The declared signal a phrase most likely means: exact, then one name containing the
- * other, then the most shared words. Unmatched phrases are kept as typed, and the server
- * names them as undeclared rather than this guessing further.
+ * other, then the most shared words — at least one of them specific, or two of any kind.
+ * Unmatched phrases are kept as typed, and the server names them as undeclared rather
+ * than this guessing further.
  */
 export function matchSignal(phrase: string, declared: string[]): { signal: string; matched: boolean } {
   if (!declared.length) return { signal: phrase, matched: false };
@@ -98,8 +110,11 @@ export function matchSignal(phrase: string, declared: string[]): { signal: strin
   const words = phrase.split('_');
   let best: { signal: string; score: number } | null = null;
   for (const s of declared) {
-    const score = s.split('_').filter((w) => words.includes(w)).length;
-    if (score > 0 && (!best || score > best.score)) best = { signal: s, score };
+    const shared = s.split('_').filter((w) => words.includes(w));
+    const specific = shared.filter((w) => !GENERIC_WORDS.has(w)).length;
+    if (specific === 0 && shared.length < 2) continue;
+    const score = shared.length + specific;
+    if (!best || score > best.score) best = { signal: s, score };
   }
   return best ? { signal: best.signal, matched: true } : { signal: phrase, matched: false };
 }
@@ -146,7 +161,12 @@ export function parsePromptToWorkflow(prompt: string, scope: WorkflowScope, decl
 
   const lower = ` ${text.toLowerCase()} `;
   const orFirst = lower.indexOf(' or ') !== -1 && (lower.indexOf(' and ') === -1 || lower.indexOf(' or ') < lower.indexOf(' and '));
-  const title = name || text.slice(0, 80) || 'New alert';
+  // Named for what it watches, not after the sentence typed: two rules on Development
+  // were called "Notify me if pump energy consumption spikes above 55kWh…" (MIN-9).
+  const described = usable.map((c) => `${c.signal.replace(/_/g, ' ')} ${c.operator === '>' ? 'above' : 'below'} ${c.value}`);
+  const fromConditions = described.length
+    ? (described.join(orFirst ? ' or ' : ' and ').replace(/^./, (ch) => ch.toUpperCase())) : '';
+  const title = name || fromConditions.slice(0, 80) || text.slice(0, 80) || 'New alert';
   let last = conditionIds[0];
   if (conditionIds.length > 1) {
     nodes.push({ id: 'combine', type: orFirst ? 'AnyOf' : 'AllOf' });

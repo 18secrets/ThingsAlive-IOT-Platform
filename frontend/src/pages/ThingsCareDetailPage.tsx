@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Gauge, Plus, RefreshCw, Wrench,
 } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
@@ -19,9 +21,7 @@ import {
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
 
-const SEVERITY_TONE: Record<PredictionSeverity, 'emerald' | 'amber' | 'rose' | 'slate'> = {
-  none: 'emerald', low: 'emerald', medium: 'amber', high: 'rose', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   normal: 'emerald', warning: 'amber', critical: 'rose', unscored: 'slate',
 };
@@ -144,6 +144,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/things-care');
   const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -152,12 +153,16 @@ export const ThingsCareDetailPage: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState(false);
+  // What a manual score did, on the page: "Saved successfully" with nothing scored read as
+  // success (test report OB-3), so this says what ran, what was skipped and why.
+  const [scoreNotice, setScoreNotice] = useState<{ tone: 'ok' | 'warn'; lines: string[] } | null>(null);
   const [openSignal, setOpenSignal] = useState<{ slug: string; signal: string } | null>(null);
 
   usePageHeader({
+    breadcrumb: t('translation:sidebar.thingsCare'),
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
-    onBack: () => navigate('/things-care'),
+    onBack: goBack,
   });
 
   const load = async () => {
@@ -190,14 +195,23 @@ export const ThingsCareDetailPage: React.FC = () => {
     setScoring(true);
     try {
       const result = await apiScorePredictionsNow(sourceSystem, externalId);
-      window.alert([
-        t('detail.scored', { count: result.written.length }),
-        t('detail.skipped', { count: result.skipped.length }),
-        t('detail.raised', { count: result.raised.length }),
-      ].join(' '));
+      if (!result.written.length && !result.skipped.length) {
+        setScoreNotice({ tone: 'warn', lines: [t('detail.nothingToScore')] });
+      } else {
+        setScoreNotice({
+          tone: result.written.length ? 'ok' : 'warn',
+          lines: [
+            t('detail.scored', { count: result.written.length })
+              + (result.raised.length ? ` ${t('detail.raised', { count: result.raised.length })}` : ''),
+            ...result.skipped.map((s) => t('detail.skippedBecause', {
+              scenario: s.clientScenarioSlug, reason: t(`detail.skipReason.${s.reason}`, { defaultValue: s.reason }),
+            })),
+          ],
+        });
+      }
       await load();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('errors.scoreNow'));
+      setScoreNotice({ tone: 'warn', lines: [err instanceof ApiError ? err.message : t('errors.scoreNow')] });
     } finally {
       setScoring(false);
     }
@@ -234,6 +248,13 @@ export const ThingsCareDetailPage: React.FC = () => {
             </button>
           </div>
         </div>
+        {scoreNotice && (
+          <div className={`text-xs rounded-lg px-3 py-2 border space-y-0.5 ${scoreNotice.tone === 'ok'
+            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900'
+            : 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900'}`}>
+            {scoreNotice.lines.map((l, i) => <p key={i}>{l}</p>)}
+          </div>
+        )}
         {sourceSystem && externalId && <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="care" />}
       </div>
 
@@ -264,7 +285,7 @@ export const ThingsCareDetailPage: React.FC = () => {
             {predictions.map((p) => {
               const occurred = p.occurredAt ? new Date(p.occurredAt) : null;
               const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString() : '—';
-              const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE[p.severity] : 'slate';
+              const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE(p.severity) : 'slate';
               const signals = (p.signals ?? []).slice().sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9));
               const healthy = signals.filter((s) => s.state === 'normal').length;
               const abnormal = signals.filter((s) => s.state === 'warning' || s.state === 'critical');

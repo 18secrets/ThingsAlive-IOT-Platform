@@ -5,10 +5,14 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile, EquipmentPlacementEvent,
   ImportResult, MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
-  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation, ClassOption
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
+import { Modal } from '../common/Modal';
+import { ExportCsvButton } from '../common/ExportCsvButton';
+import { SortLabel } from '../common/ListTable';
+import { sortRows, useSort } from '../../lib/useSort';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -17,6 +21,8 @@ const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value
 interface EquipmentManagementProps {
   equipment: EquipmentProfile[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  loading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -26,7 +32,7 @@ interface EquipmentManagementProps {
   ) => Promise<EquipmentProfile>;
   onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
   onGetEquipmentPlacementHistory: (sourceSystem: string, externalId: string) => Promise<EquipmentPlacementEvent[]>;
-  equipmentClasses: EquipmentClass[];
+  equipmentClasses: ClassOption[];
   equipmentClassesError?: string;
   plants: Plant[];
   devices: MyDevice[];
@@ -55,6 +61,7 @@ interface EquipmentManagementProps {
 export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   equipment,
   error,
+  loading,
   onCreateEquipment,
   onUpdateEquipment,
   onMoveEquipment,
@@ -91,6 +98,11 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   const [retireError, setRetireError] = useState<string | undefined>(undefined);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | undefined>(undefined);
+  // In the page, not window.prompt/alert: a dialog the browser draws is one an automated
+  // tester never sees, and "Import from Legacy" looked like it did nothing (test report OB-8).
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSource, setImportSource] = useState('iot-platform-1');
+  const [importResult, setImportResult] = useState<string[] | null>(null);
 
   const classBySlug = useMemo(
     () => new Map(equipmentClasses.map((ec) => [ec.slug, ec])),
@@ -115,10 +127,20 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     });
   }, [equipment, searchTerm, selectedStatus, classBySlug]);
 
+  const { sort, toggle } = useSort<'code' | 'name' | 'class' | 'plant' | 'status'>({ key: 'code', dir: 'asc' });
+  const sortedList = useMemo(() => sortRows(filteredList, sort, {
+    code: (e) => e.externalId,
+    name: (e) => e.name ?? e.externalId,
+    class: (e) => (e.equipmentClassSlug ? classBySlug.get(e.equipmentClassSlug)?.name ?? e.equipmentClassSlug : null),
+    plant: (e) => (e.plantId ? plantById.get(e.plantId)?.name ?? null : null),
+    status: (e) => e.status,
+  }), [filteredList, sort, classBySlug, plantById]);
+  const onSort = (key: string) => { toggle(key as typeof sort.key); setCurrentPage(1); };
+
   const totalRows = filteredList.length;
   const totalPages = Math.ceil(totalRows / rowsPerPage) || 1;
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedList = filteredList.slice(startIndex, startIndex + rowsPerPage);
+  const paginatedList = sortedList.slice(startIndex, startIndex + rowsPerPage);
 
   const handleCreate = async (input: EquipmentInput) => {
     await onCreateEquipment(input);
@@ -158,21 +180,19 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     }
   };
 
-  const handleImport = async () => {
-    const sourceSystem = window.prompt(
-      t('equipmentList.importPrompt'),
-      'iot-platform-1',
-    );
-    if (!sourceSystem?.trim()) return;
+  const handleImport = () => { setImportResult(null); setImportError(undefined); setImportOpen(true); };
+
+  const runImport = async () => {
+    if (!importSource.trim()) return;
     setImporting(true);
     setImportError(undefined);
     try {
-      const result = await onImportEquipmentFromMirror(sourceSystem.trim());
-      window.alert(
-        `${t('equipmentList.imported', { count: result.imported })}\n`
-        + `${t('equipmentList.alreadyKnown', { count: result.alreadyKnown })}\n`
-        + t('equipmentList.importedUnplaced', { count: result.unplaced }),
-      );
+      const result = await onImportEquipmentFromMirror(importSource.trim());
+      setImportResult([
+        t('equipmentList.imported', { count: result.imported }),
+        t('equipmentList.alreadyKnown', { count: result.alreadyKnown }),
+        ...(result.unplaced ? [t('equipmentList.importedUnplaced', { count: result.unplaced })] : []),
+      ]);
     } catch (err) {
       setImportError(err instanceof ApiError ? err.message : t('equipmentList.importFailed'));
     } finally {
@@ -218,6 +238,16 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <ExportCsvButton
+            name="equipment"
+            disabled={!filteredList.length}
+            headers={['code', 'name', 'class', 'plant', 'manufacturer', 'model', 'serial', 'tier', 'status'].map((c) => t(`equipmentList.col.${c}`))}
+            rows={() => sortedList.map((e) => [
+              e.externalId, e.name, e.equipmentClassSlug ? (classBySlug.get(e.equipmentClassSlug)?.name ?? e.equipmentClassSlug) : '',
+              e.plantId ? (plantById.get(e.plantId)?.name ?? '') : '', e.manufacturer, e.modelNumber, e.serialNumber, e.tier,
+              t(`status.${e.status}`),
+            ])}
+          />
           <button
             id="import-equipment-btn"
             disabled={importing}
@@ -254,15 +284,15 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
               <tr>
-                <th className="py-3 px-3.5">{t('equipmentList.col.code')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.name')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.class')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.plant')}</th>
+                <th className="py-3 px-3.5"><SortLabel label={t('equipmentList.col.code')} sortKey="code" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.name')} sortKey="name" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.class')} sortKey="class" sort={sort} onSort={onSort} /></th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.plant')} sortKey="plant" sort={sort} onSort={onSort} /></th>
                 <th className="py-3 px-4">{t('equipmentList.col.manufacturer')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.model')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.serial')}</th>
                 <th className="py-3 px-4">{t('equipmentList.col.tier')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.status')}</th>
+                <th className="py-3 px-4"><SortLabel label={t('equipmentList.col.status')} sortKey="status" sort={sort} onSort={onSort} /></th>
                 <th className="py-3 px-4"></th>
               </tr>
             </thead>
@@ -345,7 +375,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-slate-400 font-sans">
-                    {t('equipmentList.empty')}
+                    {loading ? t('common.loading') : t('equipmentList.empty')}
                   </td>
                 </tr>
               )}
@@ -356,7 +386,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         {/* Pagination */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
           <div>
-            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{loading ? '—' : totalRows}</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -411,6 +441,27 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
       </div>
 
       {/* Add / Edit Equipment Modal */}
+      <Modal isOpen={importOpen} onClose={() => setImportOpen(false)} title={t('equipmentList.importFromLegacy')} subtitle={t('equipmentList.importTitle')}>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('equipmentList.importPrompt')}</span>
+          <Input value={importSource} onChange={(v) => setImportSource(v)} className="font-mono text-xs" />
+        </label>
+        {importError && <p className="text-xs text-rose-600 dark:text-rose-400">{importError}</p>}
+        {importResult && (
+          <div className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2 space-y-0.5">
+            {importResult.map((line) => <p key={line}>{line}</p>)}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={() => setImportOpen(false)} className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm cursor-pointer">
+            {t('common.close')}
+          </button>
+          <button type="button" disabled={importing || !importSource.trim()} onClick={runImport} className="px-4 py-2 rounded-lg bg-[#0B7285] hover:bg-[#095C6B] text-white text-sm font-semibold disabled:opacity-60 cursor-pointer">
+            {importing ? t('equipmentList.importing') : t('equipmentList.importFromLegacy')}
+          </button>
+        </div>
+      </Modal>
+
       <AddEquipmentModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEquipment(null); }}
@@ -420,6 +471,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         equipmentClasses={equipmentClasses}
         plants={plants}
         existingEquipment={editingEquipment}
+        allEquipment={equipment}
       />
 
       <EquipmentBindingsModal

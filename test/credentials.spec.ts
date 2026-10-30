@@ -24,6 +24,11 @@ describe('password policy', () => {
     expect(() => passwords.assertAcceptable('Correct-Horse-1')).not.toThrow();
   });
 
+  it('refuses fewer than eight characters, as the console always said, even with every class present', () => {
+    expect(() => passwords.assertAcceptable('Aa1!xyz')).toThrow(/at least 8 characters/);
+    expect(() => passwords.assertAcceptable('Aa1!wxyz')).not.toThrow();
+  });
+
   it('refuses the handful anybody tries first', () => {
     expect(() => passwords.assertAcceptable('Password1!')).toThrow(/first anybody tries/);
   });

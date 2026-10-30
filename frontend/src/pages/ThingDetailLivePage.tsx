@@ -1,7 +1,9 @@
 import React from 'react';
+import { severityTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
@@ -17,9 +19,7 @@ import {
 const DAY = 86_400_000;
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
 
-const SEVERITY_TONE: Record<string, 'rose' | 'amber' | 'sky' | 'emerald' | 'slate'> = {
-  critical: 'rose', high: 'rose', medium: 'amber', low: 'sky', none: 'emerald',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
 /**
  * One machine at a glance, from live data (the live dashboard's drill-down): status,
@@ -30,6 +30,7 @@ const SEVERITY_TONE: Record<string, 'rose' | 'amber' | 'sky' | 'emerald' | 'slat
 export const ThingDetailLivePage: React.FC = () => {
   const { sourceSystem = '', externalId = '' } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/dashboard');
   const { t } = useTranslation('dashboard');
   const key = [sourceSystem, externalId];
 
@@ -46,13 +47,17 @@ export const ThingDetailLivePage: React.FC = () => {
   const orders = useSlot<WorkOrder[]>(() => apiListWorkOrders({ status: ['created', 'in-progress'], equipment: externalId }), key);
   const shield = useSlot<ShieldSummary>(() => apiGetShieldSummary(), key);
   // Parameters resolve per machine by its register id, which only the profile carries.
+  // While the profile loads this stays pending — rejecting flashed "not available for
+  // your role", which is what any rejection renders as, before the real answer arrived.
   const params = useSlot<EffectiveParameter[]>(
-    () => (profile.state === 'ok' && profile.data ? apiGetEffectiveParameters({ scope: 'equipment', scopeRef: profile.data.id }) : Promise.reject(new Error('no profile'))),
+    () => (profile.state === 'loading' ? new Promise<never>(() => {})
+      : profile.state === 'ok' && profile.data ? apiGetEffectiveParameters({ scope: 'equipment', scopeRef: profile.data.id })
+      : Promise.reject(new Error('no profile'))),
     [profile.state],
   );
 
   const name = profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
-  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: () => navigate('/dashboard') });
+  usePageHeader({ breadcrumb: t('translation:sidebar.dashboard'), title: name, subtitle: t('thingLive.subtitle'), onBack: goBack });
 
   if (profile.state === 'ok' && !profile.data) {
     return <p className="text-sm text-slate-500">{t('thingLive.notInRegister')}</p>;
@@ -68,9 +73,10 @@ export const ThingDetailLivePage: React.FC = () => {
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('thingLive.banner')}</span>
-        <h2 className="text-xl font-bold">{name}</h2>
+        <h2 className="text-xl font-bold">{profile.state === 'loading' ? '…' : name}</h2>
         <p className="text-xs text-sky-100">
-          {sourceSystem}/{externalId}{p?.equipmentClassSlug ? ` · ${p.equipmentClassSlug}` : ` · ${t('thingLive.notClassified')}`}{siteName ? ` · ${siteName}` : ''}
+          {/* "not classified" only once the register has answered; before, it is just unknown (COS-6). */}
+          {sourceSystem}/{externalId}{p?.equipmentClassSlug ? ` · ${p.equipmentClassSlug}` : profile.state === 'ok' ? ` · ${t('thingLive.notClassified')}` : ''}{siteName ? ` · ${siteName}` : ''}
         </p>
       </div>
 
@@ -101,11 +107,11 @@ export const ThingDetailLivePage: React.FC = () => {
         <Panel title={t('thingLive.predictions')} icon={<Activity className="w-4 h-4" />} slot={predictions} empty={t('thingLive.predictionsEmpty')}
           render={(d) => d.map((x) => (
             <Row key={x.id} left={x.clientScenarioSlug}
-              right={<><Chip tone={SEVERITY_TONE[x.severity] ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip><span className="text-slate-400">{t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}</span></>} />
+              right={<><Chip tone={SEVERITY_TONE(x.severity) ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip><span className="text-slate-400">{t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}</span></>} />
           ))} />
         <Panel title={t('thingLive.openAlerts')} icon={<Bell className="w-4 h-4" />} slot={alerts} empty={t('thingLive.openAlertsEmpty')}
           render={(d) => d.map((a) => (
-            <Row key={a.id} left={a.summary} right={<><Chip tone={SEVERITY_TONE[a.severity] ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip><span className="text-slate-400">{t(`state.${a.state}`, { defaultValue: a.state })}</span></>} />
+            <Row key={a.id} left={a.summary} right={<><Chip tone={SEVERITY_TONE(a.severity) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip><span className="text-slate-400">{t(`state.${a.state}`, { defaultValue: a.state })}</span></>} />
           ))} />
         <Panel title={t('thingLive.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} slot={orders} empty={t('thingLive.openWorkOrdersEmpty')}
           action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}

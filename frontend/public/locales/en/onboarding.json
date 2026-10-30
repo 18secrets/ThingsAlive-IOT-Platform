@@ -3,7 +3,9 @@
     "title": "AI Onboarding",
     "subtitle": "Onboarding progress by site",
     "chatTitle": "ChatBot Assistant",
-    "chatSubtitle": "AI Setup Assistant"
+    "chatSubtitle": "AI Setup Assistant",
+    "preferForm": "Prefer a form? Add the machine with its class, site and details on the Equipment page; its onboarding steps then show here.",
+    "openForm": "Open the form"
   },
   "progress": {
     "loadFailed": "Could not load onboarding progress.",
@@ -32,7 +34,8 @@
     "fullyOnboarded": "Fully onboarded",
     "inProgress": "In progress",
     "class": "class {{slug}}",
-    "waitingOn": "Waiting on: {{step}}"
+    "waitingOn": "Waiting on: {{step}}",
+    "fix": "Fix"
   },
   "siteStatus": {
     "completed": "Completed",
@@ -73,7 +76,8 @@
     "no_active_scenario": "No scenario is active on the machine",
     "no_alert_rule": "No enabled alert rule covers the machine",
     "no_user_access": "Nobody but the super admins can see the machine",
-    "blocked_by_step": "Waiting on an earlier step"
+    "blocked_by_step": "Waiting on an earlier step",
+    "alert_signal_unbound": "Alert rules cover the machine, but none watches a signal it has bound yet"
   },
   "list": {
     "totalSessions": "Total Sessions",
@@ -115,7 +119,7 @@
       "ask": {
         "title": "Ask anything",
         "description": "Plain English queries.",
-        "prompt": "Which equipment is due for maintenance this week?"
+        "prompt": "Which machines are due for maintenance this week?"
       },
       "alerts": {
         "title": "Auto-alerts",

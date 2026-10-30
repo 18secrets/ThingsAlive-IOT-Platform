@@ -7,6 +7,7 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ApiError, DeviceHealthWindow, DeviceLinkState, EquipmentProfile, MyDevice, apiGetDeviceHealth } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
+import { ExportCsvButton } from '../common/ExportCsvButton';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -19,12 +20,14 @@ const STATE_STYLE: Record<MyDevice['state'], string> = {
 interface ClientDeviceManagementProps {
   devices: MyDevice[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  loading?: boolean;
   equipment: EquipmentProfile[];
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
 }
 
 export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
-  devices, error, equipment, onUnclaimDevice,
+  devices, error, loading, equipment, onUnclaimDevice,
 }) => {
   const { t } = useTranslation('equipment');
   const stateOptions = STATE_VALUES.map((value) => ({ label: t(`deviceState.${value}`), value }));
@@ -91,6 +94,12 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
             size="sm"
           />
         </div>
+        <ExportCsvButton
+          name="devices"
+          disabled={!filtered.length}
+          headers={['IMEI', t('devices.col.model'), t('devices.col.state'), t('devices.col.fittedTo')]}
+          rows={() => filtered.map((d) => [d.imei, d.model, t(`deviceState.${d.state}`), equipmentName(d.equipmentExternalId)])}
+        />
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
@@ -157,7 +166,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
-                    {t('devices.empty')}
+                    {loading ? t('common.loading') : t('devices.empty')}
                   </td>
                 </tr>
               )}
@@ -215,7 +224,9 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
         <li key={w.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
-              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowEnd).toLocaleTimeString()}
+              {/* The end's date too when the window crosses midnight (test report COS-4). */}
+              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString() : new Date(w.windowEnd).toLocaleString()}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>

@@ -31,7 +31,8 @@
     "overdue": "ଅତିଦେୟ",
     "due_soon": "ଶୀଘ୍ର ଦେୟ",
     "current": "ଅଦ୍ୟତନ",
-    "not_recorded": "ଦର୍ଜ ହୋଇନାହିଁ"
+    "not_recorded": "ଦର୍ଜ ହୋଇନାହିଁ",
+    "alsoOverdue": "ବିଳମ୍ବିତ ମଧ୍ୟ"
   },
   "result": {
     "passed": "ପାସ୍",
