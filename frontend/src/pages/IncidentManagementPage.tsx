@@ -169,10 +169,10 @@ export const IncidentManagementPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" />
-        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" />
-        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" />
-        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" />
+        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" loading={loading} />
+        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" loading={loading} />
+        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" loading={loading} />
+        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" loading={loading} />
       </div>
 
       <div className="flex justify-end">
@@ -274,11 +274,12 @@ export const IncidentManagementPage: React.FC = () => {
   );
 };
 
-const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad' }> = ({ label, value, tone }) => {
+// A 0 before the first answer reads as "no incidents" — the dash says "not known yet".
+const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad'; loading?: boolean }> = ({ label, value, tone, loading }) => {
   const toneClass = tone === 'bad' ? 'text-rose-600 dark:text-rose-400' : tone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100';
   return (
     <div className="border rounded-xl p-4 shadow-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{loading ? '…' : value}</div>
       <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );

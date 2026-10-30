@@ -18,6 +18,8 @@ const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value
 interface EquipmentManagementProps {
   equipment: EquipmentProfile[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  loading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -56,6 +58,7 @@ interface EquipmentManagementProps {
 export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   equipment,
   error,
+  loading,
   onCreateEquipment,
   onUpdateEquipment,
   onMoveEquipment,
@@ -356,7 +359,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-slate-400 font-sans">
-                    {t('equipmentList.empty')}
+                    {loading ? t('common.loading') : t('equipmentList.empty')}
                   </td>
                 </tr>
               )}
@@ -367,7 +370,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         {/* Pagination */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
           <div>
-            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{loading ? '—' : totalRows}</span>
           </div>
 
           <div className="flex items-center gap-4">

@@ -27,6 +27,8 @@ export const LivePredictionsPage: React.FC = () => {
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
+  // "No machines match" before the list arrived read as a filter that matched nothing.
+  const [equipmentLoaded, setEquipmentLoaded] = useState(false);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [scenarios, setScenarios] = useState<ClientScenario[] | null>(null);
   const [predictions, setPredictions] = useState<Map<string, Prediction[] | 'unavailable'>>(new Map());
@@ -43,6 +45,7 @@ export const LivePredictionsPage: React.FC = () => {
     apiListEquipment().then((list) => {
       if (!live) return;
       setEquipment(list);
+      setEquipmentLoaded(true);
       // One call per machine — there is no fleet-wide predictions route. Each lands as it
       // arrives, so a slow or refused machine never holds the rest back.
       for (const m of list) {
@@ -50,7 +53,7 @@ export const LivePredictionsPage: React.FC = () => {
           .then((p) => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, p)); })
           .catch(() => { if (live) setPredictions((prev) => new Map(prev).set(`${m.sourceSystem}|${m.externalId}`, 'unavailable')); });
       }
-    }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadMachines')); });
+    }).catch((err) => { if (live) { setEquipmentLoaded(true); setError(err instanceof ApiError ? err.message : t('errors.loadMachines')); } });
     return () => { live = false; };
   }, []);
 
@@ -155,7 +158,9 @@ export const LivePredictionsPage: React.FC = () => {
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('kpis.title')}</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('kpis.subtitle')}</p>
-        {visible.length === 0 ? (
+        {!equipmentLoaded ? (
+          <p className="text-sm text-slate-400">{t('common.loading')}</p>
+        ) : visible.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">{t('kpis.noMatch')}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

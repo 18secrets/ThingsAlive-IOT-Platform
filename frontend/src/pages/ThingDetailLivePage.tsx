@@ -46,8 +46,12 @@ export const ThingDetailLivePage: React.FC = () => {
   const orders = useSlot<WorkOrder[]>(() => apiListWorkOrders({ status: ['created', 'in-progress'], equipment: externalId }), key);
   const shield = useSlot<ShieldSummary>(() => apiGetShieldSummary(), key);
   // Parameters resolve per machine by its register id, which only the profile carries.
+  // While the profile loads this stays pending — rejecting flashed "not available for
+  // your role", which is what any rejection renders as, before the real answer arrived.
   const params = useSlot<EffectiveParameter[]>(
-    () => (profile.state === 'ok' && profile.data ? apiGetEffectiveParameters({ scope: 'equipment', scopeRef: profile.data.id }) : Promise.reject(new Error('no profile'))),
+    () => (profile.state === 'loading' ? new Promise<never>(() => {})
+      : profile.state === 'ok' && profile.data ? apiGetEffectiveParameters({ scope: 'equipment', scopeRef: profile.data.id })
+      : Promise.reject(new Error('no profile'))),
     [profile.state],
   );
 

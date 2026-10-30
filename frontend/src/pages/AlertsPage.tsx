@@ -210,7 +210,7 @@ export const AlertsPage: React.FC = () => {
             ])}
           />
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
         {loading ? (
           <p className="text-sm text-slate-500">{t('loading')}</p>

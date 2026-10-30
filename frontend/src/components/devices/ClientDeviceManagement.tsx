@@ -20,12 +20,14 @@ const STATE_STYLE: Record<MyDevice['state'], string> = {
 interface ClientDeviceManagementProps {
   devices: MyDevice[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  loading?: boolean;
   equipment: EquipmentProfile[];
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
 }
 
 export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
-  devices, error, equipment, onUnclaimDevice,
+  devices, error, loading, equipment, onUnclaimDevice,
 }) => {
   const { t } = useTranslation('equipment');
   const stateOptions = STATE_VALUES.map((value) => ({ label: t(`deviceState.${value}`), value }));
@@ -164,7 +166,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
-                    {t('devices.empty')}
+                    {loading ? t('common.loading') : t('devices.empty')}
                   </td>
                 </tr>
               )}

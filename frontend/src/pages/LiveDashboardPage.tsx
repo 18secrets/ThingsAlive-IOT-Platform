@@ -271,7 +271,7 @@ function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
       <div className={`text-2xl font-bold mt-1 ${color}`}>
         {slot.state === 'ok' ? value(slot.data) : slot.state === 'loading' ? '…' : '—'}
       </div>
-      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : note}</div>
+      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
     </button>
   );
 }
