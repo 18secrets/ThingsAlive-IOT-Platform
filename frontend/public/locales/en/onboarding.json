@@ -3,7 +3,9 @@
     "title": "AI Onboarding",
     "subtitle": "Onboarding progress by site",
     "chatTitle": "ChatBot Assistant",
-    "chatSubtitle": "AI Setup Assistant"
+    "chatSubtitle": "AI Setup Assistant",
+    "preferForm": "Prefer a form? Add the machine with its class, site and details on the Equipment page; its onboarding steps then show here.",
+    "openForm": "Open the form"
   },
   "progress": {
     "loadFailed": "Could not load onboarding progress.",
