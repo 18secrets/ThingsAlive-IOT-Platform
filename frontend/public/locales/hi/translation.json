@@ -53,7 +53,8 @@
     "submitting": "साइन इन हो रहा है…",
     "failed": "साइन इन विफल रहा।",
     "haveToken": "आमंत्रण टोकन है? अपना पासवर्ड सेट करें",
-    "identifierPlaceholder": "अपना यूज़रनेम या ईमेल दर्ज करें"
+    "identifierPlaceholder": "अपना यूज़रनेम या ईमेल दर्ज करें",
+    "emailMalformed": "यह पूरा ईमेल पता नहीं है, जैसे name@company.com।"
   },
   "forgot": {
     "title": "क्या आप अपना पासवर्ड भूल गए हैं?",

@@ -54,7 +54,8 @@
     "submitting": "Signing in…",
     "failed": "Sign-in failed.",
     "haveToken": "Have an invitation token? Set your password",
-    "identifierPlaceholder": "you@yourcompany.com"
+    "identifierPlaceholder": "you@yourcompany.com",
+    "emailMalformed": "That is not a complete email address, e.g. name@company.com."
   },
   "forgot": {
     "title": "Forgot your password?",
