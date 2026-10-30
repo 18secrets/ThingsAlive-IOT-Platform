@@ -38,12 +38,14 @@
   "header": {
     "goBack": "वापस जाएँ",
     "notifications": "सूचनाएँ",
-    "telemetryNotifications": "टेलीमेट्री सूचनाएँ",
+    "telemetryNotifications": "खुले अलर्ट",
     "newCount": "{{count}} नई",
     "lightMode": "लाइट मोड",
     "darkMode": "डार्क मोड",
     "profile": "प्रोफ़ाइल और सेटिंग्स",
-    "signOut": "साइन आउट"
+    "signOut": "साइन आउट",
+    "noNotifications": "कोई खुला अलर्ट नहीं।",
+    "loadingNotifications": "लोड हो रहा है…"
   },
   "login": {
     "title": "साइन इन",

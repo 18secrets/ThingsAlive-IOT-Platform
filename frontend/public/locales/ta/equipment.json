@@ -196,7 +196,8 @@
     "end": "முடிவு (HH:MM)",
     "days": "நாட்கள்",
     "timeZone": "நேர மண்டலம் (IANA)",
-    "timeZonePlaceholder": "எ.கா. Asia/Kolkata"
+    "timeZonePlaceholder": "எ.கா. Asia/Kolkata",
+    "allDay": "{{from}} முதல் 24 மணிநேரம்"
   },
   "runStatus": {
     "scored": "மதிப்பிடப்பட்டது",

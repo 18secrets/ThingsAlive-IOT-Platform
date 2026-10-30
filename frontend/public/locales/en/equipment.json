@@ -196,7 +196,8 @@
     "end": "End (HH:MM)",
     "days": "Days",
     "timeZone": "Time zone (IANA)",
-    "timeZonePlaceholder": "e.g. Asia/Kolkata"
+    "timeZonePlaceholder": "e.g. Asia/Kolkata",
+    "allDay": "24 hours from {{from}}"
   },
   "runStatus": {
     "scored": "scored",

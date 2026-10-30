@@ -57,7 +57,9 @@
     "prompts": {
       "offline": "Which devices are offline?",
       "dust": "Show Dust Collector status",
-      "volvo": "Volvo EC210 service status"
+      "volvo": "Volvo EC210 service status",
+      "highestRisk": "Which machine has the highest risk right now?",
+      "serviceDue": "Which machines are due for service?"
     },
     "topics": {
       "admin": {

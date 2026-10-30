@@ -38,12 +38,14 @@
   "header": {
     "goBack": "ପଛକୁ ଯାଆନ୍ତୁ",
     "notifications": "ବିଜ୍ଞପ୍ତି",
-    "telemetryNotifications": "ଟେଲିମେଟ୍ରି ବିଜ୍ଞପ୍ତି",
+    "telemetryNotifications": "ଖୋଲା ସତର୍କତା",
     "newCount": "{{count}} ନୂଆ",
     "lightMode": "ଲାଇଟ୍ ମୋଡ୍",
     "darkMode": "ଡାର୍କ ମୋଡ୍",
     "profile": "ପ୍ରୋଫାଇଲ୍ ଓ ସେଟିଂସ୍",
-    "signOut": "ସାଇନ୍ ଆଉଟ୍"
+    "signOut": "ସାଇନ୍ ଆଉଟ୍",
+    "noNotifications": "କୌଣସି ଖୋଲା ସତର୍କତା ନାହିଁ।",
+    "loadingNotifications": "ଲୋଡ୍ ହେଉଛି…"
   },
   "login": {
     "title": "ସାଇନ୍ ଇନ୍",

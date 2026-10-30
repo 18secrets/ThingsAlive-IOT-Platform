@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { AlertEvent, apiListAlerts } from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from './common/LanguageSelector';
 import {
@@ -37,11 +38,21 @@ export const Header: React.FC<HeaderProps> = ({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notificationList] = useState([
-    { id: 1, title: 'Dust Collector Delta-P Normal', time: '10m ago', unread: true },
-    { id: 2, title: 'Device #131 Heartbeat Missing', time: '4h ago', unread: true },
-    { id: 3, title: 'Excavator 14 Scheduled Maintenance', time: '1d ago', unread: false }
-  ]);
+  // The account's own open alerts, newest first. This was three fixed placeholders
+  // ("Dust Collector", "Device #131", "Excavator 14") that matched no fleet (test report
+  // MIN-10). A role that cannot read alerts gets null and the panel says so.
+  const [notificationList, setNotificationList] = useState<AlertEvent[] | null | undefined>(undefined);
+  const location = useLocation();
+  // The panel stayed open on the next page until the bell was pressed again (MIN-11).
+  useEffect(() => { setShowNotifications(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!showNotifications) return;
+    let live = true;
+    apiListAlerts({ state: ['open'] })
+      .then((list) => { if (live) setNotificationList([...list].sort((a, b) => b.firedAt.localeCompare(a.firedAt)).slice(0, 8)); })
+      .catch(() => { if (live) setNotificationList(null); });
+    return () => { live = false; };
+  }, [showNotifications]);
 
   return (
     <header 
@@ -103,14 +114,25 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-auto sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-80 bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-800 rounded-lg py-2 z-50 animate-in fade-in">
               <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <span className="font-semibold text-xs text-slate-800 dark:text-slate-100">{t('header.telemetryNotifications')}</span>
-                <span className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 px-2 py-0.5 rounded-full font-bold">{t('header.newCount', { count: 3 })}</span>
+                {Array.isArray(notificationList) && notificationList.length > 0 && (
+                  <span className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 px-2 py-0.5 rounded-full font-bold">{t('header.newCount', { count: notificationList.length })}</span>
+                )}
               </div>
               <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                {notificationList.map((item) => (
-                  <div key={item.id} className={`p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer ${item.unread ? 'bg-sky-50/50 dark:bg-sky-950/20' : ''}`}>
-                    <div className="font-medium text-slate-800 dark:text-slate-200">{item.title}</div>
-                    <div className="text-[10px] text-slate-400 mt-1">{item.time}</div>
-                  </div>
+                {notificationList === undefined ? (
+                  <p className="p-3 text-slate-400">{t('header.loadingNotifications')}</p>
+                ) : notificationList === null || notificationList.length === 0 ? (
+                  <p className="p-3 text-slate-400">{t('header.noNotifications')}</p>
+                ) : notificationList.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigate(`/dashboard/${encodeURIComponent(item.sourceSystem)}/${encodeURIComponent(item.externalId)}`)}
+                    className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer bg-sky-50/50 dark:bg-sky-950/20"
+                  >
+                    <div className="font-medium text-slate-800 dark:text-slate-200">{item.summary}</div>
+                    <div className="text-[10px] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString()}</div>
+                  </button>
                 ))}
               </div>
             </div>

@@ -196,7 +196,8 @@
     "end": "ଶେଷ (HH:MM)",
     "days": "ଦିନ",
     "timeZone": "ସମୟ ମଣ୍ଡଳ (IANA)",
-    "timeZonePlaceholder": "ଯେପରି Asia/Kolkata"
+    "timeZonePlaceholder": "ଯେପରି Asia/Kolkata",
+    "allDay": "{{from}} ରୁ 24 ଘଣ୍ଟା"
   },
   "runStatus": {
     "scored": "ସ୍କୋର୍ ହୋଇଛି",

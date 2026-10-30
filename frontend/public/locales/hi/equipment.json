@@ -196,7 +196,8 @@
     "end": "समाप्त (HH:MM)",
     "days": "दिन",
     "timeZone": "समय क्षेत्र (IANA)",
-    "timeZonePlaceholder": "जैसे Asia/Kolkata"
+    "timeZonePlaceholder": "जैसे Asia/Kolkata",
+    "allDay": "{{from}} से 24 घंटे"
   },
   "runStatus": {
     "scored": "स्कोर किया गया",

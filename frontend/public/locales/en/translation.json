@@ -39,12 +39,14 @@
   "header": {
     "goBack": "Go Back",
     "notifications": "Notifications",
-    "telemetryNotifications": "Telemetry Notifications",
+    "telemetryNotifications": "Open alerts",
     "newCount": "{{count}} New",
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "profile": "Profile and settings",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "noNotifications": "No open alerts.",
+    "loadingNotifications": "Loading…"
   },
   "login": {
     "title": "Sign in",

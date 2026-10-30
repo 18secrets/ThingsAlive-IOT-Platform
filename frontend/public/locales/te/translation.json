@@ -38,12 +38,14 @@
   "header": {
     "goBack": "వెనక్కి వెళ్ళండి",
     "notifications": "నోటిఫికేషన్‌లు",
-    "telemetryNotifications": "టెలిమెట్రీ నోటిఫికేషన్‌లు",
+    "telemetryNotifications": "తెరిచిన హెచ్చరికలు",
     "newCount": "{{count}} కొత్తవి",
     "lightMode": "లైట్ మోడ్",
     "darkMode": "డార్క్ మోడ్",
     "profile": "ప్రొఫైల్ మరియు సెట్టింగ్‌లు",
-    "signOut": "సైన్ అవుట్"
+    "signOut": "సైన్ అవుట్",
+    "noNotifications": "తెరిచిన హెచ్చరికలు లేవు.",
+    "loadingNotifications": "లోడ్ అవుతోంది…"
   },
   "login": {
     "title": "సైన్ ఇన్",

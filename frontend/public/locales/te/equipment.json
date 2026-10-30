@@ -196,7 +196,8 @@
     "end": "ముగింపు (HH:MM)",
     "days": "రోజులు",
     "timeZone": "టైమ్ జోన్ (IANA)",
-    "timeZonePlaceholder": "ఉదా. Asia/Kolkata"
+    "timeZonePlaceholder": "ఉదా. Asia/Kolkata",
+    "allDay": "{{from}} నుండి 24 గంటలు"
   },
   "runStatus": {
     "scored": "స్కోర్ చేయబడింది",
