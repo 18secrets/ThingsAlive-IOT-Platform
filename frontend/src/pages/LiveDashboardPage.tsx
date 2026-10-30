@@ -10,7 +10,9 @@ import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
-import { TablePagination, usePagination } from '../components/common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   AlertEvent, AssetForecast, EquipmentAvailability, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, OnboardingSummary,
   Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
@@ -220,41 +222,84 @@ const MachineCards: React.FC<{
   onOpen: (m: EquipmentProfile) => void;
 }> = ({ machines, plantName, connectionOf, availabilityOf, onOpen }) => {
   const { t } = useTranslation('dashboard');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('dashboard-machines');
   const { pageItems, ...pager } = usePagination(machines, 12);
   const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
   // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
+  const figures = (m: EquipmentProfile) => {
+    const a = availabilityOf(m);
+    const ready = a?.readiness === 'ready';
+    return {
+      ready,
+      availability: ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—',
+      uptime: hours(ready ? a?.uptimeHours : null),
+      downtime: hours(ready ? a?.downtimeHours : null),
+      down: ready && Math.round(a?.downtimeHours ?? 0) > 0,
+    };
+  };
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pageItems.map((m) => {
-          const a = availabilityOf(m);
-          const ready = a?.readiness === 'ready';
-          return (
-            <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
-              <div className="flex items-center justify-between">
-                <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
-                <ConnectionBadge state={connectionOf(m.externalId)} />
-              </div>
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
-              <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{plantName(m.plantId)}</span></p>
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip icon={Activity} title={ready ? t('common.availability') : t('live.availabilityNotReady')} size="md">
-                    {ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—'}
-                  </Chip>
-                  <Chip icon={Clock3} title={t('common.uptimeHours')} size="md">{hours(ready ? a?.uptimeHours : null)}</Chip>
-                  <Chip icon={AlertTriangle} tone={ready && Math.round(a?.downtimeHours ?? 0) > 0 ? 'rose' : 'slate'} title={t('common.downtimeHours')} size="md">{hours(ready ? a?.downtimeHours : null)}</Chip>
-                </div>
-                <span className="inline-flex items-center text-xs font-medium text-sky-600 dark:text-sky-400 shrink-0">
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </button>
-          );
-        })}
+      <div className="flex justify-end">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
-      {pager.totalPages > 1 && <TablePagination bare compact {...pager} />}
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.machine') }, { label: ts('listCol.type') }, { label: ts('listCol.site') },
+              { label: ts('listCol.connection') }, { label: t('common.availability'), align: 'right' },
+              { label: t('common.uptimeHours'), align: 'right' }, { label: t('common.downtimeHours'), align: 'right' },
+            ]}
+            rows={pageItems}
+            rowKey={(m) => m.id}
+            cells={(m) => {
+              const f = figures(m);
+              return [
+                <span><span className="font-medium">{m.name ?? m.externalId}</span> <span className="text-slate-400">{m.externalId}</span></span>,
+                m.equipmentClassSlug ?? t('live.notClassified'),
+                plantName(m.plantId),
+                <ConnectionBadge state={connectionOf(m.externalId)} />,
+                f.availability,
+                f.uptime,
+                <span className={f.down ? 'text-rose-600 dark:text-rose-400' : ''}>{f.downtime}</span>,
+              ];
+            }}
+            onOpen={onOpen}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pageItems.map((m) => {
+            const a = availabilityOf(m);
+            const ready = a?.readiness === 'ready';
+            return (
+              <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
+                <div className="flex items-center justify-between">
+                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
+                  <ConnectionBadge state={connectionOf(m.externalId)} />
+                </div>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
+                <p className="p-4 text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{plantName(m.plantId)}</span></p>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Chip icon={Activity} title={ready ? t('common.availability') : t('live.availabilityNotReady')} size="md">
+                      {ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—'}
+                    </Chip>
+                    <Chip icon={Clock3} title={t('common.uptimeHours')} size="md">{hours(ready ? a?.uptimeHours : null)}</Chip>
+                    <Chip icon={AlertTriangle} tone={ready && Math.round(a?.downtimeHours ?? 0) > 0 ? 'rose' : 'slate'} title={t('common.downtimeHours')} size="md">{hours(ready ? a?.downtimeHours : null)}</Chip>
+                  </div>
+                  <span className="inline-flex items-center text-xs font-medium text-sky-600 dark:text-sky-400 shrink-0">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        )}
+        <TablePagination {...pager} />
+      </div>
     </div>
   );
 };

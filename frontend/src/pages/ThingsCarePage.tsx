@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, Bell, Gauge, Info } from 'lucide-react';
+import { ChevronRight, Bell, Gauge, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   ApiError, EquipmentProfile, FleetLinkRow, Plant, Prediction, PredictionSeverity,
@@ -40,7 +41,6 @@ export const ThingsCarePage: React.FC = () => {
   const [viewMode, setViewMode] = useViewMode('things-care');
   usePageHeader({ title: 'ThingsCare', subtitle: t('page.subtitle') });
   const navigate = useNavigate();
-  const [page, setPage] = useState(1);
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [linkHealth, setLinkHealth] = useState<FleetLinkRow[]>([]);
@@ -113,9 +113,8 @@ export const ThingsCarePage: React.FC = () => {
   const meanRisk = withPrediction.length ? withPrediction.reduce((a, r) => a + r.worst!.riskScore, 0) / withPrediction.length : null;
   const highOrCritical = rows.filter((r) => r.worst && (r.worst.severity === 'high' || r.worst.severity === 'critical')).length;
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageSafe = Math.min(page, pageCount);
-  const pageItems = rows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
+  const { pageItems, ...pager } = usePagination(rows, PAGE_SIZE);
 
   return (
     <div id="things-care-view" className="space-y-3">
@@ -133,12 +132,12 @@ export const ThingsCarePage: React.FC = () => {
 
       <EquipmentFilters
         scope={scope}
-        onChange={(next) => { setScope(next); setPage(1); }}
+        onChange={setScope}
         plants={plants}
         classes={equipmentClasses}
         equipmentOptions={equipmentOptions}
         selectedKey={selectedKey}
-        onSelect={(key) => { setSelectedKey(key); setPage(1); }}
+        onSelect={setSelectedKey}
       />
 
       {loading ? (
@@ -161,54 +160,46 @@ export const ThingsCarePage: React.FC = () => {
               </div>
             </div>
 
-            {pageItems.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                {t('list.noMatch')}
-              </div>
-            ) : viewMode === 'list' ? (
-              <ListTable
-                columns={[
-                  { label: t('listCol.machine') }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
-                  { label: t('listCol.risk'), align: 'right' }, { label: t('listCol.confidence') },
-                  { label: t('listCol.abnormal'), align: 'right' },
-                ]}
-                rows={pageItems}
-                rowKey={({ equipment: e }) => `${e.sourceSystem}/${e.externalId}`}
-                cells={({ equipment: e, worst }) => [
-                  <span><span className="font-medium">{e.name ?? e.externalId}</span> <span className="text-slate-400">{e.externalId}</span></span>,
-                  <ConnectionBadge state={connectionOf(e.externalId)} />,
-                  worst ? t(`severity.${worst.severity}`, { defaultValue: worst.severity }) : t('card.noScenario'),
-                  worst ? worst.riskScore : '—',
-                  worst ? t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) : t('card.na'),
-                  worst ? worst.abnormalCount : '—',
-                ]}
-                onOpen={({ equipment: e }) => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
-              />
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pageItems.map(({ equipment: e, worst }) => (
-                  <ThingsCareCard
-                    key={`${e.sourceSystem}/${e.externalId}`}
-                    name={e.name ?? e.externalId}
-                    externalId={e.externalId}
-                    prediction={worst}
-                    connection={connectionOf(e.externalId)}
-                    onOpen={() => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
-                  />
-                ))}
-              </div>
-            )}
+            <div className={LIST_PANEL}>
+              {pageItems.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 text-sm">
+                  {t('list.noMatch')}
+                </div>
+              ) : viewMode === 'list' ? (
+                <ListTable bare
+                  columns={[
+                    { label: t('listCol.machine') }, { label: t('listCol.connection') }, { label: t('listCol.severity') },
+                    { label: t('listCol.risk'), align: 'right' }, { label: t('listCol.confidence') },
+                    { label: t('listCol.abnormal'), align: 'right' },
+                  ]}
+                  rows={pageItems}
+                  rowKey={({ equipment: e }) => `${e.sourceSystem}/${e.externalId}`}
+                  cells={({ equipment: e, worst }) => [
+                    <span><span className="font-medium">{e.name ?? e.externalId}</span> <span className="text-slate-400">{e.externalId}</span></span>,
+                    <ConnectionBadge state={connectionOf(e.externalId)} />,
+                    worst ? t(`severity.${worst.severity}`, { defaultValue: worst.severity }) : t('card.noScenario'),
+                    worst ? worst.riskScore : '—',
+                    worst ? t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) : t('card.na'),
+                    worst ? worst.abnormalCount : '—',
+                  ]}
+                  onOpen={({ equipment: e }) => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
+                />
+              ) : (
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pageItems.map(({ equipment: e, worst }) => (
+                    <ThingsCareCard
+                      key={`${e.sourceSystem}/${e.externalId}`}
+                      name={e.name ?? e.externalId}
+                      externalId={e.externalId}
+                      prediction={worst}
+                      connection={connectionOf(e.externalId)}
+                      onOpen={() => navigate(`/things-care/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}`)}
+                    />
+                  ))}
+                </div>
+              )}
 
-            <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-              <span>{t('common.pageOf', { page: pageSafe, total: pageCount })}</span>
-              <div className="flex items-center gap-2">
-                <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  <ChevronLeft className="w-4 h-4" /> {t('common.prev')}
-                </button>
-                <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  {t('common.next')} <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              <TablePagination pinToBottom {...pager} />
             </div>
           </div>
         </>

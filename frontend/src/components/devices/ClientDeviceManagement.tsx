@@ -4,6 +4,9 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ApiError, DeviceHealthWindow, DeviceLinkState, EquipmentProfile, MyDevice, apiGetDeviceHealth } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
@@ -27,6 +30,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
   devices, error, equipment, onUnclaimDevice,
 }) => {
   const { t } = useTranslation('equipment');
+  const [viewMode, setViewMode] = useViewMode('client-devices');
   const stateOptions = STATE_VALUES.map((value) => ({ label: t(`deviceState.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedState, setSelectedState] = useState<'All' | MyDevice['state']>('All');
@@ -67,6 +71,41 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(filtered);
 
+  // One definition for both views (cards or list on every list page).
+  const viewColumns = [
+    { label: 'IMEI' }, { label: t('devices.col.model') }, { label: t('devices.col.state') },
+    { label: t('devices.col.fittedTo') }, { label: t('devices.col.action') },
+  ];
+  const viewCells = (d: (typeof pagedRows)[number]) => [
+    <span className="font-mono text-[11px]">{d.imei}</span>,
+    <span className="text-slate-600 dark:text-slate-400">{d.model || '—'}</span>,
+    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
+      {t(`deviceState.${d.state}`, { defaultValue: d.state })}
+    </span>,
+    <span className="text-slate-600 dark:text-slate-400">
+      {equipmentName(d.equipmentExternalId) || <span className="text-slate-400 italic">{t('devices.notFitted')}</span>}
+    </span>,
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => setHealthOf(d)}
+        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+        title={t('devices.healthTooltip')}
+      >
+        <Activity className="w-3.5 h-3.5" />
+      </button>
+      {d.state === 'assigned' && d.equipmentExternalId && (
+        <button
+          onClick={() => handleUnclaim(d)}
+          disabled={busyImei === d.imei}
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
+          title={t('bindings.takeOff')}
+        >
+          <Unplug className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>,
+  ];
+
   return (
     <div id="client-device-management-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -91,6 +130,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
             size="sm"
           />
         </div>
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
@@ -106,66 +146,15 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-              <tr>
-                <th className="py-3 px-4">IMEI</th>
-                <th className="py-3 px-4">{t('devices.col.model')}</th>
-                <th className="py-3 px-4">{t('devices.col.state')}</th>
-                <th className="py-3 px-4">{t('devices.col.fittedTo')}</th>
-                <th className="py-3 px-4 text-center">{t('devices.col.action')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {filtered.length > 0 ? (
-                pagedRows.map((d) => (
-                  <tr key={d.imei} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-mono text-[11px]">{d.imei}</td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{d.model || '—'}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
-                        {t(`deviceState.${d.state}`, { defaultValue: d.state })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                      {equipmentName(d.equipmentExternalId) || <span className="text-slate-400 italic">{t('devices.notFitted')}</span>}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setHealthOf(d)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title={t('devices.healthTooltip')}
-                        >
-                          <Activity className="w-3.5 h-3.5" />
-                        </button>
-                        {d.state === 'assigned' && d.equipmentExternalId && (
-                          <button
-                            onClick={() => handleUnclaim(d)}
-                            disabled={busyImei === d.imei}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-50"
-                            title={t('bindings.takeOff')}
-                          >
-                            <Unplug className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
-                    {t('devices.empty')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {filtered.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 text-sm">{t('devices.empty')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} actionsIndex={4} /></div>
+        )}
 
-        <TablePagination {...pager} />
+        <TablePagination pinToBottom {...pager} />
       </div>
 
       <Modal

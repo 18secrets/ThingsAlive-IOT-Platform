@@ -7,6 +7,9 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
@@ -40,6 +43,8 @@ function ruleScopeText(rule: AlertRule, plants: Plant[], equipment: EquipmentPro
 
 export const AlertsPage: React.FC = () => {
   const { t } = useTranslation('alerts');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('alerts');
   usePageHeader({ title: t('translation:pages.alerts.title'), subtitle: t('translation:pages.alerts.subtitle') });
   const navigate = useNavigate();
 
@@ -124,6 +129,58 @@ export const AlertsPage: React.FC = () => {
 
   const openCount = useMemo(() => events.filter((e) => e.state === 'open').length, [events]);
 
+  // Both lists are paged, in both views.
+  const { pageItems: ruleItems, ...rulePager } = usePagination(rules);
+  const rulePage = { pageItems: ruleItems };
+  const { pageItems: eventItems, ...eventPager } = usePagination(events);
+  const eventPage = { pageItems: eventItems };
+
+  type Rule = (typeof rules)[number];
+  type Event = (typeof events)[number];
+  // The card's controls, shared with the list row.
+  const ruleToggle = (r: Rule) => (
+    <button
+      disabled={busyId === r.id}
+      onClick={() => toggleRule(r)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${r.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+      title={r.enabled ? t('rules.disable') : t('rules.enable')}
+    >
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${r.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
+    </button>
+  );
+  const ruleChips = (r: Rule) => (
+    <>
+      <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+      <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
+      {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
+    </>
+  );
+  const ruleEdit = (r: Rule) => CREATABLE_TRIGGERS.includes(r.trigger) ? (
+    <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+      {t('rules.edit')}
+    </button>
+  ) : null;
+  const machineName = (e: Event) =>
+    equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
+  const eventActions = (e: Event) => (
+    <>
+      {e.state === 'open' && (
+        <button disabled={busyId === e.id} onClick={() => acknowledge(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+          {t('events.acknowledge')}
+        </button>
+      )}
+      <button disabled={busyId === e.id} onClick={() => resolve(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
+        {t('events.resolve')}
+      </button>
+      <button
+        onClick={() => navigate(`/admin/equipment/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}/page`)}
+        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer ml-auto"
+      >
+        {t('events.viewMachine')}
+      </button>
+    </>
+  );
+
   return (
     <div id="alerts-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
@@ -142,6 +199,7 @@ export const AlertsPage: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('rules.heading')}</h3>
           <div className="flex items-center gap-2">
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
             <button
               onClick={() => setEditingRule('new')}
               className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer inline-flex items-center gap-1.5"
@@ -156,87 +214,99 @@ export const AlertsPage: React.FC = () => {
             </button>
           </div>
         </div>
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('loading')}</p>
-        ) : rules.length === 0 ? (
-          <p className="text-sm text-slate-400">{t('rules.empty')}</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {rules.map((r) => (
-              <div key={r.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{r.name}</h4>
-                  <button
-                    disabled={busyId === r.id}
-                    onClick={() => toggleRule(r)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${r.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                    title={r.enabled ? t('rules.disable') : t('rules.enable')}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${r.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                  </button>
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
+          ) : rules.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">{t('rules.empty')}</p>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[
+                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.scope') },
+                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+              ]}
+              rows={rulePage.pageItems}
+              rowKey={(r) => r.id}
+              cells={(r) => [
+                <span className="font-medium">{r.name}</span>,
+                <div className="flex items-center gap-1.5 flex-wrap">{ruleChips(r)}</div>,
+                <span className="text-[11px] text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
+                ruleToggle(r),
+                ruleEdit(r),
+              ]}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rulePage.pageItems.map((r) => (
+                <div key={r.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{r.name}</h4>
+                    {ruleToggle(r)}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {ruleChips(r)}
+                  </div>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{ruleScopeText(r, plants, equipment, t)}</p>
+                  {ruleEdit(r)}
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
-                  <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
-                  {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
-                </div>
-                <p className="text-xs text-slate-400 dark:text-slate-500">{ruleScopeText(r, plants, equipment, t)}</p>
-                {CREATABLE_TRIGGERS.includes(r.trigger) && (
-                  <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                    {t('rules.edit')}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          {!loading && rules.length > 0 && <TablePagination {...rulePager} />}
+        </div>
       </div>
 
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-1">{t('events.heading')}</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('loading')}</p>
-        ) : events.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
-            <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((e) => {
-              const name = equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
-              return (
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
+          ) : events.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
+            </div>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[
+                { label: ts('listCol.severity') }, { label: ts('listCol.state') }, { label: ts('listCol.name') },
+                { label: ts('listCol.machine') }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt') },
+                { label: ts('listCol.actions'), width: 310 },
+              ]}
+              rows={eventPage.pageItems}
+              rowKey={(e) => e.id}
+              cells={(e) => [
+                <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
+                <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
+                <span className="font-medium">{e.ruleName}</span>,
+                machineName(e),
+                e.summary,
+                new Date(e.firedAt).toLocaleString(),
+                <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
+              ]}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {eventPage.pageItems.map((e) => (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
                     <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
                     <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{name}</p>
+                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString()}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    {e.state === 'open' && (
-                      <button disabled={busyId === e.id} onClick={() => acknowledge(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                        {t('events.acknowledge')}
-                      </button>
-                    )}
-                    <button disabled={busyId === e.id} onClick={() => resolve(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
-                      {t('events.resolve')}
-                    </button>
-                    <button
-                      onClick={() => navigate(`/admin/equipment/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}/page`)}
-                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer ml-auto"
-                    >
-                      {t('events.viewMachine')}
-                    </button>
+                    {eventActions(e)}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          {!loading && events.length > 0 && <TablePagination pinToBottom {...eventPager} />}
+        </div>
       </div>
 
       <Modal

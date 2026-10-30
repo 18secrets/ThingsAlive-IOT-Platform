@@ -8,6 +8,9 @@ import { AddSensorModal } from './AddSensorModal';
 import { SensorDetailModal } from './SensorDetailModal';
 import { ManageSensorCategoriesModal } from './ManageSensorCategoriesModal';
 import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 interface SensorTableProps {
   sensors: Sensor[];
@@ -33,6 +36,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
   onCreateCategory, onRetireCategory, onUnretireCategory, onDeleteCategory, onRenameCategory,
 }) => {
   const { t } = useTranslation('catalog');
+  const [viewMode, setViewMode] = useViewMode('admin-sensors');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -60,6 +64,65 @@ export const SensorTable: React.FC<SensorTableProps> = ({
   }, [sensors, searchTerm, selectedCategory, categoryName]);
 
   const { pageItems: pagedSensors, ...pager } = usePagination(filteredSensors);
+
+  // One definition for both views (cards or list on every list page).
+  const viewColumns = [
+    { label: t('sensors.category') },
+    { label: t('sensors.sensorName') },
+    { label: t('sensors.parameters') },
+    { label: t('common.statusHeader') },
+    { label: t('sensors.updatedAt') },
+    { label: t('common.view') },
+    { label: t('common.actions'), width: 120 },
+  ];
+  const viewCells = (sensor: (typeof pagedSensors)[number]) => {
+    const retired = !!sensor.retiredAt;
+    return [
+      <span className="font-normal">{categoryName(sensor.categoryId)}</span>,
+      <span className="font-normal text-slate-800 dark:text-slate-200">{sensor.sensorName}</span>,
+      <span className="text-slate-500 dark:text-slate-400 text-xs">{sensor.parameterSpecs.length}</span>,
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        retired
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        {retired ? t('common.statusLabel.retired') : t('sensors.live')}
+                      </span></>,
+      <span className="text-slate-500 dark:text-slate-400 text-xs">{new Date(sensor.updatedAt).toLocaleDateString()}</span>,
+      <><button
+                        onClick={() => setViewingSensor(sensor)}
+                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors inline-flex items-center justify-center cursor-pointer"
+                        title={t('sensors.viewDetails')}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button></>,
+      <><div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
+                          className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
+                          title={t('sensors.editSensor')}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => (retired ? onUnretireSensor(sensor.id) : onRetireSensor(sensor.id)))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title={retired ? t('sensors.unretireHint') : t('sensors.retireHint')}
+                        >
+                          {retired ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => withBusy(sensor.id, () => onDeleteSensor(sensor.id))}
+                          disabled={busyId === sensor.id}
+                          className="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          title={t('sensors.deleteHint')}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div></>,
+    ];
+  };
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => compareByCategoryOrder(a.name, b.name)),
@@ -130,6 +193,8 @@ export const SensorTable: React.FC<SensorTableProps> = ({
           </button>
         </div>
 
+        <div className="flex items-center gap-3 shrink-0">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           id="add-sensor-btn"
           onClick={() => { setEditingSensor(null); setIsAddModalOpen(true); }}
@@ -138,6 +203,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
           <Plus className="w-4 h-4" />
           <span>{t('sensors.addSensor')}</span>
         </button>
+        </div>
       </div>
 
       {(error || actionError) && (
@@ -148,98 +214,15 @@ export const SensorTable: React.FC<SensorTableProps> = ({
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 text-xs font-normal">
-              <tr>
-                <th className="py-3 px-6 font-medium">
-                  <div className="flex items-center gap-1">
-                    <span>{t('sensors.category')}</span>
-                    <ChevronsUpDown className="w-3 h-3 text-slate-400" />
-                  </div>
-                </th>
-                <th className="py-3 px-6 font-medium">{t('sensors.sensorName')}</th>
-                <th className="py-3 px-6 font-medium">{t('sensors.parameters')}</th>
-                <th className="py-3 px-6 font-medium">{t('common.statusHeader')}</th>
-                <th className="py-3 px-6 font-medium">{t('sensors.updatedAt')}</th>
-                <th className="py-3 px-4 font-medium text-center">{t('common.view')}</th>
-                <th className="py-3 px-4 font-medium text-center">{t('common.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 text-sm">
-              {filteredSensors.length > 0 ? (
-                pagedSensors.map((sensor) => {
-                  const retired = !!sensor.retiredAt;
-                  return (
-                  <tr key={sensor.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-6 font-normal">{categoryName(sensor.categoryId)}</td>
-                    <td className="py-3.5 px-6 font-normal text-slate-800 dark:text-slate-200">{sensor.sensorName}</td>
-                    <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
-                      {sensor.parameterSpecs.length}
-                    </td>
-                    <td className="py-3.5 px-6">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
-                        retired
-                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                      }`}>
-                        {retired ? t('common.statusLabel.retired') : t('sensors.live')}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-6 text-slate-500 dark:text-slate-400 text-xs">
-                      {new Date(sensor.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => setViewingSensor(sensor)}
-                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors inline-flex items-center justify-center cursor-pointer"
-                        title={t('sensors.viewDetails')}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => { setEditingSensor(sensor); setIsAddModalOpen(true); }}
-                          className="p-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition-colors inline-flex items-center justify-center cursor-pointer"
-                          title={t('sensors.editSensor')}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => withBusy(sensor.id, () => (retired ? onUnretireSensor(sensor.id) : onRetireSensor(sensor.id)))}
-                          disabled={busyId === sensor.id}
-                          className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
-                          title={retired ? t('sensors.unretireHint') : t('sensors.retireHint')}
-                        >
-                          {retired ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => withBusy(sensor.id, () => onDeleteSensor(sensor.id))}
-                          disabled={busyId === sensor.id}
-                          className="p-1 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50"
-                          title={t('sensors.deleteHint')}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400 text-sm">
-                    {t('sensors.noMatch')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {filteredSensors.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-sm">{t('sensors.noMatch')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={pagedSensors} rowKey={(sensor) => sensor.id} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pagedSensors} rowKey={(sensor) => sensor.id} cells={viewCells} actionsIndex={6} /></div>
+        )}
 
-        <TablePagination {...pager} />
+        <TablePagination pinToBottom {...pager} />
       </div>
 
       <AddSensorModal

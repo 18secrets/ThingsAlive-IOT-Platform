@@ -4,7 +4,9 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
 import { Modal } from '../common/Modal';
-import { TablePagination, usePagination } from '../common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
 
 interface NamedFormulaViewProps {
@@ -38,6 +40,8 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   formulas, error, onCreateFormula, onUpdateFormula, onPublishFormula,
 }) => {
   const { t } = useTranslation('catalog');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('admin-formulas');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFormula, setEditingFormula] = useState<NamedFormula | null>(null);
@@ -71,6 +75,56 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
 
   const { pageItems: pagedFormulas, ...pager } = usePagination(filtered);
 
+  type Formula = (typeof pagedFormulas)[number];
+  // The card's controls, shared with the list row.
+  const headerButtons = (f: Formula) => (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setHistoryOf(f)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title={t('formulas.versionHistory')}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => { setEditingFormula(f); setIsModalOpen(true); }}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title={f.status === 'published' ? t('formulas.viewPublished') : t('classes.editDraft')}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+  );
+  const statusBadge = (f: Formula) => (
+              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
+                {t(`common.status.${f.status}`, { defaultValue: f.status })}
+              </span>
+  );
+  const publishButton = (f: Formula) => (
+    <>
+              {f.status === 'draft' && (
+                <button
+                  onClick={() => handlePublish(f)}
+                  disabled={busySlug === f.slug}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>{t('common.publish')}</span>
+                </button>
+              )}
+    </>
+  );
+  const publishErrorNote = (f: Formula) => (
+    <>
+            {publishError[f.slug] && (
+              <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>{t('formulas.notPublished', { error: publishError[f.slug] })}</span>
+              </div>
+            )}
+    </>
+  );
+
   return (
     <div id="named-formula-management-view" className="space-y-3">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -91,6 +145,8 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
         />
         </div>
 
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           onClick={() => { setEditingFormula(null); setIsModalOpen(true); }}
           className="px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
@@ -98,6 +154,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           <Plus className="w-4 h-4" />
           <span>{t('formulas.newFormula')}</span>
         </button>
+        </div>
       </div>
 
       {error && (
@@ -107,75 +164,65 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedFormulas.map((f) => (
-          <div key={f.slug} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
-                  #{f.slug} · v{f.version}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setHistoryOf(f)}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={t('formulas.versionHistory')}
-                  >
-                    <History className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => { setEditingFormula(f); setIsModalOpen(true); }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={f.status === 'published' ? t('formulas.viewPublished') : t('classes.editDraft')}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && filtered.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.code') }, { label: ts('listCol.name') }, { label: ts('listCol.version'), align: 'right' },
+              { label: ts('listCol.expression') }, { label: ts('listCol.status') }, { label: ts('listCol.actions') },
+            ]}
+            rows={pagedFormulas}
+            rowKey={(f) => f.slug}
+            cells={(f) => [
+              <span className="font-mono">{f.slug}</span>,
+              <span><span className="font-medium">{f.name}</span>{f.category && <span className="block text-[11px] text-slate-400">{f.category}</span>}</span>,
+              `v${f.version}`,
+              <span className="font-mono text-[11px]">{f.expression}</span>,
+              statusBadge(f),
+              <div className="flex flex-wrap items-center gap-2">{headerButtons(f)}{publishButton(f)}{publishErrorNote(f)}</div>,
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pagedFormulas.map((f) => (
+            <div key={f.slug} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-800">
+                    #{f.slug} · v{f.version}
+                  </span>
+                  {headerButtons(f)}
                 </div>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{f.name}</h4>
+                {f.category && <p className="text-[11px] text-slate-400 mt-0.5">{f.category}</p>}
               </div>
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{f.name}</h4>
-              {f.category && <p className="text-[11px] text-slate-400 mt-0.5">{f.category}</p>}
-            </div>
 
-            {f.description && <p className="text-slate-600 dark:text-slate-300 line-clamp-2 text-xs leading-relaxed">{f.description}</p>}
+              {f.description && <p className="text-slate-600 dark:text-slate-300 line-clamp-2 text-xs leading-relaxed">{f.description}</p>}
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 w-fit">
-              <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0" />
-              <span className="truncate">{f.expression}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
-                {t(`common.status.${f.status}`, { defaultValue: f.status })}
-              </span>
-              {f.status === 'draft' && (
-                <button
-                  onClick={() => handlePublish(f)}
-                  disabled={busySlug === f.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  <span>{t('common.publish')}</span>
-                </button>
-              )}
-            </div>
-            {publishError[f.slug] && (
-              <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
-                <span>{t('formulas.notPublished', { error: publishError[f.slug] })}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+                <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0" />
+                <span className="truncate">{f.expression}</span>
               </div>
-            )}
-          </div>
-        ))}
+              <p className="text-[11px] text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
 
-        {filtered.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('formulas.noneFound')}</span>
-          </div>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                {statusBadge(f)}
+                {publishButton(f)}
+              </div>
+              {publishErrorNote(f)}
+            </div>
+          ))}
+
+          {filtered.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('formulas.noneFound')}</span>
+            </div>
+          )}
+        </div>
         )}
+        {filtered.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
-      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <AddNamedFormulaModal
         isOpen={isModalOpen}

@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud, FileSpreadsheet } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
-import { TablePagination, usePagination } from '../common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
@@ -57,6 +59,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   onRevokeEntitlement,
 }) => {
   const { t } = useTranslation(['accounts', 'shared']);
+  const [viewMode, setViewMode] = useViewMode('admin-clients');
   const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`clients.statusFilter.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -118,77 +121,9 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(filteredClients);
 
-  return (
-    <div id="client-management-view" className="space-y-3">
-
-      {/* Search / Add Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Filters stay together on the left; actions sit on the right. */}
-        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
-        <div className="relative flex-1 w-full max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            placeholder={t('clients.searchPlaceholder')}
-            className="pl-9!"
-            size="sm"
-          />
-        </div>
-        <SelectPicker
-          data={STATUS_OPTIONS}
-          value={statusFilter}
-          onChange={(v) => setStatusFilter((v ?? 'all') as StatusFilter)}
-          searchable={false}
-          cleanable={false}
-          size="sm"
-          className="w-full sm:w-52"
-        />
-        </div>
-
-        <button
-          id="add-client-btn"
-          onClick={() => {
-            setEditingClient(null);
-            setIsModalOpen(true);
-          }}
-          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t('clients.add')}</span>
-        </button>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {entitlementsError && (
-        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{entitlementsError}</span>
-        </div>
-      )}
-
-      {/* Client Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedRows.map((c) => (
-          <div
-            key={c.id}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-                    <Building2 className="w-4 h-4" />
-                  </div>
-                  <span className="font-mono text-[11px] text-slate-400 truncate">{c.id}</span>
-                </div>
-
+  type Client = (typeof pagedRows)[number];
+  // The card's controls, shared with the list row.
+  const actions = (c: Client) => (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => {
@@ -259,37 +194,9 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     />
                   </button>
                 </div>
-              </div>
-
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={c.clientName}>
-                {c.clientName}
-              </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {t('clients.created', { date: c.createdAt })}
-              </p>
-            </div>
-
-            {/* The account's Super Admin — the only contact the API has, since
-                there is no separate "contact person" concept on a real account. */}
-            <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-              <div className="flex items-center gap-1.5 truncate">
-                <UserRound className="w-3 h-3 text-sky-600 shrink-0" />
-                <span className="truncate">{c.contactPersonName ?? '—'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 truncate">
-                <Phone className="w-3 h-3 text-sky-600 shrink-0" />
-                <span className="font-mono truncate">{c.phone ?? '—'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 truncate">
-                <Mail className="w-3 h-3 text-sky-600 shrink-0" />
-                <span className="truncate">{c.email ?? '—'}</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              {/* Real signal: app_user.status === 'invited' means the super
-                  admin has never accepted their invitation, so no password
-                  has ever been set — see ProvisioningService.superAdminsFor. */}
+  );
+  const signInBadge = (c: Client) => (
+    <>
               {c.mustChangePassword ? (
                 <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
                   {t('clients.awaitingFirstLogin')}
@@ -299,21 +206,156 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   {t('clients.passwordSet')}
                 </span>
               )}
+    </>
+  );
+  const statusLabel = (c: Client) => (
               <span className={`font-semibold text-xs ${c.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                 {c.status === 'Active' ? `• ${t('clients.active')}` : `• ${t('clients.suspended')}`}
               </span>
-            </div>
-          </div>
-        ))}
+  );
 
-        {filteredClients.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('clients.empty')}</span>
-          </div>
-        )}
+  return (
+    <div id="client-management-view" className="space-y-3">
+
+      {/* Search / Add Bar */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Filters stay together on the left; actions sit on the right. */}
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
+        <div className="relative flex-1 w-full max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Input
+            value={searchTerm}
+            onChange={(value) => setSearchTerm(value)}
+            placeholder={t('clients.searchPlaceholder')}
+            className="pl-9!"
+            size="sm"
+          />
+        </div>
+        <SelectPicker
+          data={STATUS_OPTIONS}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter((v ?? 'all') as StatusFilter)}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-52"
+        />
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <button
+          id="add-client-btn"
+          onClick={() => {
+            setEditingClient(null);
+            setIsModalOpen(true);
+          }}
+          className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{t('clients.add')}</span>
+        </button>
+        </div>
       </div>
-      {filteredClients.length > 0 && <TablePagination bare pinToBottom {...pager} />}
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {entitlementsError && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{entitlementsError}</span>
+        </div>
+      )}
+
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && filteredClients.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: t('shared:listCol.name') }, { label: t('shared:listCol.contact') }, { label: t('shared:listCol.email') },
+              { label: t('shared:listCol.phone') }, { label: t('shared:listCol.signIn') }, { label: t('shared:listCol.status') },
+              { label: t('shared:listCol.actions'), width: 270 },
+            ]}
+            rows={pagedRows}
+            rowKey={(c) => c.id}
+            cells={(c) => [
+              <span><span className="font-medium">{c.clientName}</span><span className="block font-mono text-[11px] text-slate-400">{c.id}</span></span>,
+              c.contactPersonName ?? '—',
+              c.email ?? '—',
+              <span className="font-mono">{c.phone ?? '—'}</span>,
+              signInBadge(c),
+              statusLabel(c),
+              actions(c),
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pagedRows.map((c) => (
+            <div
+              key={c.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-4"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <span className="font-mono text-[11px] text-slate-400 truncate">{c.id}</span>
+                  </div>
+
+                  {actions(c)}
+                </div>
+
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={c.clientName}>
+                  {c.clientName}
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {t('clients.created', { date: c.createdAt })}
+                </p>
+              </div>
+
+              {/* The account's Super Admin — the only contact the API has, since
+                  there is no separate "contact person" concept on a real account. */}
+              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-1.5 truncate">
+                  <UserRound className="w-3 h-3 text-sky-600 shrink-0" />
+                  <span className="truncate">{c.contactPersonName ?? '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Phone className="w-3 h-3 text-sky-600 shrink-0" />
+                  <span className="font-mono truncate">{c.phone ?? '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Mail className="w-3 h-3 text-sky-600 shrink-0" />
+                  <span className="truncate">{c.email ?? '—'}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                {/* Real signal: app_user.status === 'invited' means the super
+                    admin has never accepted their invitation, so no password
+                    has ever been set — see ProvisioningService.superAdminsFor. */}
+                {signInBadge(c)}
+                {statusLabel(c)}
+              </div>
+            </div>
+          ))}
+
+          {filteredClients.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('clients.empty')}</span>
+            </div>
+          )}
+        </div>
+        )}
+        {filteredClients.length > 0 && <TablePagination pinToBottom {...pager} />}
+      </div>
 
       <AddClientModal
         isOpen={isModalOpen}

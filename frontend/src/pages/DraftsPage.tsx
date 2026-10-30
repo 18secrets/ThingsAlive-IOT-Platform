@@ -11,6 +11,9 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { Modal } from '../components/common/Modal';
 import { TablePagination, usePagination } from '../components/common/TablePagination';
+import { ListTable } from '../components/common/ListTable';
+import { RecordCards } from '../components/common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 
 const STATUSES: ProposalStatus[] = ['draft_ready', 'materialised', 'rejected', 'gate_refused', 'compile_refused', 'expired', 'proposed', 'compiled', 'approved'];
 
@@ -34,6 +37,7 @@ const machineOf = (p: Proposal) => {
  */
 export const DraftsPage: React.FC = () => {
   const { t } = useTranslation('drafts');
+  const [viewMode, setViewMode] = useViewMode('drafts');
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [params, setParams] = useSearchParams();
   const [drafts, setDrafts] = useState<Proposal[] | null>(null);
@@ -55,6 +59,23 @@ export const DraftsPage: React.FC = () => {
   const filtered = useMemo(() => (drafts ?? [])
     .filter((d) => (kind === 'all' || d.kind === kind) && (status === 'all' || d.status === status)), [drafts, kind, status]);
   const { pageItems, ...pager } = usePagination(filtered);
+
+  // One definition for both views (cards or list on every list page).
+  const viewColumns = [
+    { label: t('col.kind') },
+    { label: t('col.what') },
+    { label: t('col.machine') },
+    { label: t('col.status') },
+    { label: t('col.proposed') },
+  ];
+  const viewCells = (d: (typeof pageItems)[number]) => [
+    <span className="font-semibold">{t(`kind.${d.kind}`)}</span>,
+    <><div>{d.rendering[0] ?? d.sentence}</div>
+                    {d.unvalidated && <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">{t('unvalidatedShort')}</div>}</>,
+    <span className="font-mono text-[11px]">{machineOf(d)}</span>,
+    <><Chip tone={STATUS_TONE[d.status]}>{t(`status.${d.expired ? 'expired' : d.status}`)}</Chip></>,
+    <span className="text-slate-500">{new Date(d.provenance.proposedAt).toLocaleString()}</span>,
+  ];
 
   const open = (id: string | null) => setParams(id ? { id } : {});
 
@@ -81,9 +102,12 @@ export const DraftsPage: React.FC = () => {
             className="w-52"
           />
         </div>
-        <button onClick={load} disabled={loading} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer self-start" title={t('refresh')}>
+        <div className="flex items-center gap-3 self-start">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <button onClick={load} disabled={loading} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer" title={t('refresh')}>
           <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
+        </div>
       </div>
 
       {error && (
@@ -93,37 +117,14 @@ export const DraftsPage: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
-              <tr>
-                <th className="py-3 px-4">{t('col.kind')}</th>
-                <th className="py-3 px-4 min-w-[280px]">{t('col.what')}</th>
-                <th className="py-3 px-4">{t('col.machine')}</th>
-                <th className="py-3 px-4">{t('col.status')}</th>
-                <th className="py-3 px-4">{t('col.proposed')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
-              {pageItems.map((d) => (
-                <tr key={d.id} onClick={() => open(d.id)} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer align-top">
-                  <td className="py-3 px-4 font-semibold">{t(`kind.${d.kind}`)}</td>
-                  <td className="py-3 px-4">
-                    <div>{d.rendering[0] ?? d.sentence}</div>
-                    {d.unvalidated && <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">{t('unvalidatedShort')}</div>}
-                  </td>
-                  <td className="py-3 px-4 font-mono text-[11px]">{machineOf(d)}</td>
-                  <td className="py-3 px-4"><Chip tone={STATUS_TONE[d.status]}>{t(`status.${d.expired ? 'expired' : d.status}`)}</Chip></td>
-                  <td className="py-3 px-4 text-slate-500">{new Date(d.provenance.proposedAt).toLocaleString()}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={5} className="py-10 text-center text-slate-400">{drafts === null && !error ? t('loading') : t('empty')}</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length > 0 && <TablePagination {...pager} />}
+        {filtered.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-xs">{drafts === null && !error ? t('loading') : t('empty')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={pageItems} rowKey={(d) => d.id} cells={viewCells} onOpen={(d) => open(d.id)} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pageItems} rowKey={(d) => d.id} cells={viewCells} onOpen={(d) => open(d.id)} /></div>
+        )}
+        {filtered.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
 
       <Modal isOpen={!!openId} onClose={() => open(null)} title={t('detail.title')} maxWidth="max-w-3xl">

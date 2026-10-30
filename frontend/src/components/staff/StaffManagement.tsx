@@ -6,7 +6,9 @@ import {
   ApiError, InvitePlatformStaffResult, PlatformStaffMember, PlatformStaffRole, ResendInvitationResult,
   apiResendPlatformStaffInvitation,
 } from '../../lib/api';
-import { TablePagination, usePagination } from '../common/TablePagination';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { InviteStaffModal } from './InviteStaffModal';
 
@@ -35,6 +37,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
   staff, error, onInvite, onSetRole, onSuspend, onReinstate, onDelete,
 }) => {
   const { t } = useTranslation('accounts');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('admin-staff');
   const roleLabel = (r: PlatformStaffRole) => t(`staff.role.${r}`, { defaultValue: r });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | PlatformStaffMember['status']>('all');
@@ -113,6 +117,72 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(filtered);
 
+  type Staff = (typeof pagedRows)[number];
+  // The card's controls, shared with the list row.
+  const statusToggle = (s: Staff) => (
+                <button
+                  onClick={() => handleToggleStatus(s)}
+                  disabled={busyId === s.id}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${
+                    s.status !== 'suspended' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
+                  }`}
+                  title={s.status === 'suspended' ? t('staff.reinstate') : t('staff.suspend')}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      s.status !== 'suspended' ? 'translate-x-4.5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+  );
+  const rolePicker = (s: Staff, block: boolean) => (
+              <SelectPicker
+                data={ROLES.map((r) => ({ label: roleLabel(r), value: r }))}
+                value={s.role}
+                onChange={(value) => handleRoleChange(s.id, (value ?? s.role) as PlatformStaffRole)}
+                disabled={busyId === s.id}
+                block={block}
+                searchable={false}
+                cleanable={false}
+                size="sm"
+              />
+  );
+  const statusBadge = (s: Staff) => (
+              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
+                {t(`staff.status.${s.status}`, { defaultValue: s.status })}
+              </span>
+  );
+  const footerActions = (s: Staff) => (
+    <>
+              {s.status === 'invited' && (
+                <button
+                  onClick={() => handleResend(s)}
+                  disabled={busyId === s.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
+                  title={t('staff.resendHint')}
+                >
+                  <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
+                  <span>{t('staff.resendInvitation')}</span>
+                </button>
+              )}
+              {!s.activatedAt && (
+                <button
+                  onClick={() => handleDelete(s)}
+                  disabled={busyId === s.id}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
+                  title={t('staff.deleteHint')}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+              {s.suspendedReason && s.status === 'suspended' && (
+                <span className="text-[10px] text-slate-400 truncate max-w-[140px]" title={s.suspendedReason}>
+                  {s.suspendedReason}
+                </span>
+              )}
+    </>
+  );
+
   return (
     <div id="staff-management-view" className="space-y-3">
 
@@ -155,6 +225,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
         </div>
         </div>
 
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           onClick={() => setIsModalOpen(true)}
           className="w-full sm:w-auto px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
@@ -162,6 +234,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
           <Plus className="w-4 h-4" />
           <span>{t('staff.invite')}</span>
         </button>
+        </div>
       </div>
 
       {error && (
@@ -171,97 +244,68 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedRows.map((s) => (
-          <div
-            key={s.id}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-3"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
+      <div className={LIST_PANEL}>
+        {viewMode === 'list' && filtered.length > 0 ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.name') }, { label: ts('listCol.email') }, { label: ts('listCol.role') },
+              { label: ts('listCol.status') }, { label: ts('listCol.actions'), width: 240 },
+            ]}
+            rows={pagedRows}
+            rowKey={(s) => s.id}
+            cells={(s) => [
+              <span className="font-medium">{s.fullName}</span>,
+              s.email,
+              <div className="w-44">{rolePicker(s, true)}</div>,
+              statusBadge(s),
+              <div className="flex flex-wrap items-center gap-2">{statusToggle(s)}{footerActions(s)}</div>,
+            ]}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pagedRows.map((s) => (
+            <div
+              key={s.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-sky-300 dark:hover:border-sky-700 transition-all space-y-3"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  {statusToggle(s)}
                 </div>
-                <button
-                  onClick={() => handleToggleStatus(s)}
-                  disabled={busyId === s.id}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${
-                    s.status !== 'suspended' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'
-                  }`}
-                  title={s.status === 'suspended' ? t('staff.reinstate') : t('staff.suspend')}
-                >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                      s.status !== 'suspended' ? 'translate-x-4.5' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={s.fullName}>
+                  {s.fullName}
+                </h4>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{s.email}</span>
+                </div>
               </div>
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={s.fullName}>
-                {s.fullName}
-              </h4>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate">
-                <Mail className="w-3 h-3 shrink-0" />
-                <span className="truncate">{s.email}</span>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">{t('translation:settings.role')}</label>
+                {rolePicker(s, true)}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                {statusBadge(s)}
+                {footerActions(s)}
               </div>
             </div>
+          ))}
 
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">{t('translation:settings.role')}</label>
-              <SelectPicker
-                data={ROLES.map((r) => ({ label: roleLabel(r), value: r }))}
-                value={s.role}
-                onChange={(value) => handleRoleChange(s.id, (value ?? s.role) as PlatformStaffRole)}
-                disabled={busyId === s.id}
-                block
-                searchable={false}
-                cleanable={false}
-                size="sm"
-              />
+          {filtered.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+              <span>{t('staff.empty')}</span>
             </div>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
-                {t(`staff.status.${s.status}`, { defaultValue: s.status })}
-              </span>
-              {s.status === 'invited' && (
-                <button
-                  onClick={() => handleResend(s)}
-                  disabled={busyId === s.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
-                  title={t('staff.resendHint')}
-                >
-                  <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
-                  <span>{t('staff.resendInvitation')}</span>
-                </button>
-              )}
-              {!s.activatedAt && (
-                <button
-                  onClick={() => handleDelete(s)}
-                  disabled={busyId === s.id}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 disabled:opacity-30 transition-colors cursor-pointer"
-                  title={t('staff.deleteHint')}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
-              {s.suspendedReason && s.status === 'suspended' && (
-                <span className="text-[10px] text-slate-400 truncate max-w-[140px]" title={s.suspendedReason}>
-                  {s.suspendedReason}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {filtered.length === 0 && (
-          <div className="col-span-full py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-            <span>{t('staff.empty')}</span>
-          </div>
+          )}
+        </div>
         )}
+        {filtered.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
-      {filtered.length > 0 && <TablePagination bare pinToBottom {...pager} />}
 
       <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
 

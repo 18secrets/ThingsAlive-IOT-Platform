@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ChevronLeft, ChevronRight, Clock3, Info } from 'lucide-react';
+import { AlertCircle, ChevronRight, Clock3, Info } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
@@ -28,7 +29,6 @@ export const ProductionMonitoringPage: React.FC = () => {
   const [viewMode, setViewMode] = useViewMode('production-monitoring');
   usePageHeader({ title: t('translation:pages.productionMonitoring.title'), subtitle: t('page.subtitle') });
   const navigate = useNavigate();
-  const [page, setPage] = useState(1);
   const [availability, setAvailability] = useState<FleetAvailability | null>(null);
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -110,9 +110,8 @@ export const ProductionMonitoringPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availability, equipment, linkHealth, scope, selectedKey]);
 
-  const pageCount = Math.max(1, Math.ceil(machines.length / PAGE_SIZE));
-  const pageSafe = Math.min(page, pageCount);
-  const pageItems = machines.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
+  const { pageItems, ...pager } = usePagination(machines, PAGE_SIZE);
 
   return (
     <div id="production-monitoring-view" className="space-y-3">
@@ -135,12 +134,12 @@ export const ProductionMonitoringPage: React.FC = () => {
 
       <EquipmentFilters
         scope={scope}
-        onChange={(next) => { setScope(next); setPage(1); }}
+        onChange={setScope}
         plants={plants}
         classes={equipmentClasses}
         equipmentOptions={equipmentOptions}
         selectedKey={selectedKey}
-        onSelect={(key) => { setSelectedKey(key); setPage(1); }}
+        onSelect={setSelectedKey}
       />
 
       {loading ? (
@@ -174,60 +173,52 @@ export const ProductionMonitoringPage: React.FC = () => {
               </div>
             </div>
 
-            {pageItems.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                {t('list.empty')}
-              </div>
-            ) : viewMode === 'list' ? (
-              <ListTable
-                columns={[
-                  { label: t('listCol.machine') }, { label: t('listCol.connection') },
-                  { label: t('listCol.availability'), align: 'right' }, { label: t('listCol.oeeWeek'), align: 'right' },
-                  { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right' },
-                ]}
-                rows={pageItems}
-                rowKey={(m) => `${m.sourceSystem}/${m.externalId}`}
-                cells={(m) => {
-                  const oee = machineOee.get(`${m.sourceSystem}|${m.externalId}`)?.oee;
-                  const ready = m.readiness === 'ready';
-                  return [
-                    <span><span className="font-medium">{name(m.sourceSystem, m.externalId)}</span> <span className="text-slate-400">{m.externalId}</span></span>,
-                    <ConnectionBadge state={connectionOf(m.externalId)} />,
-                    // A ratio; and a reason in place of a number, as on the card.
-                    ready && m.availability != null ? `${(m.availability * 100).toFixed(0)}%`
-                      : <span className="text-slate-400">{m.reason ? t(`reason.${m.reason}`, { defaultValue: m.reason }) : '—'}</span>,
-                    oee?.readiness === 'ready' && oee.value != null ? `${(oee.value * 100).toFixed(0)}%` : '—',
-                    ready ? `${(m.uptimeHours ?? 0).toFixed(0)} h` : '—',
-                    ready ? `${(m.downtimeHours ?? 0).toFixed(0)} h` : '—',
-                  ];
-                }}
-                onOpen={(m) => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
-              />
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pageItems.map((m) => (
-                  <ProductionCard
-                    key={`${m.sourceSystem}/${m.externalId}`}
-                    machine={m}
-                    name={name(m.sourceSystem, m.externalId)}
-                    oee={machineOee.get(`${m.sourceSystem}|${m.externalId}`)}
-                    connection={connectionOf(m.externalId)}
-                    onOpen={() => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
-                  />
-                ))}
-              </div>
-            )}
+            <div className={LIST_PANEL}>
+              {pageItems.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 text-sm">
+                  {t('list.empty')}
+                </div>
+              ) : viewMode === 'list' ? (
+                <ListTable bare
+                  columns={[
+                    { label: t('listCol.machine') }, { label: t('listCol.connection') },
+                    { label: t('listCol.availability'), align: 'right' }, { label: t('listCol.oeeWeek'), align: 'right' },
+                    { label: t('listCol.up'), align: 'right' }, { label: t('listCol.down'), align: 'right' },
+                  ]}
+                  rows={pageItems}
+                  rowKey={(m) => `${m.sourceSystem}/${m.externalId}`}
+                  cells={(m) => {
+                    const oee = machineOee.get(`${m.sourceSystem}|${m.externalId}`)?.oee;
+                    const ready = m.readiness === 'ready';
+                    return [
+                      <span><span className="font-medium">{name(m.sourceSystem, m.externalId)}</span> <span className="text-slate-400">{m.externalId}</span></span>,
+                      <ConnectionBadge state={connectionOf(m.externalId)} />,
+                      // A ratio; and a reason in place of a number, as on the card.
+                      ready && m.availability != null ? `${(m.availability * 100).toFixed(0)}%`
+                        : <span className="text-slate-400">{m.reason ? t(`reason.${m.reason}`, { defaultValue: m.reason }) : '—'}</span>,
+                      oee?.readiness === 'ready' && oee.value != null ? `${(oee.value * 100).toFixed(0)}%` : '—',
+                      ready ? `${(m.uptimeHours ?? 0).toFixed(0)} h` : '—',
+                      ready ? `${(m.downtimeHours ?? 0).toFixed(0)} h` : '—',
+                    ];
+                  }}
+                  onOpen={(m) => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
+                />
+              ) : (
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pageItems.map((m) => (
+                    <ProductionCard
+                      key={`${m.sourceSystem}/${m.externalId}`}
+                      machine={m}
+                      name={name(m.sourceSystem, m.externalId)}
+                      oee={machineOee.get(`${m.sourceSystem}|${m.externalId}`)}
+                      connection={connectionOf(m.externalId)}
+                      onOpen={() => navigate(`/production-monitoring/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
+                    />
+                  ))}
+                </div>
+              )}
 
-            <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-              <span>{t('common.pageOf', { page: pageSafe, total: pageCount })}</span>
-              <div className="flex items-center gap-2">
-                <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  <ChevronLeft className="w-4 h-4" /> {t('common.prev')}
-                </button>
-                <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-                  {t('common.next')} <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              <TablePagination pinToBottom {...pager} />
             </div>
           </div>
         </>

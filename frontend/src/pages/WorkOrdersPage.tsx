@@ -7,6 +7,7 @@ import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { ConnectionBadge } from '../components/common/ConnectionBadge';
 import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import {
@@ -222,6 +223,9 @@ export const WorkOrdersPage: React.FC = () => {
     </>
   );
 
+  // The shared rsuite pager, in both views; back to page 1 when the filters change the count.
+  const { pageItems, ...pager } = usePagination(visible, 12);
+
   return (
     <div id="work-orders-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
@@ -300,69 +304,72 @@ export const WorkOrdersPage: React.FC = () => {
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
-      {loading ? (
-        <p className="text-sm text-slate-500">{t('loading')}</p>
-      ) : visible.length === 0 ? (
-        <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
-          <ClipboardList className="w-6 h-6" />
-          {t('empty')}
-        </div>
-      ) : viewMode === 'list' ? (
-        <ListTable
-          columns={[
-            { label: t('listCol.reference') }, { label: t('listCol.title') }, { label: t('listCol.machine') },
-            { label: t('listCol.status') }, { label: t('listCol.assignee') }, { label: t('listCol.priority') },
-            { label: t('listCol.due') }, { label: t('listCol.actions') },
-          ]}
-          rows={visible}
-          rowKey={(o) => o.id}
-          cells={(o) => [
-            <span className="font-mono text-slate-400">{o.reference}</span>,
-            <span className="font-medium">{o.title}</span>,
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{equipmentName(o.sourceSystem, o.externalId)} <ConnectionBadge state={connectionOf(o.externalId)} /></span>,
-            <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
-              {t(`status.${o.status}`, { defaultValue: o.status })}
-            </Chip>,
-            o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
-            <span className="capitalize">{t(`priority.${o.priority}`, { defaultValue: o.priority })}</span>,
-            o.dueAt ? new Date(o.dueAt).toLocaleDateString() : '—',
-            <div className="flex flex-wrap items-center gap-1.5">{renderActions(o)}</div>,
-          ]}
-        />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visible.map((o) => (
-            <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono text-slate-400">{o.reference}</span>
-                <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
-                  {t(`status.${o.status}`, { defaultValue: o.status })}
-                </Chip>
+      <div className={LIST_PANEL}>
+        {loading ? (
+          <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
+        ) : visible.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+            <ClipboardList className="w-6 h-6" />
+            {t('empty')}
+          </div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare
+            columns={[
+              { label: t('listCol.reference') }, { label: t('listCol.title') }, { label: t('listCol.machine') },
+              { label: t('listCol.status') }, { label: t('listCol.assignee') }, { label: t('listCol.priority') },
+              { label: t('listCol.due') }, { label: t('listCol.actions') },
+            ]}
+            rows={pageItems}
+            rowKey={(o) => o.id}
+            cells={(o) => [
+              <span className="font-mono text-slate-400">{o.reference}</span>,
+              <span className="font-medium">{o.title}</span>,
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{equipmentName(o.sourceSystem, o.externalId)} <ConnectionBadge state={connectionOf(o.externalId)} /></span>,
+              <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+                {t(`status.${o.status}`, { defaultValue: o.status })}
+              </Chip>,
+              o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
+              <span className="capitalize">{t(`priority.${o.priority}`, { defaultValue: o.priority })}</span>,
+              o.dueAt ? new Date(o.dueAt).toLocaleDateString() : '—',
+              <div className="flex flex-wrap items-center gap-1.5">{renderActions(o)}</div>,
+            ]}
+          />
+        ) : (
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pageItems.map((o) => (
+              <div key={o.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-slate-400">{o.reference}</span>
+                  <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
+                    {t(`status.${o.status}`, { defaultValue: o.status })}
+                  </Chip>
+                </div>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400 truncate">{equipmentName(o.sourceSystem, o.externalId)}</p>
+                  <ConnectionBadge state={connectionOf(o.externalId)} />
+                </div>
+                {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}
+                {o.resolution && <p className="text-xs text-slate-400 dark:text-slate-500">{t('card.resolution', { resolution: o.resolution })}</p>}
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {o.assignedToUserId
+                    ? <Trans t={t} i18nKey="card.assignedTo" values={{ name: personName(o.assignedToUserId) }} components={{ b: <span className="font-semibold" /> }} />
+                    : t('card.unassigned')}
+                  {' · '}<Trans t={t} i18nKey="card.priority" values={{ priority: t(`priority.${o.priority}`, { defaultValue: o.priority }) }} components={{ cap: <span className="capitalize" /> }} />
+                </p>
+                <small className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 pt-1">
+                  <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString()}
+                  {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}
+                </small>
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  {renderActions(o)}
+                </div>
               </div>
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{equipmentName(o.sourceSystem, o.externalId)}</p>
-                <ConnectionBadge state={connectionOf(o.externalId)} />
-              </div>
-              {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}
-              {o.resolution && <p className="text-xs text-slate-400 dark:text-slate-500">{t('card.resolution', { resolution: o.resolution })}</p>}
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {o.assignedToUserId
-                  ? <Trans t={t} i18nKey="card.assignedTo" values={{ name: personName(o.assignedToUserId) }} components={{ b: <span className="font-semibold" /> }} />
-                  : t('card.unassigned')}
-                {' · '}<Trans t={t} i18nKey="card.priority" values={{ priority: t(`priority.${o.priority}`, { defaultValue: o.priority }) }} components={{ cap: <span className="capitalize" /> }} />
-              </p>
-              <small className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 pt-1">
-                <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString()}
-                {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}
-              </small>
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {renderActions(o)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+        {visible.length > 0 && <TablePagination pinToBottom {...pager} />}
+      </div>
 
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={t('modals.edit')} subtitle={editing?.reference} maxWidth="max-w-xl">
         {editing && <EditWorkOrderForm order={editing} onCancel={() => setEditing(null)} onSave={(input) => saveEdit(editing, input)} />}

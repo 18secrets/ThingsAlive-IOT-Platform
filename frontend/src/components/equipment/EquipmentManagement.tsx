@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, ChevronLeft, ChevronRight, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
+import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,10 +9,13 @@ import {
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
+import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable, ListColumn } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 const STATUS_VALUES = ['active', 'retired'];
 
-const ROWS_PER_PAGE_OPTIONS = [10, 20, 50].map((n) => ({ label: String(n), value: n }));
 
 interface EquipmentManagementProps {
   equipment: EquipmentProfile[];
@@ -79,11 +82,11 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   onImportEquipmentFromMirror,
 }) => {
   const { t } = useTranslation('equipment');
+  const { t: ts } = useTranslation('shared');
   const statusOptions = STATUS_VALUES.map((value) => ({ label: t(`status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [viewMode, setViewMode] = useViewMode('client-equipment');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<EquipmentProfile | null>(null);
   const [bindingsEquipment, setBindingsEquipment] = useState<EquipmentProfile | null>(null);
@@ -115,10 +118,71 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     });
   }, [equipment, searchTerm, selectedStatus, classBySlug]);
 
-  const totalRows = filteredList.length;
-  const totalPages = Math.ceil(totalRows / rowsPerPage) || 1;
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedList = filteredList.slice(startIndex, startIndex + rowsPerPage);
+  const { pageItems: paginatedList, ...pager } = usePagination(filteredList);
+
+  // One definition for both views (cards or list on every list page).
+  const viewColumns: ListColumn[] = [
+    // Ten columns: past these widths the list scrolls sideways, as the table before it did.
+    { label: t('equipmentList.col.code'), minWidth: 110 },
+    { label: t('equipmentList.col.name'), minWidth: 170 },
+    { label: t('equipmentList.col.class'), minWidth: 190 },
+    { label: t('equipmentList.col.plant'), minWidth: 170 },
+    { label: t('equipmentList.col.manufacturer'), minWidth: 130 },
+    { label: t('equipmentList.col.model'), minWidth: 110 },
+    { label: t('equipmentList.col.serial'), minWidth: 120 },
+    { label: t('equipmentList.col.tier') },
+    { label: t('equipmentList.col.status') },
+    { label: ts('listCol.actions'), width: 130 },
+  ];
+  const viewCells = (item: EquipmentProfile) => [
+    <span className="font-mono text-slate-500 dark:text-slate-400">{item.externalId}</span>,
+    <span className="font-semibold text-slate-900 dark:text-white">{item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}</span>,
+    <span className="text-slate-700 dark:text-slate-300">{item.equipmentClassSlug ? (
+                        <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium text-[11px] border border-sky-200 dark:border-sky-800/60">
+                          {classBySlug.get(item.equipmentClassSlug)?.name ?? item.equipmentClassSlug}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">{t('common.unclassified')}</span>
+                      )}</span>,
+    <span className="text-slate-600 dark:text-slate-400 font-sans">{item.plantId ? (plantById.get(item.plantId)?.name ?? '—') : <span className="text-slate-400 italic">{t('common.unassigned')}</span>}</span>,
+    <>{item.manufacturer ?? '—'}</>,
+    <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{item.modelNumber ?? '—'}</span>,
+    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{item.serialNumber ?? '—'}</span>,
+    <span className="capitalize text-slate-600 dark:text-slate-400">{t(`tier.${item.tier}`, { defaultValue: item.tier })}</span>,
+    <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        item.status === 'active'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}>
+                        {t(`status.${item.status}`, { defaultValue: item.status })}
+                      </span></>,
+    <><div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                          title={t('common.edit')}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setBindingsEquipment(item)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                          title={t('bindings.title')}
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                        </button>
+                        {item.status === 'active' && (
+                          <button
+                            onClick={() => handleRetire(item)}
+                            disabled={retiringId === item.id}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                            title={t('equipmentList.retire')}
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div></>,
+  ];
 
   const handleCreate = async (input: EquipmentInput) => {
     await onCreateEquipment(input);
@@ -194,7 +258,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
               value={searchTerm}
               onChange={(value) => {
                 setSearchTerm(value);
-                setCurrentPage(1);
+                pager.setPage(1);
               }}
               placeholder={t('equipmentList.searchPlaceholder')}
               size="sm"
@@ -208,7 +272,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             value={selectedStatus === 'All' ? null : selectedStatus}
             onChange={(value) => {
               setSelectedStatus(value ?? 'All');
-              setCurrentPage(1);
+              pager.setPage(1);
             }}
             placeholder={t('common.selectStatusAll')}
             searchable={false}
@@ -217,7 +281,8 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           <button
             id="import-equipment-btn"
             disabled={importing}
@@ -250,164 +315,15 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
 
       {/* Main Equipment Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-              <tr>
-                <th className="py-3 px-3.5">{t('equipmentList.col.code')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.name')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.class')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.plant')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.manufacturer')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.model')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.serial')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.tier')}</th>
-                <th className="py-3 px-4">{t('equipmentList.col.status')}</th>
-                <th className="py-3 px-4"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {paginatedList.length > 0 ? (
-                paginatedList.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td className="py-3 px-3.5 font-mono text-slate-500 dark:text-slate-400">
-                      {item.externalId}
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      {item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
-                      {item.equipmentClassSlug ? (
-                        <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium text-[11px] border border-sky-200 dark:border-sky-800/60">
-                          {classBySlug.get(item.equipmentClassSlug)?.name ?? item.equipmentClassSlug}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">{t('common.unclassified')}</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-sans">
-                      {item.plantId ? (plantById.get(item.plantId)?.name ?? '—') : <span className="text-slate-400 italic">{t('common.unassigned')}</span>}
-                    </td>
-                    <td className="py-3 px-4">
-                      {item.manufacturer ?? '—'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                      {item.modelNumber ?? '—'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-700 dark:text-slate-300">
-                      {item.serialNumber ?? '—'}
-                    </td>
-                    <td className="py-3 px-4 capitalize text-slate-600 dark:text-slate-400">
-                      {t(`tier.${item.tier}`, { defaultValue: item.tier })}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
-                        item.status === 'active'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                          : 'bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                      }`}>
-                        {t(`status.${item.status}`, { defaultValue: item.status })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title={t('common.edit')}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setBindingsEquipment(item)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                          title={t('bindings.title')}
-                        >
-                          <Radio className="w-3.5 h-3.5" />
-                        </button>
-                        {item.status === 'active' && (
-                          <button
-                            onClick={() => handleRetire(item)}
-                            disabled={retiringId === item.id}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                            title={t('equipmentList.retire')}
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-400 font-sans">
-                    {t('equipmentList.empty')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {filteredList.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 text-sm">{t('equipmentList.empty')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} actionsIndex={9} /></div>
+        )}
 
-        {/* Pagination */}
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div>
-            {t('common.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span>{t('common.rowsPerPage')}</span>
-              <SelectPicker
-                data={ROWS_PER_PAGE_OPTIONS}
-                value={rowsPerPage}
-                onChange={(value) => {
-                  setRowsPerPage(Number(value ?? 10));
-                  setCurrentPage(1);
-                }}
-                searchable={false}
-                cleanable={false}
-                size="sm"
-              />
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-7 h-7 rounded text-xs font-semibold flex items-center justify-center transition-colors ${
-                    currentPage === i + 1
-                      ? 'bg-[#0B7285] text-white border border-[#0B7285]'
-                      : 'border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-
-              <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <TablePagination pinToBottom {...pager} />
       </div>
 
       {/* Add / Edit Equipment Modal */}

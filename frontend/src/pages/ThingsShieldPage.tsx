@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ChevronLeft, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
+import { AlertCircle, ChevronRight, ShieldCheck, ShieldAlert, Info, Siren } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
   ApiError, Plant, SHIELD_CATEGORIES, ShieldMachine, ShieldStatus, ShieldSummary,
@@ -32,7 +33,6 @@ export const ThingsShieldPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let live = true;
@@ -73,9 +73,8 @@ export const ThingsShieldPage: React.FC = () => {
     return n;
   }, [matching]);
 
-  const pageCount = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
-  const pageSafe = Math.min(page, pageCount);
-  const pageItems = matching.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
+  const { pageItems, ...pager } = usePagination(matching, PAGE_SIZE);
   const open = (m: ShieldMachine) => navigate(`/things-shield/${encodeURIComponent(m.machine.sourceSystem)}/${encodeURIComponent(m.machine.externalId)}`);
 
   return (
@@ -99,12 +98,12 @@ export const ThingsShieldPage: React.FC = () => {
       <EquipmentFilters
         showConnection={false}
         scope={scope}
-        onChange={(next) => { setScope(next); setPage(1); }}
+        onChange={setScope}
         plants={plants}
         classes={classes}
         equipmentOptions={equipmentOptions}
         selectedKey={selectedKey}
-        onSelect={(key) => { setSelectedKey(key); setPage(1); }}
+        onSelect={setSelectedKey}
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -125,49 +124,41 @@ export const ThingsShieldPage: React.FC = () => {
           </div>
         </div>
 
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('page.loading')}</p>
-        ) : pageItems.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-            {t('page.noMatch')}
-          </div>
-        ) : viewMode === 'list' ? (
-          <ListTable
-            columns={[{ label: t('listCol.machine') }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`) }))]}
-            rows={pageItems}
-            rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
-            cells={(m) => [
-              <span className="inline-flex items-center gap-2">
-                {needsAttention(m)
-                  ? <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  : <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
-                <span className="font-medium">{m.machine.name ?? m.machine.externalId}</span>
-                <span className="text-slate-400">{m.machine.externalId}</span>
-              </span>,
-              ...SHIELD_CATEGORIES.map((c) => (
-                <Chip tone={STATUS_TONE[m.categories[c].status]}>{t(`status.${m.categories[c].status}`)}</Chip>
-              )),
-            ]}
-            onOpen={open}
-          />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pageItems.map((m) => (
-              <ShieldCard key={`${m.machine.sourceSystem}/${m.machine.externalId}`} machine={m} onOpen={() => open(m)} />
-            ))}
-          </div>
-        )}
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('page.loading')}</p>
+          ) : pageItems.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm">
+              {t('page.noMatch')}
+            </div>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[{ label: t('listCol.machine') }, ...SHIELD_CATEGORIES.map((c) => ({ label: t(`category.${c}`) }))]}
+              rows={pageItems}
+              rowKey={(m) => `${m.machine.sourceSystem}/${m.machine.externalId}`}
+              cells={(m) => [
+                <span className="inline-flex items-center gap-2">
+                  {needsAttention(m)
+                    ? <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                    : <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                  <span className="font-medium">{m.machine.name ?? m.machine.externalId}</span>
+                  <span className="text-slate-400">{m.machine.externalId}</span>
+                </span>,
+                ...SHIELD_CATEGORIES.map((c) => (
+                  <Chip tone={STATUS_TONE[m.categories[c].status]}>{t(`status.${m.categories[c].status}`)}</Chip>
+                )),
+              ]}
+              onOpen={open}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pageItems.map((m) => (
+                <ShieldCard key={`${m.machine.sourceSystem}/${m.machine.externalId}`} machine={m} onOpen={() => open(m)} />
+              ))}
+            </div>
+          )}
 
-        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 mt-4">
-          <span>{t('page.pageOf', { page: pageSafe, count: pageCount })}</span>
-          <div className="flex items-center gap-2">
-            <button disabled={pageSafe <= 1} onClick={() => setPage((p) => p - 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              <ChevronLeft className="w-4 h-4" /> {t('page.prev')}
-            </button>
-            <button disabled={pageSafe >= pageCount} onClick={() => setPage((p) => p + 1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer">
-              {t('page.next')} <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <TablePagination pinToBottom {...pager} />
         </div>
       </div>
 
