@@ -90,7 +90,9 @@
     "site": "Site",
     "description": "Description (optional)",
     "cancel": "Cancel",
-    "save": "Save changes"
+    "save": "Save changes",
+    "notANumber": "Has to be a number.",
+    "minBelowMax": "Has to be above the minimum, or the rule can never fire."
   },
   "agent": {
     "assistantTitle": "AI Assistant",

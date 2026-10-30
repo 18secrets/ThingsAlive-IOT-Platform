@@ -307,8 +307,8 @@ const AlertRuleForm: React.FC<{
     if (trigger === 'signal-threshold') {
       return {
         signal: signal.trim(),
-        min: min.trim() ? Number(min) : null,
-        max: max.trim() ? Number(max) : null,
+        min: minValue,
+        max: maxValue,
       };
     }
     if (trigger === 'prediction-severity') {
@@ -317,9 +317,19 @@ const AlertRuleForm: React.FC<{
     return {};
   }
 
+  // An unreadable bound would go out as null (JSON has no NaN) and the rule would save
+  // watching one side only, so each is checked here and the reason shown under it.
+  const asNumber = (raw: string) => (raw.trim() === '' ? null : Number(raw.trim()));
+  const minValue = asNumber(min);
+  const maxValue = asNumber(max);
+  const minError = minValue !== null && !Number.isFinite(minValue) ? t('form.notANumber') : undefined;
+  const maxError = maxValue !== null && !Number.isFinite(maxValue) ? t('form.notANumber')
+    : minValue !== null && maxValue !== null && !minError && minValue >= maxValue ? t('form.minBelowMax') : undefined;
+
   function valid(): boolean {
     if (!name.trim()) return false;
     if (trigger === 'signal-threshold' && (!signal.trim() || (!min.trim() && !max.trim()))) return false;
+    if (trigger === 'signal-threshold' && (minError || maxError)) return false;
     if (appliesTo === 'plant' && !plantId) return false;
     if (appliesTo === 'equipment' && !equipmentKey) return false;
     return true;
@@ -372,11 +382,13 @@ const AlertRuleForm: React.FC<{
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.min')}</span>
-            <Input value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            {minError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{minError}</span>}
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.max')}</span>
-            <Input value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            {maxError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
         </div>
       )}

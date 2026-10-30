@@ -580,6 +580,12 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     if (p.max == null && p.min == null) {
       return 'A threshold rule needs a maximum, a minimum, or both.';
     }
+    // "abc" compared against a reading is always false, so the rule would never fire.
+    for (const [field, value] of [['maximum', p.max], ['minimum', p.min]] as const) {
+      if (value != null && (typeof value !== 'number' || !Number.isFinite(value))) {
+        return `The ${field} has to be a number.`;
+      }
+    }
     if (p.max != null && p.min != null && p.min >= p.max) {
       // Nothing can be both, so this rule can never fire and would look configured.
       return 'The minimum has to be below the maximum, or the rule can never fire.';
