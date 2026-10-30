@@ -242,6 +242,15 @@ describeDb('OEE end to end', () => {
     expect(r.oee.value).toBeCloseTo((600 - 120) / 600 * 1, 6);
   });
 
+  it('a machine\'s OEE carries the breakdowns Performance counted, so the list cannot disagree with the count', async () => {
+    await machine('EX-1');
+    await work('EX-1', at(MONDAY, 6), at(MONDAY, 16), { idle: [[at(MONDAY, 8), at(MONDAY, 9)], [at(MONDAY, 13), at(MONDAY, 14)]] });
+    const r = await oee.forEquipment(scope, ref('EX-1'), 'day', new Date(MONDAY), AFTER_MONDAY);
+    expect(r.performance.breakdownCount).toBe(2);
+    expect(r.breakdowns.map((b) => b.startedAt)).toEqual([new Date(at(MONDAY, 8)), new Date(at(MONDAY, 13))]);
+    expect(r.breakdowns.reduce((s, b) => s + (b.durationMinutes ?? 0), 0)).toBe(r.performance.breakdownMinutes);
+  });
+
   it('6. an open breakdown counts to now and says it is open', async () => {
     await machine('EX-1');
     await work('EX-1', at(MONDAY, 6), at(MONDAY, 16), { idle: [[at(MONDAY, 10), at(MONDAY, 12)]] });

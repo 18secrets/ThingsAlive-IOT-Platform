@@ -7,8 +7,8 @@ import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { Chip } from '../components/common/Chip';
 import {
-  ApiError, BreakdownEvent, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
-  OeeWindow, UtilizationShiftRow, apiGetBreakdowns, apiGetEquipmentAvailability, apiGetEquipmentOee,
+  ApiError, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
+  OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
 
@@ -37,20 +37,18 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
   const { t } = useTranslation('production');
   const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
   const [oee, setOee] = useState<EquipmentOee | null>(null);
-  const [breakdowns, setBreakdowns] = useState<BreakdownEvent[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
+  // The rows the count above was made from, in the same response — a separate fetch
+  // could land late or fail and leave "7 breakdowns" beside "none recorded".
+  const breakdowns = oee?.breakdowns ?? [];
 
   useEffect(() => {
     let live = true;
     setError(undefined);
+    // The previous window's numbers must not stand under the newly selected one.
+    setOee(null);
     apiGetEquipmentOee(sourceSystem, externalId, oeeWindow)
-      .then((result) => {
-        if (!live) return;
-        setOee(result);
-        // Same window the OEE was computed over, so the list explains the number above it.
-        return apiGetBreakdowns(sourceSystem, externalId, result.from, result.to)
-          .then((rows) => { if (live) setBreakdowns(rows); });
-      })
+      .then((result) => { if (live) setOee(result); })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadOee')); });
     return () => { live = false; };
   }, [sourceSystem, externalId, oeeWindow]);
@@ -76,6 +74,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {!oee && !error && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
 
       {oee && (
         <>

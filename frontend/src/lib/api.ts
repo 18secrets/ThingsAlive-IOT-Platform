@@ -2338,6 +2338,8 @@ export interface EquipmentOee {
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
   };
   oee: OeeFactor;
+  /** The rows Performance counted. On one machine's OEE only, not on a site's machines. */
+  breakdowns?: BreakdownEvent[];
 }
 
 export interface SiteOee {
