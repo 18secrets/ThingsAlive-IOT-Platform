@@ -224,7 +224,9 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
         <li key={w.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
-              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowEnd).toLocaleTimeString()}
+              {/* The end's date too when the window crosses midnight (test report COS-4). */}
+              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString() : new Date(w.windowEnd).toLocaleString()}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>
