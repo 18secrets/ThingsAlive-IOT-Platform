@@ -3501,6 +3501,10 @@ export interface MeDiagnostics {
   /** Null for a token that names no account row (one minted by the CLI). */
   email: string | null;
   fullName: string | null;
+  /** The role's own name ("CEO/Manager"); null for staff and CLI tokens. */
+  roleName?: string | null;
+  tenantName?: string | null;
+  tenantSince?: string | null;
   roles: string[];
   isPlatformRole: boolean;
   scope: {

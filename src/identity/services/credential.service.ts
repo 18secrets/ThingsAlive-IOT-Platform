@@ -10,6 +10,7 @@ import { AppUser } from '../entities/app-user.entity';
 import { InvitationPurpose, UserInvitation } from '../entities/user-invitation.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
 import { UserSession } from '../entities/user-session.entity';
+import { TenantRole } from '../entities/tenant-role.entity';
 import { PasswordService } from './password.service';
 
 export interface SignInResult {
@@ -459,10 +460,20 @@ export class CredentialService {
   }
 
   /** The caller's own name and address, for the screens that show who is signed in. */
-  async ownIdentity(scope: RequestScope): Promise<{ email: string; fullName: string } | null> {
+  async ownIdentity(scope: RequestScope): Promise<{
+    email: string; fullName: string; roleName: string | null; tenantName: string | null; tenantSince: Date | null;
+  } | null> {
     return withTenantId(this.ds, scope.tenantId, async (m) => {
       const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId } });
-      return user ? { email: user.email, fullName: user.fullName } : null;
+      if (!user) return null;
+      // The role's own name, as Users and Diagnostics show it. Settings said "Client"
+      // for the same person they called "CEO/Manager" (test report MIN-3).
+      const role = await m.getRepository(TenantRole).findOne({ where: { tenantId: scope.tenantId, slug: user.roleSlug } });
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId: scope.tenantId } });
+      return {
+        email: user.email, fullName: user.fullName, roleName: role?.name ?? null,
+        tenantName: tenant?.name ?? null, tenantSince: tenant?.createdAt ?? null,
+      };
     });
   }
 

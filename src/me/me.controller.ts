@@ -48,6 +48,10 @@ export class MeController {
       userId: scope.userId,
       email: identity?.email ?? null,
       fullName: identity?.fullName ?? null,
+      // Client users only; staff identities carry neither.
+      roleName: identity && 'roleName' in identity ? identity.roleName : null,
+      tenantName: identity && 'tenantName' in identity ? identity.tenantName : null,
+      tenantSince: identity && 'tenantSince' in identity ? identity.tenantSince : null,
       roles: scope.roles,
       isPlatformRole: scope.isPlatformRole,
       scope: {

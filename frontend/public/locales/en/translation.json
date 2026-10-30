@@ -109,7 +109,8 @@
     "tooShort": "New password must be at least 8 characters.",
     "sameAsCurrent": "New password must be different from your current password.",
     "mismatch": "New password and confirmation do not match.",
-    "updated": "Your password has been updated. Signing you out for a fresh sign-in…"
+    "updated": "Your password has been updated. Signing you out for a fresh sign-in…",
+    "superAdminNote": "Super Admin: you manage users and roles, so every page opens for you whatever your role lists."
   },
   "passwordField": {
     "show": "Show password",
