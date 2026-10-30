@@ -153,6 +153,9 @@ export const ThingsCareDetailPage: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState(false);
+  // What a manual score did, on the page: "Saved successfully" with nothing scored read as
+  // success (test report OB-3), so this says what ran, what was skipped and why.
+  const [scoreNotice, setScoreNotice] = useState<{ tone: 'ok' | 'warn'; lines: string[] } | null>(null);
   const [openSignal, setOpenSignal] = useState<{ slug: string; signal: string } | null>(null);
 
   usePageHeader({
@@ -192,14 +195,23 @@ export const ThingsCareDetailPage: React.FC = () => {
     setScoring(true);
     try {
       const result = await apiScorePredictionsNow(sourceSystem, externalId);
-      window.alert([
-        t('detail.scored', { count: result.written.length }),
-        t('detail.skipped', { count: result.skipped.length }),
-        t('detail.raised', { count: result.raised.length }),
-      ].join(' '));
+      if (!result.written.length && !result.skipped.length) {
+        setScoreNotice({ tone: 'warn', lines: [t('detail.nothingToScore')] });
+      } else {
+        setScoreNotice({
+          tone: result.written.length ? 'ok' : 'warn',
+          lines: [
+            t('detail.scored', { count: result.written.length })
+              + (result.raised.length ? ` ${t('detail.raised', { count: result.raised.length })}` : ''),
+            ...result.skipped.map((s) => t('detail.skippedBecause', {
+              scenario: s.clientScenarioSlug, reason: t(`detail.skipReason.${s.reason}`, { defaultValue: s.reason }),
+            })),
+          ],
+        });
+      }
       await load();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('errors.scoreNow'));
+      setScoreNotice({ tone: 'warn', lines: [err instanceof ApiError ? err.message : t('errors.scoreNow')] });
     } finally {
       setScoring(false);
     }
@@ -236,6 +248,13 @@ export const ThingsCareDetailPage: React.FC = () => {
             </button>
           </div>
         </div>
+        {scoreNotice && (
+          <div className={`text-xs rounded-lg px-3 py-2 border space-y-0.5 ${scoreNotice.tone === 'ok'
+            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900'
+            : 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900'}`}>
+            {scoreNotice.lines.map((l, i) => <p key={i}>{l}</p>)}
+          </div>
+        )}
         {sourceSystem && externalId && <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="care" />}
       </div>
 

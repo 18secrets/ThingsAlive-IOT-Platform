@@ -115,7 +115,15 @@
     "clickSignal": "Click a signal to see its readings against normal",
     "sigmaTitle": "How far the latest reading is from this machine's normal, in standard deviations",
     "footer_one": "Judged against a {{count}}-day normal · {{model}} · reading at {{at}}",
-    "footer_other": "Judged against a {{count}}-day normal · {{model}} · reading at {{at}}"
+    "footer_other": "Judged against a {{count}}-day normal · {{model}} · reading at {{at}}",
+    "nothingToScore": "Nothing was scored: no scenario is active on this machine. Adopt and activate its scenarios in Signal Bindings; a scenario then needs a fitted device, readings and its baseline history.",
+    "skippedBecause": "{{scenario}}: not scored — {{reason}}.",
+    "skipReason": {
+      "no-device": "no device is fitted",
+      "no-readings": "no readings yet",
+      "scenario-missing": "the scenario is not in this account's catalog",
+      "scenario-disabled": "the scenario is switched off"
+    }
   },
   "chain": {
     "title": "Root-cause diagnosis",

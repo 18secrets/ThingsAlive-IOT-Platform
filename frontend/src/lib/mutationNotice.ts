@@ -33,6 +33,9 @@ const NOT_A_WRITE: RegExp[] = [
   /^\/fleet-import\/plan(\?|$)/,
   // A signed-in tab handing a new tab its session: nothing the person saved.
   /^\/auth\/fork$/,
+  // Scoring reports its own result on the page; "Saved successfully" over a run that
+  // scored nothing read as success (test report OB-3).
+  /^\/predictions\/[^/]+\/[^/]+\/score$/,
 ];
 
 /** What a request is, for a notice: null when it is a read, or a POST that writes nothing. */
