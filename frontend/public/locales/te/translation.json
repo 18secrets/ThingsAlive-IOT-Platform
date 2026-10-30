@@ -45,7 +45,9 @@
     "profile": "ప్రొఫైల్ మరియు సెట్టింగ్‌లు",
     "signOut": "సైన్ అవుట్",
     "noNotifications": "తెరిచిన హెచ్చరికలు లేవు.",
-    "loadingNotifications": "లోడ్ అవుతోంది…"
+    "loadingNotifications": "లోడ్ అవుతోంది…",
+    "timeZone": "సమయాలు {{zone}} లో",
+    "timeZoneTitle": "ప్రతి తేదీ, సమయం మీ బ్రౌజర్ టైమ్ జోన్ {{zone}} లో చూపబడుతుంది."
   },
   "login": {
     "title": "సైన్ ఇన్",

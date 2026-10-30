@@ -45,7 +45,9 @@
     "profile": "ପ୍ରୋଫାଇଲ୍ ଓ ସେଟିଂସ୍",
     "signOut": "ସାଇନ୍ ଆଉଟ୍",
     "noNotifications": "କୌଣସି ଖୋଲା ସତର୍କତା ନାହିଁ।",
-    "loadingNotifications": "ଲୋଡ୍ ହେଉଛି…"
+    "loadingNotifications": "ଲୋଡ୍ ହେଉଛି…",
+    "timeZone": "ସମୟ {{zone}} ରେ",
+    "timeZoneTitle": "ପ୍ରତ୍ୟେକ ତାରିଖ ଓ ସମୟ ଆପଣଙ୍କ ବ୍ରାଉଜରର ସମୟ ମଣ୍ଡଳ {{zone}} ରେ ଦେଖାଯାଏ।"
   },
   "login": {
     "title": "ସାଇନ୍ ଇନ୍",

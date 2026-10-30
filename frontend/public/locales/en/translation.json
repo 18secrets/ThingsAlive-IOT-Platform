@@ -46,7 +46,9 @@
     "profile": "Profile and settings",
     "signOut": "Sign Out",
     "noNotifications": "No open alerts.",
-    "loadingNotifications": "Loading…"
+    "loadingNotifications": "Loading…",
+    "timeZone": "Times in {{zone}}",
+    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}."
   },
   "login": {
     "title": "Sign in",

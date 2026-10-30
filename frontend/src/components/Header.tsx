@@ -26,6 +26,13 @@ interface HeaderProps {
   onOpenNav?: () => void;
 }
 
+const VIEWER_ZONE = (() => {
+  const name = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const short = new Intl.DateTimeFormat('en', { timeZoneName: 'short' }).formatToParts(new Date())
+    .find((p) => p.type === 'timeZoneName')?.value ?? name;
+  return { name, short };
+})();
+
 export const Header: React.FC<HeaderProps> = ({
   title,
   breadcrumb,
@@ -99,6 +106,11 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Header Action Icons matching screenshot */}
       <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+        {/* Every time on screen is formatted in the viewer's own zone, and nothing said
+            which (test report MIN-12) — the fleet is in India, a viewer may not be. */}
+        <span className="hidden md:inline text-[11px] text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
+          {t('header.timeZone', { zone: VIEWER_ZONE.short })}
+        </span>
         {/* Notification Bell */}
         <div className="relative">
           <button 

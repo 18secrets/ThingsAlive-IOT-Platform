@@ -45,7 +45,9 @@
     "profile": "प्रोफ़ाइल और सेटिंग्स",
     "signOut": "साइन आउट",
     "noNotifications": "कोई खुला अलर्ट नहीं।",
-    "loadingNotifications": "लोड हो रहा है…"
+    "loadingNotifications": "लोड हो रहा है…",
+    "timeZone": "समय {{zone}} में",
+    "timeZoneTitle": "हर तारीख और समय आपके ब्राउज़र के समय क्षेत्र {{zone}} में दिखाया जाता है।"
   },
   "login": {
     "title": "साइन इन",

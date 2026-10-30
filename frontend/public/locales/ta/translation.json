@@ -45,7 +45,9 @@
     "profile": "சுயவிவரம் மற்றும் அமைப்புகள்",
     "signOut": "வெளியேறு",
     "noNotifications": "திறந்த எச்சரிக்கைகள் இல்லை.",
-    "loadingNotifications": "ஏற்றுகிறது…"
+    "loadingNotifications": "ஏற்றுகிறது…",
+    "timeZone": "நேரம் {{zone}} இல்",
+    "timeZoneTitle": "ஒவ்வொரு தேதியும் நேரமும் உங்கள் உலாவியின் நேர மண்டலமான {{zone}} இல் காட்டப்படுகிறது."
   },
   "login": {
     "title": "உள்நுழைக",
