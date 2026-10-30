@@ -62,6 +62,7 @@ const STEP_REASON_MEANING: Record<string, string> = {
   no_readings: 'The signals are bound but no readings have arrived yet. Check the logger is powered and online.',
   no_active_scenario: 'No prediction scenario is switched on. Switch one on from the Scenarios page.',
   no_alert_rule: 'No enabled alert rule covers the machine. Add one on the Alerts page.',
+  alert_signal_unbound: 'Alert rules cover the machine, but none watches a signal it has bound yet. Fit the logger and map the signal.',
   no_user_access: 'Only super admins can see the machine. Give people access on Client Users.',
   blocked_by_step: 'Waiting on an earlier step; that step\'s meaning says what to do.',
 };

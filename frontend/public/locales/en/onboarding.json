@@ -73,7 +73,8 @@
     "no_active_scenario": "No scenario is active on the machine",
     "no_alert_rule": "No enabled alert rule covers the machine",
     "no_user_access": "Nobody but the super admins can see the machine",
-    "blocked_by_step": "Waiting on an earlier step"
+    "blocked_by_step": "Waiting on an earlier step",
+    "alert_signal_unbound": "Alert rules cover the machine, but none watches a signal it has bound yet"
   },
   "list": {
     "totalSessions": "Total Sessions",
