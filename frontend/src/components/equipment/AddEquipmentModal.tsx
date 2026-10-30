@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier } from '../../lib/api';
+import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption } from '../../lib/api';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
@@ -14,7 +14,7 @@ interface AddEquipmentModalProps {
   /** Placement has its own route and needs a reason — throws to abort the whole
    *  save if the person backs out of giving one. */
   onMove: (sourceSystem: string, externalId: string, toPlantId: string | null) => Promise<void>;
-  equipmentClasses: EquipmentClass[];
+  equipmentClasses: ClassOption[];
   plants: Plant[];
   /** Present to edit that machine instead of registering a new one. */
   existingEquipment?: EquipmentProfile | null;

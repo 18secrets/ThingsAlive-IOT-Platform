@@ -20,7 +20,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -141,7 +141,7 @@ interface AdminManagementProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;

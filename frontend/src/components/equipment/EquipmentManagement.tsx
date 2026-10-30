@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile, EquipmentPlacementEvent,
   ImportResult, MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
-  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
+  KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation, ClassOption
 } from '../../lib/api';
 import { AddEquipmentModal } from './AddEquipmentModal';
 import { EquipmentBindingsModal } from './EquipmentBindingsModal';
@@ -32,7 +32,7 @@ interface EquipmentManagementProps {
   ) => Promise<EquipmentProfile>;
   onRetireEquipment: (sourceSystem: string, externalId: string, reason: string) => Promise<EquipmentProfile>;
   onGetEquipmentPlacementHistory: (sourceSystem: string, externalId: string) => Promise<EquipmentPlacementEvent[]>;
-  equipmentClasses: EquipmentClass[];
+  equipmentClasses: ClassOption[];
   equipmentClassesError?: string;
   plants: Plant[];
   devices: MyDevice[];

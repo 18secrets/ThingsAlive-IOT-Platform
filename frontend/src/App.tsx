@@ -70,7 +70,7 @@ import {
   apiListCatalogImports, apiUploadCatalogImport, apiGetCatalogImportDiff,
   apiApplyCatalogImport, apiDiscardCatalogImport, apiReviewCatalogImportSensors, apiDownloadCatalogTemplate,
   apiListEntitlements, apiGrantEntitlement, apiRevokeEntitlement,
-  apiListMyEquipmentClasses, apiListEquipment, apiListAllEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
+  apiListMyEquipmentClasses, apiListMyCatalogEquipmentClasses, ClassOption, apiListEquipment, apiListAllEquipment, apiCreateEquipment, apiUpdateEquipment, apiMoveEquipment, apiRetireEquipment,
   apiGetEquipmentPlacementHistory,
   apiListMyDevices, apiClaimDevice, apiUnclaimDevice,
   apiGetEquipmentCoverage, apiGetBindingDiscovery, apiProposeOrActivateBinding,
@@ -189,7 +189,10 @@ function AppData() {
   // and empty for a platform role.
   const [allEquipment, setAllEquipment] = useState<EquipmentProfile[]>([]);
   const [allEquipmentError, setAllEquipmentError] = useState<string | undefined>(undefined);
-  const [myEquipmentClasses, setMyEquipmentClasses] = useState<EquipmentClass[]>([]);
+  // The account's own class copies, the ones machines are registered against and
+  // scenarios are copied for — not the library entitlements, which offered the demo
+  // tenant one seed-only class with no scenarios (test report OB-1, OB-4).
+  const [myEquipmentClasses, setMyEquipmentClasses] = useState<ClassOption[]>([]);
   const [myEquipmentClassesError, setMyEquipmentClassesError] = useState<string | undefined>(undefined);
   // The client's own devices (/inventory/mine) — fitted to a machine or not, for
   // the signal-binding panel's "claim a device" step.
@@ -435,7 +438,9 @@ function AppData() {
 
   const refreshMyEquipmentClasses = async () => {
     try {
-      setMyEquipmentClasses(await apiListMyEquipmentClasses());
+      setMyEquipmentClasses((await apiListMyCatalogEquipmentClasses())
+        .filter((c) => c.status === 'active').map((c) => ({ slug: c.slug, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)));
       setMyEquipmentClassesError(undefined);
     } catch (err) {
       setMyEquipmentClassesError(err instanceof ApiError ? err.message : 'Could not load equipment classes.');

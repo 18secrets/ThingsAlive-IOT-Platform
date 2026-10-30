@@ -2898,6 +2898,9 @@ export interface EditMyEquipmentClassInput {
   defaultThresholds?: Record<string, unknown>;
 }
 
+/** What the equipment register needs of a class: its key and the name to show. */
+export type ClassOption = { slug: string; name: string };
+
 export function apiListMyCatalogEquipmentClasses(): Promise<(MyEquipmentClass & { provenance: ScenarioProvenance })[]> {
   return authFetch("/my-catalog/equipment-classes");
 }

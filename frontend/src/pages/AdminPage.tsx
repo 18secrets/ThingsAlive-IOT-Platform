@@ -13,7 +13,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
@@ -106,7 +106,7 @@ interface AdminPageProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;
