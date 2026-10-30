@@ -14,7 +14,13 @@
   },
   "people": {
     "someoneElse": "someone else",
-    "nobody": "nobody"
+    "nobody": "nobody",
+    "system": {
+      "prediction": "Things Alive (automatic, from a critical prediction)",
+      "shift-runner": "Things Alive (shift scoring)",
+      "geofence": "Things Alive (geofence)",
+      "other": "Things Alive (automatic)"
+    }
   },
   "prompts": {
     "complete": "What was done?",

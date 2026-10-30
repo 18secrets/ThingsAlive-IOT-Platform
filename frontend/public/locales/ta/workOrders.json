@@ -14,7 +14,13 @@
   },
   "people": {
     "someoneElse": "வேறொருவர்",
-    "nobody": "யாருமில்லை"
+    "nobody": "யாருமில்லை",
+    "system": {
+      "prediction": "Things Alive (தானியங்கி, முக்கிய முன்கணிப்பிலிருந்து)",
+      "shift-runner": "Things Alive (ஷிஃப்ட் மதிப்பீடு)",
+      "geofence": "Things Alive (புவிவேலி)",
+      "other": "Things Alive (தானியங்கி)"
+    }
   },
   "prompts": {
     "complete": "என்ன செய்யப்பட்டது?",

@@ -14,7 +14,13 @@
   },
   "people": {
     "someoneElse": "వేరొకరు",
-    "nobody": "ఎవరూ లేరు"
+    "nobody": "ఎవరూ లేరు",
+    "system": {
+      "prediction": "Things Alive (స్వయంచాలకం, క్లిష్టమైన అంచనా నుండి)",
+      "shift-runner": "Things Alive (షిఫ్ట్ స్కోరింగ్)",
+      "geofence": "Things Alive (జియోఫెన్స్)",
+      "other": "Things Alive (స్వయంచాలకం)"
+    }
   },
   "prompts": {
     "complete": "ఏమి చేశారు?",

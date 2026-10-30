@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -37,6 +38,7 @@ const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'
 export const WorkOrdersPage: React.FC = () => {
   const { t } = useTranslation(['workOrders', 'shared']);
   const [viewMode, setViewMode] = useViewMode('work-orders');
+  const navigate = useNavigate();
   const { sort, setSort, toggle } = useSort<WorkOrderSort>({ key: 'reference', dir: 'desc' });
   usePageHeader({ title: t('translation:pages.workOrders.title'), subtitle: t('translation:pages.workOrders.subtitle') });
 
@@ -87,8 +89,13 @@ export const WorkOrdersPage: React.FC = () => {
 
   // Names for ids. Somebody no longer active (suspended, or never joined) still shows
   // up in old history, so an unknown id reads as "someone else" rather than a raw uuid.
+  // The platform's own actors ("system:prediction") are named for what they are; read
+  // as "someone else" they made an automatic job look like an unknown person's (MIN-8).
   const personName = (userId: string | null) =>
-    userId ? people.find((p) => p.id === userId)?.fullName ?? t('people.someoneElse') : t('people.nobody');
+    !userId ? t('people.nobody')
+      : userId.startsWith('system:') ? t(`people.system.${userId.slice(7)}`, { defaultValue: t('people.system.other') })
+      : people.find((p) => p.id === userId)?.fullName ?? t('people.someoneElse');
+  const openMachine = (o: WorkOrder) => navigate(`/dashboard/${encodeURIComponent(o.sourceSystem)}/${encodeURIComponent(o.externalId)}`);
 
   const profileOf = (sourceSystem: string, externalId: string) =>
     equipment.find((e) => e.sourceSystem === sourceSystem && e.externalId === externalId);
@@ -365,7 +372,10 @@ export const WorkOrdersPage: React.FC = () => {
           cells={(o) => [
             <span className="font-mono text-slate-400">{o.reference}</span>,
             <span className="font-medium">{o.title}</span>,
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{equipmentName(o.sourceSystem, o.externalId)} <ConnectionBadge state={connectionOf(o.externalId)} /></span>,
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <button type="button" onClick={() => openMachine(o)} className="hover:text-sky-600 hover:underline cursor-pointer">{equipmentName(o.sourceSystem, o.externalId)}</button>
+              <ConnectionBadge state={connectionOf(o.externalId)} />
+            </span>,
             <Chip tone={o.status === 'completed' ? 'emerald' : o.status === 'cancelled' ? 'rose' : o.status === 'in-progress' ? 'amber' : 'sky'}>
               {t(`status.${o.status}`, { defaultValue: o.status })}
             </Chip>,
@@ -387,7 +397,9 @@ export const WorkOrdersPage: React.FC = () => {
               </div>
               <h4 className="font-semibold text-slate-900 dark:text-white text-base">{o.title}</h4>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{equipmentName(o.sourceSystem, o.externalId)}</p>
+                <button type="button" onClick={() => openMachine(o)} className="text-sm text-slate-500 dark:text-slate-400 truncate hover:text-sky-600 hover:underline cursor-pointer text-left">
+                  {equipmentName(o.sourceSystem, o.externalId)}
+                </button>
                 <ConnectionBadge state={connectionOf(o.externalId)} />
               </div>
               {o.description && <p className="text-sm text-slate-500 dark:text-slate-400">{o.description}</p>}

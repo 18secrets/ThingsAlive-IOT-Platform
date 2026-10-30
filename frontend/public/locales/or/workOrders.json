@@ -14,7 +14,13 @@
   },
   "people": {
     "someoneElse": "ଅନ୍ୟ କେହି",
-    "nobody": "କେହି ନୁହେଁ"
+    "nobody": "କେହି ନୁହେଁ",
+    "system": {
+      "prediction": "Things Alive (ସ୍ୱୟଂଚାଳିତ, ଗୁରୁତର ପୂର୍ବାନୁମାନରୁ)",
+      "shift-runner": "Things Alive (ଶିଫ୍ଟ ସ୍କୋରିଂ)",
+      "geofence": "Things Alive (ଜିଓଫେନ୍ସ)",
+      "other": "Things Alive (ସ୍ୱୟଂଚାଳିତ)"
+    }
   },
   "prompts": {
     "complete": "କ'ଣ କରାଗଲା?",

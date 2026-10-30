@@ -14,7 +14,13 @@
   },
   "people": {
     "someoneElse": "कोई और",
-    "nobody": "कोई नहीं"
+    "nobody": "कोई नहीं",
+    "system": {
+      "prediction": "Things Alive (स्वचालित, गंभीर पूर्वानुमान से)",
+      "shift-runner": "Things Alive (शिफ्ट स्कोरिंग)",
+      "geofence": "Things Alive (जियोफेंस)",
+      "other": "Things Alive (स्वचालित)"
+    }
   },
   "prompts": {
     "complete": "क्या काम किया गया?",
