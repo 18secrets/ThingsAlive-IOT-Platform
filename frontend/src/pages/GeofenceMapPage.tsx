@@ -96,7 +96,14 @@ export const GeofenceMapPage: React.FC = () => {
 
   const [status, setStatus] = useState<GeofenceFleetStatus | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [siteId, setSiteId] = useState<string | null>(null);
+  // The last site this browser looked at, so the map opens on it at once instead of on
+  // "Loading positions…" with nothing chosen (test report MIN-13). A preference, so any
+  // storage failure just means no memory.
+  const [siteId, setSiteIdState] = useState<string | null>(() => { try { return localStorage.getItem(SITE_KEY); } catch { return null; } });
+  const setSiteId = (id: string | null) => {
+    setSiteIdState(id);
+    try { if (id) localStorage.setItem(SITE_KEY, id); } catch { /* a preference, nothing lost */ }
+  };
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'machines' | 'zones'>('machines');
@@ -132,9 +139,11 @@ export const GeofenceMapPage: React.FC = () => {
     return [...bySite.values()].sort((a, b) => b.violating - a.violating || a.name.localeCompare(b.name));
   }, [status]);
 
-  // Open on the site with the most machines breaking a rule; keep the person's choice after.
+  // Open on the remembered site if it still has machines, else the one with the most
+  // machines breaking a rule; keep the person's choice after.
   useEffect(() => {
-    if (!siteId && sites.length) setSiteId(sites[0].id);
+    if (sites.length && (!siteId || !sites.some((s) => s.id === siteId))) setSiteId(sites[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, siteId]);
 
   const here = useMemo(
@@ -190,7 +199,7 @@ export const GeofenceMapPage: React.FC = () => {
           onChange={(v) => { setSiteId(v); setSelected(null); setDraft(null); setManualCentre(null); }}
           cleanable={false}
           searchable={sites.length > 8}
-          placeholder={t('geofence.pickSite')}
+          placeholder={status ? t('geofence.pickSite') : t('geofence.loadingSites')}
           style={{ minWidth: 280 }}
         />
         <button
@@ -509,6 +518,11 @@ const SiteMap: React.FC<{
 
 /** Map tiles are 256 px; aim for a few across a plan that renders some 600–800 px wide. */
 const TILE_PX_TARGET = 0.32;
+/** Past 17, OpenStreetMap's standard layer is pale or blank over most sites outside dense
+ *  cities, which drew a washed-out map under one site's fences (test report MIN-13); a
+ *  zoom-17 tile scaled up is coarser but has the ground on it. */
+const MAX_TILE_ZOOM = 17;
+const SITE_KEY = 'geofence-site';
 
 /**
  * The OpenStreetMap tiles under the plan, placed in its Mercator-metre coordinates. Light use
@@ -517,7 +531,7 @@ const TILE_PX_TARGET = 0.32;
  */
 function tilesFor(view: PlanView): { href: string; x: number; y: number; size: number }[] {
   const { centre, half } = view;
-  const z = Math.max(3, Math.min(19, Math.round(Math.log2(WORLD / (2 * half * TILE_PX_TARGET)))));
+  const z = Math.max(3, Math.min(MAX_TILE_ZOOM, Math.round(Math.log2(WORLD / (2 * half * TILE_PX_TARGET)))));
   const n = 2 ** z;
   const size = WORLD / n;
   const cx = mercX(centre[0]);
