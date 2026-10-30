@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
   ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
@@ -401,6 +402,7 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/admin/equipment');
   const [page, setPage] = useState<MachinePage | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -413,7 +415,7 @@ export const EquipmentPagePage: React.FC = () => {
   usePageHeader({
     title: page?.equipment.name ?? externalId ?? t('translation:sidebar.equipment'),
     subtitle: t('equipmentPage.title'),
-    onBack: () => navigate('/admin/equipment'),
+    onBack: goBack,
   });
 
   useEffect(() => {

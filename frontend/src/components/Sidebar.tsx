@@ -163,7 +163,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
                 }`}
               />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              {/* Two lines rather than "Incident Manage…" (test report COS-5). */}
+              {!isCollapsed && <span className="line-clamp-2 leading-snug">{item.label}</span>}
             </button>
           );
         })}

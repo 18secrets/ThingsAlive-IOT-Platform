@@ -50,6 +50,15 @@ describe('the signal-threshold window', () => {
     expect(firing!.evidence).toMatchObject({ worstValue: 120, direction: 'above', bound: 105, breaches: 6 });
   });
 
+  it('the sentence rounds the worst reading to two decimals; the evidence keeps it exact', () => {
+    const readings = [...[9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map((m) => r('coolant_temp_c', 397.4071110816279, m))];
+    const firing = evaluateRule({
+      trigger: 'signal-threshold', params: { signal: 'coolant_temp_c', max: 105 }, readings, predictions: [],
+    });
+    expect(firing!.summary).toMatch(/worst was 397\.41 degC$/);
+    expect(firing!.evidence).toMatchObject({ worstValue: 397.4071110816279 });
+  });
+
   it('1c. one short of the boundary — five of the last ten breached — does not fire', () => {
     const readings = [
       ...[9, 8, 7, 6, 3].map((m) => r('coolant_temp_c', 95, m)),

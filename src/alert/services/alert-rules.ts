@@ -391,7 +391,9 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       return {
         summary: `${params.signal} breached ${bound}${breach.r.unit ? ` ${breach.r.unit}` : ''} `
           + `${direction} on ${breach.count} of the last ${window.length} readings; `
-          + `worst was ${breach.r.value}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
+          // Two decimals for the sentence a person reads ("397.4071110816279" was the raw
+          // float, test report COS-4); `worstValue` below keeps it exact.
+          + `worst was ${Math.round(breach.r.value * 100) / 100}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
         evidence: {
           signal: params.signal,
           worstValue: breach.r.value,

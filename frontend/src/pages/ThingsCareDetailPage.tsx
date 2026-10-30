@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Gauge, Plus, RefreshCw, Wrench,
 } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
@@ -144,6 +145,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/things-care');
   const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -157,7 +159,7 @@ export const ThingsCareDetailPage: React.FC = () => {
   usePageHeader({
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
-    onBack: () => navigate('/things-care'),
+    onBack: goBack,
   });
 
   const load = async () => {

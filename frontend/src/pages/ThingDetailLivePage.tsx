@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
@@ -30,6 +31,7 @@ const SEVERITY_TONE: Record<string, 'rose' | 'amber' | 'sky' | 'emerald' | 'slat
 export const ThingDetailLivePage: React.FC = () => {
   const { sourceSystem = '', externalId = '' } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/dashboard');
   const { t } = useTranslation('dashboard');
   const key = [sourceSystem, externalId];
 
@@ -56,7 +58,7 @@ export const ThingDetailLivePage: React.FC = () => {
   );
 
   const name = profile.state === 'ok' && profile.data ? profile.data.name ?? externalId : externalId;
-  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: () => navigate('/dashboard') });
+  usePageHeader({ title: name, subtitle: t('thingLive.subtitle'), onBack: goBack });
 
   if (profile.state === 'ok' && !profile.data) {
     return <p className="text-sm text-slate-500">{t('thingLive.notInRegister')}</p>;
@@ -72,9 +74,10 @@ export const ThingDetailLivePage: React.FC = () => {
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">{t('thingLive.banner')}</span>
-        <h2 className="text-xl font-bold">{name}</h2>
+        <h2 className="text-xl font-bold">{profile.state === 'loading' ? '…' : name}</h2>
         <p className="text-xs text-sky-100">
-          {sourceSystem}/{externalId}{p?.equipmentClassSlug ? ` · ${p.equipmentClassSlug}` : ` · ${t('thingLive.notClassified')}`}{siteName ? ` · ${siteName}` : ''}
+          {/* "not classified" only once the register has answered; before, it is just unknown (COS-6). */}
+          {sourceSystem}/{externalId}{p?.equipmentClassSlug ? ` · ${p.equipmentClassSlug}` : profile.state === 'ok' ? ` · ${t('thingLive.notClassified')}` : ''}{siteName ? ` · ${siteName}` : ''}
         </p>
       </div>
 

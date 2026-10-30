@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Clock3, Plus } from 'lucide-react';
+import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
@@ -157,6 +158,7 @@ function periodLastNDays(days: number): { from: string; to: string } {
 export const ProductionMonitoringDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const goBack = useGoBack('/production-monitoring');
   const { t } = useTranslation('production');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
   const [availability, setAvailability] = useState<EquipmentAvailability | null>(null);
@@ -167,7 +169,7 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
   usePageHeader({
     title: profile?.name ?? externalId ?? t('page.machineNotFound'),
     subtitle: t('page.detailSubtitle'),
-    onBack: () => navigate('/production-monitoring'),
+    onBack: goBack,
   });
 
   useEffect(() => {
