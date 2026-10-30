@@ -431,6 +431,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         equipmentClasses={equipmentClasses}
         plants={plants}
         existingEquipment={editingEquipment}
+        allEquipment={equipment}
       />
 
       <EquipmentBindingsModal

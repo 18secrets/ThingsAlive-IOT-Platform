@@ -18,6 +18,8 @@ interface AddEquipmentModalProps {
   plants: Plant[];
   /** Present to edit that machine instead of registering a new one. */
   existingEquipment?: EquipmentProfile | null;
+  /** Every machine in the account, to say before saving that a code is already taken. */
+  allEquipment?: EquipmentProfile[];
 }
 
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
@@ -31,6 +33,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   equipmentClasses,
   plants,
   existingEquipment,
+  allEquipment = [],
 }) => {
   const { t } = useTranslation('equipment');
   const tierOptions = TIERS.map((tier) => ({ label: t(`tier.${tier}`), value: tier }));
@@ -84,6 +87,12 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   }, [isOpen, existingEquipment]);
 
   if (!isOpen) return null;
+
+  // Said while typing, not after a 409. A mirrored machine with the same code is a
+  // different identity the API allows, but two "3100092"s in one list is still a mistake.
+  const duplicateOf = !existingEquipment && code.trim()
+    ? allEquipment.find((e) => e.externalId.toLowerCase() === code.trim().toLowerCase())
+    : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,9 +177,15 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                 placeholder={t('common.eg', { example: 'DG-01' })}
                 className="font-mono text-xs"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                {isEditing ? t('equipmentForm.codeHintEdit') : t('equipmentForm.codeHintNew')}
-              </p>
+              {duplicateOf ? (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  {t('equipmentForm.codeTaken', { name: duplicateOf.name ?? duplicateOf.externalId })}
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {isEditing ? t('equipmentForm.codeHintEdit') : t('equipmentForm.codeHintNew')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -302,7 +317,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !!duplicateOf}
               className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />

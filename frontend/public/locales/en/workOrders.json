@@ -98,7 +98,9 @@
     "assignTo": "Assign to",
     "nobodyUnassign": "Nobody (unassign)",
     "noteOptional": "Note (optional)",
-    "notePlaceholder": "Why the change, if it helps whoever reads the history"
+    "notePlaceholder": "Why the change, if it helps whoever reads the history",
+    "pastDue": "A new job cannot be due in the past.",
+    "pastDueWarning": "This date has already passed; the job will show as overdue."
   },
   "history": {
     "empty": "Nothing recorded yet.",

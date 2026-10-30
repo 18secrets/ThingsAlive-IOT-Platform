@@ -277,7 +277,8 @@
     "serialNumber": "Serial Number",
     "serviceTier": "Service Tier",
     "registering": "Registering…",
-    "register": "Register Equipment"
+    "register": "Register Equipment",
+    "codeTaken": "This code is already used by {{name}}."
   },
   "bindings": {
     "title": "Signal Bindings",

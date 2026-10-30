@@ -1,18 +1,18 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsISO8601, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsISO8601, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { WorkOrderPriority } from './entities/work-order.entity';
-import { WorkOrderService } from './services/work-order.service';
+import { MAX_TITLE_LENGTH, WorkOrderService } from './services/work-order.service';
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
 export class RaiseDto {
   @IsString() @IsNotEmpty() sourceSystem: string;
   @IsString() @IsNotEmpty() externalId: string;
-  @IsString() @IsNotEmpty() title: string;
+  @IsString() @IsNotEmpty() @MaxLength(MAX_TITLE_LENGTH) title: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(PRIORITIES as unknown as string[]) priority?: WorkOrderPriority;
   @IsOptional() @IsUUID() assignedToUserId?: string;
@@ -22,7 +22,7 @@ export class RaiseDto {
 }
 
 export class EditDto {
-  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TITLE_LENGTH) title?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(PRIORITIES as unknown as string[]) priority?: WorkOrderPriority;
   @IsOptional() @IsISO8601() dueAt?: string;

@@ -403,6 +403,20 @@ export const WorkOrdersPage: React.FC = () => {
   );
 };
 
+/** The API's own limit (MAX_TITLE_LENGTH); the rest of the detail goes in the description. */
+const MAX_TITLE = 200;
+/** Today as the date input writes it, in the viewer's own calendar. */
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const TitleCounter: React.FC<{ title: string }> = ({ title }) => (
+  <span className={`text-[11px] ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+    {title.length}/{MAX_TITLE}
+  </span>
+);
+
 const CreateWorkOrderForm: React.FC<{
   equipment: EquipmentProfile[];
   initial?: { equipmentKey: string; title: string } | null;
@@ -415,13 +429,15 @@ const CreateWorkOrderForm: React.FC<{
   const [priority, setPriority] = useState<WorkOrderPriority>('normal');
   const [description, setDescription] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const pastDue = !!dueAt && dueAt < todayLocal();
+  const canCreate = !!title.trim() && title.trim().length <= MAX_TITLE && !!equipmentKey && !pastDue;
 
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim() || !equipmentKey) return;
+        if (!canCreate || !equipmentKey) return;
         const [sourceSystem, externalId] = equipmentKey.split('|');
         onCreate({
           sourceSystem, externalId, title: title.trim(), priority,
@@ -431,7 +447,10 @@ const CreateWorkOrderForm: React.FC<{
       }}
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.task')}</span>
+        <span className="flex items-center justify-between">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.task')}</span>
+          <TitleCounter title={title} />
+        </span>
         <Input required value={title} onChange={(value) => setTitle(value)} placeholder={t('form.taskPlaceholder')} />
       </label>
       <div className="block space-y-1">
@@ -462,10 +481,12 @@ const CreateWorkOrderForm: React.FC<{
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.dueDate')}</span>
           <input
             type="date"
+            min={todayLocal()}
             value={dueAt}
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
+          {pastDue && <span className="text-[11px] text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -476,7 +497,7 @@ const CreateWorkOrderForm: React.FC<{
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
           {t('actions.cancel')}
         </button>
-        <button type="submit" disabled={!equipmentKey} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
+        <button type="submit" disabled={!canCreate} className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 cursor-pointer">
           {t('actions.create')}
         </button>
       </div>
@@ -499,13 +520,16 @@ const EditWorkOrderForm: React.FC<{
   const [description, setDescription] = useState(order.description ?? '');
   const [priority, setPriority] = useState<WorkOrderPriority>(order.priority);
   const [dueAt, setDueAt] = useState(order.dueAt ? order.dueAt.slice(0, 10) : '');
+  // Warned, not refused: an overdue job keeps its date when only its title is edited.
+  const movedIntoPast = !!dueAt && dueAt !== (order.dueAt ?? '').slice(0, 10) && dueAt < todayLocal();
+  const canSave = !!title.trim() && title.trim().length <= MAX_TITLE;
 
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim()) return;
+        if (!canSave) return;
         onSave({
           title: title.trim(),
           description: description.trim(),
@@ -515,7 +539,10 @@ const EditWorkOrderForm: React.FC<{
       }}
     >
       <label className="block space-y-1">
-        <span className={FIELD_LABEL}>{t('form.task')}</span>
+        <span className="flex items-center justify-between">
+          <span className={FIELD_LABEL}>{t('form.task')}</span>
+          <TitleCounter title={title} />
+        </span>
         <Input required value={title} onChange={(value) => setTitle(value)} />
       </label>
       <div className="grid grid-cols-2 gap-3">
@@ -538,6 +565,7 @@ const EditWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
+          {movedIntoPast && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -546,7 +574,7 @@ const EditWorkOrderForm: React.FC<{
       </label>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className={CANCEL_BTN}>{t('actions.cancel')}</button>
-        <button type="submit" disabled={!title.trim()} className={SAVE_BTN}>{t('actions.save')}</button>
+        <button type="submit" disabled={!canSave} className={SAVE_BTN}>{t('actions.save')}</button>
       </div>
     </form>
   );

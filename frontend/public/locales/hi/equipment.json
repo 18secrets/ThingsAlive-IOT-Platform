@@ -277,7 +277,8 @@
     "serialNumber": "सीरियल नंबर",
     "serviceTier": "सर्विस टियर",
     "registering": "दर्ज हो रहा है…",
-    "register": "उपकरण दर्ज करें"
+    "register": "उपकरण दर्ज करें",
+    "codeTaken": "यह कोड पहले से {{name}} द्वारा उपयोग में है।"
   },
   "bindings": {
     "title": "सिग्नल बाइंडिंग",
