@@ -1,7 +1,9 @@
-import { Body, Controller, Headers, Ip, Optional, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Ip, Optional, Post, UnauthorizedException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { RequestScope } from '../auth/types/request-scope';
 import { MailService } from '../mail/mail.service';
 import { CredentialService, RESET_HOURS } from './services/credential.service';
 import { PasswordService } from './services/password.service';
@@ -93,6 +95,19 @@ export class AuthController {
       return this.platformCredentials.refresh(body.refreshToken, { ipAddress: ip, userAgent });
     }
     return this.credentials.refresh(body.refreshToken, { ipAddress: ip, userAgent });
+  }
+
+  @Post('fork')
+  @ApiOperation({ summary: 'A second refresh token in this sign-in, for another browser tab. Ends when this sign-in does' })
+  fork(
+    @CurrentScope() scope: RequestScope,
+    @Headers('authorization') authorization: string | undefined,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    const bearer = authorization?.replace(/^Bearer\s+/i, '').trim();
+    if (!bearer) throw new UnauthorizedException('Bearer token required.');
+    return this.credentials.forkSession(scope, bearer, { ipAddress: ip, userAgent });
   }
 
   @Post('sign-out')

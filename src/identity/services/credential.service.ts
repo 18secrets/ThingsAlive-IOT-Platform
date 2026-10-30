@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { DataSource, EntityManager, IsNull, LessThan, Not } from 'typeorm';
+import { DataSource, EntityManager, IsNull, LessThan, MoreThan, Not } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
@@ -354,6 +354,54 @@ export class CredentialService {
     return outcome.value;
   }
 
+  /**
+   * A second refresh token for the same sign-in, for a new browser tab (test report
+   * MAJ-5). Sessions live per tab, and a tab cannot simply copy another's refresh
+   * token: tokens rotate, so the second tab to refresh would present a retired one
+   * and reuse detection would sign both out.
+   *
+   * The new row joins the caller's family rather than starting one, which is what
+   * keeps this from turning an hour's access token into a month of access: it ends
+   * when the sign-in it came from ends — sign-out in any tab, a suspension, or reuse
+   * detected anywhere in the family — and expires no later than that sign-in's own
+   * current row. The access token is verified here again because it carries the
+   * family (`sid`) and the request scope does not.
+   */
+  async forkSession(
+    scope: RequestScope, bearer: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<SignInResult> {
+    if (scope.isPlatformRole) throw new BadRequestException('Staff sessions are not shared between tabs.');
+    let sid: string | undefined;
+    try {
+      const payload = await this.jwt.verifyAsync<Record<string, unknown>>(bearer, {
+        secret: this.config.get<string>('AUTH_JWT_SECRET'),
+        issuer: this.config.get<string>('AUTH_JWT_ISSUER') || undefined,
+      });
+      sid = typeof payload.sid === 'string' ? payload.sid : undefined;
+    } catch {
+      sid = undefined;
+    }
+    if (!sid) throw new UnauthorizedException('Please sign in again.');
+
+    const outcome = await runTenantSpanning<Outcome<SignInResult>>(this.ds, 'session fork', async (m) => {
+      const current = await m.getRepository(UserSession).findOne({
+        where: {
+          tenantId: scope.tenantId, userId: scope.userId, family: sid,
+          rotatedAt: IsNull(), revokedAt: IsNull(), expiresAt: MoreThan(now),
+        },
+        order: { expiresAt: 'DESC' },
+      });
+      if (!current) return refuse('Please sign in again.');
+      const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId, tenantId: scope.tenantId } });
+      if (!user || user.status !== 'active') return refuse('Please sign in again.');
+      await this.record(m, 'session.forked', { user, ctx, detail: sid });
+      return allow(await this.startSession(m, user, ctx, now, sid, current.expiresAt));
+    });
+
+    if (outcome.kind === 'refused') throw new UnauthorizedException(outcome.message);
+    return outcome.value;
+  }
+
   async signOut(refreshToken: string, now = new Date()): Promise<void> {
     const hash = this.passwords.fingerprint(refreshToken);
     await runTenantSpanning(this.ds, 'sign-out', async (m) => {
@@ -459,7 +507,7 @@ export class CredentialService {
   // ----------------------------------------------------------------------- shared
 
   private async startSession(
-    m: EntityManager, user: AppUser, ctx: RequestContext, now: Date, family?: string,
+    m: EntityManager, user: AppUser, ctx: RequestContext, now: Date, family?: string, expiresAt?: Date,
   ): Promise<SignInResult> {
     const refreshToken = this.passwords.newToken();
     const sessions = m.getRepository(UserSession);
@@ -469,7 +517,7 @@ export class CredentialService {
       userId: user.id,
       tokenHash: this.passwords.fingerprint(refreshToken),
       family: sid,
-      expiresAt: new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
+      expiresAt: expiresAt ?? new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
       rotatedAt: null, revokedAt: null, revokedReason: null,
       userAgent: ctx.userAgent ?? null,
     }));

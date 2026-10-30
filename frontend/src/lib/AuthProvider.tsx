@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthUser, NavigationTab } from '../types';
 import {
-  ApiError, apiAcceptInvitation, apiMyPermissions, apiResume, apiSignIn, apiSignOut, hasStoredSession,
-  setSessionDeadHandler, SignedInUser, takeSessionEndReason,
+  ApiError, apiAcceptInvitation, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
+  hasStoredSession, setSessionDeadHandler, shareSessionWithNewTabs, SignedInUser, takeSessionEndReason,
 } from './api';
 
 const SESSION_KEY = 'ta_session';
@@ -70,7 +70,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authUser, setAuthUser] = useState<AuthUser | null>(loadSession);
-  const [restoringSession, setRestoringSession] = useState(() => hasStoredSession());
+  // A tab opened with no session of its own first asks the other tabs (api.ts, tab
+  // handoff); that wait is a quarter-second unless one of them answers.
+  const [restoringSession, setRestoringSession] = useState(() => hasStoredSession() || !loadSession());
   const [sessionEndedReason, setSessionEndedReason] = useState<string | null>(null);
 
   // Resume a real session on a cold load. The cached AuthUser in
@@ -82,10 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let live = true;
     (async () => {
       try {
-        const user = await apiResume();
+        const resuming = hasStoredSession();
+        const user = resuming ? await apiResume() : await apiSessionFromOtherTab();
         if (!live) return;
         // A dead refresh token means the cached session was a lie.
-        if (!user) setSessionEndedReason(takeSessionEndReason());
+        if (!user && resuming) setSessionEndedReason(takeSessionEndReason());
         setAuthUser(user ? await authUserFromApi(user) : null);
       } catch (err) {
         // The refresh worked but the first real call was refused. Before this, the
@@ -103,6 +106,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Runs once, on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While signed in, answer a new tab that has no session (api.ts, tab handoff).
+  useEffect(() => (authUser ? shareSessionWithNewTabs() : undefined), [authUser]);
 
   // Persist session (per-tab)
   useEffect(() => {

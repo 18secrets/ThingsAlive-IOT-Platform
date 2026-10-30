@@ -31,6 +31,8 @@ const NOT_A_WRITE: RegExp[] = [
   /\/rec-evidence(\/|$)/,
   /^\/intelligence\/chains\/[^/]+\/project$/,
   /^\/fleet-import\/plan(\?|$)/,
+  // A signed-in tab handing a new tab its session: nothing the person saved.
+  /^\/auth\/fork$/,
 ];
 
 /** What a request is, for a notice: null when it is a read, or a POST that writes nothing. */

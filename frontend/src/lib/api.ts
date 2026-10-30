@@ -170,6 +170,83 @@ export async function apiResume(): Promise<SignedInUser | null> {
   }
 }
 
+// ------------------------------------------------------------- tab handoff
+
+/**
+ * A new tab gets its session from a signed-in one (test report MAJ-5: a second tab or
+ * a deep link landed on /sign-in). Sessions stay per tab, so each tab can still sign
+ * in as somebody else; what changes is that a tab opened with none asks the others.
+ * A signed-in tab answers with a fork — its own refresh token in the same sign-in
+ * (POST /auth/fork) — never its own token: tokens rotate, and two tabs presenting one
+ * would trip reuse detection and sign both out. BroadcastChannel never leaves this
+ * origin and this browser.
+ */
+const CHANNEL = "ta-session";
+/** How long a new tab waits for any tab to say it can help — no network in between. */
+const OFFER_WAIT_MS = 250;
+/** How long it then waits for the fork itself, one request away. */
+const FORK_WAIT_MS = 4000;
+
+type HandoffMessage =
+  | { type: "need"; id: string }
+  | { type: "offer"; id: string }
+  | { type: "claimed"; id: string }
+  | { type: "session"; id: string; tokens: SessionTokens };
+
+/** Answer other tabs' requests while this tab is signed in. Returns the stop function. */
+export function shareSessionWithNewTabs(): () => void {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const channel = new BroadcastChannel(CHANNEL);
+  const claimed = new Set<string>();
+  channel.onmessage = async (event: MessageEvent<HandoffMessage>) => {
+    const msg = event.data;
+    if (msg?.type === "claimed") { claimed.add(msg.id); return; }
+    if (msg?.type !== "need" || !hasStoredSession()) return;
+    channel.postMessage({ type: "offer", id: msg.id } satisfies HandoffMessage);
+    // Several open tabs all offer; the new tab takes the first and says so, and a tab
+    // that hears that before forking skips it. A fork that loses the race is an unused
+    // row in the same sign-in, and ends with it.
+    await new Promise((r) => setTimeout(r, Math.random() * 60));
+    if (claimed.has(msg.id)) return;
+    try {
+      const tokens: SessionTokens = await authFetch("/auth/fork", { method: "POST" });
+      channel.postMessage({ type: "session", id: msg.id, tokens } satisfies HandoffMessage);
+    } catch {
+      // This tab could not fork (signed out meanwhile, say); the new tab times out to sign-in.
+    }
+  };
+  return () => channel.close();
+}
+
+/** For a tab opened with no session: a signed-in user, or null to show sign-in. */
+export async function apiSessionFromOtherTab(): Promise<SignedInUser | null> {
+  if (typeof BroadcastChannel === "undefined") return null;
+  const channel = new BroadcastChannel(CHANNEL);
+  const id = Math.random().toString(36).slice(2);
+  try {
+    return await new Promise<SignedInUser | null>((resolve) => {
+      let offered = false;
+      const giveUp = setTimeout(() => { if (!offered) resolve(null); }, OFFER_WAIT_MS);
+      const tooLong = setTimeout(() => resolve(null), OFFER_WAIT_MS + FORK_WAIT_MS);
+      channel.onmessage = (event: MessageEvent<HandoffMessage>) => {
+        const msg = event.data;
+        if (msg?.id !== id) return;
+        if (msg.type === "offer") { offered = true; return; }
+        if (msg.type === "session") {
+          channel.postMessage({ type: "claimed", id } satisfies HandoffMessage);
+          clearTimeout(giveUp);
+          clearTimeout(tooLong);
+          store(msg.tokens);
+          resolve(msg.tokens.user);
+        }
+      };
+      channel.postMessage({ type: "need", id } satisfies HandoffMessage);
+    });
+  } finally {
+    channel.close();
+  }
+}
+
 export async function apiSignOut(): Promise<void> {
   const refreshToken = sessionStorage.getItem(REFRESH_KEY);
   clear();
