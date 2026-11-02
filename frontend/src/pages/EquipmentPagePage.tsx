@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
+import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
-  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, RecordServiceInput, RuntimeUnit, ServiceKind,
-  ShiftInput, ShiftRun, Weekday, apiCreateShift, apiGetMachinePage, apiGetServiceHistory, apiGetShiftRuns,
-  apiListShifts, apiReinstateShift, apiRecordService, apiRetireShift, apiUpdateShift,
+  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageSignalChartData, PageWidget, RecordServiceInput,
+  RuntimeUnit, ServiceKind, ShiftInput, ShiftRun, TenantModel, Weekday, apiCreateShift, apiGetMachinePage,
+  apiGetMyClassModel, apiGetServiceHistory, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRecordService,
+  apiRetireShift, apiUpdateShift,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
 import { MachineLinks } from '../components/common/MachineLinks';
@@ -16,6 +17,10 @@ import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
+import type { SceneMarker } from '../components/visual/ModelScene';
+
+// Lazy, as in ModelAnchorEditor: three.js is fetched only when a machine has a model.
+const ModelScene = lazy(() => import('../components/visual/ModelScene'));
 
 // Day names are `days.0`–`days.6` (Sunday first, matching Weekday).
 const DAY_OPTIONS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
@@ -399,6 +404,66 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
   );
 };
 
+/** The latest value of each charted signal, read from the page's own widgets so the twin
+ *  shows exactly what the cards below it show — no second telemetry fetch to disagree. */
+function latestBySignal(widgets: PageWidget[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const w of widgets) {
+    if (w.widgetType !== 'signal_chart' || w.readiness !== 'ready' || !w.data) continue;
+    const data = w.data as PageSignalChartData;
+    const last = [...data.points].reverse().find((p) => p.v != null);
+    if (last?.v != null) out.set(data.signal, `${last.v.toFixed(2)}${data.unit ? ` ${data.unit}` : ''}`);
+  }
+  return out;
+}
+
+/** The machine's digital twin: its class's 3-D model, read only, with each marker labelled
+ *  by its signal's latest value. Markers waiting for a recheck are left off — the geometry
+ *  moved under them, so where they would be drawn is not known to be right. */
+function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageWidget[] }) {
+  const { t } = useTranslation('equipment');
+  const [model, setModel] = useState<TenantModel | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let live = true;
+    apiGetMyClassModel(classSlug)
+      .then((m) => { if (live) { setModel(m); setError(undefined); } })
+      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' })); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classSlug]);
+
+  const markers = useMemo<SceneMarker[]>(() => {
+    const values = latestBySignal(widgets);
+    return (model?.anchors ?? []).filter((a) => !a.needsRecheck).map((a) => {
+      const name = a.label || a.signal;
+      const value = values.get(a.signal);
+      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label: value ? `${name} · ${value}` : name, tone: 'normal' };
+    });
+  }, [model, widgets]);
+
+  // A machine whose class has no model shows nothing rather than an empty frame.
+  if (!error && (!model || model.state !== 'ready' || !model.modelUrl)) return null;
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
+      <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+        <Box className="w-4 h-4 text-sky-600" /> {t('twin.title', { defaultValue: 'Digital twin' })}
+      </h3>
+      {error ? (
+        <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
+      ) : (
+        <div className="h-96 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800/50">
+          <Suspense fallback={<p className="text-xs text-slate-400 p-3">{t('common.loading')}</p>}>
+            <ModelScene url={model!.modelUrl!} bounds={model!.bounds} markers={markers} />
+          </Suspense>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
@@ -472,6 +537,8 @@ export const EquipmentPagePage: React.FC = () => {
           <MachineLinks sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} current="equipment" inverse />
         </div>
       </div>
+
+      {page.equipment.classSlug && <DigitalTwin classSlug={page.equipment.classSlug} widgets={page.widgets} />}
 
       {page.widgets.length === 0 && (
         <p className="text-sm text-slate-400">{t('equipmentPage.noWidgets')}</p>

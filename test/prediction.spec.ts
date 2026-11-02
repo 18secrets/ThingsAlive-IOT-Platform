@@ -44,6 +44,10 @@ describeDb('prediction runtime', () => {
     owner = await createTestDataSource();
     await owner.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     await owner.runMigrations({ transaction: 'all' });
+    // The fixtures are pinned to August–September 2026, but the migration only builds
+    // partitions from two months before the day it runs, so a fresh database stops
+    // covering them as the calendar moves on. Build the fixture months explicitly.
+    await owner.query(`SELECT ensure_telemetry_partition('2026-08-01'::date), ensure_telemetry_partition('2026-09-01'::date)`);
     ds = await createAppDataSource();
     baselines = new BaselineService(ds);
     predictions = new PredictionService(ds);
