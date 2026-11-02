@@ -67,7 +67,8 @@
   "filters": {
     "allStatuses": "All statuses",
     "allPriorities": "All priorities",
-    "search": "Search by reference, title or machine"
+    "search": "Search by reference, title or machine",
+    "find": "Find a job"
   },
   "actions": {
     "create": "Create work order",

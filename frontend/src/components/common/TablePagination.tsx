@@ -2,16 +2,17 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pagination, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 
-const PAGE_SIZES = [10, 20, 50];
+// Every list starts at 10 rows (or cards) a page, with the same choices everywhere (2 Nov 2026).
+const PAGE_SIZES = [10, 20, 50, 100];
 
 /**
  * Client-side paging for a list that is already filtered. Back to page 1 whenever the
  * number of rows changes (a search or filter was applied), and never left past the
  * last page when rows are removed.
  */
-export function usePagination<T>(items: T[], initialPageSize = 10) {
+export function usePagination<T>(items: T[]) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -109,9 +110,7 @@ export const TablePagination: React.FC<{
         {!compact && <div className="flex items-center gap-2">
           <span>{t('pagination.rowsPerPage')}</span>
           <SelectPicker
-            // Card pages page by a multiple of their grid's columns (9, 12), which is not
-            // one of the stock sizes; offered too, or the picker reads "Select".
-            data={[...new Set([...PAGE_SIZES, pageSize])].sort((a, b) => a - b).map((n) => ({ label: String(n), value: n }))}
+            data={PAGE_SIZES.map((n) => ({ label: String(n), value: n }))}
             value={pageSize}
             onChange={(value) => setPageSize(Number(value ?? 10))}
             searchable={false}

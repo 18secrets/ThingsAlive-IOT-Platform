@@ -18,7 +18,6 @@ import {
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
 } from '../lib/api';
 
-const PAGE_SIZE = 12;
 const DAYS = 7;
 
 function periodLastNDays(days: number): { from: string; to: string } {
@@ -163,7 +162,7 @@ export const ProductionMonitoringPage: React.FC = () => {
   }), [machines, sort, equipment]);
 
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted);
 
   return (
     <div id="production-monitoring-view" className="space-y-3">
@@ -186,19 +185,7 @@ export const ProductionMonitoringPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-slate-500 dark:text-slate-400">{t('period.label')}</span>
-        <DateRangePicker
-          size="sm"
-          format="yyyy-MM-dd"
-          value={range}
-          onChange={(v) => { setRange(v as [Date, Date] | null); pager.setPage(1); }}
-          shouldDisableDate={(date) => date.getTime() > Date.now()}
-          placeholder={t('hero.lastDays', { count: DAYS })}
-          cleanable
-        />
-      </div>
-
+      {/* The availability period sits beside the machine picker: both narrow what the page counts. */}
       <EquipmentFilters
         scope={scope}
         onChange={setScope}
@@ -207,6 +194,19 @@ export const ProductionMonitoringPage: React.FC = () => {
         equipmentOptions={equipmentOptions}
         selectedKey={selectedKey}
         onSelect={setSelectedKey}
+        beside={<>
+          <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{t('period.label')}</span>
+          <DateRangePicker
+            format="yyyy-MM-dd"
+            value={range}
+            onChange={(v) => { setRange(v as [Date, Date] | null); pager.setPage(1); }}
+            shouldDisableDate={(date) => date.getTime() > Date.now()}
+            placeholder={t('hero.lastDays', { count: DAYS })}
+            cleanable
+            block
+            className="sm:w-auto! sm:min-w-[230px]"
+          />
+        </>}
       />
 
       {loading ? (
@@ -236,17 +236,19 @@ export const ProductionMonitoringPage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: machines.length })}</span>
-                <SortSelect
-                  sort={sort}
-                  onChange={(next) => { setSort(next); pager.setPage(1); }}
-                  options={[
-                    { key: 'availability', dir: 'asc', label: t('shared:sort.availabilityLow') },
-                    { key: 'availability', dir: 'desc', label: t('shared:sort.availabilityHigh') },
-                    { key: 'downtime', dir: 'desc', label: t('shared:sort.downtimeHigh') },
-                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
-                  ]}
-                />
-                <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                <span className="inline-flex items-center gap-2">
+                  <SortSelect
+                    sort={sort}
+                    onChange={(next) => { setSort(next); pager.setPage(1); }}
+                    options={[
+                      { key: 'availability', dir: 'asc', label: t('shared:sort.availabilityLow') },
+                      { key: 'availability', dir: 'desc', label: t('shared:sort.availabilityHigh') },
+                      { key: 'downtime', dir: 'desc', label: t('shared:sort.downtimeHigh') },
+                      { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                    ]}
+                  />
+                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                </span>
               </div>
             </div>
 

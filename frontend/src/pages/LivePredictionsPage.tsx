@@ -94,7 +94,7 @@ export const LivePredictionsPage: React.FC = () => {
   // Both lists are paged, in both views.
   const { pageItems: scenarioItems, ...scenarioPager } = usePagination(visibleScenarios);
   const scenarioPage = { pageItems: scenarioItems };
-  const { pageItems: machineItems, ...machinePager } = usePagination(sorted, 12);
+  const { pageItems: machineItems, ...machinePager } = usePagination(sorted);
   const machinePage = { pageItems: machineItems };
 
   // The card's pieces, shared with the list row.
@@ -171,19 +171,24 @@ export const LivePredictionsPage: React.FC = () => {
         </div>
       )}
 
-      <EquipmentFilters
-        showConnection={false}
-        scope={scope}
-        onChange={setScope}
-        plants={plants}
-        classes={classes}
-        equipmentOptions={equipmentOptions}
-        selectedKey={selectedKey}
-        onSelect={setSelectedKey}
-      />
-
-      <div className="flex justify-end">
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      {/* One switch for both lists, in the filter row rather than on a row of its own. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <EquipmentFilters
+            showConnection={false}
+            scope={scope}
+            onChange={setScope}
+            plants={plants}
+            classes={classes}
+            equipmentOptions={equipmentOptions}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+          />
+        </div>
+        {/* On a phone the picker sits under its label; line up with the picker, not the label. */}
+        <div className="self-end sm:self-auto">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">

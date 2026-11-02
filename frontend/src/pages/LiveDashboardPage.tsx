@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
+  Activity, AlertTriangle, ArrowUpRight, Bell, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
   Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -20,6 +20,8 @@ import {
   apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListMyDevices, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
 import { severityTone } from '../components/common/statusTone';
+import { MachineIcon } from '../components/common/MachineIcon';
+import { SelectPicker } from 'rsuite';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -239,12 +241,28 @@ const MachineCards: React.FC<{
   const [viewMode, setViewMode] = useViewMode('dashboard-machines');
   // Eighty-odd machines over seven pages had no way to find one (test report MIN-7).
   const [query, setQuery] = useState('');
+  // And narrowing by where, what and whether it reports, from what the cards already show (2 Nov 2026).
+  const [site, setSite] = useState('all');
+  const [kind, setKind] = useState('all');
+  const [link, setLink] = useState<'all' | 'online' | 'offline' | 'none'>('all');
+  const siteOptions = useMemo(() => [...new Set(machines.map((m) => m.plantId ?? ''))]
+    .map((id) => ({ label: plantName(id || null), value: id || 'none' }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [machines, plantName]);
+  const kindOptions = useMemo(() => [...new Set(machines.map((m) => m.equipmentClassSlug ?? ''))]
+    .map((slug) => ({ label: slug || t('live.notClassified'), value: slug || 'none' }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [machines, t]);
   const matching = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return !q ? machines : machines.filter((m) =>
-      (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q) || plantName(m.plantId).toLowerCase().includes(q));
-  }, [machines, query, plantName]);
-  const { pageItems, ...pager } = usePagination(matching, 12);
+    return machines.filter((m) => {
+      if (site !== 'all' && (m.plantId ?? 'none') !== site) return false;
+      if (kind !== 'all' && (m.equipmentClassSlug ?? 'none') !== kind) return false;
+      if (link !== 'all' && (connectionOf(m.externalId) ?? 'none') !== link) return false;
+      return !q || (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q)
+        || plantName(m.plantId).toLowerCase().includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machines, query, plantName, site, kind, link]);
+  const { pageItems, ...pager } = usePagination(matching);
   const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
   // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
   const figures = (m: EquipmentProfile) => {
@@ -260,8 +278,8 @@ const MachineCards: React.FC<{
   };
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative max-w-sm">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={query}
@@ -270,7 +288,38 @@ const MachineCards: React.FC<{
             className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
           />
         </div>
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <SelectPicker
+          size="sm"
+          data={[{ label: ts('filters.allSitesPlants'), value: 'all' }, ...siteOptions]}
+          value={site}
+          onChange={(v) => setSite(v ?? 'all')}
+          searchable={siteOptions.length > 8}
+          cleanable={false}
+        />
+        <SelectPicker
+          size="sm"
+          data={[{ label: ts('filters.allClasses'), value: 'all' }, ...kindOptions]}
+          value={kind}
+          onChange={(v) => setKind(v ?? 'all')}
+          searchable={kindOptions.length > 8}
+          cleanable={false}
+        />
+        <SelectPicker
+          size="sm"
+          data={[
+            { label: ts('filters.allConnections'), value: 'all' },
+            { label: ts('connection.online'), value: 'online' },
+            { label: ts('connection.offline'), value: 'offline' },
+            { label: ts('connection.noData'), value: 'none' },
+          ]}
+          value={link}
+          onChange={(v) => setLink((v ?? 'all') as typeof link)}
+          searchable={false}
+          cleanable={false}
+        />
+        <span className="ml-auto">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </span>
       </div>
       <div className={LIST_PANEL}>
         {matching.length === 0 ? (
@@ -306,7 +355,7 @@ const MachineCards: React.FC<{
             return (
               <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
                 <div className="flex items-center justify-between">
-                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
+                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><MachineIcon classSlug={m.equipmentClassSlug} name={m.name} className="w-4.5 h-4.5" /></span>
                   <ConnectionBadge state={connectionOf(m.externalId)} />
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>

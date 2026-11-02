@@ -5,21 +5,14 @@ import { LayoutGrid, List } from 'lucide-react';
 export type ViewMode = 'cards' | 'list';
 
 /**
- * Cards or a list, remembered per page (tester request, 24 Oct 2026): cards read well
- * for a handful of machines and badly for a hundred. Per viewer and per page, in
- * localStorage — a preference, not shared state — and every access is guarded, since
- * storage can be missing or refused (private windows), in which case cards it is.
+ * Cards or a list. Every page opens as a list, and a switch to cards lasts only while
+ * the person stays on that page (tester request, 2 Nov 2026 — the 24 Oct version
+ * remembered each page's choice per viewer, so a page could open as cards). `page`
+ * names the page for callers; nothing is stored under it any more.
  */
-export function useViewMode(page: string): [ViewMode, (mode: ViewMode) => void] {
-  const key = `ta.viewMode.${page}`;
-  const [mode, setMode] = useState<ViewMode>(() => {
-    try { return localStorage.getItem(key) === 'list' ? 'list' : 'cards'; } catch { return 'cards'; }
-  });
-  const set = (next: ViewMode) => {
-    setMode(next);
-    try { localStorage.setItem(key, next); } catch { /* a preference, nothing lost */ }
-  };
-  return [mode, set];
+export function useViewMode(_page: string): [ViewMode, (mode: ViewMode) => void] {
+  const [mode, setMode] = useState<ViewMode>('list');
+  return [mode, setMode];
 }
 
 export const ViewModeToggle: React.FC<{ mode: ViewMode; onChange: (mode: ViewMode) => void }> = ({ mode, onChange }) => {
@@ -31,7 +24,7 @@ export const ViewModeToggle: React.FC<{ mode: ViewMode; onChange: (mode: ViewMod
       aria-pressed={mode === value}
       title={label}
       aria-label={label}
-      className={`p-1.5 rounded-md cursor-pointer transition-colors ${
+      className={`p-1 rounded-md cursor-pointer transition-colors ${
         mode === value
           ? 'bg-sky-600 text-white'
           : 'text-slate-500 dark:text-slate-400 hover:text-sky-600 hover:bg-slate-100 dark:hover:bg-slate-800'
