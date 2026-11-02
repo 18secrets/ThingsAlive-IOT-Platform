@@ -39,6 +39,8 @@ import { ForecastModule } from './forecast/forecast.module';
 import { ReadingsImportModule } from './readings-import/readings-import.module';
 import { ForecastApiModule } from './forecast/forecast-api.module';
 import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
+import { LegacyShiftMetricsModule } from './legacy/legacy-shift-metrics.module';
+import { ShiftFuelModule } from './shift-fuel/shift-fuel.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
 import { TelemetryArchiveModule } from './telemetry/archive/telemetry-archive.module';
@@ -122,6 +124,8 @@ export class AppModule {
               ReadingsImportModule,
               ForecastApiModule,
               ForecastSchedulingModule,
+              LegacyShiftMetricsModule,
+              ShiftFuelModule,
               EvaluationModule,
               TelemetryPartitionModule,
               TelemetryArchiveModule,

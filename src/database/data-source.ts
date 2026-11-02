@@ -91,6 +91,7 @@ import { RecFrame } from '../rec-frame/rec-frame.entity';
 import { FORECAST_ENTITIES } from '../forecast/forecast.entities';
 import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
 import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
+import { SHIFT_FUEL_ENTITIES } from '../shift-fuel/shift-fuel.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 
 /**
@@ -198,6 +199,7 @@ export const ENTITIES = [
   ...FORECAST_ENTITIES,
   ...EMBEDDING_ENTITIES,
   ...EVALUATION_ENTITIES,
+  ...SHIFT_FUEL_ENTITIES,
 ];
 
 export interface DataSourceChoices {
