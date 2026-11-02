@@ -6,7 +6,7 @@ import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-fo
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassRecommendation } from '../../catalog/entities/equipment-class-recommendation.entity';
 import { WidgetSize, WidgetType } from '../../catalog/layout/widget-types';
-import { LayoutWidget, mergeTenantLayout } from '../../catalog/layout/layout-rules';
+import { accountAdded, LayoutWidget, mergeTenantLayout } from '../../catalog/layout/layout-rules';
 import { loadLayout } from '../../catalog/services/class-layout';
 import { toFailureModeJsonb } from '../../catalog/services/class-failure-modes';
 import { loadAnchors, loadVisual } from '../../catalog/services/class-visual.service';
@@ -84,6 +84,9 @@ interface Loaded {
   layout: ClientEquipmentClassLayout[];
   anchors: ClientEquipmentClassVisualAnchor[];
   nextLayout: LayoutWidget[];
+  /** The library layout of the version the copy came from: what tells an account's own
+   * widget apart from one the new version removed. */
+  baseLayout: LayoutWidget[];
   nextAnchors: Anchor[];
   /** No `geometry_version` exists: a different schematic image between the two
    * versions is the geometry change (QUPGRADE1 §3). */
@@ -166,13 +169,13 @@ export class ClassUpgradeService {
     const base = new Map<number, Loaded['base'] extends Map<number, infer V> ? V : never>();
     for (const v of versions) base.set(v, await this.template(slug, v));
     const pm = this.ds.manager;
-    const [nextLayout, nextAnchors, oldVisual, newVisual, nextModelAnchors, oldModel, newModel] = await Promise.all([
-      loadLayout(pm, slug, toVersion), loadAnchors(pm, slug, toVersion), loadVisual(pm, slug, from), loadVisual(pm, slug, toVersion),
+    const [nextLayout, baseLayout, nextAnchors, oldVisual, newVisual, nextModelAnchors, oldModel, newModel] = await Promise.all([
+      loadLayout(pm, slug, toVersion), loadLayout(pm, slug, from), loadAnchors(pm, slug, toVersion), loadVisual(pm, slug, from), loadVisual(pm, slug, toVersion),
       loadModelAnchors(pm, slug, toVersion), loadModel(pm, slug, from), loadModel(pm, slug, toVersion),
     ]);
     return {
       cls, from, base, next: await this.template(slug, toVersion), formulas, modes, recs, layout, anchors,
-      nextLayout, nextAnchors, geometryChanged: (oldVisual?.assetKey ?? null) !== (newVisual?.assetKey ?? null),
+      nextLayout, baseLayout, nextAnchors, geometryChanged: (oldVisual?.assetKey ?? null) !== (newVisual?.assetKey ?? null),
       modelAnchors, nextModelAnchors,
       modelGeometryChanged: (oldModel?.geometryVersion ?? null) !== (newModel?.geometryVersion ?? null),
     };
@@ -216,6 +219,7 @@ export class ClassUpgradeService {
     const classCustomised = !same(CLASS_FIELDS(l.cls), CLASS_FIELDS(l.base.get(l.from)!.profile));
     const tenantWidgets = new Set(l.layout.map((w) => w.widgetKey));
     const nextWidgets = new Set(l.nextLayout.map((w) => w.widgetKey));
+    const ownWidgets = new Set(accountAdded(l.layout, l.nextLayout, l.baseLayout).map((w) => w.widgetKey));
     const tenantSignals = new Set(l.anchors.map((a) => a.signal));
     const nextSignals = new Set(l.nextAnchors.map((a) => a.signal));
     const custom = l.anchors.filter((a) => a.placementCustom).map((a) => a.signal);
@@ -231,8 +235,10 @@ export class ClassUpgradeService {
       // The QREC0b merge: a widget the new version drops goes — nothing is left to bind it to.
       layout: {
         added: [...nextWidgets].filter((k) => !tenantWidgets.has(k)),
-        removed: [...tenantWidgets].filter((k) => !nextWidgets.has(k)),
-        keptCustom: l.layout.filter((w) => (w.positionCustom || w.hidden) && nextWidgets.has(w.widgetKey)).map((w) => w.widgetKey),
+        removed: [...tenantWidgets].filter((k) => !nextWidgets.has(k) && !ownWidgets.has(k)),
+        keptCustom: l.layout
+          .filter((w) => ((w.positionCustom || w.hidden) && nextWidgets.has(w.widgetKey)) || ownWidgets.has(w.widgetKey))
+          .map((w) => w.widgetKey),
       },
       // The QREC0c merge: a tenant-placed anchor always stays; a class one follows the version.
       anchors: {
@@ -289,12 +295,18 @@ export class ClassUpgradeService {
       l.layout.map((w) => ({ widgetType: w.widgetType, widgetKey: w.widgetKey, boundTo: w.boundTo, title: w.title,
         position: w.position, size: w.size, hidden: w.hidden, positionCustom: w.positionCustom })),
       l.nextLayout,
+      l.baseLayout,
     );
+    // An account's own widget keeps the provenance it had: no version of the library is its source.
+    const prior = new Map(l.layout.map((w) => [w.widgetKey, w]));
+    const fromLibrary = new Set(l.nextLayout.map((w) => w.widgetKey));
     await layoutRepo.delete({ tenantId, clientEquipmentClassSlug: slug });
     if (mergedLayout.length) {
       await layoutRepo.save(mergedLayout.map((w) => layoutRepo.create({
         tenantId, clientEquipmentClassSlug: slug, ...w, widgetType: w.widgetType as WidgetType, size: w.size as WidgetSize,
-        templateVersion: to, copiedAt: now,
+        ...(fromLibrary.has(w.widgetKey)
+          ? { templateVersion: to, copiedAt: now }
+          : { templateVersion: prior.get(w.widgetKey)!.templateVersion, copiedAt: prior.get(w.widgetKey)!.copiedAt }),
       })));
     }
 
