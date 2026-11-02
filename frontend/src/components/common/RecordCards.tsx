@@ -1,12 +1,13 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
-import { ListColumn } from './ListTable';
+import { fromControl, ListColumn } from './ListTable';
 
 /**
  * The card half of a cards/list page whose list came first: the same columns and the
  * same cells ListTable shows, laid out as cards. The first column is the card's title,
  * an actions column (if any) sits at the foot, every other column is a labelled line.
- * Built from one definition so the two views cannot show different things.
+ * Built from one definition so the two views cannot show different things. With
+ * `onOpen` the whole card opens, as a list row does; its buttons still act on their own.
  */
 export function RecordCards<T>({ columns, rows, rowKey, cells, onOpen, actionsIndex }: {
   columns: ListColumn[];
@@ -24,7 +25,8 @@ export function RecordCards<T>({ columns, rows, rowKey, cells, onOpen, actionsIn
         return (
           <div
             key={rowKey(row)}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs flex flex-col gap-3 hover:border-sky-300 dark:hover:border-sky-700 transition-colors"
+            onClick={onOpen ? (event) => { if (!fromControl(event)) onOpen(row); } : undefined}
+            className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs flex flex-col gap-3 hover:border-sky-300 dark:hover:border-sky-700 transition-colors${onOpen ? ' cursor-pointer' : ''}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="font-semibold text-slate-900 dark:text-white text-sm leading-snug min-w-0">{values[0]}</div>
