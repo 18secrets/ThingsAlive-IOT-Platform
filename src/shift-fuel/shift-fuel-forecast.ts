@@ -147,3 +147,49 @@ export function forecastShift(
     inputsThrough: used.length ? used[used.length - 1].sdate : null,
   };
 }
+
+/**
+ * The second method (D51): the same-shift average leaning harder on recent shifts
+ * (alpha 0.6), and nothing at all when the machine stood idle on both of the latest
+ * shifts the forecast can see — its own shift's last and whichever shift came last. In a
+ * backtest over 2,800 machine-shifts with only the data there at issue time, it scored
+ * 27% per shift and 86% per machine-week against 25% and 84% for `ewma-0.5-28d`: a small
+ * gain, because how much a running machine burns is the hard part, and neither knows the
+ * day's job.
+ *
+ * The gate looks only at days before the target's own, as the average does: the forecast
+ * for tonight is issued this morning, before today's day shift has a total.
+ */
+export const RECENT_METHOD = 'recent-0.6-28d';
+export const RECENT_ALPHA = 0.6;
+
+export function forecastShiftRecent(history: readonly ShiftObservation[], target: ShiftKey): ShiftFuelForecastValue {
+  const base = forecastShift(history, target, { alpha: RECENT_ALPHA });
+  const seen = history
+    .filter((h) => h.sdate >= addDays(target.sdate, -HISTORY_DAYS) && h.sdate < target.sdate)
+    .filter((h): h is ShiftObservation & { fuelL: number } => h.fuelL !== null && Number.isFinite(h.fuelL))
+    .sort((a, b) => compareShifts(a, b));
+  const latest = seen[seen.length - 1];
+  const latestSame = [...seen].reverse().find((h) => h.shift === target.shift);
+  if (latest && latestSame && latest.fuelL === 0 && latestSame.fuelL === 0) return { ...base, predictedL: 0 };
+  return base;
+}
+
+export const SHIFT_FUEL_METHODS: Record<string, (history: readonly ShiftObservation[], target: ShiftKey) => ShiftFuelForecastValue> = {
+  [SHIFT_FUEL_METHOD]: (history, target) => forecastShift(history, target),
+  [RECENT_METHOD]: forecastShiftRecent,
+};
+
+/**
+ * Which method this process issues and serves, from SHIFT_FUEL_FORECAST_METHOD (default
+ * `ewma-0.5-28d`). Read the same way by the scheduler, which writes, and the API, which
+ * reads: set it on both, or the API serves the other method's rows. Refused when unknown,
+ * so a typo stops the process at boot rather than issuing nothing quietly.
+ */
+export function shiftFuelMethodFrom(env: Record<string, string | undefined>): string {
+  const method = env.SHIFT_FUEL_FORECAST_METHOD?.trim() || SHIFT_FUEL_METHOD;
+  if (!SHIFT_FUEL_METHODS[method]) {
+    throw new Error(`SHIFT_FUEL_FORECAST_METHOD "${method}" is not one of: ${Object.keys(SHIFT_FUEL_METHODS).join(', ')}.`);
+  }
+  return method;
+}

@@ -440,6 +440,22 @@ stream are unchanged: they stay for the live signals.
   `SELECT` on `equipment_shift_metrics` (`equnr`, `sdate`, `shift`, `fuel_consumption`,
   `work_hrs_new`, `updated_at`).
 
+## D51 — A second shift fuel method, chosen by setting
+
+Decided 2026-11-02 by Tapas. `recent-0.6-28d` beside D50's `ewma-0.5-28d`: the same-shift
+average with alpha 0.6, and 0 when the machine stood idle on both of the latest shifts the
+forecast can see. Backtested over 2,800 machine-shifts (5 Oct – 1 Nov) using only the data
+there at issue time: 27% per shift, 41% per machine-day, 86% per machine-week, against
+25%, 40% and 84%. A small gain, said plainly: how much a running machine burns is what is
+hard, and only the day's plan (work orders, site schedule) would move per-shift accuracy
+much further.
+
+Chosen by `SHIFT_FUEL_FORECAST_METHOD`, default `ewma-0.5-28d`, rather than replacing the
+arithmetic, so the two can be switched without a deploy and D50's rows keep their
+meaning; a method's name is on every forecast it issues. Set on the scheduler (which
+issues) and the api (which serves only that method's rows). An unknown name stops the
+process at boot.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

@@ -5,7 +5,7 @@ import { LegacyShiftMetricRow, LegacyShiftMetricsReader, ShiftMetricsSource } fr
 import { runTenantSpanning, withTenantId } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import {
-  addDays, forecastShift, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHOD, ShiftKey, ShiftObservation, targetShifts,
+  addDays, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHODS, shiftFuelMethodFrom, ShiftKey, ShiftObservation, targetShifts,
 } from './shift-fuel-forecast';
 
 /** Beside the shift pass (…001) and the forecast pass (…002): its own, so none waits on another. */
@@ -241,8 +241,9 @@ export class ShiftFuelService {
       external_id: r.external_id, sdate: r.sdate, shift: r.shift, fuelL: r.fuel_l,
     }));
 
+    const method = shiftFuelMethodFrom(process.env);
     const rows = targets.map((t) => ({
-      ...t, ...forecastShift(history.filter((h) => h.external_id === t.externalId), t as ShiftKey),
+      ...t, ...SHIFT_FUEL_METHODS[method](history.filter((h) => h.external_id === t.externalId), t as ShiftKey),
     }));
     const issued: unknown[] = await m.query(
       `INSERT INTO "shift_fuel_forecast"
@@ -253,7 +254,7 @@ export class ShiftFuelService {
        ON CONFLICT ("tenant_id", "source_system", "external_id", "sdate", "shift", "method") DO NOTHING
        RETURNING 1`,
       [
-        tenantId, CLIENT_SOURCE_SYSTEM, SHIFT_FUEL_METHOD, now,
+        tenantId, CLIENT_SOURCE_SYSTEM, method, now,
         rows.map((r) => r.externalId), rows.map((r) => r.sdate), rows.map((r) => r.shift),
         rows.map((r) => r.predictedL), rows.map((r) => r.inputsThrough),
       ],

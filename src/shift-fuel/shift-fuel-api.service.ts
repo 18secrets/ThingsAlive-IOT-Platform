@@ -5,7 +5,7 @@ import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { EquipmentRef } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { LegacyShiftMetric, ShiftFuelForecast } from './shift-fuel.entities';
-import { addDays, compareShifts, indiaDate, SHIFT_FUEL_METHOD, shiftEnd, shiftStart } from './shift-fuel-forecast';
+import { addDays, compareShifts, indiaDate, shiftEnd, shiftFuelMethodFrom, shiftStart } from './shift-fuel-forecast';
 
 /** One shift of one machine: what was forecast, and what the existing platform says happened. */
 export interface ShiftFuelRow {
@@ -70,7 +70,7 @@ export class ShiftFuelApiService {
       const since = addDays(indiaDate(at), -days);
       const where = { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId, sdate: MoreThanOrEqual(since) };
       // One at a time: both share this transaction's connection.
-      const forecasts = await m.getRepository(ShiftFuelForecast).find({ where: { ...where, method: SHIFT_FUEL_METHOD } });
+      const forecasts = await m.getRepository(ShiftFuelForecast).find({ where: { ...where, method: shiftFuelMethodFrom(process.env) } });
       const actuals = await m.getRepository(LegacyShiftMetric).find({ where });
 
       const rows = new Map<string, ShiftFuelRow>();
@@ -96,7 +96,7 @@ export class ShiftFuelApiService {
       }
       return {
         equipment: { sourceSystem: ref.sourceSystem, externalId: ref.externalId },
-        method: SHIFT_FUEL_METHOD,
+        method: shiftFuelMethodFrom(process.env),
         asOf: at.toISOString(),
         days,
         shifts: [...rows.values()].sort(compareShifts),
@@ -106,7 +106,7 @@ export class ShiftFuelApiService {
 
   /** Each machine's newest two forecasts, and the fleet's sum per shift. */
   async fleet(scope: RequestScope, at: Date = new Date()): Promise<FleetShiftFuel> {
-    const empty: FleetShiftFuel = { method: SHIFT_FUEL_METHOD, asOf: at.toISOString(), forecasts: [], totals: [] };
+    const empty: FleetShiftFuel = { method: shiftFuelMethodFrom(process.env), asOf: at.toISOString(), forecasts: [], totals: [] };
     if (scope.equipmentIds !== undefined && scope.equipmentIds.length === 0) return empty;
 
     const rows: {
@@ -125,7 +125,7 @@ export class ShiftFuelApiService {
         WHERE f.newest <= 2
           AND ($4::text[] IS NULL OR f."external_id" = ANY($4::text[]))
         ORDER BY f."sdate", f."shift", f."external_id"`,
-      [scope.tenantId, SHIFT_FUEL_METHOD, addDays(indiaDate(at), -FLEET_RECENT_DAYS), scope.equipmentIds ? [...scope.equipmentIds] : null],
+      [scope.tenantId, shiftFuelMethodFrom(process.env), addDays(indiaDate(at), -FLEET_RECENT_DAYS), scope.equipmentIds ? [...scope.equipmentIds] : null],
     ));
 
     const forecasts = rows.map((r): FleetShiftFuelForecast => ({
