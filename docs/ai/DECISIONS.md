@@ -375,6 +375,21 @@ sign-out in any tab, a suspension, or reuse detected anywhere ends every tab, as
 one. Client users only; staff tabs stay per tab. Audited as `session.forked`. Signing in
 from a deep link now returns to it (`useReturnPath`), never to another origin.
 
+## D49 — An upgrade keeps an account's own widgets
+
+Decided 2026-11-02 by Tapas. Amends QREC0b's merge rule ("a widget the new version no
+longer has is dropped"). The rule now drops a widget only when the version the account's
+copy came from had it, so the library removed it. A widget that neither version has was
+the account's own: it keeps its place, title, size and `template_version`, and the
+library's widgets move round it. The preview lists it under `keptCustom`.
+
+Why: formulas already worked this way (`tenant_added`, kept). The layout did not, and
+upgrading demo-construction's sixteen classes to v2 deleted the nineteen widgets on each of
+83 machine pages, because the demo seed wrote them into the account copy and the library
+layout was empty. They were recovered from the table's dead tuples (three classes) and
+rebuilt from those (twelve). Accounts still cannot add widgets through the API; that is
+QPAGE1's. This only stops an upgrade destroying widgets that got there some other way.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

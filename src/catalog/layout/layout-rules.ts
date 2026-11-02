@@ -157,9 +157,14 @@ export interface TenantLayoutWidget extends LayoutWidget {
  *  - everything else takes the new version's position, shifted past any position a
  *    custom widget already holds — a deliberate change wins a collision;
  *  - a widget the new version no longer has is dropped: there is nothing left for it
- *    to be bound to.
+ *    to be bound to;
+ *  - unless the version the copy came from (`base`) never had it either: then the
+ *    library did not remove it, the account added it, and it stays where it is (D49).
+ *    Without `base` every widget is treated as the library's, as before.
  */
-export function mergeTenantLayout(copy: TenantLayoutWidget[], next: LayoutWidget[]): TenantLayoutWidget[] {
+export function mergeTenantLayout(
+  copy: TenantLayoutWidget[], next: LayoutWidget[], base?: LayoutWidget[],
+): TenantLayoutWidget[] {
   const byKey = new Map(copy.map((w) => [w.widgetKey, w]));
   const merged: TenantLayoutWidget[] = next.map((w) => {
     const prior = byKey.get(w.widgetKey);
@@ -173,6 +178,14 @@ export function mergeTenantLayout(copy: TenantLayoutWidget[], next: LayoutWidget
 
   const taken = new Set(merged.filter((w) => w.positionCustom).map((w) => w.position));
   const movable = merged.filter((w) => !w.positionCustom).sort((a, b) => a.position - b.position);
+  // The account's own widgets keep their places ahead of the library's, which move
+  // round them: nothing in the new version asked for those places.
+  for (const w of accountAdded(copy, next, base).sort((a, b) => a.position - b.position)) {
+    let p = w.position;
+    while (taken.has(p)) p += 1;
+    merged.push({ ...w, position: p });
+    taken.add(p);
+  }
   for (const w of movable) {
     let p = w.position;
     while (taken.has(p)) p += 1;
@@ -180,4 +193,11 @@ export function mergeTenantLayout(copy: TenantLayoutWidget[], next: LayoutWidget
     taken.add(p);
   }
   return merged.sort((a, b) => a.position - b.position);
+}
+
+/** Widgets in an account's copy that neither the version it came from nor the next one has. */
+export function accountAdded<T extends LayoutWidget>(copy: T[], next: LayoutWidget[], base?: LayoutWidget[]): T[] {
+  if (!base) return [];
+  const library = new Set([...base, ...next].map((w) => w.widgetKey));
+  return copy.filter((w) => !library.has(w.widgetKey));
 }
