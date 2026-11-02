@@ -3,6 +3,8 @@ import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { AccuracyQueryError, MAX_RANGE_DAYS, parseAccuracyQuery } from './shift-fuel-accuracy';
+import { ShiftFuelAccuracy, ShiftFuelAccuracyApiService } from './shift-fuel-accuracy-api.service';
 import { FleetShiftFuel, MachineShiftFuel, ShiftFuelApiService } from './shift-fuel-api.service';
 import { FleetShiftFuelNowcast, ShiftFuelNowcastApiService, ShiftFuelNowcastView } from './shift-fuel-nowcast-api.service';
 
@@ -29,6 +31,7 @@ export class ShiftFuelController {
   constructor(
     private readonly fuel: ShiftFuelApiService,
     private readonly nowcast: ShiftFuelNowcastApiService,
+    private readonly accuracyApi: ShiftFuelAccuracyApiService,
   ) {}
 
   @Get('equipment/:sourceSystem/:externalId/shift-fuel-forecast')
@@ -54,5 +57,35 @@ export class ShiftFuelController {
   async fleet(@CurrentScope() scope: RequestScope): Promise<FleetShiftFuel & { nowcasts: FleetShiftFuelNowcast[] }> {
     const at = new Date();
     return this.nowcast.besideFleet(scope, await this.fuel.fleet(scope, at), at);
+  }
+
+  @Get('shift-fuel-accuracy')
+  @Requires('prediction.read')
+  @ApiQuery({ name: 'from', required: false, description: 'First sdate, YYYY-MM-DD; default today in Asia/Kolkata' })
+  @ApiQuery({ name: 'to', required: false, description: `Last sdate, inclusive; default today. At most ${MAX_RANGE_DAYS} days from from` })
+  @ApiQuery({ name: 'level', required: false, enum: ['day', 'shift', 'range'], description: 'What one miss is counted over; default day' })
+  @ApiOperation({
+    summary: 'How accurate the shift fuel forecast and the in-shift nowcast were, per machine and for the fleet',
+    description: 'Completed shifts only, in range by sdate. accuracy = max(0, 100 - round(100 x miss / actual)), null when '
+      + 'nothing burned. A shift with no forecast (or no snapshot by a checkpoint) is left out of that score and counted '
+      + 'in shiftsWithoutForecast (shiftsWithoutCheckpoint). checkpoints are the nowcast\'s accuracy 2, 4 and 6 hours in. '
+      + 'fleet covers only machines that burned fuel in the range. latestDataDate is the newest day with a completed, '
+      + 'totalled shift (D53).',
+  })
+  async accuracy(
+    @CurrentScope() scope: RequestScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('level') level?: string,
+  ): Promise<ShiftFuelAccuracy> {
+    const at = new Date();
+    let query;
+    try {
+      query = parseAccuracyQuery({ from, to, level }, at);
+    } catch (err) {
+      if (err instanceof AccuracyQueryError) throw new BadRequestException(err.message);
+      throw err;
+    }
+    return this.accuracyApi.accuracy(scope, query, at);
   }
 }

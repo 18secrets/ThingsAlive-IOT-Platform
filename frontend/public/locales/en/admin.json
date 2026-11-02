@@ -8,7 +8,8 @@
     "toolMapping": "Tool Mapping",
     "signalAliases": "Signal Aliases",
     "signalStates": "Signal States",
-    "telemetryArchive": "Telemetry Archive"
+    "telemetryArchive": "Telemetry Archive",
+    "fuelForecastAccuracy": "Fuel forecast accuracy"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",
@@ -34,5 +35,57 @@
     "noDrops": "No partition has been dropped yet.",
     "rowsDropped_one": "{{formatted}} row",
     "rowsDropped_other": "{{formatted}} rows"
+  },
+  "fuelAccuracy": {
+    "title": "Fuel forecast accuracy",
+    "updated": "Updated {{time}}. Refreshes every 15 minutes.",
+    "loadFailed": "Could not load fuel forecast accuracy.",
+    "loading": "Loading…",
+    "empty": "No machine has a completed shift with fuel figures in the dates picked.",
+    "totalsLine_one": "Totals over the {{count}} machine that burned fuel in the dates picked. Machines that didn't run are left out.",
+    "totalsLine_other": "Totals over the {{count}} machines that burned fuel in the dates picked. Machines that didn't run are left out.",
+    "tiles": {
+      "actual": "Actual fuel (L)",
+      "forecast": "Forecast fuel (L)",
+      "accuracy": "Accuracy of the forecast",
+      "inShift": "Accuracy of the in-shift forecast"
+    },
+    "noForecastNote_one": "{{count}} shift had no forecast and is left out.",
+    "noForecastNote_other": "{{count}} shifts had no forecast and are left out.",
+    "noCheckpointNote_one": "{{count}} shift had no in-shift forecast by {{hours}} and is left out.",
+    "noCheckpointNote_other": "{{count}} shifts had no in-shift forecast by {{hours}} and are left out.",
+    "checkpointLabel": "Hours into the shift",
+    "hours_one": "{{count}} h",
+    "hours_other": "{{count}} h",
+    "fellBack": "No shift dated {{today}} has been completed and totalled yet, so this shows {{shown}}, the latest day with data.",
+    "from": "From",
+    "to": "To",
+    "today": "Today",
+    "countMissesPer": "Count misses per",
+    "levels": {
+      "day": "Day",
+      "shift": "Shift",
+      "range": "Whole range"
+    },
+    "columns": {
+      "equipment": "Equipment",
+      "actual": "Actual L",
+      "forecast": "Forecast L",
+      "accuracy": "Accuracy",
+      "inShift": "In-shift at {{hours}}"
+    },
+    "didntRun": "Didn't run",
+    "notScored": "No shift with fuel burned had a forecast to score.",
+    "how": {
+      "title": "How accuracy is measured",
+      "shifts": "Only completed shifts count. A shift belongs to the date it starts on: shift 1 runs 08:00–20:00 and shift 2 runs 20:00–08:00 the next morning (India time).",
+      "actual": "Actual is the existing platform's fuel total for the shift, copied into 2.0 every hour. A shift it has no figure for is not counted.",
+      "forecast": "Forecast is the figure issued for the shift before it ended. A shift with no forecast is left out of the score, never counted as a forecast of zero, and the note under the tile says how many.",
+      "inShift": "The in-shift forecast at 2, 4 or 6 hours is the newest re-forecast made by that point in the shift: litres burned so far plus the forecast’s share of the hours left. A shift with none by then is left out of that checkpoint.",
+      "formula": "Accuracy = 100 − (miss ÷ actual litres × 100), rounded, and never below 0. A machine that burned nothing has no percentage: it shows “Didn’t run”.",
+      "levels": "“Count misses per” decides what a miss is. Shift: every machine-shift’s gap counts. Day: each machine’s day total against its forecast day total, so an over-forecast morning can offset an under-forecast night; the fleet tiles use the whole fleet’s day totals. Whole range: one total against the other.",
+      "fleet": "The tiles add up only the machines that burned fuel in the dates picked, their forecast litres included.",
+      "didntRun": "“Didn’t run” means the machine burned 0 litres across the dates picked."
+    }
   }
 }
