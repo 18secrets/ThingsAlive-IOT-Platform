@@ -3,9 +3,15 @@ import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
-import { ShiftFuelApiService } from './shift-fuel-api.service';
+import { FleetShiftFuel, MachineShiftFuel, ShiftFuelApiService } from './shift-fuel-api.service';
+import { FleetShiftFuelNowcast, ShiftFuelNowcastApiService, ShiftFuelNowcastView } from './shift-fuel-nowcast-api.service';
 
 const MAX_DAYS = 90;
+
+const NOWCAST = ' nowcast (nowcasts on the fleet route) is the newest in-shift snapshot of the shift under way (D52): '
+  + 'soFarL litres burned since it started, read off the fuel counter, plus baseL (its forecast) times the share of the '
+  + 'twelve hours left, as predictedL; asOf is the quarter hour it describes and counterAt the newest reading it used. '
+  + 'Null, or absent from the list, when there is no snapshot: no shift has a reading yet, or the nowcast is not running.';
 
 const SHAPE = 'Shifts are the existing platform\'s: 1 is 08:00-20:00 Asia/Kolkata on sdate, 2 is 20:00 on sdate to 08:00 '
   + 'the next day. predictedL is issued before the shift ends and never changed once it has started; inputsThrough is the '
@@ -20,26 +26,33 @@ const SHAPE = 'Shifts are the existing platform\'s: 1 is 08:00-20:00 Asia/Kolkat
 @ApiTags('Forecasts')
 @Controller()
 export class ShiftFuelController {
-  constructor(private readonly fuel: ShiftFuelApiService) {}
+  constructor(
+    private readonly fuel: ShiftFuelApiService,
+    private readonly nowcast: ShiftFuelNowcastApiService,
+  ) {}
 
   @Get('equipment/:sourceSystem/:externalId/shift-fuel-forecast')
   @Requires('prediction.read')
   @ApiQuery({ name: 'days', required: false, description: `Days back from today, 1-${MAX_DAYS}; default 14` })
-  @ApiOperation({ summary: 'This machine\'s recent shifts: forecast litres, and the actual litres and hours where synced', description: SHAPE })
-  machine(
+  @ApiOperation({ summary: 'This machine\'s recent shifts: forecast litres, and the actual litres and hours where synced', description: SHAPE + NOWCAST })
+  async machine(
     @CurrentScope() scope: RequestScope,
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
     @Query('days', new DefaultValuePipe(14), ParseIntPipe) days: number,
-  ) {
+  ): Promise<MachineShiftFuel & { nowcast: ShiftFuelNowcastView | null }> {
     if (days < 1 || days > MAX_DAYS) throw new BadRequestException(`days must be between 1 and ${MAX_DAYS}.`);
-    return this.fuel.machine(scope, { sourceSystem, externalId }, days);
+    const ref = { sourceSystem, externalId };
+    const at = new Date();
+    // The forecast first: it is what answers 404 for a machine that is absent or out of scope.
+    return this.nowcast.besideMachine(scope, ref, await this.fuel.machine(scope, ref, days, at), at);
   }
 
   @Get('shift-fuel-forecasts')
   @Requires('prediction.read')
-  @ApiOperation({ summary: 'Each machine\'s newest two shift fuel forecasts, and the fleet total per shift', description: SHAPE })
-  fleet(@CurrentScope() scope: RequestScope) {
-    return this.fuel.fleet(scope);
+  @ApiOperation({ summary: 'Each machine\'s newest two shift fuel forecasts, and the fleet total per shift', description: SHAPE + NOWCAST })
+  async fleet(@CurrentScope() scope: RequestScope): Promise<FleetShiftFuel & { nowcasts: FleetShiftFuelNowcast[] }> {
+    const at = new Date();
+    return this.nowcast.besideFleet(scope, await this.fuel.fleet(scope, at), at);
   }
 }

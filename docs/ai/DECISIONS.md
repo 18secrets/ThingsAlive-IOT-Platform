@@ -440,6 +440,65 @@ stream are unchanged: they stay for the live signals.
   `SELECT` on `equipment_shift_metrics` (`equnr`, `sdate`, `shift`, `fuel_consumption`,
   `work_hrs_new`, `updated_at`).
 
+## D52 — While a shift runs, its fuel is re-forecast from the litres already burned
+
+Decided 2026-11-02 by Tapas. (D51 is proposed by the selectable-method MR, !204; this is
+numbered past it so the two do not clash.) Every quarter hour of a running shift, each
+machine gets a snapshot of the shift's total:
+`predicted_l = so_far_l + base_l × hours_remaining / 12`. `so_far_l` is the rise of the
+existing platform's cumulative `fuel_consumption` counter since the shift started; `base_l`
+is the shift's own D50 forecast (`ewma-0.5-28d`), or, before the morning sync has issued
+it, the same function over the same synced history. Snapshots land in
+`shift_fuel_nowcast` (method `so-far+ewma-0.5-28d-share`) and are served beside D50's
+fields — `nowcast` on `GET /equipment/:sourceSystem/:externalId/shift-fuel-forecast`,
+`nowcasts` on `GET /shift-fuel-forecasts`, the newest snapshot of the shift under way —
+without changing any field D50 returns. Code: `src/shift-fuel/shift-fuel-nowcast*.ts`,
+`LegacyShiftMetricsReader.readFuelCounters`.
+
+Why: a backtest over 1,246 machine-shifts scored this rule's per-shift accuracy at 38%
+before the shift (the forecast alone), 44% two hours in, 51% at four hours and 59% at six;
+per machine-day 51% → 66%, per fleet-day 76% → 82%. The counter is exact for the part
+already burned — its rise over a shift matched `equipment_shift_metrics.fuel_consumption`
+within 2 L on 1,224 of 1,296 machine-shifts — so the only guess left is the rest of the
+shift, and the forecast's even share of it beat extrapolating the last hour's burn and a
+learned model, both of which scored worse: one busy or idle hour is a poor guide to the
+next eight, and the forecast already carries the machine's normal shift.
+
+- **Reading the counter.** So far = newest reading at or before the tick, minus the
+  counter at the start (the last reading in the five minutes before it, else the first
+  after it). No reading since the start: no snapshot — a silent feed is not an idle
+  machine. A counter that went backwards (reset, or a device replaced under the same
+  series) is clamped to nothing burned. A stale reading is still used and its time kept as
+  `counter_at`. Several fuel series on one machine: the one that reported most recently,
+  never their sum (two devices on one tank would double every shift). A series whose unit
+  is not `liter` is skipped and counted.
+- **Load on their database.** Per series, `LIMIT 1` probes down
+  `(device_sensor_measurement_id, "timestamp")` — two as a rule, a third only when nothing
+  was logged in the five minutes before the start — batched per pass with `LATERAL`, and
+  bounded on `created_at` (the partition key) as well as `timestamp`, so only the newest
+  one or two partitions are opened. The upper `created_at` bound is the tick itself: a
+  snapshot sees only what had reached the existing platform by its `as_of`.
+- **Append-only.** Snapshots are what gets scored at two, four and six hours, so `ta_app`
+  has `SELECT, INSERT` only and a trigger refuses an UPDATE from every role. The database
+  also holds: `as_of` strictly inside its own shift (D50's generated `starts_at`/`ends_at`),
+  `counter_at` between the shift start and `as_of`, litres non-negative, and
+  `so_far_l ≤ predicted_l ≤ so_far_l + base_l`. One snapshot per machine, shift, method and
+  tick (`as_of` is the tick, rounded down), so a second pass in the same quarter hour writes
+  nothing; one pass at a time, by advisory lock `8_742_310_004`.
+- **Switching it on.** Scheduler service only, the same `LEGACY_SHIFT_DB_*` connection, and
+  only where `SHIFT_FUEL_FORECAST_ENABLED=true` **and** `SHIFT_FUEL_NOWCAST_ENABLED=true`;
+  `SHIFT_FUEL_NOWCAST_TICK_SECONDS` (default 900, at least 300). Its own flag because it
+  reads more than D50 was switched on for: until the grants below exist every tick would
+  fail, and probing the existing platform's largest table should start because somebody
+  decided it, not because a deploy landed on a scheduler that already had D50 enabled. The
+  api needs none of these. The grants the read-only login now needs, beside D50's
+  `equipment_shift_metrics`: `SELECT` on `device_sensor_measurement_logs`
+  (`device_sensor_measurement_id`, `timestamp`, `value`, `created_at`, `deleted_at`),
+  `device_sensor_measurements` (`id`, `device_sensor_id`, `sensor_measurement_id`,
+  `deleted_at`), `sensor_measurements` (`id`, `name`, `unit`), `device_sensors` (`id`,
+  `device_id`, `deleted_at`), `devices` (`id`, `equipment_id`) and `equipment_master`
+  (`id`, `equipment`).
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

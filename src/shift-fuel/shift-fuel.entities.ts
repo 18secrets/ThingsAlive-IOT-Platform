@@ -40,4 +40,25 @@ export class ShiftFuelForecast {
   @Column({ name: 'ends_at', type: 'timestamptz', insert: false, update: false }) endsAt: Date;
 }
 
-export const SHIFT_FUEL_ENTITIES = [LegacyShiftMetric, ShiftFuelForecast];
+/** D52's snapshots; the rules are in `1763100000000-ShiftFuelNowcast.ts`. Append-only. */
+@Entity('shift_fuel_nowcast')
+export class ShiftFuelNowcast {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ name: 'tenant_id', type: 'text' }) tenantId: string;
+  @Column({ name: 'source_system', type: 'text' }) sourceSystem: string;
+  @Column({ name: 'external_id', type: 'text' }) externalId: string;
+  @Column({ type: 'date' }) sdate: string;
+  @Column({ type: 'smallint' }) shift: 1 | 2;
+  @Column({ name: 'as_of', type: 'timestamptz' }) asOf: Date;
+  @Column({ name: 'counter_at', type: 'timestamptz' }) counterAt: Date;
+  @Column({ name: 'so_far_l', type: 'numeric', transformer: asNumber }) soFarL: number;
+  @Column({ name: 'base_l', type: 'numeric', transformer: asNumber }) baseL: number;
+  @Column({ name: 'base_source', type: 'text' }) baseSource: 'issued' | 'computed';
+  @Column({ name: 'predicted_l', type: 'numeric', transformer: asNumber }) predictedL: number;
+  @Column({ type: 'text' }) method: string;
+  @Column({ name: 'created_at', type: 'timestamptz', insert: false, update: false }) createdAt: Date;
+  @Column({ name: 'starts_at', type: 'timestamptz', insert: false, update: false }) startsAt: Date;
+  @Column({ name: 'ends_at', type: 'timestamptz', insert: false, update: false }) endsAt: Date;
+}
+
+export const SHIFT_FUEL_ENTITIES = [LegacyShiftMetric, ShiftFuelForecast, ShiftFuelNowcast];
