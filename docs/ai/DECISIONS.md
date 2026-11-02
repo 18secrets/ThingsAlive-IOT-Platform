@@ -390,6 +390,56 @@ layout was empty. They were recovered from the table's dead tuples (three classe
 rebuilt from those (twelve). Accounts still cannot add widgets through the API; that is
 QPAGE1's. This only stops an upgrade destroying widgets that got there some other way.
 
+## D50 — Fuel per shift is forecast from the existing platform's shift totals
+
+Decided 2026-11-02 by Tapas. A machine's fuel per shift is forecast from the existing
+platform's `equipment_shift_metrics` (litres and working hours per machine per shift),
+copied into 2.0 as `legacy_shift_metric`, not from 2.0's hourly telemetry. Forecasts land
+in `shift_fuel_forecast` and are served at `GET /equipment/:sourceSystem/:externalId/shift-fuel-forecast`
+and `GET /shift-fuel-forecasts` (`prediction.read`). Code: `src/shift-fuel`,
+`src/legacy/legacy-shift-metrics.reader.ts`.
+
+Why: a backtest against the existing platform's actuals scored this method about 84%
+accurate per machine per week and about 95% per fleet per week. The hourly TTM forecast
+(D46), trained on the demo stream's simulated telemetry, scored about 0% against the same
+actuals. Fuel per shift is a question about shift totals, and the existing platform
+already keeps them, revised when late data arrives. The hourly forecast and the demo
+stream are unchanged: they stay for the live signals.
+
+- **Method** `ewma-0.5-28d`: an exponentially weighted average, alpha 0.5, of the same
+  machine's same-shift litres over the 28 days before the target's date, oldest first. A
+  day with no row, or a row with no figure, is skipped, not counted as zero; no history
+  forecasts 0 with `inputs_through` null. Chosen because it is deterministic arithmetic
+  with nothing to train (G07), follows a machine moved to harder work within days, and is
+  the method the backtest measured. The method is in the forecast's key, so a second one
+  can sit beside it and be scored against it rather than replacing it.
+- **Which shifts.** The next two that have not ended after the newest synced row: after
+  the morning sync, today's two. Issued once and never rewritten. The database holds the
+  three rules that make a forecast scorable: nothing from its own day
+  (`inputs_through < sdate`), issued before its shift ended, and no update once its shift
+  has started (a trigger, for every role; `ta_app` has no UPDATE on the table at all).
+- **Placement.** The existing platform's `equnr` is matched to `external_id` among machines
+  created in 2.0 (`ta-2.0`), in any account. A number two accounts both hold is placed in
+  neither. Machines mirrored from 1.0 (`iot-platform-1`) are keyed by 1.0's row id, not an
+  equipment number, so they are not matched.
+- **Sync.** Hourly on the scheduler. Each pass re-reads the last 35 days (the 28-day window
+  plus a week of known revisions) and upserts; a pass over unchanged data writes nothing.
+  One pass at a time, by advisory lock `8_742_310_003`.
+- **Connection: its own variables, `LEGACY_SHIFT_DB_*`, not `LEGACY_DB_*`.** Setting
+  `LEGACY_DB_*` does two things nobody has asked for: wherever `SHIFT_RUNNER_ENABLED` is on,
+  the shift runner stops scoring from the readings already in 2.0 and pulls
+  `device_sensor_measurement_logs` instead, so a window whose readings exist only in 2.0
+  (every machine the demo stream feeds) comes back empty and is marked scored with nothing
+  in it; and every process that has them connects at
+  boot and does not start while the far database is unreachable. The new connection is the
+  same read-only one (`default_transaction_read_only=on`, and each read also says
+  `SET TRANSACTION READ ONLY`), lives in `src/legacy`, and connects on first use, so an
+  unreachable database fails a pass, not a boot. It runs only where
+  `SHIFT_FUEL_FORECAST_ENABLED=true` as well. Both go on the scheduler service only; the
+  api serves forecasts from 2.0's own tables and needs neither. The grant to ask for:
+  `SELECT` on `equipment_shift_metrics` (`equnr`, `sdate`, `shift`, `fuel_consumption`,
+  `work_hrs_new`, `updated_at`).
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

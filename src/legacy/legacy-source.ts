@@ -50,6 +50,41 @@ export function legacyConfigFrom(env: Record<string, string | undefined>): Legac
   };
 }
 
+/**
+ * The connection the shift fuel forecast reads `equipment_shift_metrics` through (D50).
+ *
+ * Its own variables rather than LEGACY_DB_*, on purpose. Setting LEGACY_DB_* does more
+ * than open a connection: wherever SHIFT_RUNNER_ENABLED is on it switches the shift runner
+ * from the readings already in 2.0 to pulling `device_sensor_measurement_logs` for every
+ * owed window — so a window whose readings exist only in 2.0, which is every machine the
+ * demo stream feeds, comes back empty and is marked scored with nothing in it. It also
+ * connects at boot, so a process that has them does not start while the far
+ * database is unreachable. Nobody has asked for either, and a forecast should not be the
+ * reason they happen.
+ *
+ * Same read-only connection underneath (`createLegacyDataSource`), so the guarantee is the
+ * same one: the session refuses a write whatever the code asks for. If both are ever
+ * pointed at the same database that costs a second small pool and nothing else.
+ */
+export function legacyShiftMetricsConfigFrom(env: Record<string, string | undefined>): LegacyDbConfig | null {
+  const host = env.LEGACY_SHIFT_DB_HOST?.trim();
+  const database = env.LEGACY_SHIFT_DB_DATABASE?.trim();
+  const username = env.LEGACY_SHIFT_DB_USERNAME?.trim();
+  if (!host || !database || !username) return null;
+
+  return {
+    host,
+    port: Number(env.LEGACY_SHIFT_DB_PORT ?? 5432),
+    username,
+    password: env.LEGACY_SHIFT_DB_PASSWORD ?? '',
+    database,
+    schema: env.LEGACY_SHIFT_DB_SCHEMA?.trim() || 'public',
+    ssl: `${env.LEGACY_SHIFT_DB_SSL ?? ''}`.toLowerCase() === 'true',
+  };
+}
+
+export const LEGACY_SHIFT_METRICS_CONFIG = Symbol('ta:legacy-shift-metrics-config');
+
 export function createLegacyDataSource(config: LegacyDbConfig): DataSource {
   return new DataSource({
     type: 'postgres',
