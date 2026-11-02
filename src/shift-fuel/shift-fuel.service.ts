@@ -38,7 +38,7 @@ export interface ShiftFuelPassSummary {
   forecastsIssued: number;
 }
 
-interface Machine {
+export interface Machine {
   tenantId: string;
   externalId: string;
   active: boolean;
@@ -152,8 +152,11 @@ export class ShiftFuelService {
     return summary;
   }
 
-  /** Every 2.0-created machine, by equipment number, and the numbers two accounts share. */
-  private async machines(): Promise<{ placed: Map<string, Machine>; ambiguous: string[] }> {
+  /**
+   * Every 2.0-created machine, by equipment number, and the numbers two accounts share.
+   * Public so the nowcast (D52) places machines by this same rule rather than a copy of it.
+   */
+  async machines(): Promise<{ placed: Map<string, Machine>; ambiguous: string[] }> {
     const profiles = await runTenantSpanning(this.ds, 'shift fuel: placing equipment numbers', (m) =>
       m.getRepository(EquipmentProfile).find({
         where: { sourceSystem: CLIENT_SOURCE_SYSTEM },
