@@ -31,6 +31,8 @@ const STAFF_ADMIN_CAPABILITY: Record<AdminSubTab | 'catalog-import', string | nu
   devices: 'device.manage',
   equipment: 'catalog.read',
   plant: null,
+  // A reading of one account's own fuel, like Sites: nothing for an account-less staff login.
+  'fuel-forecast-accuracy': null,
 };
 
 /** The page each client path belongs to, for the role check. */

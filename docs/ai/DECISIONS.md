@@ -499,6 +499,51 @@ next eight, and the forecast already carries the machine's normal shift.
   `device_id`, `deleted_at`), `devices` (`id`, `equipment_id`) and `equipment_master`
   (`id`, `equipment`).
 
+## D53 — Fuel forecast accuracy is scored in 2.0, from 2.0's own tables, and shown in the console
+
+Decided 2026-11-03 by Tapas. How close D50's forecast and D52's in-shift forecast came to
+what was burned is served at `GET /shift-fuel-accuracy?from&to&level` (`prediction.read`,
+scoped and tenant-isolated like D50's routes) and shown on a page in the 2.0 console,
+Administration → Fuel forecast accuracy (`/admin/fuel-forecast-accuracy`). It replaces a
+dashboard that was refreshed by hand. Code: `src/shift-fuel/shift-fuel-accuracy*.ts`,
+`frontend/src/pages/FuelForecastAccuracyPage.tsx`.
+
+Why: the numbers that say whether D50 and D52 are worth keeping should not depend on
+somebody remembering to refresh them. Everything needed is already in 2.0 — the hourly
+sync's copy of the existing platform's totals, and the forecasts and snapshots written
+before each shift ended — so the page reads only `legacy_shift_metric`,
+`shift_fuel_forecast` and `shift_fuel_nowcast`, never the existing platform, and is current
+whenever those are.
+
+- **Which shifts.** Completed ones only (shift end ≤ now), in range by `sdate`, with D50's
+  shift boundaries. Actual is `legacy_shift_metric.fuel_l`; a row with no figure is not an
+  outcome. Forecast is `shift_fuel_forecast.predicted_l`, method `ewma-0.5-28d`, the
+  method D50's routes serve. The in-shift forecast at 2, 4 and 6 hours is the newest
+  `shift_fuel_nowcast` snapshot with `as_of` ≤ shift start + h.
+- **Missing is left out, never zero.** A shift with an actual and no forecast is left out
+  of the forecast's score — out of the miss and out of the actual it is divided by — and
+  counted (`shiftsWithoutForecast`, "N shifts had no forecast"). Each checkpoint is left
+  out the same way, shift by shift (`shiftsWithoutCheckpoint`). A forecast that was never
+  issued did not predict that nothing would burn.
+- **The score.** `accuracy = max(0, 100 − round(100 × miss / actual))`, null when the
+  scored actual is 0. The miss depends on "Count misses per": *Shift*, Σ over machine-shifts
+  of |forecast − actual|; *Day*, Σ over (machine, day) of |Σ forecast − Σ actual| for a
+  machine, and Σ over days of |fleet day forecast − fleet day actual| for the fleet;
+  *Whole range*, |Σ forecast − Σ actual|, per machine or for the fleet. Litres are summed
+  in hundredths, as the columns hold them, and rounded once.
+- **The fleet** is the machines whose actual total in the range is above 0, all of their
+  scored shifts included. A machine that burned nothing stays in the table as "Didn't run"
+  and out of the tiles: charging the forecast for a machine nobody ran would score a
+  decision about the site, not the forecast.
+- **Range** at most 92 days; both dates default to today in India. The page falls back
+  to the newest day with a completed, totalled shift (`latestDataDate`) when today has
+  none yet, and says so. Its own refresh is every 15 minutes, the nowcast's tick.
+- **The arithmetic** is in one pure module (`shift-fuel-accuracy.ts`) the SQL only feeds,
+  so the definition above lives in one place and its spec holds it to hand-worked numbers.
+- **`frontend/` was edited by explicit exception, for this task only.** The standing rule
+  (CLAUDE.md: the UI team builds pages) is unchanged; the user chose to have this page
+  built in the 2.0 console.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

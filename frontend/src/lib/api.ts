@@ -2372,6 +2372,53 @@ export function apiGetFleetAvailability(from: string, to: string): Promise<Fleet
   return authFetch(`/utilization/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 }
 
+/** What one miss is counted over (D53): each machine-shift, each day, or the whole range. */
+export type FuelAccuracyLevel = "day" | "shift" | "range";
+/** Hours into a shift the in-shift forecast is scored at. JSON keys, so strings. */
+export type FuelAccuracyCheckpoint = "2" | "4" | "6";
+
+export interface FuelAccuracyTotals {
+  actualL: number;
+  forecastL: number;
+  /** 0-100; null when nothing burned in the shifts it was scored over. */
+  accuracy: number | null;
+  checkpoints: Record<FuelAccuracyCheckpoint, number | null>;
+  shiftsWithoutForecast: number;
+  shiftsWithoutCheckpoint: Record<FuelAccuracyCheckpoint, number>;
+}
+
+export interface MachineFuelAccuracy extends FuelAccuracyTotals {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  shifts: number;
+  ranShifts: number;
+}
+
+export interface ShiftFuelAccuracy {
+  from: string;
+  to: string;
+  level: FuelAccuracyLevel;
+  asOf: string;
+  /** Only the machines that burned fuel in the range; `machines` is how many. */
+  fleet: FuelAccuracyTotals & { machines: number };
+  machines: MachineFuelAccuracy[];
+  /** The newest day with a completed shift the existing platform has totalled. */
+  latestDataDate: string | null;
+}
+
+/** Either date left out is today in India, on the server's clock. */
+export function apiGetShiftFuelAccuracy(
+  query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},
+): Promise<ShiftFuelAccuracy> {
+  const params = new URLSearchParams();
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+  if (query.level) params.set("level", query.level);
+  const qs = params.toString();
+  return authFetch(`/shift-fuel-accuracy${qs ? `?${qs}` : ""}`);
+}
+
 export function apiGetEquipmentAvailability(
   sourceSystem: string, externalId: string, from: string, to: string,
 ): Promise<EquipmentAvailability> {

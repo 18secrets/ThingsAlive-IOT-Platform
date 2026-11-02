@@ -132,7 +132,8 @@ export type AdminSubTab =
   | 'named-formula'
   | 'clients'
   | 'staff'
-  | 'telemetry-archive';
+  | 'telemetry-archive'
+  | 'fuel-forecast-accuracy';
 
 /**
  * The tab Administration opens on: the first one in each role's tab bar

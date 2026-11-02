@@ -9,7 +9,8 @@ import {
   Cpu,
   Briefcase,
   ShieldCheck,
-  FunctionSquare
+  FunctionSquare,
+  Fuel
 } from 'lucide-react';
 import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
@@ -36,6 +37,7 @@ import { EquipmentManagement } from '../equipment/EquipmentManagement';
 import { MasterEquipmentManagement } from '../equipment/MasterEquipmentManagement';
 import { ClientManagement } from '../clients/ClientManagement';
 import { StaffManagement } from '../staff/StaffManagement';
+import { FuelForecastAccuracyPage } from '../../pages/FuelForecastAccuracyPage';
 
 interface AdminManagementProps {
   sensors: SensorItem[];
@@ -201,7 +203,9 @@ interface AdminManagementProps {
   canOpenSubTab?: (tab: AdminSubTab) => boolean;
 }
 
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
+// Fuel forecast accuracy (D53) is a reading of the account's own fleet, beside the fleet
+// it reads; Administration is where an account's people already go to see that fleet.
+const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'fuel-forecast-accuracy'];
 
 // Master Admin only (task: move to the sidebar, 2026-10-10) — see Shell.tsx's
 // ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
@@ -346,6 +350,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'devices', label: t('translation:sidebar.devices'), icon: Cpu },
     { id: 'equipment', label: t('translation:sidebar.equipment'), icon: Wrench },
     { id: 'telemetry-archive', label: t('tabs.telemetryArchive'), icon: Disc },
+    { id: 'fuel-forecast-accuracy', label: t('tabs.fuelForecastAccuracy'), icon: Fuel },
   ];
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —
@@ -487,6 +492,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onRematchIndustries={onRematchIndustries}
           />
         )}
+
+        {restrictToClientAdmin && activeSubTab === 'fuel-forecast-accuracy' && <FuelForecastAccuracyPage />}
 
         {restrictToClientAdmin && activeSubTab === 'plant' && (
           <PlantView
