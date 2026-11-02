@@ -33,17 +33,22 @@
     "collapse": "Collapse sidebar",
     "version": "Version: {{version}}",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "geofence": "Geofence map"
   },
   "header": {
     "goBack": "Go Back",
     "notifications": "Notifications",
-    "telemetryNotifications": "Telemetry Notifications",
+    "telemetryNotifications": "Open alerts",
     "newCount": "{{count}} New",
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "profile": "Profile and settings",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "noNotifications": "No open alerts.",
+    "loadingNotifications": "Loading…",
+    "timeZone": "Times in {{zone}}",
+    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}."
   },
   "login": {
     "title": "Sign in",
@@ -53,7 +58,8 @@
     "submitting": "Signing in…",
     "failed": "Sign-in failed.",
     "haveToken": "Have an invitation token? Set your password",
-    "identifierPlaceholder": "you@yourcompany.com"
+    "identifierPlaceholder": "you@yourcompany.com",
+    "emailMalformed": "That is not a complete email address, e.g. name@company.com."
   },
   "forgot": {
     "title": "Forgot your password?",
@@ -93,7 +99,7 @@
     "accountStatus": "Account Status",
     "accessLevel": "Access Level",
     "clientSince": "Client Since",
-    "allPlantsAndClients": "All Plants & Clients",
+    "allPlantsAndClients": "All Sites & Clients",
     "changePassword": "Change Password",
     "changePasswordHint": "Update the password used to sign in",
     "currentPassword": "Current Password",
@@ -107,7 +113,8 @@
     "tooShort": "New password must be at least 8 characters.",
     "sameAsCurrent": "New password must be different from your current password.",
     "mismatch": "New password and confirmation do not match.",
-    "updated": "Your password has been updated. Signing you out for a fresh sign-in…"
+    "updated": "Your password has been updated. Signing you out for a fresh sign-in…",
+    "superAdminNote": "Super Admin: you manage users and roles, so every page opens for you whatever your role lists."
   },
   "passwordField": {
     "show": "Show password",
@@ -201,6 +208,10 @@
     "dashboardPlatform": {
       "title": "Dashboard",
       "subtitle": "Platform Overview"
+    },
+    "geofence": {
+      "title": "Geofence map",
+      "subtitle": "Where every machine is, against its fences"
     }
   },
   "rsuite": {
@@ -256,5 +267,125 @@
     "suspendReason": "Why is {{name}} being suspended?",
     "takeBackReason": "Why is {{imei}} being taken back into stock?",
     "retireReason": "Why is {{imei}} being retired?"
+  },
+  "toast": {
+    "saved": "Saved successfully",
+    "deleted": "Deleted successfully",
+    "saveFailed": "Could not save",
+    "deleteFailed": "Could not delete",
+    "noReason": "The server could not be reached. Please try again."
+  },
+  "access": {
+    "noPageTitle": "You don't have access to this page",
+    "noPageBody": "Your role doesn't include this page. Ask your administrator if you need it.",
+    "goBack": "Go to my pages"
+  },
+  "geofence": {
+    "loadFailed": "Could not load machine positions. Try again.",
+    "loading": "Loading positions…",
+    "noSites": "No machine on this site has a position or a fence yet.",
+    "pickSite": "Choose a site",
+    "refresh": "Refresh",
+    "updated": "Updated {{time}}",
+    "stat": {
+      "machines": "Machines",
+      "live": "Reporting position",
+      "violating": "Breaking a rule",
+      "stale": "Position stale",
+      "noPosition": "No position"
+    },
+    "legend": {
+      "ok": "Inside its fences",
+      "violating": "Breaking a rule",
+      "stale": "Last known place",
+      "boundary": "Site boundary",
+      "noGo": "No-go zone"
+    },
+    "state": {
+      "ok": "Inside",
+      "violating": "Breaking a rule",
+      "stale": "Stale",
+      "none": "No position"
+    },
+    "inside": "inside",
+    "outside": "outside",
+    "age": "{{minutes}} min ago",
+    "machinesHere": "{{count}} machines on this site",
+    "openMachine": "Open machine page",
+    "tab": {
+      "machines": "Machines",
+      "zones": "Zones"
+    },
+    "draw": {
+      "title": "Draw a zone on {{site}}",
+      "name": "Name",
+      "namePlaceholder": "e.g. Quarry edge",
+      "code": "Code: {{code}}",
+      "appliesTo": "Applies to",
+      "pickMachine": "Choose a machine on this site",
+      "pickType": "Choose a machine type",
+      "kindLabel": "Kind",
+      "shapeLabel": "Shape",
+      "target": {
+        "plant": "Every machine on this site",
+        "equipment": "One machine",
+        "equipment-class": "A machine type",
+        "account": "Every machine, all sites",
+        "site-boundary": "This site's boundary"
+      },
+      "kind": {
+        "restricted": "No-go",
+        "allowed": "Allowed area",
+        "corridor": "Route corridor"
+      },
+      "mode": {
+        "circle": "Circle",
+        "polygon": "Polygon",
+        "corridor": "Route"
+      },
+      "hint": {
+        "circle": "Click the plan where the centre goes.",
+        "polygon_one": "Click {{count}} more corner on the plan.",
+        "polygon_other": "Click {{count}} more corners on the plan.",
+        "corridor_one": "Click {{count}} more point along the route.",
+        "corridor_other": "Click {{count}} more points along the route.",
+        "ready": "Ready to save. Keep clicking to add points, or undo the last one."
+      },
+      "radius": "Radius (metres)",
+      "width": "Width (metres, total)",
+      "save": "Save zone",
+      "saveBoundary": "Save site boundary",
+      "saving": "Saving…",
+      "undo": "Undo point",
+      "cancel": "Cancel",
+      "saveFailed": "Could not save. Try again.",
+      "boundaryPolygon": "A site boundary is a polygon.",
+      "zonesHere_one": "{{count}} zone on this site",
+      "zonesHere_other": "{{count}} zones on this site",
+      "noZones": "No zones here yet. Draw one above.",
+      "off": "switched off",
+      "rename": "Rename",
+      "saveName": "Save name",
+      "switchOff": "Switch off",
+      "switchOn": "Switch on",
+      "delete": "Delete",
+      "confirmDelete": "Delete for good",
+      "keep": "Keep",
+      "centreLabel": "Centre the plan on latitude, longitude",
+      "centreGo": "Go",
+      "centreHint": "Type the site’s latitude and longitude to draw its first fence."
+    },
+    "notLoaded": "Positions could not be loaded. See the message above, then Refresh.",
+    "loadingSites": "Loading sites…"
+  },
+  "passwordRules": {
+    "length": "At least 8 characters",
+    "upper": "An uppercase letter",
+    "lower": "A lowercase letter",
+    "number": "A number",
+    "special": "A special character"
+  },
+  "breadcrumb": {
+    "sites": "Sites"
   }
 }

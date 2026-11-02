@@ -360,6 +360,21 @@ first at roughly the second. Moving is one migration that
 adds a `vector` column and an HNSW index; the embedding profile and the stored values do not
 change, so it is not a reindex.
 
+## D48 — A new tab borrows a sign-in, never a token (test report MAJ-5)
+
+Decided 2026-10-30 by Tapas. Sessions stay per tab, so two tabs can still be two people.
+What changes is a tab opened with no session — a second tab, a deep link: it asks the open
+tabs over `BroadcastChannel`, and a signed-in one answers with `POST /auth/fork`, a second
+refresh token **in the same family**. Copying the tab's own token was not an option:
+tokens rotate, so whichever tab refreshed second would present a retired token and reuse
+detection would sign both out.
+
+Same family is what bounds it. A fork turns an hour's access token into a refresh token,
+so it must not outlive what it came from: it expires with the family's current row, and
+sign-out in any tab, a suspension, or reuse detected anywhere ends every tab, as with
+one. Client users only; staff tabs stay per tab. Audited as `session.forked`. Signing in
+from a deep link now returns to it (`useReturnPath`), never to another origin.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

@@ -19,7 +19,8 @@ import {
   Factory,
   Briefcase,
   Cpu,
-  Wrench
+  Wrench,
+  MapPinned
 } from 'lucide-react';
 import { NavigationTab, UserRole } from '../types';
 import logoFull from '../../assets/logo-icon.png';
@@ -34,6 +35,8 @@ interface SidebarProps {
   allowedTabs?: NavigationTab[];
   /** Client role only — a Super Admin sees every client page, regardless of allowedTabs. */
   isSuperAdmin?: boolean;
+  /** Whether this person may open a page at all (lib/pageAccess.ts); absent = no further limit. */
+  canOpen?: (tab: NavigationTab) => boolean;
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -54,7 +57,7 @@ const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>([
 const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff', 'devices', 'equipment']);
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, isCollapsed, onToggleCollapsed,
+  currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, canOpen, isCollapsed, onToggleCollapsed,
 }) => {
   const { t } = useTranslation();
   const allNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -68,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // direct link (Alerts' "Create alert" / "Edit, assign" buttons navigate
     // to it) but no longer has its own sidebar entry.
     { id: 'alerts', label: t('sidebar.alerts'), icon: AlertTriangle },
+    { id: 'geofence', label: t('sidebar.geofence'), icon: MapPinned },
     { id: 'predictions', label: t('sidebar.livePredictions'), icon: Activity },
     { id: 'scenarios', label: t('sidebar.scenarios'), icon: GitBranch },
     { id: 'work-orders', label: t('sidebar.workOrders'), icon: ClipboardList },
@@ -85,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allowed = allowedTabs || [];
   const navItems = allNavItems.filter((item) => {
+    if (canOpen && !canOpen(item.id)) return false;
     if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
     if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
     // A Super Admin gets every client page unconditionally, regardless of
@@ -158,7 +163,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'
                 }`}
               />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              {/* Two lines rather than "Incident Manage…" (test report COS-5). */}
+              {!isCollapsed && <span className="line-clamp-2 leading-snug">{item.label}</span>}
             </button>
           );
         })}

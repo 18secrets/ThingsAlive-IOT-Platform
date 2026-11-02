@@ -5,7 +5,9 @@ import { DataSource } from 'typeorm';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { dataSourceOptions } from '../src/database/data-source';
+import { demoPosition, demoSiteCentre, ensureDemoGeofences } from '../src/database/seeds/demo-geofence';
 import {
+  DEMO_CLASS,
   DEMO_MACHINES,
   DEMO_SIGNALS,
   DEMO_SOURCE,
@@ -61,7 +63,9 @@ export const ALL_FLEET_MACHINES: FleetMachine[] = [
   { externalId: 'EX-01', sourceSystem: 'seed-demo', imei: '358000000000100', state: 'healthy' },
   { externalId: 'EX-02', sourceSystem: 'seed-demo', imei: '358000000000200', state: 'trending' },
   { externalId: 'EX-03', sourceSystem: 'seed-demo', imei: '358000000000300', state: 'breaching' },
-  { externalId: 'EX-04', sourceSystem: 'seed-demo', imei: '358000000000400', state: 'healthy' },
+  // Quiet on purpose: EX-04 is the demo's offline machine (seed-demo's "Gone quiet").
+  // Streaming it makes every machine look online. --include-quiet still wakes it.
+  { externalId: 'EX-04', sourceSystem: 'seed-demo', imei: '358000000000400', state: 'quiet' },
   { externalId: 'EX-05', sourceSystem: 'seed-demo', imei: '358000000000500', state: 'healthy' },
   { externalId: 'EX-06', sourceSystem: 'seed-demo', imei: '358000000000600', state: 'healthy' },
   { externalId: 'EX-08', sourceSystem: 'ta-2.0', imei: '356938035643825', state: 'healthy' },
@@ -73,6 +77,53 @@ export const ALL_FLEET_MACHINES: FleetMachine[] = [
   { externalId: 'EX-14', sourceSystem: 'ta-2.0', imei: '356938035643882', state: 'healthy' },
   { externalId: 'EXC-001', sourceSystem: 'ta-2.0', imei: '356938035643809', state: 'healthy' },
 ];
+
+/**
+ * The machines this run streams: those of ALL_FLEET_MACHINES whose logger is fitted to
+ * a machine in this database. The list above spans two setups (seed-demo's EX-01..06
+ * and the EX-08.. fleet that onboard-all-machines.ts registers); streaming a logger no
+ * machine owns writes readings nothing shows, and still counts it as a device online.
+ */
+let fleet: FleetMachine[] = ALL_FLEET_MACHINES;
+
+/** Each streamed machine's site centre and type, for its simulated GPS (QGEO2 fleet map). */
+const gpsOf = new Map<string, { centre: [number, number]; typeText: string }>();
+
+/**
+ * Draws demo site boundaries and no-go zones where missing, and notes where each machine
+ * works and what it is — a tipper drives, a generator does not. The same positions as the
+ * seed's top-up, so the two writers never disagree about where a machine is.
+ */
+async function loadGeofences(ds: DataSource): Promise<void> {
+  const rows: { externalId: string; plantId: string | null; plantCode: string | null; typeText: string }[] = await ds.query(
+    `SELECT e.external_id AS "externalId", p.id AS "plantId", p.code AS "plantCode",
+            concat_ws(' ', e.equipment_class_slug, c.name, e.name) AS "typeText"
+       FROM equipment_profile e
+       LEFT JOIN plant p ON p.id = e.plant_id
+       LEFT JOIN client_equipment_class c ON c.tenant_id = e.tenant_id AND c.slug = e.equipment_class_slug
+      WHERE e.tenant_id = $1 AND e.external_id = ANY($2::text[])`,
+    [DEMO_TENANT, fleet.map((m) => m.externalId)],
+  );
+  const plants = new Map<string, string>();
+  for (const r of rows) {
+    if (r.plantId && r.plantCode) plants.set(r.plantId, r.plantCode);
+    gpsOf.set(r.externalId, { centre: demoSiteCentre(r.plantCode ?? `machine:${r.externalId}`), typeText: r.typeText });
+  }
+  const drawn = await ensureDemoGeofences(ds, DEMO_TENANT, [...plants].map(([id, code]) => ({ id, code })));
+  console.log(`[SeedStream] Geofences: ${drawn.boundaries} site boundaries and ${drawn.zones} no-go zones drawn `
+    + `(existing ones kept); simulated GPS for ${gpsOf.size} machines.`);
+}
+
+async function loadFleet(ds: DataSource): Promise<void> {
+  const rows: { imei: string }[] = await ds.query(
+    `SELECT imei FROM device_inventory WHERE tenant_id = $1 AND equipment_external_id IS NOT NULL`,
+    [DEMO_TENANT],
+  );
+  const fitted = new Set(rows.map((r) => r.imei));
+  fleet = ALL_FLEET_MACHINES.filter((m) => fitted.has(m.imei));
+  const skipped = ALL_FLEET_MACHINES.filter((m) => !fitted.has(m.imei)).map((m) => m.externalId);
+  if (skipped.length) console.log(`[SeedStream] Not streaming ${skipped.join(', ')}: no fitted logger in this database.`);
+}
 
 /**
  * Configure worker command for ForecastService.
@@ -107,6 +158,10 @@ async function ensurePrerequisites(ds: DataSource) {
     await seedDemo(ds);
     console.log(`[SeedStream] Demo tenant seeded.`);
   }
+  // After seeding, so a fresh database's own loggers count; before anything uses the fleet.
+  await loadFleet(ds);
+  // Fences, sites and machine types for the simulated GPS, once the fleet is known (QGEO2).
+  await loadGeofences(ds);
 
   // 2. Enable forecasting on hydraulic-excavator requirements
   await ds.query(`
@@ -144,7 +199,13 @@ async function ensurePrerequisites(ds: DataSource) {
 
   // 4. Ensure scenario activations on EX-01..EX-06
   const demoMachines = ['EX-01', 'EX-02', 'EX-03', 'EX-04', 'EX-05', 'EX-06'];
-  const scenarios = ['coolant-drift', 'hydraulic-heat'];
+  // Activate the scenarios the account actually holds for the demo class, read rather
+  // than hard-coded: a slug that does not exist activates nothing, silently, and
+  // ThingsCare then shows "no scenario" on every machine.
+  const scenarios: string[] = (await ds.query(
+    `SELECT slug FROM client_scenario WHERE tenant_id = $1 AND client_equipment_class_slug = $2`,
+    [DEMO_TENANT, DEMO_CLASS],
+  )).map((r: { slug: string }) => r.slug);
   for (const machine of demoMachines) {
     for (const slug of scenarios) {
       await ds.query(`
@@ -179,7 +240,7 @@ async function ensurePrerequisites(ds: DataSource) {
       runId = id;
     }
 
-    const residualMachines = ALL_FLEET_MACHINES;
+    const residualMachines = fleet;
     const demoSignals = ['engine_coolant_temperature', 'engine_oil_pressure'];
 
     const resTenantIds: string[] = [];
@@ -282,9 +343,14 @@ async function ensurePrerequisites(ds: DataSource) {
          SET start_minute = 0,
              end_minute = 1440,
              days = ARRAY[0,1,2,3,4,5,6],
-             scored_through = NOW(),
-             arrivals_through = NOW()
+             -- A week back, not now(): scored_through is where the shift runner resumes,
+             -- so now() told it every past shift was already scored and Utilization and
+             -- Shift history stayed empty. Only on the first conversion to 24/7, so a
+             -- restart does not rewind shifts the runner has since scored.
+             scored_through = NOW() - INTERVAL '7 days',
+             arrivals_through = NOW() - INTERVAL '7 days'
        WHERE tenant_id = $1
+         AND NOT (start_minute = 0 AND end_minute = 1440 AND days = ARRAY[0,1,2,3,4,5,6])
     `, [DEMO_TENANT]);
   });
   console.log(`[SeedStream] 🕒 Configured 24/7 continuous operational shifts for all fleet machines.`);
@@ -299,7 +365,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
   const tickStep = 30 * 1000;
   const tickIndex = Math.floor(nowMs / tickStep);
 
-  const activeMachines = ALL_FLEET_MACHINES.filter((m) => m.state !== 'quiet' || includeQuiet);
+  const activeMachines = fleet.filter((m) => m.state !== 'quiet' || includeQuiet);
 
   const currentMonth = now.toISOString().slice(0, 7);
   if (lastEnsuredMonth !== currentMonth) {
@@ -317,7 +383,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
     const numId = Number(machine.externalId.replace(/[^0-9]/g, '')) || 7;
     for (const [index, s] of DEMO_SIGNALS.entries()) {
       let val: number;
-      if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(nowMs)) {
+      if (machine.state === 'breaching' && s.signal === 'engine_coolant_temperature' && running(nowMs, machine.externalId)) {
         val = BREACH_TAIL[tickIndex % BREACH_TAIL.length];
       } else {
         const noise = prng(numId * 101 + index + tickIndex * 7919);
@@ -338,9 +404,20 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
       units.push(s.unit);
     }
 
+    // Simulated GPS (QGEO2 fleet map), from the same logger as everything else, so the
+    // shift pass and the fleet map read it like a real fix.
+    const gps = gpsOf.get(machine.externalId);
+    if (gps) {
+      const [lngNow, latNow] = demoPosition(machine.externalId, gps.centre, nowMs, gps.typeText);
+      imeis.push(imei, imei);
+      signals.push('latitude', 'longitude');
+      values.push(latNow, lngNow);
+      units.push('deg', 'deg');
+    }
+
     // Fuel consumption (rate in L/h) for productive quality tracking in OEE
     const noiseFuel = prng(numId * 313 + tickIndex * 6271)();
-    const isEngineRunning = running(nowMs);
+    const isEngineRunning = running(nowMs, machine.externalId);
     const fuelRate = isEngineRunning ? parseFloat((12.4 + noiseFuel * 1.5).toFixed(2)) : 0;
     imeis.push(imei);
     signals.push('fuel_consumption');
@@ -361,7 +438,7 @@ export async function emitSimultaneousTick(ds: DataSource, now: Date, includeQui
   // Update link health for all equipment
   const windowStart = new Date(Math.floor(nowMs / (3600 * 1000)) * (3600 * 1000));
 
-  for (const m of ALL_FLEET_MACHINES) {
+  for (const m of fleet) {
     const isOnline = m.state !== 'quiet' || includeQuiet;
     await ds.query(`
       INSERT INTO device_link_health (
@@ -395,7 +472,7 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
   );
   if (baselineCount === 0) {
     const baselineService = new BaselineService(ds);
-    for (const machine of ALL_FLEET_MACHINES) {
+    for (const machine of fleet) {
       try {
         await baselineService.refresh(adminScope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId });
       } catch {}
@@ -404,7 +481,7 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
 
   const predictionService = new PredictionService(ds);
   let scoredCount = 0;
-  for (const machine of ALL_FLEET_MACHINES) {
+  for (const machine of fleet) {
     try {
       const res = await predictionService.scoreAsset(adminScope, { sourceSystem: machine.sourceSystem, externalId: machine.externalId }, now);
       scoredCount += res.written.length;
@@ -535,7 +612,7 @@ async function main() {
           const adminScope = { tenantId: DEMO_TENANT, userId: 'u-admin', roles: ['admin'], isPlatformRole: false };
           const predictionService = new PredictionService(ds);
           (async () => {
-            for (const m of ALL_FLEET_MACHINES) {
+            for (const m of fleet) {
               try {
                 await predictionService.scoreAsset(adminScope, { sourceSystem: m.sourceSystem, externalId: m.externalId }, tickNow);
               } catch {}

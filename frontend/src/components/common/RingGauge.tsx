@@ -7,7 +7,9 @@ export const RingGauge: React.FC<{
   size?: number;
   strokeWidth?: number;
   colorClass?: string;
-}> = ({ value, size = 56, strokeWidth = 5, colorClass = 'text-sky-600 dark:text-sky-400' }) => {
+  /** '%' for a share (OEE, availability); '' for a 0–100 score, which is points, not a percentage. */
+  unit?: string;
+}> = ({ value, size = 56, strokeWidth = 5, colorClass = 'text-sky-600 dark:text-sky-400', unit = '%' }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const pct = value == null ? 0 : Math.max(0, Math.min(100, value));
@@ -27,7 +29,7 @@ export const RingGauge: React.FC<{
         )}
       </svg>
       <span className="absolute text-sm font-bold text-slate-800 dark:text-slate-100">
-        {value != null ? `${Math.round(value)}%` : '—'}
+        {value != null ? `${Math.round(value)}${unit}` : '—'}
       </span>
     </div>
   );

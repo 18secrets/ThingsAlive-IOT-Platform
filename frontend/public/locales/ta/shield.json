@@ -31,7 +31,8 @@
     "overdue": "காலாவதி",
     "due_soon": "விரைவில் வர உள்ளது",
     "current": "நடப்பில்",
-    "not_recorded": "பதிவு இல்லை"
+    "not_recorded": "பதிவு இல்லை",
+    "alsoOverdue": "தாமதமும் கூட"
   },
   "result": {
     "passed": "தேர்ச்சி",
@@ -91,5 +92,8 @@
     "saving": "சேமிக்கிறது…",
     "saveCorrection": "திருத்தத்தைச் சேமி",
     "saveRecord": "பதிவைச் சேமி"
+  },
+  "listCol": {
+    "machine": "இயந்திரம்"
   }
 }

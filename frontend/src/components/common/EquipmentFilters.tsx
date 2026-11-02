@@ -37,7 +37,10 @@ export const EquipmentFilters: React.FC<{
   equipmentOptions?: SelectableEquipment[];
   selectedKey?: string;
   onSelect?: (key: string) => void;
-}> = ({ scope, onChange, plants, classes, equipmentOptions, selectedKey, onSelect }) => {
+  /** Off where the cards carry no connection status and the page never applies the
+   *  choice (TC_124): a filter that changes nothing reads as broken. */
+  showConnection?: boolean;
+}> = ({ scope, onChange, plants, classes, equipmentOptions, selectedKey, onSelect, showConnection = true }) => {
   const { t } = useTranslation('shared');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(scope);
@@ -144,7 +147,7 @@ export const EquipmentFilters: React.FC<{
                   container={() => containerRef.current ?? document.body}
                 />
               </div>
-              <div className="block space-y-1">
+              {showConnection && <div className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.connectionStatus')}</span>
                 <SelectPicker
                   data={[
@@ -159,7 +162,7 @@ export const EquipmentFilters: React.FC<{
                   block
                   container={() => containerRef.current ?? document.body}
                 />
-              </div>
+              </div>}
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.findEquipment')}</span>
                 <div className="relative">

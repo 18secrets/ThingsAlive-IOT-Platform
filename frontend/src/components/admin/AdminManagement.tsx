@@ -20,7 +20,7 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../../lib/api';
 import { SensorTable } from './SensorTable';
 import { ToolMappingTable } from './ToolMappingTable';
@@ -81,6 +81,8 @@ interface AdminManagementProps {
    *  the client's own still-mock Devices tab. */
   devicePool: PooledDevice[];
   devicePoolError?: string;
+  /** True until the pool's first answer: the list is unknown then, not empty. */
+  devicePoolLoading?: boolean;
   onRegisterDevices: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
@@ -119,11 +121,14 @@ interface AdminManagementProps {
   onNavigateToAISetup?: () => void;
   realEquipment: EquipmentProfile[];
   realEquipmentError?: string;
+  realEquipmentLoading?: boolean;
   /** Every account's register in one read (`GET /equipment/all`) — Master Admin's
    *  own Equipment sidebar page. Separate from `realEquipment`, which is
    *  tenant-scoped and empty for them. */
   allEquipment: EquipmentProfile[];
   allEquipmentError?: string;
+  /** True until the first answer: the list is unknown then, not empty. */
+  allEquipmentLoading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -140,10 +145,11 @@ interface AdminManagementProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;
+  myDevicesLoading?: boolean;
   onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
   onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
@@ -191,6 +197,8 @@ interface AdminManagementProps {
   onDeleteStaff: (id: string) => Promise<void>;
   /** True for a client-role user — restricts the subtab bar to Plant/Devices/Equipment only. */
   restrictToClientAdmin?: boolean;
+  /** Which sub-tabs this person may open (lib/pageAccess.ts); absent = all. */
+  canOpenSubTab?: (tab: AdminSubTab) => boolean;
 }
 
 const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
@@ -242,6 +250,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onUpdateDevice,
   onReturnDeviceToStock,
   devicePoolError,
+  devicePoolLoading,
   onRegisterDevices,
   onAssignDevice,
   equipmentClasses,
@@ -273,8 +282,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onNavigateToAISetup,
   realEquipment,
   realEquipmentError,
+  realEquipmentLoading,
   allEquipment,
   allEquipmentError,
+  allEquipmentLoading,
   onListPlantsForTenant,
   onCreateEquipment,
   onUpdateEquipment,
@@ -285,6 +296,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   myEquipmentClassesError,
   myDevices,
   myDevicesError,
+  myDevicesLoading,
   onClaimDevice,
   onUnclaimDevice,
   onGetEquipmentCoverage,
@@ -317,6 +329,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onReinstateStaff,
   onDeleteStaff,
   restrictToClientAdmin,
+  canOpenSubTab,
 }) => {
   const { t } = useTranslation('admin');
   const allSubTabs: { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -346,7 +359,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const subTabs = restrictToClientAdmin
     ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
     : allSubTabs.filter((tab) => (
-      !['plant', ...PROMOTED_SUBTABS].includes(tab.id)
+      !['plant', ...PROMOTED_SUBTABS].includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true)
     ));
 
   // A promoted tab (Master Admin only) is reached directly from the sidebar
@@ -491,6 +504,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <ClientDeviceManagement
             devices={myDevices}
             error={myDevicesError}
+            loading={myDevicesLoading}
             equipment={realEquipment}
             onUnclaimDevice={onUnclaimDevice}
           />
@@ -500,6 +514,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <DevicePoolManagement
             pool={devicePool}
             error={devicePoolError}
+            loading={devicePoolLoading}
             clients={clients}
             toolMappings={realToolMappings}
             onRegister={onRegisterDevices}
@@ -515,6 +530,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <EquipmentManagement
             equipment={realEquipment}
             error={realEquipmentError}
+            loading={realEquipmentLoading}
             onCreateEquipment={onCreateEquipment}
             onUpdateEquipment={onUpdateEquipment}
             onMoveEquipment={onMoveEquipment}
@@ -544,6 +560,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <MasterEquipmentManagement
             equipment={allEquipment}
             error={allEquipmentError}
+            loading={allEquipmentLoading}
             clients={clients}
             onCreateEquipment={onCreateEquipment}
             onUpdateEquipment={onUpdateEquipment}

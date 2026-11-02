@@ -2,6 +2,7 @@ import {StrictMode, Suspense} from 'react';
 import {createRoot} from 'react-dom/client';
 import {CustomProvider} from 'rsuite';
 import App from './App.tsx';
+import {MutationToasts} from './components/common/MutationToasts';
 import {useRsuiteTheme} from './lib/useRsuiteTheme';
 import {useRsuiteLocale} from './lib/useRsuiteLocale';
 // rsuite's own CSS loads first, so a Tailwind utility (e.g. `pl-9` clearing a
@@ -19,6 +20,7 @@ const Root = () => {
     <CustomProvider theme={theme} locale={locale}>
       <Suspense fallback={null}>
         <App />
+        <MutationToasts />
       </Suspense>
     </CustomProvider>
   );

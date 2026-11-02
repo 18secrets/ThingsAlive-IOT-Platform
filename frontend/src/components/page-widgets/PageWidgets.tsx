@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import i18n from '../../i18n';
 import { AlertTriangle, Bell, CheckCircle2, Wrench } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
 import { Chip } from '../common/Chip';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
+import { severityTone } from '../common/statusTone';
 
 /** Every widget a composed page (machine or site) can render, shared because the
  *  shape — `PageWidget[]` with a `readiness`/`reason` a widget can't fill — is the
@@ -50,10 +52,18 @@ const ExploreLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
   );
 };
 
+/** A layout may leave a KPI widget untitled; a number with no name says nothing, so fall
+ *  back to the formula key read as words ("avg_coolant_temp" -> "Avg coolant temp"). */
+const kpiTitle = (widget: PageWidget, formulaKey?: string): string => {
+  if (widget.title) return widget.title;
+  const words = (formulaKey ?? widget.widgetKey).replace(/[_-]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
 function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (formulaKey: string) => void }) {
   const { t } = useTranslation('equipment');
   if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title}><Unfilled reason={widget.reason} /></WidgetShell>;
+    return <WidgetShell title={kpiTitle(widget)}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const data = widget.data as PageKpiWidgetData;
   const explore = onExplore ? <ExploreLink onClick={() => onExplore(data.formulaKey)} /> : null;
@@ -61,7 +71,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
     const points = (data.value as { t: string; v: number | null }[] ?? []).map((p) => p.v).filter((v): v is number => v != null);
     const latest = points[points.length - 1];
     return (
-      <WidgetShell title={widget.title}>
+      <WidgetShell title={kpiTitle(widget, data.formulaKey)}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
@@ -78,7 +88,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
   const value = data.value as number | null;
   const showGauge = widget.widgetType === 'kpi_gauge' && data.unit === '%';
   return (
-    <WidgetShell title={widget.title}>
+    <WidgetShell title={kpiTitle(widget, data.formulaKey)}>
       <div className="flex items-center gap-4">
         {showGauge && <RingGauge value={value} />}
         <div>
@@ -205,7 +215,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
                 <p className="text-[11px] text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString()}</p>
               </div>
-              <Chip icon={AlertTriangle} tone={a.severity === 'critical' ? 'rose' : 'amber'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
+              <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
           ))}
         </div>
@@ -307,6 +317,7 @@ function RecommendationsWidget({ widget }: { widget: PageWidget }) {
 
 function MachineListWidget({ widget }: { widget: PageWidget }) {
   const { t } = useTranslation('equipment');
+  const navigate = useNavigate();
   if (widget.readiness !== 'ready' || !widget.data) {
     return <WidgetShell title={widget.title ?? t('widgets.machines')}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
@@ -316,7 +327,14 @@ function MachineListWidget({ widget }: { widget: PageWidget }) {
       <div className="space-y-1.5">
         {rows.map((m) => (
           <div key={`${m.sourceSystem}/${m.externalId}`} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300 truncate">{m.name ?? m.externalId}</span>
+            {/* A name on a site page that went nowhere (test report MIN-8). */}
+            <button
+              type="button"
+              onClick={() => navigate(`/dashboard/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
+              className="text-slate-600 dark:text-slate-300 truncate hover:text-sky-600 dark:hover:text-sky-400 hover:underline cursor-pointer text-left"
+            >
+              {m.name ?? m.externalId}
+            </button>
             <div className="flex items-center gap-1.5 shrink-0">
               {m.openAlerts > 0 && <Chip icon={Bell} tone="rose">{m.openAlerts}</Chip>}
               <Chip tone={READINESS_TONE[m.readiness]}>{t(`readiness.${m.readiness}`, { defaultValue: m.readiness })}</Chip>

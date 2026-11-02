@@ -132,7 +132,11 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     if (!canAct) return;
     const parsed = parsePromptToWorkflow(text, scope(), scopeData.signalsFor(scope()));
     if (parsed.conditions > 0) {
-      onGenerate(parsed.draft);
+      // Said on the canvas: a phrase naming no signal on this machine is kept as typed and
+      // the server refuses it, so the person picks the signal rather than a guess (MIN-9).
+      onGenerate(parsed.unmatched.length
+        ? { ...parsed.draft, notes: parsed.unmatched.map((what) => t('assistant.unmatchedSignal', { what })) }
+        : parsed.draft);
       return;
     }
     setPrompt(text);

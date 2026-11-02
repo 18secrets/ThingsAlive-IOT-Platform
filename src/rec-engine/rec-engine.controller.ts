@@ -29,15 +29,21 @@ export class RecEngineController {
   @ApiOperation({ summary: 'Run the five deterministic steps now. Idempotent: unchanged evidence returns the existing bundle', description: OUTCOMES })
   @ApiResponse({ status: 201, description: 'A new bundle: the evidence changed since the last one' })
   @ApiResponse({ status: 200, description: 'The existing bundle: nothing it read has changed' })
+  @ApiResponse({ status: 201, description: 'Either way the body also carries checkedAt (when this check ran) and evidenceUnchanged' })
   async evaluate(
     @CurrentScope() scope: RequestScope,
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
     @Res({ passthrough: true }) res: { status: (code: number) => unknown },
   ) {
-    const { bundle, created } = await this.engine.evaluate(scope, { sourceSystem, externalId });
+    const checkedAt = new Date();
+    const { bundle, created } = await this.engine.evaluate(scope, { sourceSystem, externalId }, checkedAt);
     res.status(created ? 201 : 200);
-    return bundle;
+    // The bundle is the evidence and keeps its own asOf: unchanged evidence returns the
+    // bundle first written for it, so a screen showing only asOf reads "analysed 23/10"
+    // after a check made today. checkedAt says when this check ran; evidenceUnchanged
+    // says the answer stands, rather than leaving the screen to look stale.
+    return { ...bundle, checkedAt: checkedAt.toISOString(), evidenceUnchanged: !created };
   }
 
   @Get('equipment/:sourceSystem/:externalId/rec-evidence')

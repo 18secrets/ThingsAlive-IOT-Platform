@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { DataSource, EntityManager, IsNull, LessThan, Not } from 'typeorm';
+import { DataSource, EntityManager, IsNull, LessThan, MoreThan, Not } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
@@ -10,6 +10,7 @@ import { AppUser } from '../entities/app-user.entity';
 import { InvitationPurpose, UserInvitation } from '../entities/user-invitation.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
 import { UserSession } from '../entities/user-session.entity';
+import { TenantRole } from '../entities/tenant-role.entity';
 import { PasswordService } from './password.service';
 
 export interface SignInResult {
@@ -316,12 +317,31 @@ export class CredentialService {
           );
           await this.record(m, 'session.reuse-detected', { user, ctx, detail: session.family });
         }
+        // Suspending somebody revokes their sessions as it happens, so a reload after
+        // it lands here, and the console can only say why if this does (TC_136). It
+        // tells the token's holder nothing they could not see the hour before.
+        if (user.status === 'suspended') {
+          return refuse('This account has been suspended. Your administrator can restore it.');
+        }
         return refuse('Please sign in again.');
+      }
+
+      // The same refusal sign-in gives, or a reload after the account was suspended
+      // kept the person signed in (tester bugs TC_136, TC_137): sign-in checked the
+      // organisation, refresh did not, so refresh issued tokens every other endpoint
+      // then refused, and the console waited on its first call for good. The
+      // sessions go too: a suspension is not undone by presenting an older token.
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId: user.tenantId } });
+      if (tenant && tenant.status === 'suspended') {
+        await this.revokeAll(m, user, 'tenant suspended', now);
+        return refuse('This organisation\'s account is suspended. Please contact Things Alive.');
       }
 
       if (user.status !== 'active') {
         await this.revokeAll(m, user, `status ${user.status}`, now);
-        return refuse('This account can no longer sign in.');
+        return refuse(user.status === 'suspended'
+          ? 'This account has been suspended. Your administrator can restore it.'
+          : 'This account can no longer sign in.');
       }
 
       session.rotatedAt = now;
@@ -329,6 +349,54 @@ export class CredentialService {
       await this.record(m, 'session.refreshed', { user, ctx });
 
       return allow(await this.startSession(m, user, ctx, now, session.family));
+    });
+
+    if (outcome.kind === 'refused') throw new UnauthorizedException(outcome.message);
+    return outcome.value;
+  }
+
+  /**
+   * A second refresh token for the same sign-in, for a new browser tab (test report
+   * MAJ-5). Sessions live per tab, and a tab cannot simply copy another's refresh
+   * token: tokens rotate, so the second tab to refresh would present a retired one
+   * and reuse detection would sign both out.
+   *
+   * The new row joins the caller's family rather than starting one, which is what
+   * keeps this from turning an hour's access token into a month of access: it ends
+   * when the sign-in it came from ends — sign-out in any tab, a suspension, or reuse
+   * detected anywhere in the family — and expires no later than that sign-in's own
+   * current row. The access token is verified here again because it carries the
+   * family (`sid`) and the request scope does not.
+   */
+  async forkSession(
+    scope: RequestScope, bearer: string, ctx: RequestContext = {}, now = new Date(),
+  ): Promise<SignInResult> {
+    if (scope.isPlatformRole) throw new BadRequestException('Staff sessions are not shared between tabs.');
+    let sid: string | undefined;
+    try {
+      const payload = await this.jwt.verifyAsync<Record<string, unknown>>(bearer, {
+        secret: this.config.get<string>('AUTH_JWT_SECRET'),
+        issuer: this.config.get<string>('AUTH_JWT_ISSUER') || undefined,
+      });
+      sid = typeof payload.sid === 'string' ? payload.sid : undefined;
+    } catch {
+      sid = undefined;
+    }
+    if (!sid) throw new UnauthorizedException('Please sign in again.');
+
+    const outcome = await runTenantSpanning<Outcome<SignInResult>>(this.ds, 'session fork', async (m) => {
+      const current = await m.getRepository(UserSession).findOne({
+        where: {
+          tenantId: scope.tenantId, userId: scope.userId, family: sid,
+          rotatedAt: IsNull(), revokedAt: IsNull(), expiresAt: MoreThan(now),
+        },
+        order: { expiresAt: 'DESC' },
+      });
+      if (!current) return refuse('Please sign in again.');
+      const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId, tenantId: scope.tenantId } });
+      if (!user || user.status !== 'active') return refuse('Please sign in again.');
+      await this.record(m, 'session.forked', { user, ctx, detail: sid });
+      return allow(await this.startSession(m, user, ctx, now, sid, current.expiresAt));
     });
 
     if (outcome.kind === 'refused') throw new UnauthorizedException(outcome.message);
@@ -391,6 +459,24 @@ export class CredentialService {
     });
   }
 
+  /** The caller's own name and address, for the screens that show who is signed in. */
+  async ownIdentity(scope: RequestScope): Promise<{
+    email: string; fullName: string; roleName: string | null; tenantName: string | null; tenantSince: Date | null;
+  } | null> {
+    return withTenantId(this.ds, scope.tenantId, async (m) => {
+      const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId } });
+      if (!user) return null;
+      // The role's own name, as Users and Diagnostics show it. Settings said "Client"
+      // for the same person they called "CEO/Manager" (test report MIN-3).
+      const role = await m.getRepository(TenantRole).findOne({ where: { tenantId: scope.tenantId, slug: user.roleSlug } });
+      const tenant = await m.getRepository(Tenant).findOne({ where: { tenantId: scope.tenantId } });
+      return {
+        email: user.email, fullName: user.fullName, roleName: role?.name ?? null,
+        tenantName: tenant?.name ?? null, tenantSince: tenant?.createdAt ?? null,
+      };
+    });
+  }
+
   // -------------------------------------------------------------------- resetting
 
   /**
@@ -432,7 +518,7 @@ export class CredentialService {
   // ----------------------------------------------------------------------- shared
 
   private async startSession(
-    m: EntityManager, user: AppUser, ctx: RequestContext, now: Date, family?: string,
+    m: EntityManager, user: AppUser, ctx: RequestContext, now: Date, family?: string, expiresAt?: Date,
   ): Promise<SignInResult> {
     const refreshToken = this.passwords.newToken();
     const sessions = m.getRepository(UserSession);
@@ -442,7 +528,7 @@ export class CredentialService {
       userId: user.id,
       tokenHash: this.passwords.fingerprint(refreshToken),
       family: sid,
-      expiresAt: new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
+      expiresAt: expiresAt ?? new Date(now.getTime() + REFRESH_TOKEN_DAYS * 86_400_000),
       rotatedAt: null, revokedAt: null, revokedReason: null,
       userAgent: ctx.userAgent ?? null,
     }));

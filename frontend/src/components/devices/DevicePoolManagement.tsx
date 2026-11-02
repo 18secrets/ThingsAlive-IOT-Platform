@@ -6,10 +6,14 @@ import {
   ApiError, DeviceInventoryEvent, InventoryAction, PooledDevice, RegisterDeviceInput, ToolMapping, apiGetDeviceHistory,
 } from '../../lib/api';
 import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { Modal } from '../common/Modal';
 import { AssignDeviceModal } from './AssignDeviceModal';
 import { RegisterDevicesModal } from './RegisterDevicesModal';
+import { sortRows, useSort } from '../../lib/useSort';
 
 // Labels are state.<value> in the devices namespace.
 const STATE_VALUES: PooledDevice['state'][] = ['in-stock', 'assigned', 'retired'];
@@ -17,6 +21,8 @@ const STATE_VALUES: PooledDevice['state'][] = ['in-stock', 'assigned', 'retired'
 interface DevicePoolManagementProps {
   pool: PooledDevice[];
   error?: string;
+  /** True until the first answer: the list is unknown then, not empty (test report MAJ-6). */
+  loading?: boolean;
   clients: ClientAccount[];
   toolMappings: ToolMapping[];
   onRegister: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
@@ -36,9 +42,10 @@ const STATE_STYLE: Record<PooledDevice['state'], string> = {
 };
 
 export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
-  pool, error, clients, toolMappings, onRegister, onAssign, onRelease, onRetire, onReturnToStock, onUpdate,
+  pool, error, loading, clients, toolMappings, onRegister, onAssign, onRelease, onRetire, onReturnToStock, onUpdate,
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
+  const [viewMode, setViewMode] = useViewMode('admin-devices');
   const STATE_OPTIONS = STATE_VALUES.map((value) => ({ label: t(`state.${value}`), value }));
   const [editing, setEditing] = useState<PooledDevice | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,80 +82,35 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
     });
   }, [pool, searchTerm, selectedState, clientName]);
 
-  const { pageItems: pagedRows, ...pager } = usePagination(filtered);
+  // Sortable headers (test report MAJ-9): the whole filtered set is sorted, then paged.
+  const { sort, toggle } = useSort<'imei' | 'model' | 'tool' | 'state' | 'client'>({ key: 'imei', dir: 'asc' });
+  const sorted = useMemo(() => sortRows(filtered, sort, {
+    imei: (d) => d.imei,
+    model: (d) => d.model,
+    tool: (d) => d.toolMappingName,
+    state: (d) => d.state,
+    client: (d) => clientName(d.tenantId),
+  }), [filtered, sort, clientName]);
+  const { pageItems: pagedRows, ...pager } = usePagination(sorted);
 
-  return (
-    <div id="device-pool-view" className="space-y-4">
-      <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input
-              value={searchTerm}
-              onChange={(value) => setSearchTerm(value)}
-              placeholder={t('pool.searchPlaceholder')}
-              size="sm"
-              className="w-full pl-9! pr-4"
-            />
-          </div>
-          <SelectPicker
-            data={STATE_OPTIONS}
-            value={selectedState === 'All' ? null : selectedState}
-            onChange={(value) => setSelectedState(value ?? 'All')}
-            placeholder={t('pool.allStates')}
-            searchable={false}
-            cleanable={selectedState !== 'All'}
-            size="sm"
-          />
-        </div>
-
-        <button
-          id="register-device-btn"
-          onClick={() => setIsRegisterOpen(true)}
-          className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t('pool.register')}</span>
-        </button>
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-              <tr>
-                <th className="py-3 px-4">IMEI</th>
-                <th className="py-3 px-4">{t('pool.col.model')}</th>
-                <th className="py-3 px-4">{t('pool.col.toolProfile')}</th>
-                <th className="py-3 px-4">{t('pool.col.state')}</th>
-                <th className="py-3 px-4">{t('translation:common.client')}</th>
-                <th className="py-3 px-4 text-center">{t('pool.col.action')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {filtered.length > 0 ? (
-                pagedRows.map((d) => (
-                  <tr key={d.imei} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-mono text-[11px]">{d.imei}</td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{d.model || '—'}</td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{d.toolMappingName || '—'}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
+  // One definition for both views (cards or list on every list page).
+  const viewColumns = [
+    { label: 'IMEI', sortKey: 'imei' },
+    { label: t('pool.col.model'), sortKey: 'model' },
+    { label: t('pool.col.toolProfile'), sortKey: 'tool' },
+    { label: t('pool.col.state'), sortKey: 'state' },
+    { label: t('translation:common.client'), sortKey: 'client' },
+    { label: t('pool.col.action'), width: 200 },
+  ];
+  const viewCells = (d: (typeof pagedRows)[number]) => [
+    <span className="font-mono text-[11px]">{d.imei}</span>,
+    <span className="text-slate-600 dark:text-slate-400">{d.model || '—'}</span>,
+    <span className="text-slate-600 dark:text-slate-400">{d.toolMappingName || '—'}</span>,
+    <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
                         {t(`state.${d.state}`, { defaultValue: d.state })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                      {clientName(d.tenantId) || <span className="text-slate-400 italic">{t('pool.unassigned')}</span>}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                      </span></>,
+    <span className="text-slate-600 dark:text-slate-400">{clientName(d.tenantId) || <span className="text-slate-400 italic">{t('pool.unassigned')}</span>}</span>,
+    <><div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => setHistoryImei(d.imei)}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer inline-flex items-center gap-1"
@@ -213,22 +175,64 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 font-sans">
-                    {t('pool.empty')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      </div></>,
+  ];
+
+  return (
+    <div id="device-pool-view" className="space-y-4">
+      <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              value={searchTerm}
+              onChange={(value) => setSearchTerm(value)}
+              placeholder={t('pool.searchPlaceholder')}
+              size="sm"
+              className="w-full pl-9! pr-4"
+            />
+          </div>
+          <SelectPicker
+            data={STATE_OPTIONS}
+            value={selectedState === 'All' ? null : selectedState}
+            onChange={(value) => setSelectedState(value ?? 'All')}
+            placeholder={t('pool.allStates')}
+            searchable={false}
+            cleanable={selectedState !== 'All'}
+            size="sm"
+          />
         </div>
 
-        <TablePagination {...pager} />
+        <div className="flex items-center gap-3 shrink-0">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <button
+          id="register-device-btn"
+          onClick={() => setIsRegisterOpen(true)}
+          className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{t('pool.register')}</span>
+        </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('shared:loading') : t('pool.empty')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} actionsIndex={5} /></div>
+        )}
+
+        <TablePagination pinToBottom loading={loading} {...pager} />
       </div>
 
       <AssignDeviceModal

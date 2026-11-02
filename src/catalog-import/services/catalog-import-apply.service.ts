@@ -1,7 +1,9 @@
 import { retiredSignalProblems, rethrowSensorContentError } from '../../device-catalog/services/sensor-retirement';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
 import { EquipmentClassFormula } from '../../catalog/entities/equipment-class-formula.entity';
+import { Severity } from '../../common/severity';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
 import { SensorRoleCapability } from '../../device-catalog/entities/sensor-role-capability.entity';
@@ -13,7 +15,7 @@ import { insertLayout } from '../../catalog/services/class-layout';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import {
-  ClassDiffWarning, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass, str, strOrNull,
+  ClassDiffWarning, ThresholdEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass, str, strOrNull,
 } from './class-content';
 import { EMPTY_SENSOR_CAPABILITY_ANALYSIS, analyzeSensorCapability } from './sensor-review';
 
@@ -23,6 +25,12 @@ export interface ClassApplyResult {
   action: 'create' | 'new_version' | 'unchanged';
   version: number;
   created: Record<string, number>;
+  /**
+   * Draft alert templates made from the signal sheet's limits (TC_116). Beside
+   * `created` rather than in it: `created` counts the workbook's own rows, and its
+   * keys are a contract a v3 batch's summary keeps exactly.
+   */
+  draftedAlertTemplates?: number;
 }
 
 export interface ApplySummary {
@@ -302,6 +310,13 @@ export class CatalogImportApplyService {
       // reusing a version would mean updating rows in place with no way to remove
       // one the new content dropped. Always minting a fresh version number instead
       // needs no delete at all: nothing has ever been written under it before.
+      //
+      // An unpublished draft the new version replaces is retired first, here, so a
+      // slug never holds two drafts (uq_equipment_class_profile_one_draft). Left as a
+      // draft, it outlived the publish of its replacement and was what the Equipment
+      // Classes card showed — with a Publish button that would retire the newer
+      // version (tester bug TC_127). Before the insert, or the index refuses it.
+      await classRepo.update({ slug, status: 'draft' }, { status: 'retired' });
       targetClass = await classRepo.save(classRepo.create({
         slug, version: current.version + 1, status: 'draft', publishedAt: null, ...classFields,
       }));
@@ -309,6 +324,7 @@ export class CatalogImportApplyService {
     }
 
     const created: Record<string, number> = {};
+    let drafted = 0;
 
     if (!identical) {
       const bySheetCount = (sheet: string) => rows.filter((r) => r.sheet === sheet).length;
@@ -363,6 +379,7 @@ export class CatalogImportApplyService {
       created.sensor_requirement = proposed.sensorRequirements.length;
       created.default_threshold = Object.keys(proposed.defaultThresholds).length;
       created.formula = bySheetCount('formula');
+      drafted = await draftThresholdAlerts(m, slug, proposed.defaultThresholds, batch.uploadedBy);
     }
 
     for (const r of rows) {
@@ -370,6 +387,44 @@ export class CatalogImportApplyService {
       r.targetRef = targetClass.id;
     }
 
-    return { action, version: targetClass.version, created };
+    return { action, version: targetClass.version, created, ...(drafted ? { draftedAlertTemplates: drafted } : {}) };
   }
+}
+
+/**
+ * A signal row's min/max becomes a draft signal-threshold alert template (tester bug
+ * TC_116). Until now the limits were stored on the class as defaultThresholds and
+ * nothing read them into a rule, so a workbook full of limits produced no alerts and
+ * the tester reasonably took it as broken.
+ *
+ * Drafts only: a template reaches a customer when somebody publishes it, the same as
+ * one written on the class page. One per signal, slug `<class>-<signal>-limit`, and
+ * only when no template of that slug exists in any state — a re-upload must neither
+ * duplicate it nor overwrite one an author has since edited or published.
+ */
+async function draftThresholdAlerts(
+  m: EntityManager, classSlug: string, thresholds: Record<string, ThresholdEntry>, createdBy: string,
+): Promise<number> {
+  const repo = m.getRepository(AlertRuleTemplate);
+  const severities = Object.values(Severity) as string[];
+  let drafted = 0;
+  for (const [signal, t] of Object.entries(thresholds)) {
+    if (t.min === undefined && t.max === undefined) continue;
+    const slug = `${classSlug}-${signal}-limit`.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    if (await repo.findOne({ where: { slug } })) continue;
+    const unit = t.unit ? ` ${t.unit}` : '';
+    const bounds = [t.min !== undefined && `below ${t.min}${unit}`, t.max !== undefined && `above ${t.max}${unit}`]
+      .filter(Boolean).join(' or ');
+    await repo.save(repo.create({
+      slug, version: 1, equipmentClassSlug: classSlug,
+      name: `${signal} ${bounds}`,
+      description: 'Drafted from the limits in a catalog import. Review, then publish to offer it to customers.',
+      trigger: 'signal-threshold',
+      params: { signal, ...(t.min !== undefined ? { min: t.min } : {}), ...(t.max !== undefined ? { max: t.max } : {}) },
+      severity: (t.severity && severities.includes(t.severity) ? t.severity : Severity.High) as Severity,
+      status: 'draft', publishedAt: null, createdBy,
+    }));
+    drafted += 1;
+  }
+  return drafted;
 }

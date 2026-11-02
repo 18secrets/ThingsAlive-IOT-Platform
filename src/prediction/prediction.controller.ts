@@ -48,6 +48,23 @@ export class PredictionController {
     );
   }
 
+  @Get(':sourceSystem/:externalId/:clientScenarioSlug/signals/:signal')
+  @Requires('prediction.read')
+  @ApiOperation({ summary: 'One watched signal opened up: its readings and the lines it was judged against' })
+  signalDetail(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Param('clientScenarioSlug') clientScenarioSlug: string,
+    @Param('signal') signal: string,
+    @Query('hours') hours?: string,
+  ) {
+    return this.predictions.signalDetail(
+      scope, { sourceSystem, externalId, clientScenarioSlug }, signal,
+      hours === undefined ? undefined : Number(hours),
+    );
+  }
+
   @Get(':sourceSystem/:externalId/baselines')
   @Requires('prediction.read')
   @ApiOperation({ summary: 'What normal currently looks like on this asset' })

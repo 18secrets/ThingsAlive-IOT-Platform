@@ -89,7 +89,9 @@ export class PredictionWorkRaiser implements WorkRaiser {
       reference,
       sourceSystem: trigger.sourceSystem,
       externalId: trigger.externalId,
-      title: `${trigger.clientScenarioSlug}: risk ${Math.round(trigger.riskScore)}`,
+      // "when raised": the card sat the raise-time 100 beside today's 13 with nothing
+      // saying which was which (test report MIN-8).
+      title: `${trigger.clientScenarioSlug}: risk ${Math.round(trigger.riskScore)} when raised`,
       description: 'Raised automatically from a critical prediction. Assign somebody to it.',
       status: 'created',
       // A critical prediction is not an ordinary job, and arriving at 'normal' next to
@@ -117,7 +119,9 @@ export class PredictionWorkRaiser implements WorkRaiser {
     await events.save(events.create({
       tenantId: scope.tenantId, workOrderId: order.id, kind: 'raised',
       fromStatus: null, toStatus: 'created', fromAssignee: null, toAssignee: null,
-      note: `Prediction ${trigger.predictionId} scored ${trigger.severity} at `
+      // The prediction's id is in `prediction_id`, which is what traces it; in the note
+      // it was a uuid shown to a person.
+      note: `Scored ${trigger.severity} (risk ${Math.round(trigger.riskScore)}) on the reading at `
         + `${trigger.occurredAt.toISOString()}.`,
       actorUserId: 'system:prediction',
     }));

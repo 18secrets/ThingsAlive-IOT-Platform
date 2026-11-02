@@ -32,12 +32,15 @@ describe('deployment configuration', () => {
   const scheduler = readJson('railway.scheduler.json');
   const pkg = readJson('package.json');
 
-  it('ships a Dockerfile, and both services build from it', () => {
+  // D46 §2: the api image never carries Python or torch; the scheduler's adds them and
+  // the TTM weights, and Railway picks a Dockerfile per service. Asserted here so the
+  // dashboard's Dockerfile Path (docs/deployment.md) has a specification to match.
+  it('ships both Dockerfiles: the api builds from Dockerfile, the scheduler from Dockerfile.scheduler', () => {
     expect(existsSync(join(ROOT, 'Dockerfile'))).toBe(true);
-    for (const config of [api, scheduler]) {
-      expect(config.build.builder).toBe('DOCKERFILE');
-      expect(config.build.dockerfilePath).toBe('Dockerfile');
-    }
+    expect(existsSync(join(ROOT, 'Dockerfile.scheduler'))).toBe(true);
+    for (const config of [api, scheduler]) expect(config.build.builder).toBe('DOCKERFILE');
+    expect(api.build.dockerfilePath).toBe('Dockerfile');
+    expect(scheduler.build.dockerfilePath).toBe('Dockerfile.scheduler');
   });
 
   it('installs from the lockfile rather than resolving afresh', () => {

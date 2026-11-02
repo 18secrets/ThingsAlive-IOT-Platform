@@ -162,6 +162,45 @@ describeDb('onboarding status', () => {
     expect(stepOf(await machine('EX-03'), 'alerts').state).toBe('done');
   });
 
+  it('coverage asks for a recommended signal while an enabled scenario needs it, and stops when none does', async () => {
+    // Test report OB-2: engine_load is "recommended" on the class, but the hydraulic-heat
+    // scenario cannot run without it, and coverage never listed it.
+    const roles = async () => {
+      const c = await app.get(SignalBindingService).coverage(demo, { sourceSystem: DEMO_SOURCE, externalId: 'EX-01' }, NOW);
+      return [...c.covered, ...c.missing].map((r) => r.measurementRole);
+    };
+    expect(await roles()).toContain('engine_load');
+    await owner.query(
+      `UPDATE client_scenario SET enabled = false WHERE tenant_id = $1 AND slug = 'demo-excavator-hydraulic-heat'`, [DEMO_TENANT]);
+    try {
+      expect(await roles()).not.toContain('engine_load');
+    } finally {
+      await owner.query(
+        `UPDATE client_scenario SET enabled = true WHERE tenant_id = $1 AND slug = 'demo-excavator-hydraulic-heat'`, [DEMO_TENANT]);
+    }
+  });
+
+  it('a rule on a signal the machine has not bound covers it but does not make alerts done', async () => {
+    // Test report OB-5: an account-wide rule marked the step done on machines it could
+    // never fire on. Leave only such a rule enabled and the step must stay pending.
+    const alerts = app.get(AlertService);
+    const enabled = (await alerts.listRules(demo)).filter((r) => r.enabled);
+    for (const r of enabled) await alerts.setEnabled(demo, r.id, false);
+    const unbound = await alerts.createRule(demo, {
+      slug: 'turbo-boost-high', name: 'Turbo boost above 3', trigger: 'signal-threshold',
+      params: { signal: 'turbo_boost_pressure', max: 3 }, appliesTo: 'account', severity: 'high',
+    } as Parameters<AlertService['createRule']>[1]);
+    try {
+      expect(stepOf(await machine('EX-03'), 'alerts')).toEqual(expect.objectContaining({
+        state: 'pending', reason: 'alert_signal_unbound',
+        evidence: expect.objectContaining({ waitingOnSignals: ['turbo_boost_pressure'] }),
+      }));
+    } finally {
+      await alerts.setEnabled(demo, unbound.id, false);
+      for (const r of enabled) await alerts.setEnabled(demo, r.id, true);
+    }
+  });
+
   // ============================================================ edge cases
   it('an unclassified machine with no site: equipment pending, mapping waits on it, and it is listed under site null', async () => {
     await owner.query(

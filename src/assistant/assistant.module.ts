@@ -2,6 +2,7 @@ import { Logger, Module } from '@nestjs/common';
 import { AlertModule } from '../alert/alert.module';
 import { DeviceHealthModule } from '../device-health/device-health.module';
 import { EquipmentModule } from '../equipment/equipment.module';
+import { GeofenceModule } from '../geofence/geofence.module';
 import { IncidentModule } from '../incident/incident.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { OnboardingStatusModule } from '../onboarding/onboarding-status.module';
@@ -15,7 +16,7 @@ import { ASSISTANT_DAILY_LIMIT, AssistantService, DEFAULT_DAILY_TOKEN_LIMIT } fr
 
 @Module({
   imports: [
-    EquipmentModule, AlertModule, DeviceHealthModule, IncidentModule, WorkModule, PageModule, InventoryModule,
+    EquipmentModule, GeofenceModule, AlertModule, DeviceHealthModule, IncidentModule, WorkModule, PageModule, InventoryModule,
     OnboardingStatusModule,
   ],
   controllers: [AssistantController],

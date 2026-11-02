@@ -17,12 +17,13 @@ import { chainForEquipment, resolveParameters, ResolvedParameter } from '../para
 import { withTenantSession } from '../scope/tenant-session';
 import { EquipmentServiceRecord } from '../service/entities/equipment-service-record.entity';
 import { WorkOrder } from '../work/entities/work-order.entity';
+import { ForecastReader, ResidualVerdict } from '../forecast/forecast-reader';
 import { compareModes, failureModeStatus, URGENCY_ORDER } from './attribute';
 import { observeSignals, SignalObservation } from './observe';
 import { BundleOutcome, BundleReason, BundleStatus, RecEvidenceBundle } from './rec-evidence-bundle.entity';
 
 /** Bumped whenever any step's logic changes: the same inputs under new logic are new evidence. */
-export const ENGINE_VERSION = 'rec-engine@1';
+export const ENGINE_VERSION = 'rec-engine@2';
 
 const OPEN_ALERT = ['open', 'acknowledged'];
 const OPEN_WORK = ['created', 'in-progress'];
@@ -34,7 +35,11 @@ export interface DetectEntry {
   state: DetectState;
   sources: (
     | { kind: 'alert'; ref: string; trigger: string; alertState: string }
-    | { kind: 'residual'; readiness: 'not_available'; reason: 'no_forecast_model' }
+    | { kind: 'residual'; readiness: 'not_available'; reason: string }
+    | {
+      kind: 'residual'; readiness: 'ready'; state: 'normal' | 'anomalous';
+      at: string; actual: number; predicted: number; residual: number; band: { lo: number; hi: number };
+    }
   )[];
   readiness: 'ready' | 'not_available' | 'not_configured';
   reason: string | null;
@@ -62,7 +67,7 @@ export interface Evaluation {
  */
 @Injectable()
 export class RecEngineService {
-  constructor(private readonly ds: DataSource) {}
+  constructor(private readonly ds: DataSource, private readonly forecasts: ForecastReader) {}
 
   async evaluate(
     scope: RequestScope, ref: { sourceSystem: string; externalId: string }, at = new Date(),
@@ -187,11 +192,15 @@ export class RecEngineService {
         where: { classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion, forecastEnabled: true },
       })).map((r) => r.measurementRole))
       : new Set<string>();
+    // The forecast band's verdict per declared signal (D20, D21: Detect is thresholds
+    // and TTM residual). Steady running hours only, so the morning start and the night
+    // are not faults (forecast-band.ts, runStartHours).
+    const verdicts = await this.forecasts.residualVerdicts(m, tenantId, profile, [...forecastDeclared].filter((s) => named.includes(s)), at);
     const open = events.filter((e) => OPEN_ALERT.includes(e.state));
     const silent = open.filter((e) => triggerOf(e) === 'no-telemetry');
     const entries: DetectEntry[] = named.map((signal) =>
       detectEntry(signal, open.filter((e) => signalOf(e) === signal && triggerOf(e) !== 'no-telemetry'),
-        silent, observed.get(signal), forecastDeclared.has(signal), triggerOf));
+        silent, observed.get(signal), forecastDeclared.has(signal), verdicts.get(signal), triggerOf));
     const stateOf = new Map(entries.map((e) => [e.signal, e.state]));
     const unobserved = entries.filter((e) => e.state === 'not_observed' || e.state === 'baseline_not_established').map((e) => e.signal);
     const detect = {
@@ -202,8 +211,8 @@ export class RecEngineService {
         notObserved: entries.filter((e) => e.state === 'not_observed').map((e) => ({ signal: e.signal, reason: e.reason })),
         sources: {
           alerts: 'available',
-          // QML1 is not on main (QREC1 question 1): every forecast-declared signal says so.
-          residual: forecastDeclared.size ? 'not_available' : 'not_declared',
+          residual: !forecastDeclared.size ? 'not_declared'
+            : [...verdicts.values()].some((v) => v.readiness === 'ready') ? 'available' : 'not_available',
         },
       },
       unattributableAlerts: open.filter((e) => signalOf(e) === null)
@@ -211,7 +220,12 @@ export class RecEngineService {
     };
 
     // -- Attribute ------------------------------------------------------------------
-    const openSignals = open.map((e) => signalOf(e));
+    // A band breach points at a mode exactly as an open alert on the signal does.
+    const openSignals = [
+      ...open.map((e) => signalOf(e)),
+      ...entries.filter((e) => e.sources.some((x) => x.kind === 'residual' && 'state' in x && x.state === 'anomalous')
+        && e.state === 'anomalous').map((e) => e.signal),
+    ];
     const attributed = modes.map((f) => ({
       failureModeCode: f.code, name: f.name, severity: f.severity as Severity | null, orphaned: f.orphanedAt !== null,
       matchedSignals: f.signals.filter((s) => stateOf.get(s) === 'anomalous').sort(),
@@ -393,12 +407,16 @@ const PRECEDENT_METHOD = 'This machine only, all history this account holds for 
 
 function detectEntry(
   signal: string, alerts: AlertEvent[], silent: AlertEvent[], o: SignalObservation | undefined,
-  forecast: boolean, triggerOf: (e: AlertEvent) => string,
+  forecast: boolean, verdict: ResidualVerdict | undefined, triggerOf: (e: AlertEvent) => string,
 ): DetectEntry {
   const sources: DetectEntry['sources'] = alerts.map((e) => ({
     kind: 'alert' as const, ref: `alert_event:${e.id}`, trigger: triggerOf(e), alertState: e.state,
   }));
-  if (forecast) sources.push({ kind: 'residual', readiness: 'not_available', reason: 'no_forecast_model' });
+  if (forecast) {
+    sources.push(verdict?.readiness === 'ready'
+      ? { kind: 'residual', ...verdict }
+      : { kind: 'residual', readiness: 'not_available', reason: verdict?.reason ?? 'no_forecast_model' });
+  }
   const readiness: DetectEntry['readiness'] = !o || !o.bound ? 'not_configured' : o.freshness === 'ready' ? 'ready' : 'not_available';
   const lastReadingAt = o?.lastReadingAt ?? null;
 
@@ -412,6 +430,11 @@ function detectEntry(
   // A dead sensor with no alert is not a healthy sensor (G04).
   if (!o || !o.bound) return { signal, state: 'not_observed', sources, readiness, reason: 'unbound', lastReadingAt };
   if (o.freshness !== 'ready') return { signal, state: 'not_observed', sources, readiness, reason: o.freshness, lastReadingAt };
+  // Past the forecast band on a live, bound sensor: anomalous with no alert, which is the
+  // case a threshold misses — a fault that has not reached the alert line.
+  if (verdict?.readiness === 'ready' && verdict.state === 'anomalous') {
+    return { signal, state: 'anomalous', sources, readiness, reason: null, lastReadingAt };
+  }
   return { signal, state: 'normal', sources, readiness, reason: null, lastReadingAt };
 }
 

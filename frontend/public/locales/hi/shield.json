@@ -31,7 +31,8 @@
     "overdue": "अतिदेय",
     "due_soon": "जल्द देय",
     "current": "अद्यतन",
-    "not_recorded": "दर्ज नहीं"
+    "not_recorded": "दर्ज नहीं",
+    "alsoOverdue": "अतिदेय भी"
   },
   "result": {
     "passed": "पास",
@@ -91,5 +92,8 @@
     "saving": "सहेजा जा रहा है…",
     "saveCorrection": "सुधार सहेजें",
     "saveRecord": "रिकॉर्ड सहेजें"
+  },
+  "listCol": {
+    "machine": "मशीन"
   }
 }

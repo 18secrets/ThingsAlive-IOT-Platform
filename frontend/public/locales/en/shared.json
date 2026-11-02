@@ -11,17 +11,17 @@
   "backToClients": "Back to Clients",
   "filters": {
     "button": "Filters",
-    "selectedEquipment": "Selected equipment",
-    "allMatchingEquipment": "All matching equipment",
-    "title": "Filter Equipment",
+    "selectedEquipment": "Selected machine",
+    "allMatchingEquipment": "All matching machines",
+    "title": "Filter machines",
     "intro": "Choose your scope, then apply.",
-    "sitePlant": "Site / Plant",
-    "allSitesPlants": "All sites / plants",
+    "sitePlant": "Site",
+    "allSitesPlants": "All sites",
     "equipmentClass": "Equipment class",
     "allClasses": "All classes",
     "connectionStatus": "Connection status",
     "allConnections": "All connections",
-    "findEquipment": "Find equipment",
+    "findEquipment": "Find a machine",
     "findPlaceholder": "Name or machine code",
     "clear": "Clear selections",
     "apply": "Apply filters"
@@ -57,12 +57,14 @@
     "prompts": {
       "offline": "Which devices are offline?",
       "dust": "Show Dust Collector status",
-      "volvo": "Volvo EC210 service status"
+      "volvo": "Volvo EC210 service status",
+      "highestRisk": "Which machine has the highest risk right now?",
+      "serviceDue": "Which machines are due for service?"
     },
     "topics": {
       "admin": {
         "title": "Admin Console & Sub-tabs",
-        "body": "Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Plants, and Tool Mappings."
+        "body": "Manage Industry Types, telemetry Sensors, communication Protocols, Equipment Categories, Sites, and Tool Mappings."
       },
       "equipment": {
         "title": "Equipment & Categorization",
@@ -101,5 +103,62 @@
     "rowsPerPage": "Rows per page:",
     "previous": "Previous page",
     "next": "Next page"
+  },
+  "viewMode": {
+    "cards": "Card view",
+    "list": "List view"
+  },
+  "listCol": {
+    "actions": "Actions",
+    "address": "Address",
+    "code": "Code",
+    "connection": "Connection",
+    "contact": "Contact",
+    "created": "Created",
+    "details": "Details",
+    "email": "Email",
+    "enabled": "Enabled",
+    "expression": "Expression",
+    "failureModes": "Failure modes",
+    "firedAt": "Fired at",
+    "machine": "Machine",
+    "name": "Name",
+    "needs": "Needs",
+    "pages": "Pages",
+    "phone": "Phone",
+    "risk": "Risk",
+    "role": "Role",
+    "scope": "Applies to",
+    "severity": "Severity",
+    "signIn": "Sign-in",
+    "signals": "Signals",
+    "site": "Site",
+    "state": "State",
+    "status": "Status",
+    "summary": "Summary",
+    "type": "Machine type",
+    "users": "Users",
+    "version": "Version",
+    "partition": "Partition",
+    "droppedAt": "Dropped at"
+  },
+  "export": {
+    "csv": "Export CSV",
+    "title": "Download every row this list is showing, with its filters applied"
+  },
+  "sort": {
+    "riskHigh": "Highest risk first",
+    "riskLow": "Lowest risk first",
+    "nameAz": "Name A–Z",
+    "codeAz": "Code A–Z",
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "dueSoonest": "Due soonest",
+    "priorityHigh": "Highest priority first",
+    "availabilityLow": "Lowest availability first",
+    "availabilityHigh": "Highest availability first",
+    "downtimeHigh": "Most downtime first",
+    "severityHigh": "Most severe first",
+    "attentionFirst": "Needs attention first"
   }
 }

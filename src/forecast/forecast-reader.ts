@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { EntityManager, MoreThan } from 'typeorm';
+import { Between, EntityManager } from 'typeorm';
 import { ExcludedRange, openWorkOrderExcludedRanges } from '../catalog/formula/baseline-operators';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { WorkOrder } from '../work/entities/work-order.entity';
 import {
-  Band, FORECAST_CADENCE_MS, FORECAST_RETENTION_DAYS, learnBand, ResidualPoint,
+  Band, FORECAST_CADENCE_MS, FORECAST_RETENTION_DAYS, learnBand, ResidualPoint, steadyHours,
 } from './forecast-band';
 import { ForecastLatest, ForecastModel, ForecastResidual, HorizonPoint } from './forecast.entities';
 import { forecastDeclarations, signalInputs } from './forecast-inputs';
@@ -28,6 +28,19 @@ export interface ForecastChartData {
     band: { lo: number; hi: number; n: number; learnedFrom: string; learnedTo: string } | null;
   };
 }
+
+/**
+ * One forecast-declared signal's band verdict, for the readers that ask "is this signal
+ * abnormal" rather than "draw the forecast": the recommendation engine's Detect and the
+ * page's failure-mode statuses. `not_available` with the reader's own reason when there is
+ * no forecast yet or no band yet; a band that cannot judge is never `normal`.
+ */
+export type ResidualVerdict =
+  | {
+    readiness: 'ready'; state: 'normal' | 'anomalous';
+    at: string; actual: number; predicted: number; residual: number; band: { lo: number; hi: number };
+  }
+  | { readiness: 'not_available'; reason: string };
 
 export type ForecastChartAnswer =
   | { readiness: 'ready'; data: ForecastChartData }
@@ -85,13 +98,22 @@ export class ForecastReader {
     };
   }
 
-  /** The newest step with an actual, judged against a band learned from the steps before it (D20). */
+  /**
+   * The newest steady running hour, judged against a band learned from the steps before
+   * it (D20). Not simply the newest step: the band is learned from steady running only,
+   * so a parked hour (every night) or a run's first hour (every morning) judged against
+   * it would read anomalous on a healthy machine. `at` says which hour was judged.
+   */
   async anomaly(
     m: EntityManager, tenantId: string, profile: EquipmentProfile, signal: string, modelId: string, at: Date,
   ): Promise<ForecastChartData['anomaly']> {
     const rows = await residualsFor(m, tenantId, profile, signal, modelId, at);
-    const newest = rows.length ? rows[rows.length - 1] : null;
-    const band = learnBand(rows.slice(0, -1).map(toPoint), await this.dirtyRanges(m, tenantId, profile, signal, at));
+    const points = rows.map(toPoint);
+    const steady = steadyHours(points);
+    const judged = [...rows].reverse().find((_, i) => steady(points[rows.length - 1 - i])) ?? null;
+    const before = judged ? points.filter((p) => p.stepAt < judged.stepAt) : points;
+    const band = learnBand(before, await this.dirtyRanges(m, tenantId, profile, signal, at));
+    const newest = judged;
     const base = {
       at: newest?.stepAt.toISOString() ?? null, actual: newest?.actual ?? null,
       predicted: newest?.predicted ?? null, residual: newest?.residual ?? null,
@@ -107,6 +129,36 @@ export class ForecastReader {
       state: outside ? 'anomalous' : 'normal', baselineReason: null, ...base,
       band: { lo: band.lo, hi: band.hi, n: band.n, learnedFrom: band.learnedFrom, learnedTo: band.learnedTo },
     };
+  }
+
+  /**
+   * The band verdict for each of `signals` the machine's class declares a forecast for;
+   * undeclared signals are absent. As of `at`: a replay of last month reads last month's
+   * residuals (`residualsFor` is bounded by `at`), though which forecast is latest is read
+   * as it stands now.
+   */
+  async residualVerdicts(
+    m: EntityManager, tenantId: string, profile: EquipmentProfile, signals: string[], at: Date,
+  ): Promise<Map<string, ResidualVerdict>> {
+    const out = new Map<string, ResidualVerdict>();
+    const declared = new Set((await forecastDeclarations(m, profile.equipmentClassSlug, profile.classVersion))
+      .map((r) => r.measurementRole));
+    for (const signal of signals.filter((s) => declared.has(s))) {
+      const latest = await m.getRepository(ForecastLatest).findOne({
+        where: { tenantId, sourceSystem: profile.sourceSystem, externalId: profile.externalId, signal },
+      });
+      if (!latest) { out.set(signal, { readiness: 'not_available', reason: 'no_forecast_model' }); continue; }
+      const a = await this.anomaly(m, tenantId, profile, signal, latest.modelId, at);
+      if (a.state === 'baseline_not_established' || !a.band || a.at === null) {
+        out.set(signal, { readiness: 'not_available', reason: a.baselineReason ?? 'baseline_not_established' });
+        continue;
+      }
+      out.set(signal, {
+        readiness: 'ready', state: a.state, at: a.at, actual: a.actual!, predicted: a.predicted!, residual: a.residual!,
+        band: { lo: a.band.lo, hi: a.band.hi },
+      });
+    }
+    return out;
   }
 
   /** The band for a (machine, signal, model), as the pass needs it to put intervals on a new forecast. */
@@ -139,7 +191,9 @@ function residualsFor(
   return m.getRepository(ForecastResidual).find({
     where: {
       tenantId, sourceSystem: profile.sourceSystem, externalId: profile.externalId, signal, modelId,
-      stepAt: MoreThan(new Date(at.getTime() - FORECAST_RETENTION_DAYS * 86_400_000)),
+      // Bounded above too, so a verdict as of a past moment cannot read what came after it:
+      // an hourly bucket's actual is known only once its hour is over.
+      stepAt: Between(new Date(at.getTime() - FORECAST_RETENTION_DAYS * 86_400_000 + 1), new Date(at.getTime() - 3_600_000)),
     },
     order: { stepAt: 'ASC' },
   });

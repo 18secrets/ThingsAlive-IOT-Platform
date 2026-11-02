@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 
 import { DataSource, EntityManager } from 'typeorm';
+import { topUpDemoPositions } from './demo-geofence';
 import { AlertService } from '../../alert/services/alert.service';
+import { EquipmentServiceRecord } from '../../service/entities/equipment-service-record.entity';
 import { RequestScope } from '../../auth/types/request-scope';
 import { AlertRuleTemplate } from '../../catalog/entities/alert-rule-template.entity';
 import { ClientCatalogEntitlement } from '../../catalog/entities/client-catalog-entitlement.entity';
@@ -83,6 +85,9 @@ export interface DemoSignal {
 
 /** Canonical names from `common/signals.ts`, so Availability and the duty cycle read
  * them without an alias. */
+/** Forecast by the TTM pass (QML1): the signals the demo's failure modes name. */
+export const DEMO_FORECAST_SIGNALS = ['engine_coolant_temperature', 'hydraulic_oil_temperature', 'engine_oil_pressure'];
+
 export const DEMO_SIGNALS: DemoSignal[] = [
   { signal: 'engine_running_status', unit: 'state', criticality: 'required', description: 'Engine running (1) or stopped (0).' },
   { signal: 'engine_coolant_temperature', unit: 'degC', criticality: 'required', description: 'Engine coolant temperature.' },
@@ -90,6 +95,18 @@ export const DEMO_SIGNALS: DemoSignal[] = [
   { signal: 'hydraulic_oil_temperature', unit: 'degC', criticality: 'required', description: 'Hydraulic oil temperature at the tank.' },
   { signal: 'fuel_level', unit: '%', criticality: 'required', description: 'Fuel tank level.' },
   { signal: 'engine_load', unit: '%', criticality: 'recommended', description: 'Engine load, percent of rated.' },
+];
+
+/**
+ * Signals the seed does not write but the top-up keeps going where a machine already
+ * reports them. On dev, `fuel_consumption` came from `scripts/stream-demo-telemetry.ts`
+ * run by cron on a laptop; when that stopped on 23 Oct, OEE Quality, which needs a fuel
+ * rate in its period, read `stale` on every demo machine while the other six signals were
+ * fresh. Continued rather than seeded, so a fresh demo is unchanged and a machine is
+ * never handed a signal it has no binding for.
+ */
+export const DEMO_CONTINUED_SIGNALS: { signal: string; unit: string }[] = [
+  { signal: 'fuel_consumption', unit: 'L/h' },
 ];
 
 /**
@@ -114,6 +131,13 @@ export interface DemoMachine {
   endDaysAgo: number;
   unbound: string[];
   expect: string;
+  /**
+   * Its class's normal burn while running, L/h, when the class states one. Without it the
+   * stream burns the demo's 12.4–13.9 L/h — right for the demo excavator, and thirty-fold
+   * wrong across a real fleet: a truck-mounted crane burns under 3 L/h and an excavator
+   * nearly 70, so a flat rate made every low-burn machine look like it was wasting fuel.
+   */
+  fuelPerHour?: number;
 }
 
 export const DEMO_MACHINES: DemoMachine[] = [
@@ -271,6 +295,10 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
       classSlug: DEMO_CLASS, classVersion: 1, measurementRole: s.signal, componentScope: '',
       criticality: s.criticality, minCount: 1, canonicalUnit: s.unit, enables: [], notes: null,
       staleAfterSeconds: STALE_AFTER_SECONDS,
+      // The three the failure modes watch, so the forecast pass has something to do and
+      // the recommendation engine a band to read (D20, D21). Fuel, load and running
+      // status are not: nothing in the library judges them by a forecast.
+      ...(DEMO_FORECAST_SIGNALS.includes(s.signal) ? { forecastEnabled: true, forecastHorizonHours: 24 } : {}),
     })));
 
     const formula = (formulaKey: string, expression: string, extra: Partial<EquipmentClassFormula> = {}) => ({
@@ -297,25 +325,25 @@ async function authorClass(ds: DataSource, authoring: CatalogAuthoringService): 
       formula('hydraulic_vs_baseline', 'zscore(hydraulic_oil_temperature, 30d)', { chartType: 'line', displayFormat: 'number:2' }),
     ].map((f) => m.getRepository(EquipmentClassFormula).create(f)));
 
-    const widgets: [string, string, string | null, 'small' | 'medium' | 'large' | 'full'][] = [
-      ['readiness_list', 'readiness', null, 'medium'],
-      ['kpi_number', 'avg_coolant_temp', 'avg_coolant_temp', 'small'],
-      ['kpi_chart', 'coolant_vs_baseline', 'coolant_vs_baseline', 'medium'],
-      ['kpi_number', 'avg_hydraulic_temp', 'avg_hydraulic_temp', 'small'],
-      ['kpi_chart', 'hydraulic_vs_baseline', 'hydraulic_vs_baseline', 'medium'],
-      ['kpi_number', 'avg_oil_pressure', 'avg_oil_pressure', 'small'],
-      ['kpi_number', 'avg_fuel_level', 'avg_fuel_level', 'small'],
-      ['kpi_chart', 'coolant_trace', 'coolant_trace', 'large'],
-      ['signal_chart', 'hydraulic_chart', 'hydraulic_oil_temperature', 'medium'],
-      ['alert_list', 'alerts', null, 'medium'],
-      ['work_order_list', 'work_orders', null, 'medium'],
-      ['failure_modes', 'failure_modes', null, 'medium'],
-      ['recommendations', 'recommendations', null, 'medium'],
+    const widgets: [string, string, string | null, string | null, 'small' | 'medium' | 'large' | 'full'][] = [
+      ['readiness_list', 'readiness', null, null, 'medium'],
+      ['kpi_number', 'avg_coolant_temp', 'avg_coolant_temp', 'Average Coolant Temperature', 'small'],
+      ['kpi_chart', 'coolant_vs_baseline', 'coolant_vs_baseline', 'Coolant vs Baseline', 'medium'],
+      ['kpi_number', 'avg_hydraulic_temp', 'avg_hydraulic_temp', 'Average Hydraulic Temperature', 'small'],
+      ['kpi_chart', 'hydraulic_vs_baseline', 'hydraulic_vs_baseline', 'Hydraulic vs Baseline', 'medium'],
+      ['kpi_number', 'avg_oil_pressure', 'avg_oil_pressure', 'Average Oil Pressure', 'small'],
+      ['kpi_number', 'avg_fuel_level', 'avg_fuel_level', 'Average Fuel Level', 'small'],
+      ['kpi_chart', 'coolant_trace', 'coolant_trace', 'Coolant Temperature Trace', 'large'],
+      ['signal_chart', 'hydraulic_chart', 'hydraulic_oil_temperature', 'Hydraulic Oil Temperature', 'medium'],
+      ['alert_list', 'alerts', null, null, 'medium'],
+      ['work_order_list', 'work_orders', null, null, 'medium'],
+      ['failure_modes', 'failure_modes', null, null, 'medium'],
+      ['recommendations', 'recommendations', null, null, 'medium'],
     ];
-    await m.getRepository(EquipmentClassLayout).save(widgets.map(([widgetType, widgetKey, boundTo, size], i) =>
+    await m.getRepository(EquipmentClassLayout).save(widgets.map(([widgetType, widgetKey, boundTo, title, size], i) =>
       m.getRepository(EquipmentClassLayout).create({
         classSlug: DEMO_CLASS, classVersion: 1, widgetType: widgetType as never, widgetKey, boundTo,
-        title: null, position: i + 1, size, source: 'manual', importBatchId: null,
+        title, position: i + 1, size, source: 'manual', importBatchId: null,
       })));
   });
 
@@ -453,6 +481,18 @@ async function seedSiteAndMachines(ds: DataSource, now: Date): Promise<void> {
         startMinute: 8 * 60, endMinute: 18 * 60, days: [1, 2, 3, 4, 5], timeZone: TIME_ZONE, status: 'active',
         scoredThrough: now, arrivalsThrough: now, createdBy: SEEDER, updatedBy: SEEDER,
       });
+      // One past scheduled service each, at a different age: the machines had no service
+      // history at all, so every Service panel read empty (test report MIN-14). Inside the
+      // machine's own history, at about the engine hours a weekday shift would have run.
+      const machineIndex = DEMO_MACHINES.indexOf(machine);
+      const serviceDaysAgo = Math.min(machine.historyDays - 1, 12 + machineIndex * 9) + machine.endDaysAgo;
+      const daysRun = machine.historyDays + machine.endDaysAgo - serviceDaysAgo;
+      await m.getRepository(EquipmentServiceRecord).save({
+        tenantId: DEMO_TENANT, sourceSystem: DEMO_SOURCE, externalId: machine.externalId,
+        performedAt: new Date(now.getTime() - serviceDaysAgo * DAY_MS), kind: 'scheduled' as const,
+        meterReading: Math.round(daysRun * (5 / 7) * 10), meterUnit: 'h', workOrderId: null,
+        notes: '250-hour service: engine oil and filters, coolant level, greasing.', recordedBy: SEEDER,
+      });
     }
   });
 }
@@ -476,10 +516,23 @@ export const local = (t: number) => {
   return { hour: d.getUTCHours() + d.getUTCMinutes() / 60, dow: d.getUTCDay(), day: Math.floor((t + TZ_OFFSET_MS) / DAY_MS) };
 };
 
+/**
+ * The live stream forces machines running so a demo always has data, which ran every
+ * machine round the clock and gave every Production card the same hours (test report
+ * MIN-14). Under it each machine still stops once a day, for 0–4 hours at an hour of its
+ * own, both fixed by the digits of its id — the same every day, different between machines.
+ */
+export const forcedStop = (externalId: string, t: number) => {
+  const num = Number(externalId.replace(/[^0-9]/g, '')) || 0;
+  const length = num % 5;
+  const start = (num * 7) % 24;
+  return (local(t).hour - start + 24) % 24 < length;
+};
+
 /** In shift, minus a two-hour stop every Wednesday afternoon — so availability is high,
  * not a suspicious 100%. */
-export const running = (t: number) => {
-  if (process.env.DEMO_FORCE_RUNNING === 'true') return true;
+export const running = (t: number, externalId?: string) => {
+  if (process.env.DEMO_FORCE_RUNNING === 'true') return !externalId || !forcedStop(externalId, t);
   const { hour, dow } = local(t);
   if (dow < 1 || dow > 5 || hour < 8 || hour >= 18) return false;
   return !(dow === 3 && hour >= 13 && hour < 15);
@@ -489,7 +542,7 @@ export const running = (t: number) => {
  * never a straight line, because a flat series makes `baseline_sd` zero and every
  * baseline KPI `undefined_result`, which would look like a bug and is not. */
 export function demoValue(machine: DemoMachine, signal: string, t: number, now: number, noise: () => number): number {
-  const on = running(t);
+  const on = running(t, machine.externalId);
   const { hour } = local(t);
   const n = (scale: number) => (noise() - 0.5) * 2 * scale;
   const cycle = Math.sin((2 * Math.PI * (hour - 8)) / 10);
@@ -499,6 +552,12 @@ export function demoValue(machine: DemoMachine, signal: string, t: number, now: 
     case 'engine_oil_pressure': return on ? 390 + 15 * cycle + n(6) : Math.abs(n(2));
     case 'hydraulic_oil_temperature': return on ? 62 + 5 * cycle + n(1.5) : 33 + 2 * Math.sin((2 * Math.PI * hour) / 24) + n(0.6);
     case 'fuel_level': return Math.min(98, Math.max(5, 55 + 30 * Math.sin((2 * Math.PI * t) / (3.2 * DAY_MS)) + n(0.8)));
+    // The laptop stream's model, so the series does not step where one source hands to the
+    // other: 12.4–13.9 L/h, which is 83–93% of the 15 L/h it was drawn around. A machine
+    // whose class states a norm burns the same share of that norm instead.
+    case 'fuel_consumption':
+      if (!on) return 0;
+      return machine.fuelPerHour ? machine.fuelPerHour * (0.83 + noise() * 0.1) : 12.4 + noise() * 1.5;
     case 'engine_coolant_temperature': {
       if (!on) return 34 + 3 * Math.sin((2 * Math.PI * hour) / 24) + n(0.8);
       // Trending: up to +14 °C across the last ten days — 98 °C or so by now, under the
@@ -607,7 +666,7 @@ async function raiseAlerts(ds: DataSource, alerts: AlertService, now: Date): Pro
 export interface TopUpResult {
   /** Readings written, per machine. */
   written: Record<string, number>;
-  /** EX-05 readings removed from beyond its history window, so it stays newly commissioned. */
+  /** Readings removed from a 'new' machine beyond its history window, so it stays newly commissioned (none in the demo today). */
   trimmed: number;
 }
 
@@ -622,9 +681,10 @@ export interface TopUpResult {
  * shift calendar. EX-04 is not topped up — being quiet is its state. EX-03 keeps
  * breaching: while running, its coolant cycles through `BREACH_TAIL` by tick number, so
  * any ten consecutive running readings carry exactly six past the bound, and the open
- * alert stays true (a second is suppressed by the open one). EX-05's oldest readings are
- * trimmed to its nine days; otherwise it crosses the baseline's coverage threshold a week
- * after seeding and stops being newly commissioned.
+ * alert stays true (a second is suppressed by the open one). A machine in the 'new' state
+ * has its oldest readings trimmed to its history days; otherwise it crosses the baseline's
+ * coverage threshold a week after seeding and stops being newly commissioned. Since
+ * 8b90917 no demo machine is 'new' (EX-05 has ninety days), so nothing is trimmed.
  *
  * Safe to run on a timer and twice at once: `uq_telemetry_reading_dedupe` refuses a
  * duplicate reading, and the insert skips it rather than failing.
@@ -675,6 +735,11 @@ export async function topUpDemo(
       ));
       count += rows.length;
     }
+
+    for (const [index, s] of DEMO_CONTINUED_SIGNALS.entries()) {
+      count += await continueSignal(ds, machine, imei, s.signal, nowMs,
+        Number(machine.externalId.slice(-2)) * 101 + DEMO_SIGNALS.length + index);
+    }
     written[machine.externalId] = count;
 
     if (machine.state === 'new') {
@@ -685,8 +750,86 @@ export async function topUpDemo(
       trimmed += Array.isArray(result) ? Number(result[1] ?? 0) : 0;
     }
   }
+  for (const [externalId, n] of Object.entries(await topUpFleet(ds, nowMs))) written[externalId] = n;
   await analyzeTelemetry(ds);
   return { written, trimmed };
+}
+
+/**
+ * One signal on one logger, carried on from that signal's own last reading to now, in
+ * that reading's unit. From its own last reading, not the machine's: the gap since
+ * another source stopped is filled, and a logger that never reported it gets none.
+ */
+async function continueSignal(
+  ds: DataSource, machine: DemoMachine, imei: string, signal: string, nowMs: number, seed: number,
+): Promise<number> {
+  const [last] = await runTenantSpanning(ds, 'seed:demo top-up last continued reading', (m) => m.query(
+    `SELECT source_timestamp AS since, unit FROM telemetry_reading WHERE tenant_id = $1 AND imei = $2 AND signal = $3
+      ORDER BY source_timestamp DESC LIMIT 1`,
+    [DEMO_TENANT, imei, signal],
+  )) as { since: Date; unit: string }[];
+  if (!last) return 0;
+  const times: number[] = [];
+  for (let t = new Date(last.since).getTime() + STEP_MS; t <= nowMs; t += STEP_MS) times.push(t);
+  if (!times.length) return 0;
+  for (const month of new Set(times.map((t) => new Date(t).toISOString().slice(0, 7)))) {
+    await ds.query(`SELECT ensure_telemetry_partition($1::date)`, [`${month}-01`]);
+  }
+  const values = times.map((t) => demoValue(machine, signal, t, nowMs, prng(seed + Math.floor(t / STEP_MS) * 7919)));
+  const rows: unknown[] = await runTenantSpanning(ds, 'seed:demo top-up continued telemetry', (m) => m.query(
+    `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
+       SELECT $1, $2, $3, v, $4, ts, ts, 'simulated'
+         FROM unnest($5::timestamptz[], $6::double precision[]) AS r(ts, v)
+     ON CONFLICT DO NOTHING
+     RETURNING 1`,
+    [DEMO_TENANT, imei, signal, last.unit, times.map((t) => new Date(t).toISOString()), values],
+  ));
+  return rows.length;
+}
+
+/**
+ * The demo tenant's other machines, the ones the seed did not create (on dev, EX-08..14
+ * and EXC-001, registered by fleet onboarding). Their readings came from the same laptop
+ * stream as the demo's fuel rate and stopped with it on 23 Oct. Each active primary
+ * binding on one is carried on as a healthy machine — the stream's own model for them —
+ * where the seed has a model for the signal and the logger has reported it before. Read
+ * from the bindings, not a list, so a machine onboarded later is streamed without a
+ * deploy, and a retired binding stops being written.
+ */
+async function topUpFleet(ds: DataSource, nowMs: number): Promise<Record<string, number>> {
+  const modelled = [...DEMO_SIGNALS, ...DEMO_CONTINUED_SIGNALS].map((s) => s.signal);
+  const bindings: { external_id: string; imei: string; signal_key: string }[] = await runTenantSpanning(
+    ds, 'seed:demo top-up fleet bindings', (m) => m.query(
+      `SELECT DISTINCT external_id, imei, signal_key FROM signal_binding_version
+        WHERE tenant_id = $1 AND source_system <> $2 AND status = 'active' AND is_primary AND valid_to IS NULL
+          AND imei IS NOT NULL AND signal_key = ANY($3)
+        ORDER BY external_id, signal_key`,
+      [DEMO_TENANT, DEMO_SOURCE, modelled],
+    ),
+  );
+  // Each machine's class norm, read at the class version the machine is on — the figure
+  // OEE judges its fuel against, so the stream and the KPI agree on what normal is.
+  const norms = new Map<string, number>((await runTenantSpanning(
+    ds, 'seed:demo top-up fleet fuel norms', (m) => m.query(
+      `SELECT p.external_id, c.nominal_fuel_per_hour AS norm
+         FROM equipment_profile p
+         JOIN equipment_class_profile c ON c.slug = p.equipment_class_slug AND c.version = p.class_version
+        WHERE p.tenant_id = $1 AND p.source_system <> $2
+          AND c.nominal_fuel_per_hour > 0 AND c.nominal_fuel_unit = 'L/h'`,
+      [DEMO_TENANT, DEMO_SOURCE],
+    ),
+  )).map((r: { external_id: string; norm: string }) => [r.external_id, Number(r.norm)]));
+  const written: Record<string, number> = {};
+  for (const b of bindings) {
+    const machine: DemoMachine = {
+      externalId: b.external_id, name: b.external_id, state: 'healthy', historyDays: 0, endDaysAgo: 0, unbound: [], expect: '',
+      fuelPerHour: norms.get(b.external_id),
+    };
+    // Seeded by logger, so two fleet machines never share a series, nor one share the demo's.
+    const seed = Number(b.imei.slice(-6)) * 13 + modelled.indexOf(b.signal_key);
+    written[b.external_id] = (written[b.external_id] ?? 0) + await continueSignal(ds, machine, b.imei, b.signal_key, nowMs, seed);
+  }
+  return written;
 }
 
 /**
@@ -810,6 +953,9 @@ export async function resetDemo(ds: DataSource, env = process.env): Promise<Reco
 
 // ============================================================================ CLI
 
+/** How often the demo's simulated GPS moves: a fix a minute, as a logger reporting position would. */
+const GPS_STEP_MS = 60_000;
+
 async function main() {
   requireEnabled();
   const ds = await new DataSource(dataSourceOptions(process.env, { appRole: null })).initialize();
@@ -822,11 +968,26 @@ async function main() {
         // eslint-disable-next-line no-console
         console.log(`${new Date().toISOString()} topped up, readings per machine: ${JSON.stringify(written)}; trimmed ${trimmed}.`);
       };
+      // Simulated GPS and the fences it is judged against (QGEO2 fleet map), after the
+      // readings that say which machines are online. Every minute, not with the readings:
+      // a tipper drives a site loop in twelve minutes, so positions at the readings'
+      // ten-minute cadence showed it jumping, not driving.
+      const positions = async () => {
+        const gps = await topUpDemoPositions(ds, { tenantId: DEMO_TENANT, stepMs: GPS_STEP_MS });
+        // eslint-disable-next-line no-console
+        console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
+      };
       await once();
+      await positions();
       if (!process.argv.includes('--follow')) return;
+      let lastReadings = Date.now();
       for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, STEP_MS));
-        await once();
+        await new Promise((resolve) => setTimeout(resolve, GPS_STEP_MS));
+        if (Date.now() - lastReadings >= STEP_MS) {
+          await once();
+          lastReadings = Date.now();
+        }
+        await positions();
       }
     }
     if (process.argv.includes('--reset')) {

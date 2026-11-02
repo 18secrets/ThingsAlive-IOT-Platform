@@ -75,6 +75,47 @@ export interface ResidualPoint {
   operating: boolean | null;
 }
 
+const HOUR_MS = 3_600_000;
+
+/** Hourly buckets at the start of each run that are neither learned from nor judged. */
+export const WARM_UP_HOURS = 2;
+
+/**
+ * The first `WARM_UP_HOURS` hourly buckets of each run: operating, with a parked bucket
+ * within that many hours before. TTM reads only the signal's own history, so it cannot
+ * see an engine about to start and forecasts the start between parked and running.
+ *
+ * Two, not one, because buckets are UTC hours and a shift need not start on one: an
+ * 08:00 IST start is 02:30 UTC, so the 02:00 bucket is half parked and the 03:00 bucket
+ * is the first full running hour, forecast from a parked context. Measured on an uploaded
+ * excavator history (real TTM, 22 days): those two buckets missed coolant by +5.7 and
+ * +18.1 °C on average, against +2.9 to +12.1 for the rest of the shift. With one hour
+ * excluded, the second still read anomalous every morning on all three sensors, and the
+ * recommendation engine said to stop a healthy engine. Learned from, these hours stretch
+ * the band; judged, they cry wolf. So they are neither. A bucket whose predecessors have
+ * no residual is not counted as a start, because nobody knows it was.
+ */
+export function runStartHours(residuals: ResidualPoint[]): Set<number> {
+  const parked = new Set(residuals.filter((r) => r.operating === false).map((r) => r.stepAt.getTime()));
+  const operating = new Set(residuals.filter((r) => r.operating === true).map((r) => r.stepAt.getTime()));
+  return new Set(residuals.filter((r) => {
+    if (r.operating !== true) return false;
+    const t = r.stepAt.getTime();
+    // Parked k hours ago, and operating every hour between: within the run's first buckets.
+    for (let k = 1; k <= WARM_UP_HOURS; k++) {
+      if (parked.has(t - k * HOUR_MS)) return true;
+      if (!operating.has(t - k * HOUR_MS)) return false;
+    }
+    return false;
+  }).map((r) => r.stepAt.getTime()));
+}
+
+/** Operating and past its run's warm-up: what the band learns from and what is judged. */
+export const steadyHours = (residuals: ResidualPoint[]): ((r: ResidualPoint) => boolean) => {
+  const starts = runStartHours(residuals);
+  return (r) => r.operating === true && !starts.has(r.stepAt.getTime());
+};
+
 export type Band =
   | {
     established: true;
@@ -88,7 +129,8 @@ export type Band =
  * The residual band (D20). Learned only from clean residuals: none inside an alert or an
  * open work order on the machine (the same exclusion the KPI baseline uses), and none from
  * an hour the machine was not operating (Q12, the QFIX-BASELINE rule — a parked machine's
- * residuals are a second population). Fewer than 14 days with a clean residual and there is
+ * residuals are a second population), nor from the first hour of a run (`runStartHours`).
+ * Fewer than 14 days with a clean residual and there is
  * no band: `baseline_not_established`, which nothing may show as normal. A machine with no
  * shift schedule cannot tell operating from parked, so it never learns one either; the
  * reason says so rather than leaving it looking young.
@@ -97,8 +139,9 @@ export function learnBand(residuals: ResidualPoint[], excluded: ExcludedRange[])
   if (residuals.length && residuals.every((r) => r.operating === null)) {
     return { established: false, reason: 'no_shift_schedule', cleanDays: 0 };
   }
+  const steady = steadyHours(residuals);
   const clean = residuals.filter((r) =>
-    r.operating === true && !excluded.some((x) => r.stepAt >= x.start && r.stepAt < x.end));
+    steady(r) && !excluded.some((x) => r.stepAt >= x.start && r.stepAt < x.end));
   const days = new Set(clean.map((r) => r.stepAt.toISOString().slice(0, 10)));
   if (days.size < BASELINE_DAYS) return { established: false, reason: 'baseline_not_established', cleanDays: days.size };
 

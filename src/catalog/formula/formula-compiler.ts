@@ -32,6 +32,9 @@ export type PlanNode =
    * null only where no vocabulary was supplied (the import dry-run), and a null code
    * evaluates `not_configured` rather than guessing a state. */
   | { type: 'state'; kind: 'scalar'; unit: string; name: string; code: number | null }
+  /** A geofence zone by code (task QGEO2), looked up among the machine's zones when it is
+   * evaluated: the same formula runs on every machine of the class, each with its own zones. */
+  | { type: 'zone'; kind: 'scalar'; unit: string; code: string }
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
@@ -541,14 +544,16 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       }
       // State arguments are resolved after the rest, against the series argument's
       // signal (task QCAT1) — a state name only means something for one signal.
-      const nonState = node.args.map((a, i) => (entry.argKinds[i] === 'state' ? null : infer(a, ctx)));
-      const args = node.args.map((a, i) => nonState[i] ?? inferState(node.name, a, nonState[0], ctx));
+      const quoted = (i: number) => entry.argKinds[i] === 'state' || entry.argKinds[i] === 'zone';
+      const nonState = node.args.map((a, i) => (quoted(i) ? null : infer(a, ctx)));
+      const args = node.args.map((a, i) => nonState[i]
+        ?? (entry.argKinds[i] === 'zone' ? inferZone(node.name, a) : inferState(node.name, a, nonState[0], ctx)));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
         // A duration literal reports kind:'scalar' (task QCE4) so it never widens
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
-        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.kind;
+        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone' : a.kind;
         if (actual !== expected) {
           throw new FormulaCompileError(
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
@@ -558,7 +563,7 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       });
 
       // Latitude and longitude are one position, so they share a unit (task QGEO1).
-      if (entry.needsSiteBoundary
+      if ((entry.needsSiteBoundary || entry.needsZone)
         && !unitsEqual(parseUnitStringFromRendered(args[0].unit), parseUnitStringFromRendered(args[1].unit))) {
         throw new FormulaCompileError(
           `calls "${node.name}" with "${args[0].unit}" and "${args[1].unit}"; latitude and longitude share a unit.`,
@@ -636,6 +641,10 @@ function inferState(operator: string, raw: RawNode, series: PlanNode | null, ctx
   if (raw.type !== 'state') {
     throw new FormulaCompileError(`calls "${operator}" with a state that is not a quoted name, e.g. 'idle'.`);
   }
+  // Held here rather than in the parser since QGEO2: a quoted zone code may be upper case.
+  if (!/^[a-z][a-z0-9_]*$/.test(raw.name)) {
+    throw new FormulaCompileError(`'${raw.name}' is not a state name: lower_snake_case, starting with a letter.`);
+  }
   const unit = renderUnit(DIMENSIONLESS);
   if (!ctx.signalStates) return { type: 'state', kind: 'scalar', unit, name: raw.name, code: null };
   const signal = series?.type === 'signal' ? series.name : null;
@@ -653,6 +662,14 @@ function inferState(operator: string, raw: RawNode, series: PlanNode | null, ctx
     );
   }
   return { type: 'state', kind: 'scalar', unit, name: raw.name, code };
+}
+
+/** A zone by code (task QGEO2). Its existence is the machine's to answer at evaluation. */
+function inferZone(operator: string, raw: RawNode): PlanNode {
+  if (raw.type !== 'state') {
+    throw new FormulaCompileError(`calls "${operator}" with a zone that is not a quoted zone code, e.g. 'PIT'.`);
+  }
+  return { type: 'zone', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), code: raw.name };
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
@@ -704,6 +721,7 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
     case 'signal':
     case 'param':
     case 'state':
+    case 'zone':
       return { nodes: 1, depth: 1 };
     case 'unary': {
       const c = computeExpansion(node.operand, resolved);
@@ -741,6 +759,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
     case 'signal':
     case 'param':
     case 'state':
+    case 'zone':
       return 0;
     case 'unary':
       return computeCompositionDepth(node.operand, resolved);

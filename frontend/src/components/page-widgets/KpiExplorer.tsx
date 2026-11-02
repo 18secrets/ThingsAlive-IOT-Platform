@@ -33,8 +33,11 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
   const { t } = useTranslation('equipment');
   const [formulas, setFormulas] = useState<string[]>(initialFormulaKey ? [initialFormulaKey] : []);
   const [formulaKey, setFormulaKey] = useState<string | null>(initialFormulaKey ?? null);
-  // Seven days rather than the formula's own window: not every formula declares one.
-  const [preset, setPreset] = useState<Preset>('7d');
+  // The formula's own window first, so exploring from a widget shows the widget's number.
+  // Opening on seven days set a 7-day 62.5 °C beside the widget's 24-hour 84.3 °C, both
+  // read as "the average", with nothing but the dates saying they differed (test report
+  // MIN-6). A formula with no window of its own falls back to seven days, below.
+  const [preset, setPreset] = useState<Preset>('declared');
   const [range, setRange] = useState<[Date, Date] | null>(null);
   const [result, setResult] = useState<KpiEnvelope | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -68,7 +71,12 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
     setLoading(true);
     setError(undefined);
     apiGetEquipmentKpi(sourceSystem, externalId, formulaKey, window)
-      .then((r) => { if (live) setResult(r); })
+      .then((r) => {
+        if (!live) return;
+        // No declared window to resolve: seven days is a better first answer than "pick a range".
+        if (preset === 'declared' && !r.window) { setPreset('7d'); return; }
+        setResult(r);
+      })
       .catch((err) => { if (live) { setResult(null); setError(err instanceof ApiError ? err.message : t('kpiExplorer.evaluateFailed')); } })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };

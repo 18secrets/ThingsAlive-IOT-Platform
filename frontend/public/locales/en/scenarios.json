@@ -20,7 +20,8 @@
     "selfAuthored": "self-authored",
     "needs": "Needs {{signals}} · {{days}}d history",
     "noSignals": "no signals",
-    "edit": "Edit"
+    "edit": "Edit",
+    "disableConfirm": "Disable “{{name}}”? Machines of this class stop being scored for it until it is enabled again."
   },
   "severity": {
     "none": "none",

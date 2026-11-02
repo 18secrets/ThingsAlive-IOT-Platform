@@ -29,6 +29,20 @@ export interface RaiseInput extends EquipmentRef {
   dueAt?: Date | null;
 }
 
+/** Long enough for "Inspect coolant circuit on the left bank after overheat alert"; a
+ *  paragraph belongs in the description, where the card does not truncate it. */
+export const MAX_TITLE_LENGTH = 200;
+/** A date-only due date arrives as UTC midnight, which is already behind "now" for
+ *  most of today in India; a day's grace keeps today choosable and 2020 refused. */
+const PAST_DUE_GRACE_MS = 24 * 3_600_000;
+
+function assertTitle(title: string | undefined): void {
+  if (!title?.trim()) throw new BadRequestException('A job needs a title.');
+  if (title.trim().length > MAX_TITLE_LENGTH) {
+    throw new BadRequestException(`A job title can be at most ${MAX_TITLE_LENGTH} characters; put the rest in the description.`);
+  }
+}
+
 export interface ListFilter {
   status?: string[];
   assignedToUserId?: string;
@@ -61,7 +75,12 @@ export class WorkOrderService {
 
   async raise(scope: RequestScope, input: RaiseInput, now = new Date()): Promise<WorkOrder> {
     this.assertCanAssign(scope, 'raise a job');
-    if (!input.title?.trim()) throw new BadRequestException('A job needs a title.');
+    assertTitle(input.title);
+    // Only when raising: an existing job past its date is overdue, and editing its
+    // title must not be refused for that.
+    if (input.dueAt && input.dueAt.getTime() < now.getTime() - PAST_DUE_GRACE_MS) {
+      throw new BadRequestException('A new job cannot be due in the past.');
+    }
 
     return withTenantSession(this.ds, scope, async (m) => {
       await this.assertAssetVisible(m, scope, input);
@@ -239,7 +258,7 @@ export class WorkOrderService {
     return withTenantSession(this.ds, scope, async (m) => {
       const order = await this.load(m, scope, id);
       if (input.title !== undefined) {
-        if (!input.title.trim()) throw new BadRequestException('A job needs a title.');
+        assertTitle(input.title);
         order.title = input.title.trim();
       }
       if (input.description !== undefined) order.description = input.description;

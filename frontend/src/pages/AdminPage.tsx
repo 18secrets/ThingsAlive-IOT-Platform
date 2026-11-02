@@ -13,10 +13,11 @@ import {
   MyDevice, CoverageResult, DiscoveryResult, ProposeOrActivateBindingInput, SignalBindingVersion,
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   NamedFormula, NamedFormulaInput, SignalAlias, SignalAliasInput, GeoJsonPolygon, ImportResult,
-  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry,
+  SignalStateVocabEntry, SignalStateCode, IndustryType, IndustryTypeInput, UnmatchedIndustry, ClassOption
 } from '../lib/api';
 import { useAuth } from '../lib/AuthProvider';
 import { AdminManagement } from '../components/admin/AdminManagement';
+import { canOpenAdminSubTab, firstAllowedAdminSubTab } from '../lib/pageAccess';
 
 interface AdminPageProps {
   sensors: SensorItem[];
@@ -55,6 +56,7 @@ interface AdminPageProps {
   onReplaceSignalStates: (role: string, states: SignalStateCode[]) => Promise<SignalStateVocabEntry[]>;
   devicePool: PooledDevice[];
   devicePoolError?: string;
+  devicePoolLoading?: boolean;
   onRegisterDevices: (devices: RegisterDeviceInput[]) => Promise<{ registered: number; alreadyKnown: number }>;
   onAssignDevice: (imei: string, tenantId: string) => Promise<void>;
   onReleaseDevice: (imei: string) => Promise<void>;
@@ -88,8 +90,10 @@ interface AdminPageProps {
   onImportEquipmentFromMirror: (sourceSystem: string) => Promise<ImportResult>;
   realEquipment: EquipmentProfile[];
   realEquipmentError?: string;
+  realEquipmentLoading?: boolean;
   allEquipment: EquipmentProfile[];
   allEquipmentError?: string;
+  allEquipmentLoading?: boolean;
   onCreateEquipment: (input: EquipmentInput) => Promise<EquipmentProfile>;
   onUpdateEquipment: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
@@ -104,10 +108,11 @@ interface AdminPageProps {
     sourceSystem: string, externalId: string, tenantId?: string,
   ) => Promise<EquipmentPlacementEvent[]>;
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
-  myEquipmentClasses: EquipmentClass[];
+  myEquipmentClasses: ClassOption[];
   myEquipmentClassesError?: string;
   myDevices: MyDevice[];
   myDevicesError?: string;
+  myDevicesLoading?: boolean;
   onClaimDevice: (imei: string, equipmentExternalId: string, sourceSystem: string) => Promise<MyDevice>;
   onUnclaimDevice: (imei: string, reason?: string) => Promise<MyDevice>;
   onGetEquipmentCoverage: (sourceSystem: string, externalId: string) => Promise<CoverageResult>;
@@ -162,13 +167,14 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
   const restrictToClientAdmin = authUser.role === 'client';
   // Clients/Staff/Devices/Equipment moved to the sidebar for Master Admin —
   // see AdminIndexRedirect's own comment in App.tsx, which this must match.
-  const activeSubTab = (subTab ?? firstAdminSubTab(!!restrictToClientAdmin)) as AdminSubTab;
+  const activeSubTab = (subTab ?? firstAllowedAdminSubTab(authUser) ?? firstAdminSubTab(!!restrictToClientAdmin)) as AdminSubTab;
 
   const visiblePlants = restrictToClientAdmin ? props.plants.filter((p) => p.clientId === authUser.clientId) : props.plants;
   const modalClients = restrictToClientAdmin ? props.clients.filter((c) => c.id === authUser.clientId) : props.clients;
 
   return (
     <AdminManagement
+      canOpenSubTab={(tab) => canOpenAdminSubTab(authUser, tab)}
       sensors={props.sensors}
       toolMappings={props.toolMappings}
       categories={props.categories}
@@ -205,6 +211,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onReplaceSignalStates={props.onReplaceSignalStates}
       devicePool={props.devicePool}
       devicePoolError={props.devicePoolError}
+      devicePoolLoading={props.devicePoolLoading}
       onRegisterDevices={props.onRegisterDevices}
       onAssignDevice={props.onAssignDevice}
       onReleaseDevice={props.onReleaseDevice}
@@ -241,8 +248,10 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       }
       realEquipment={props.realEquipment}
       realEquipmentError={props.realEquipmentError}
+      realEquipmentLoading={props.realEquipmentLoading}
       allEquipment={props.allEquipment}
       allEquipmentError={props.allEquipmentError}
+      allEquipmentLoading={props.allEquipmentLoading}
       onListPlantsForTenant={props.onListPlantsForTenant}
       onCreateEquipment={props.onCreateEquipment}
       onUpdateEquipment={props.onUpdateEquipment}
@@ -253,6 +262,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       myEquipmentClassesError={props.myEquipmentClassesError}
       myDevices={props.myDevices}
       myDevicesError={props.myDevicesError}
+      myDevicesLoading={props.myDevicesLoading}
       onClaimDevice={props.onClaimDevice}
       onUnclaimDevice={props.onUnclaimDevice}
       onGetEquipmentCoverage={props.onGetEquipmentCoverage}

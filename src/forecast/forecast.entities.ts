@@ -22,6 +22,7 @@ export class ForecastModel {
 }
 
 export type ForecastRunOutcome = 'running' | 'completed' | 'budget_exhausted' | 'failed' | 'lock_held';
+export type ForecastRunKind = 'pass' | 'warm_start';
 
 @Entity('forecast_run')
 export class ForecastRun {
@@ -38,10 +39,13 @@ export class ForecastRun {
   @Column({ name: 'python_load_seconds', type: 'double precision', nullable: true }) pythonLoadSeconds: number | null;
   @Column({ name: 'python_infer_seconds', type: 'double precision', nullable: true }) pythonInferSeconds: number | null;
   @Column({ type: 'text', nullable: true }) error: string | null;
+  /** `warm_start` for a replay over history (`forecast-warm-start.ts`); `pass` otherwise. */
+  @Column({ type: 'text', default: 'pass' }) kind: ForecastRunKind;
 }
 
 export type SkipReason =
-  | 'stale' | 'no_readings' | 'unbound' | 'insufficient_coverage' | 'gap_at_edge' | 'budget_exhausted' | 'refused';
+  | 'stale' | 'no_readings' | 'unbound' | 'insufficient_coverage' | 'gap_at_edge' | 'budget_exhausted' | 'refused'
+  | 'warm_start_no_history';
 
 @Entity('forecast_run_skip')
 export class ForecastRunSkip {
@@ -110,6 +114,8 @@ export class ForecastResidual {
   @Column({ type: 'double precision' }) residual: number;
   /** Null when the machine has no shift schedule to tell operating from parked. */
   @Column({ type: 'boolean', nullable: true }) operating: boolean | null;
+  /** `backtest` when the warm start computed it over history; `live` when a pass measured it. */
+  @Column({ type: 'text', default: 'live' }) origin: 'live' | 'backtest';
 }
 
 @Entity('forecast_daily_sample')

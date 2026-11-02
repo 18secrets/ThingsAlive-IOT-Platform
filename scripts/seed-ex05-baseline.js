@@ -1,6 +1,12 @@
 const { Client } = require('pg');
 
-const DATABASE_URL = 'postgresql://postgres:CdhlqhgUKSBzboKMRAItBDaYHJiMgYsI@crossover.proxy.rlwy.net:47609/railway';
+// Read from the environment only. A literal here is a live credential in a public
+// repository, which is exactly how this line leaked once (2026-10-22).
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Run with: DATABASE_URL=... node scripts/seed-ex05-baseline.js');
+  process.exit(1);
+}
 const TENANT_ID = 'demo-construction';
 const IMEI = '358000000000500';
 

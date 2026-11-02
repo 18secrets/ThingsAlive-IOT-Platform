@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 /**
  * The answer model, behind the smallest interface the chat loop needs.
@@ -93,19 +93,42 @@ export function geminiConfigFrom(env: Record<string, string | undefined>): Gemin
   return null;
 }
 
+// 60 s, not 20: gemini-3.5-flash-lite took 10-13 s for a one-line question on
+// 26 Oct, and an onboarding call (system prompt, every tool, their results) went past
+// 20 s every time, so Gemini answered DEADLINE_EXCEEDED and the chat said the
+// assistant was unavailable. Still a bound: a hung call fails inside a minute.
+const MODEL_CALL_TIMEOUT_MS = 60_000;
+const FALLBACK_HOLD_MS = 5 * 60_000;
+
 /** Gemini, on Vertex AI or with an API key. */
+/**
+ * How a Flash model is told not to think. Gemini 2.x takes a budget of zero; 3.x refuses
+ * that outright ("Request contains an invalid argument") and takes a level instead, the
+ * lowest being minimal — while 2.x refuses a level. Dev runs gemini-3.5-flash-lite, also
+ * the fallback below, and every assistant answer there failed until this followed the
+ * model's generation.
+ */
+export function thinkingOff(modelName: string): { thinkingBudget: number } | { thinkingLevel: ThinkingLevel } {
+  return /gemini-([3-9]|\d{2,})/i.test(modelName) ? { thinkingLevel: ThinkingLevel.MINIMAL } : { thinkingBudget: 0 };
+}
+
 export class GeminiModel implements AssistantModel {
   private readonly ai: GoogleGenAI;
   readonly name: string;
+  /** Until when the fallback model answers instead (see generate). */
+  private fallbackUntil = 0;
 
   constructor(config: GeminiConfig) {
     this.name = config.model;
+    // A turn can take five calls in a row; one that hangs held the whole chat open with
+    // no answer (TC_128). Long enough for a slow answer, short enough to fail.
+    const httpOptions = { timeout: MODEL_CALL_TIMEOUT_MS };
     this.ai = config.mode === 'vertex'
       ? new GoogleGenAI({
-        vertexai: true, project: config.project, location: config.location,
+        vertexai: true, project: config.project, location: config.location, httpOptions,
         ...(config.credentials ? { googleAuthOptions: { credentials: config.credentials } } : {}),
       })
-      : new GoogleGenAI({ apiKey: config.apiKey });
+      : new GoogleGenAI({ apiKey: config.apiKey, httpOptions });
   }
 
   async generate(input: { system: string; turns: AssistantTurn[]; tools: ToolDeclaration[] }): Promise<ModelReply> {
@@ -135,7 +158,12 @@ export class GeminiModel implements AssistantModel {
           // Low, not zero: the answers are read off tool results, and a creative model
           // is one that rounds a reading or invents a machine name.
           temperature: 0.2,
-          maxOutputTokens: 1024,
+          // Thinking off on Flash: the answers are lookups read back, and thinking added
+          // seconds to every one of up to five calls a turn (TC_128: ~48 s an answer).
+          // It also spent maxOutputTokens, leaving some answers empty. Pro cannot turn
+          // it off, so it keeps its default.
+          ...(/flash/i.test(modelName) ? { thinkingConfig: thinkingOff(modelName) } : {}),
+          maxOutputTokens: 2048,
           ...(input.tools.length ? {
             tools: [{
               functionDeclarations: input.tools.map((d) => ({
@@ -148,8 +176,12 @@ export class GeminiModel implements AssistantModel {
     };
 
     let res: any;
+    const fallback = 'gemini-3.5-flash-lite';
+    // While the primary is known to be overloaded, go straight to the fallback rather
+    // than waiting for the primary to fail again on every round of every turn.
+    const first = Date.now() < this.fallbackUntil ? fallback : this.name;
     try {
-      res = await callModel(this.name);
+      res = await callModel(first);
     } catch (err: any) {
       const msg = `${err?.message || ''} ${JSON.stringify(err || {})}`;
       const isCapacityOrNotFound =
@@ -158,8 +190,17 @@ export class GeminiModel implements AssistantModel {
         err?.status === 429 ||
         err?.code === 503 ||
         /503|404|UNAVAILABLE|high demand|not found/i.test(msg);
-      if (isCapacityOrNotFound && this.name !== 'gemini-3.5-flash-lite') {
-        res = await callModel('gemini-3.5-flash-lite');
+      // A deadline is one stuck call, not a model in trouble: on Dev, 29 Oct, the
+      // first question hung the full minute and came back DEADLINE_EXCEEDED, and the
+      // same question asked again answered in 2 s. Dev runs the fallback model itself,
+      // so the branch above never retried it. Once only: two in a row is an outage,
+      // and the person is already waiting.
+      const deadline = err?.status === 504 || err?.code === 504 || /\b504\b|DEADLINE_EXCEEDED/.test(msg);
+      if (isCapacityOrNotFound && this.name !== fallback) {
+        this.fallbackUntil = Date.now() + FALLBACK_HOLD_MS;
+        res = await callModel(fallback);
+      } else if (deadline) {
+        res = await callModel(first);
       } else {
         throw err;
       }

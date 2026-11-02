@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SelectPicker } from 'rsuite';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Pagination, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZES = [10, 20, 50];
@@ -30,17 +29,48 @@ export function usePagination<T>(items: T[], initialPageSize = 10) {
   };
 }
 
-/** Page numbers to show: the first, the last, and the current one with a neighbour each side. */
-function pageList(current: number, totalPages: number): (number | 'gap')[] {
-  const wanted = new Set([1, totalPages, current - 1, current, current + 1].filter((p) => p >= 1 && p <= totalPages));
-  const sorted = [...wanted].sort((a, b) => a - b);
-  const out: (number | 'gap')[] = [];
-  sorted.forEach((p, i) => {
-    if (i > 0 && p - sorted[i - 1] > 1) out.push('gap');
-    out.push(p);
-  });
-  return out;
+/**
+ * Space above the footer that takes up whatever the page leaves empty below it, so the
+ * footer sits at the foot of the screen on a short list and right after the list on a
+ * long one (TC_132: on a page of two cards it floated halfway up). Measured against the
+ * scrolling <main>, re-measured whenever it or its content resizes. Only for a footer
+ * that is the last thing on its page; anything after it would be pushed down too.
+ */
+function usePinToBottom(enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [gap, setGap] = useState(0);
+  const applied = useRef(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const scroller = el?.closest('main');
+    if (!enabled || !el || !scroller) return;
+    const measure = () => {
+      // What the page would leave empty without the space already added. Measured from
+      // the content, not scrollHeight: that never reads less than the visible height.
+      const content = scroller.firstElementChild as HTMLElement | null;
+      if (!content) return;
+      const pad = getComputedStyle(scroller);
+      const inner = scroller.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+      const free = Math.max(0, Math.floor(inner - (content.offsetHeight - applied.current)));
+      applied.current = free;
+      setGap(free);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    if (scroller.firstElementChild) observer.observe(scroller.firstElementChild);
+    return () => observer.disconnect();
+  }, [enabled]);
+  return { ref, gap };
 }
+
+/**
+ * The one box a paged list and its footer share, cards or rows alike. With a pinned footer
+ * the box reaches the foot of the screen, so a short list leaves white inside the box and
+ * not a gap between the list and a footer of its own (TC_132 asked for the footer at the
+ * foot; the tester review after it asked for one look across the pages).
+ */
+export const LIST_PANEL = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden';
 
 /** The footer the paged tables share, in the look Equipment and Alert Agent already used. */
 export const TablePagination: React.FC<{
@@ -54,23 +84,34 @@ export const TablePagination: React.FC<{
   bare?: boolean;
   /** For a narrow side column: stacked, and no page-size picker. */
   compact?: boolean;
-}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact }) => {
+  /** Keep the footer at the foot of the screen when the list is short (see usePinToBottom). */
+  pinToBottom?: boolean;
+  /** Before the first answer: the count is not known yet, and a 0 would say "none" (test report MAJ-6). */
+  loading?: boolean;
+}> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact, pinToBottom = false, loading }) => {
   const { t } = useTranslation('shared');
-  const navClass = 'p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
+  const pin = usePinToBottom(pinToBottom);
   return (
-    <div className={`flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans ${
+    <div
+      ref={pin.ref}
+      // A bare footer adds the space to the gap its parent's spacing already gives it. Inside
+      // a box there is no such gap; the space stays inside the box, above the footer's line.
+      style={pinToBottom && pin.gap ? { marginTop: bare ? `calc(0.75rem + ${pin.gap}px)` : `${pin.gap}px` } : undefined}
+      className={`flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans ${
       compact ? 'flex-col pt-2' : 'px-4 sm:px-6 py-3.5 flex-col sm:flex-row'
     } ${
       compact ? '' : bare ? 'border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900' : 'border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30'
     }`}>
       <div>
-        {t('pagination.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{total}</span>
+        {t('pagination.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{loading ? '—' : total}</span>
       </div>
       <div className="flex items-center gap-4 flex-wrap justify-center">
         {!compact && <div className="flex items-center gap-2">
           <span>{t('pagination.rowsPerPage')}</span>
           <SelectPicker
-            data={PAGE_SIZES.map((n) => ({ label: String(n), value: n }))}
+            // Card pages page by a multiple of their grid's columns (9, 12), which is not
+            // one of the stock sizes; offered too, or the picker reads "Select".
+            data={[...new Set([...PAGE_SIZES, pageSize])].sort((a, b) => a - b).map((n) => ({ label: String(n), value: n }))}
             value={pageSize}
             onChange={(value) => setPageSize(Number(value ?? 10))}
             searchable={false}
@@ -79,31 +120,19 @@ export const TablePagination: React.FC<{
             className="w-20"
           />
         </div>}
-        <div className="flex items-center gap-1">
-          <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t('pagination.previous')} className={navClass}>
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          {pageList(page, totalPages).map((p, i) => p === 'gap' ? (
-            <span key={`gap-${i}`} className="w-5 text-center text-slate-400">…</span>
-          ) : (
-            <button
-              type="button"
-              key={p}
-              onClick={() => setPage(p)}
-              aria-current={p === page ? 'page' : undefined}
-              className={`min-w-7 h-7 px-1 rounded text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
-                p === page
-                  ? 'bg-[#0B7285] text-white border border-[#0B7285]'
-                  : 'border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-          <button type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={t('pagination.next')} className={navClass}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+        {/* rsuite's own pager, so every list in the console pages the same way. */}
+        <Pagination
+          prev
+          next
+          ellipsis
+          boundaryLinks
+          maxButtons={5}
+          size="xs"
+          total={total}
+          limit={pageSize}
+          activePage={page}
+          onChangePage={setPage}
+        />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { IsISO8601, IsOptional } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { presentEnvelope } from './kpi-presentation';
 import { KpiEnvelope } from './types';
 import { KpiEvaluatorService } from './services/kpi-evaluator.service';
 
@@ -27,18 +28,20 @@ export class KpiController {
   @Get(':sourceSystem/:externalId/kpis')
   @Requires('catalog.read')
   @ApiOperation({ summary: 'Every KPI the equipment\'s class declares, each with its readiness envelope' })
-  listKpis(
+  async listKpis(
     @CurrentScope() scope: RequestScope,
       @Param('sourceSystem') sourceSystem: string,
       @Param('externalId') externalId: string,
   ): Promise<KpiEnvelope[]> {
-    return this.evaluator.evaluateAll(scope, { sourceSystem, externalId });
+    const ref = { sourceSystem, externalId };
+    const [envelopes, formats] = await Promise.all([this.evaluator.evaluateAll(scope, ref), this.evaluator.displayFormats(scope, ref)]);
+    return envelopes.map((e) => presentEnvelope(e, formats.get(e.formulaKey)));
   }
 
   @Get(':sourceSystem/:externalId/kpis/:formulaKey')
   @Requires('catalog.read')
   @ApiOperation({ summary: 'One KPI, over its declared window or an explicit from/to' })
-  getKpi(
+  async getKpi(
     @CurrentScope() scope: RequestScope,
       @Param('sourceSystem') sourceSystem: string,
       @Param('externalId') externalId: string,
@@ -48,6 +51,10 @@ export class KpiController {
     const explicitWindow = query.from && query.to
       ? { from: new Date(query.from), to: new Date(query.to) }
       : undefined;
-    return this.evaluator.evaluateOne(scope, { sourceSystem, externalId }, formulaKey, new Date(), explicitWindow);
+    const ref = { sourceSystem, externalId };
+    const [envelope, formats] = await Promise.all([
+      this.evaluator.evaluateOne(scope, ref, formulaKey, new Date(), explicitWindow), this.evaluator.displayFormats(scope, ref),
+    ]);
+    return presentEnvelope(envelope, formats.get(formulaKey));
   }
 }

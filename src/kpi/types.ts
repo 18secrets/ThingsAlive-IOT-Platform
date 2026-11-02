@@ -19,7 +19,10 @@ export type Reason =
   // formula's own window cannot be resolved yet (a `shift` window needs the machine's
   // shift schedule, which the evaluator does not read), or the formula has no
   // compiled plan to evaluate.
-  | 'window_not_resolved' | 'formula_not_compiled';
+  | 'window_not_resolved' | 'formula_not_compiled'
+  // Task QGEO2: a formula names a geofence zone that does not apply to this machine —
+  // not drawn, switched off, or aimed at other machines. Never read as "outside".
+  | 'zone_not_applied';
 
 export interface Coverage {
   expected: number;

@@ -6,7 +6,7 @@ import { AppUser } from '../entities/app-user.entity';
 import { PlatformUser, PlatformUserStatus } from '../entities/platform-user.entity';
 import { rethrowLoginEmailClash } from '../login-email';
 import { rethrowDeleteRefusal } from '../delete-refusal';
-import { PlatformCredentialService } from './platform-credential.service';
+import { PlatformCredentialService, ROLE_CHANGED } from './platform-credential.service';
 
 export interface InviteStaffInput {
   email: string;
@@ -84,13 +84,23 @@ export class PlatformStaffService {
     return this.view(user);
   }
 
-  async setRole(id: string, role: PlatformRole): Promise<PlatformStaffView> {
+  /**
+   * The role rides in the access token, so a change reached nobody already signed in
+   * (tester bug TC_149): they kept the old pages, and a demoted Master Admin kept Master
+   * Admin's reach, until the token ran out. Their sessions end with the change instead,
+   * the same way a suspension ends them; the next request sends them to sign in, as
+   * the role they now hold.
+   */
+  async setRole(id: string, role: PlatformRole, now = new Date()): Promise<PlatformStaffView> {
     const repo = this.ds.getRepository(PlatformUser);
     const user = await repo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('No such platform user.');
+    if (user.role === role) return this.view(user);
 
     user.role = role;
-    return this.view(await repo.save(user));
+    const saved = await repo.save(user);
+    await this.credentials.revokeAllFor(id, ROLE_CHANGED, now);
+    return this.view(saved);
   }
 
   /**

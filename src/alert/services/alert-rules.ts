@@ -391,7 +391,9 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       return {
         summary: `${params.signal} breached ${bound}${breach.r.unit ? ` ${breach.r.unit}` : ''} `
           + `${direction} on ${breach.count} of the last ${window.length} readings; `
-          + `worst was ${breach.r.value}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
+          // Two decimals for the sentence a person reads ("397.4071110816279" was the raw
+          // float, test report COS-4); `worstValue` below keeps it exact.
+          + `worst was ${Math.round(breach.r.value * 100) / 100}${breach.r.unit ? ` ${breach.r.unit}` : ''}`,
         evidence: {
           signal: params.signal,
           worstValue: breach.r.value,
@@ -579,6 +581,12 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     if (!p?.signal?.trim()) return 'A threshold rule needs a signal.';
     if (p.max == null && p.min == null) {
       return 'A threshold rule needs a maximum, a minimum, or both.';
+    }
+    // "abc" compared against a reading is always false, so the rule would never fire.
+    for (const [field, value] of [['maximum', p.max], ['minimum', p.min]] as const) {
+      if (value != null && (typeof value !== 'number' || !Number.isFinite(value))) {
+        return `The ${field} has to be a number.`;
+      }
     }
     if (p.max != null && p.min != null && p.min >= p.max) {
       // Nothing can be both, so this rule can never fire and would look configured.

@@ -56,7 +56,7 @@ export const ChainDiagnosisPanel: React.FC<{ sourceSystem: string; externalId: s
           {origins.length > 0 && <Chip tone="rose">{t('chain.origins', { count: origins.length })}</Chip>}
           {/* "Nothing wrong" only from a chain that actually ran; one with no readings says nothing. */}
           {diagnosis && origins.length === 0 && diagnosis.chains.some((c) => c.evaluated) && <Chip tone="emerald">{t('chain.noStageOff')}</Chip>}
-          {diagnosis && diagnosis.chains.length > 0 && !diagnosis.chains.some((c) => c.evaluated) && <Chip tone="slate">{t('chain.notEnoughReadings')}</Chip>}
+          {diagnosis && diagnosis.chains.length > 0 && !diagnosis.chains.some((c) => c.evaluated) && <Chip tone="slate" title={t('chain.notEnoughReadingsWhy')}>{t('chain.notEnoughReadings')}</Chip>}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

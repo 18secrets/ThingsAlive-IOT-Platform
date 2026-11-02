@@ -26,6 +26,9 @@ const OBVIOUS = new Set([
  */
 const COST = 12;
 
+/** The same eight the console's checklist shows. */
+export const MIN_LENGTH = 8;
+
 @Injectable()
 export class PasswordService {
   /** Checks the policy, then hashes. Never one without the other. */
@@ -48,6 +51,11 @@ export class PasswordService {
       // Not a strength rule. bcrypt ignores everything past 72 bytes, and an
       // unbounded input is a cheap way to make the server do work on request.
       throw new BadRequestException('That password is too long.');
+    }
+    // The console always asked for eight and the API never did, so a password set
+    // through the API alone could be "Aa1!" (test report MIN-1).
+    if (value.length < MIN_LENGTH) {
+      throw new BadRequestException(`A password needs at least ${MIN_LENGTH} characters.`);
     }
     if (!/[A-Z]/.test(value)) {
       throw new BadRequestException('A password needs at least one uppercase letter.');

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { KpiModule } from '../kpi/kpi.module';
 import { ForecastReader } from './forecast-reader';
 import { ForecastService } from './forecast.service';
+import { ForecastWarmStart } from './forecast-warm-start';
 import { FORECAST_WORKER, workerCommandFromEnv } from './forecast-worker';
 
 /**
@@ -14,8 +15,9 @@ import { FORECAST_WORKER, workerCommandFromEnv } from './forecast-worker';
   providers: [
     ForecastReader,
     ForecastService,
+    ForecastWarmStart,
     { provide: FORECAST_WORKER, useFactory: () => workerCommandFromEnv(process.env) },
   ],
-  exports: [ForecastReader, ForecastService],
+  exports: [ForecastReader, ForecastService, ForecastWarmStart],
 })
 export class ForecastModule {}

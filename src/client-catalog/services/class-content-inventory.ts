@@ -122,6 +122,11 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
     reason: 'tenant-owned computed shift scoring (its own tenant_id and RLS policy); equipment_class_slug '
       + 'is denormalised onto it for reporting, not a reference to content that needs copying',
   },
+  {
+    table: 'geofence_zone', disposition: 'exclude',
+    reason: 'the tenant\'s own zone (task QGEO2); equipment_class_slug is one of the targets it applies to, '
+      + 'the same instance-of reference alert_rule makes — there is no platform zone to copy',
+  },
 ];
 
 /**

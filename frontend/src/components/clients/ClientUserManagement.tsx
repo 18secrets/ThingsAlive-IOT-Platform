@@ -12,6 +12,9 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { copyToClipboard } from '../../lib/clipboard';
 import { InvitationTokenDialog } from '../common/InvitationTokenDialog';
 import { EditUserAccessModal } from './EditUserAccessModal';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 interface ClientUserManagementProps {
   users: TenantUser[];
@@ -38,6 +41,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
   plants, equipment, onSetUserAccess,
 }) => {
   const { t } = useTranslation('users');
+  const [viewMode, setViewMode] = useViewMode('client-users');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,65 +88,28 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(filteredUsers);
 
-  return (
-    <div id="client-user-management-view" className="space-y-3">
-      <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 w-full max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            placeholder={t('clientUsers.searchPlaceholder')}
-            className="pl-9!"
-            size="sm"
-          />
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="w-full sm:w-auto px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t('invite.title')}</span>
-        </button>
-      </div>
 
-      {(error || actionError) && (
-        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error || actionError}</span>
-        </div>
-      )}
+  // One definition for both views (tester request: cards or list on every list page).
+  const viewColumns = [
+    { label: t('col.name') },
+    { label: t('col.email') },
+    { label: t('col.role') },
+    { label: t('col.status') },
+    { label: t('col.actions') },
+  ];
+  const viewCells = (u: (typeof pagedRows)[number]) => {
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
-              <tr>
-                <th className="py-3 px-4">{t('col.name')}</th>
-                <th className="py-3 px-4">{t('col.email')}</th>
-                <th className="py-3 px-4">{t('col.role')}</th>
-                <th className="py-3 px-4">{t('col.status')}</th>
-                <th className="py-3 px-4 text-center">{t('col.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pagedRows.map((u) => {
                 const superAdmin = isSuperAdminUser(u);
                 const lastCeoManager = isLastCeoManager(u);
                 const busy = busyId === u.id;
                 const userScopeShape = roles.find((r) => r.slug === u.roleSlug)?.scopeShape;
-                return (
-                  <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      <span className="flex items-center gap-1.5">
+    return [
+      <span className="font-semibold text-slate-900 dark:text-white"><span className="flex items-center gap-1.5">
                         {u.fullName}
                         {superAdmin && <span title={t('common.superAdmin')}><Crown className="w-4 h-4 text-amber-500" /></span>}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">{u.email}</td>
-                    <td className="py-3 px-4">
-                      <span title={lastCeoManager ? t('clientUsers.lastCeoManager') : undefined}>
+                      </span></span>,
+      <span className="font-mono text-slate-600 dark:text-slate-300">{u.email}</span>,
+      <><span title={lastCeoManager ? t('clientUsers.lastCeoManager') : undefined}>
                         <SelectPicker
                           data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                           value={u.roleSlug}
@@ -152,15 +119,11 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                           cleanable={false}
                           size="sm"
                         />
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
+                      </span></>,
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
                         {t(`userStatus.${u.status}`, { defaultValue: u.status })}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-2">
+                      </span></>,
+      <><div className="flex items-center justify-center gap-2">
                         {userScopeShape && userScopeShape !== 'tenant' && (
                           <button
                             onClick={() => setAccessUser(u)}
@@ -216,26 +179,55 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                             <Ban className="w-4 h-4" />
                           </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </div></>,
+    ];
+  };
 
-              {filteredUsers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-10">
-                    <div className="flex flex-col items-center gap-2 text-slate-400 text-sm">
+  return (
+    <div id="client-user-management-view" className="space-y-3">
+      <InvitationTokenDialog result={reissued} onClose={() => setReissued(null)} />
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex-1 w-full max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Input
+            value={searchTerm}
+            onChange={(value) => setSearchTerm(value)}
+            placeholder={t('clientUsers.searchPlaceholder')}
+            className="pl-9!"
+            size="sm"
+          />
+        </div>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex-1 sm:flex-none px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{t('invite.title')}</span>
+        </button>
+        </div>
+      </div>
+
+      {(error || actionError) && (
+        <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error || actionError}</span>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
+        {filteredUsers.length === 0 ? (
+          <div className="py-10 flex flex-col items-center gap-2 text-slate-400 text-sm"><div className="flex flex-col items-center gap-2 text-slate-400 text-sm">
                       <AlertCircle className="w-5 h-5 text-slate-300 dark:text-slate-600" />
                       <span>{t('clientUsers.empty')}</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {filteredUsers.length > 0 && <TablePagination {...pager} />}
+                    </div></div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={(u) => String(u.id)} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(u) => String(u.id)} cells={viewCells} actionsIndex={4} /></div>
+        )}
+        {filteredUsers.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
 
       <InviteUserModal

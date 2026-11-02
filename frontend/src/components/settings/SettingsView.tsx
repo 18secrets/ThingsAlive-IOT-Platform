@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   UserCircle2,
@@ -11,7 +11,9 @@ import {
 } from 'lucide-react';
 import { AuthUser, ClientAccount } from '../../types';
 import { PasswordField } from '../common/PasswordField';
+import { PasswordChecklist, passwordMeetsRules } from '../common/PasswordChecklist';
 import { SessionDiagnostics } from './SessionDiagnostics';
+import { MeDiagnostics, apiGetMe } from '../../lib/api';
 
 interface SettingsViewProps {
   authUser: AuthUser;
@@ -29,6 +31,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     return clients.find((c) => c.id === authUser.clientId) || null;
   }, [clients, authUser.clientId, isMasterAdmin]);
 
+  // The person's own name, their role's own name and their organisation's, from the
+  // API. Settings showed "Client", the tenant id and "Client Since —" where Users and
+  // Diagnostics showed "CEO/Manager" (test report MIN-3, COS-3).
+  const [me, setMe] = useState<MeDiagnostics | null>(null);
+  useEffect(() => {
+    let live = true;
+    apiGetMe().then((m) => { if (live) setMe(m); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -44,7 +56,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     const trimmedNew = newPassword.trim();
     const trimmedConfirm = confirmPassword.trim();
 
-    if (trimmedNew.length < 8) {
+    if (!passwordMeetsRules(trimmedNew)) {
       setFormError(t('settings.tooShort'));
       return;
     }
@@ -72,7 +84,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
     setConfirmPassword('');
   };
 
-  const displayName = isMasterAdmin ? t('settings.masterAdmin') : (authUser.clientName || authUser.username);
+  const displayName = me?.fullName || (isMasterAdmin ? t('settings.masterAdmin') : (authUser.clientName || authUser.username));
+  const organisation = me?.tenantName || authUser.clientName || '—';
+  const since = me?.tenantSince ? new Date(me.tenantSince).toLocaleDateString() : clientRecord?.createdAt || '—';
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
@@ -103,9 +117,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
                 {t('settings.role')}
               </span>
               <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 text-xs">
-                {isMasterAdmin ? t('settings.masterAdmin') : t('common.client')}
+                {isMasterAdmin ? t('settings.masterAdmin') : me?.roleName || t('common.client')}
               </span>
             </div>
+            {!isMasterAdmin && authUser.isSuperAdmin && (
+              <p className="text-[11px] text-slate-400 -mt-2">{t('settings.superAdminNote')}</p>
+            )}
 
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
               <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
@@ -121,7 +138,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
                   <Briefcase className="w-4 h-4 text-sky-600" />
                   {t('settings.clientOrganization')}
                 </span>
-                <span className="font-medium text-slate-700 dark:text-slate-200">{authUser.clientName || '—'}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{organisation}</span>
               </div>
             )}
 
@@ -141,7 +158,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
                 {isMasterAdmin ? t('settings.accessLevel') : t('settings.clientSince')}
               </span>
               <span className="font-medium text-slate-700 dark:text-slate-200">
-                {isMasterAdmin ? t('settings.allPlantsAndClients') : (clientRecord?.createdAt || '—')}
+                {isMasterAdmin ? t('settings.allPlantsAndClients') : since}
               </span>
             </div>
           </div>
@@ -175,6 +192,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               placeholder={t('settings.newPasswordPlaceholder')}
               required
             />
+            <PasswordChecklist password={newPassword.trim()} />
 
             <PasswordField
               label={t('settings.confirmNewPassword')}
@@ -200,7 +218,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !currentPassword.trim() || !passwordMeetsRules(newPassword.trim())
+                || newPassword.trim() !== confirmPassword.trim()}
               className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <KeyRound className="w-4 h-4" />

@@ -7,6 +7,7 @@ export type SecurityEventType =
   | 'password.set'
   | 'password.reset-requested'
   | 'session.refreshed'
+  | 'session.forked'
   | 'session.reuse-detected'
   | 'session.signed-out'
   | 'session.revoked';

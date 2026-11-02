@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
 import {
@@ -36,6 +37,29 @@ export interface ImportResult {
 }
 
 export const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * The catalog version a machine of this class is read against.
+ *
+ * Forecasts, recommendations, OEE and workflows all look up the library by
+ * (equipment_class_slug, class_version), and every one of them treats a null version
+ * as "nothing declared". A machine created with a slug and no version was therefore
+ * classified on its own page and invisible to every pass that reads the catalog —
+ * silently, because "no forecast declared" is a normal answer.
+ *
+ * The version is the one the account's own copy was forked from, not the library's
+ * newest: the account decides when to take a newer template, and a machine reading a
+ * version its account never accepted would be scored against content they never saw.
+ * A copy renamed away from its template, or invented here, has no library version
+ * under this slug, so null is the honest answer there too.
+ */
+export async function pinnedClassVersion(
+  m: EntityManager, tenantId: string, classSlug: string | null,
+): Promise<number | null> {
+  if (!classSlug) return null;
+  const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId, slug: classSlug } });
+  return cls && cls.templateSlug === classSlug ? cls.templateVersion : null;
+}
 
 /**
  * The equipment register, owned by the client (tasks P1-85, P1-86).
@@ -105,6 +129,7 @@ export class EquipmentService {
       if (existing) throw new ConflictException(`Equipment "${input.code}" already exists.`);
 
       const plantId = await this.resolvePlant(m, tenantId, input.plantId ?? null);
+      const equipmentClassSlug = input.equipmentClassSlug ?? null;
       const saved = await repo.save(repo.create({
         tenantId,
         sourceSystem: CLIENT_SOURCE_SYSTEM,
@@ -117,8 +142,8 @@ export class EquipmentService {
         serialNumber: input.serialNumber ?? null,
         description: input.description ?? null,
         plantId,
-        equipmentClassSlug: input.equipmentClassSlug ?? null,
-        classVersion: null,
+        equipmentClassSlug,
+        classVersion: await pinnedClassVersion(m, tenantId, equipmentClassSlug),
         tier: input.tier ?? 'basic',
         commissionedAt: input.commissionedAt ?? null,
         serviceIntervalHours: input.serviceIntervalHours ?? null,
@@ -140,12 +165,18 @@ export class EquipmentService {
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
     return withTenantId(this.ds, tenantId, async (m) => {
       const asset = await this.find(m, tenantId, ref);
+      const classBefore = asset.equipmentClassSlug;
 
       for (const key of ['name', 'manufacturer', 'modelNumber', 'serialNumber',
         'description', 'equipmentClassSlug', 'commissionedAt', 'serviceIntervalHours'] as const) {
         if (input[key] !== undefined) (asset as any)[key] = input[key] ?? null;
       }
       if (input.tier !== undefined) asset.tier = input.tier;
+      // Only a change of class moves the version. Re-pinning on every edit would quietly
+      // move a machine onto a newer template the moment somebody fixed a typo in its name.
+      if (asset.equipmentClassSlug !== classBefore) {
+        asset.classVersion = await pinnedClassVersion(m, tenantId, asset.equipmentClassSlug);
+      }
       // Placement is not edited here. It has its own method because it has its own
       // consequences, and burying it among seven descriptive fields would hide them.
       asset.updatedBy = scope.userId;

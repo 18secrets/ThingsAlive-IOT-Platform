@@ -6,7 +6,9 @@ import {
   AssistantModel, AssistantTurn, GeminiModel, geminiConfigFrom, ModelReply, ToolDeclaration,
 } from '../src/assistant/assistant-model';
 import { AssistantTools } from '../src/assistant/assistant-tools';
-import { AssistantService, MAX_ROUNDS } from '../src/assistant/assistant.service';
+import { GeofenceTracker } from '../src/geofence/geofence-tracker.service';
+import { GeofenceService } from '../src/geofence/geofence.service';
+import { AssistantService, MAX_ROUNDS, tidyReply } from '../src/assistant/assistant.service';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { createApp } from '../src/main';
 import { withTenantId } from '../src/scope/tenant-session';
@@ -107,9 +109,9 @@ describeDb('assistant chat', () => {
   it('offers only read tools, and only those the caller\'s capabilities open', async () => {
     const names = (s: RequestScope) => tools.available(s).map((t) => t.name).sort();
     expect(names(acme)).toEqual(
-      ['list_alerts', 'list_equipment', 'list_incidents', 'list_work_orders', 'logger_health', 'machine_page'],
+      ['list_alerts', 'list_equipment', 'list_incidents', 'list_work_orders', 'logger_health', 'machine_geofences', 'machine_page'],
     );
-    expect(names(viewer)).toEqual(['list_equipment', 'machine_page']);
+    expect(names(viewer)).toEqual(['list_equipment', 'machine_geofences', 'machine_page']);
   });
 
   it('a tool the caller was not offered is refused when the model calls it anyway', async () => {
@@ -191,6 +193,75 @@ describeDb('assistant chat', () => {
     await expect(withTenantId(ds, 'acme', (m) => m.query(
       `UPDATE assistant_usage SET tokens = tokens - 10 WHERE tenant_id = 'acme'`,
     ))).rejects.toThrow(/ck_assistant_usage_tokens/);
+  });
+
+
+  it('tells the model today\'s date, so "this week" has something to count from', async () => {
+    const model = new ScriptedModel(() => say('ok'));
+    await service(model).chat(acme, ask('Alerts this week?'), new Date('2026-10-29T08:00:00Z'));
+    expect(model.seen[0].system).toMatch(/Today is 2026-10-29 \(UTC\)\.$/);
+  });
+
+  it('list_alerts keeps to the days asked for: since inclusive, before exclusive', async () => {
+    await owner.query(
+      `INSERT INTO alert_event (tenant_id, rule_id, rule_name, source_system, external_id, severity, summary, evidence, state, fired_at)
+         VALUES ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'last week', '{}'::jsonb, 'open', '2026-10-25T23:59:59Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'monday', '{}'::jsonb, 'open', '2026-10-26T00:00:00Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'today', '{}'::jsonb, 'open', '2026-10-29T07:00:00Z'),
+                ('acme', gen_random_uuid(), 'R', 'ta-2.0', 'GEN-1', 'high', 'next week', '{}'::jsonb, 'open', '2026-11-02T00:00:00Z')`,
+    );
+    const summaries = async (args: Record<string, unknown>) =>
+      ((await tools.run(acme, 'list_alerts', args)) as { summary: string }[]).map((a) => a.summary);
+    expect(await summaries({ firedSince: '2026-10-26', firedBefore: '2026-11-02' })).toEqual(['today', 'monday']);
+    expect(await summaries({ firedSince: '2026-10-29' })).toEqual(['next week', 'today']);
+    expect(await summaries({ firedBefore: '2026-10-26' })).toEqual(['last week']);
+  });
+
+  it('list_alerts refuses a day it cannot read rather than answering about every alert', async () => {
+    for (const bad of ['last week', '2026-02-31', '29/10/2026']) {
+      expect(await tools.run(acme, 'list_alerts', { firedSince: bad }))
+        .toEqual({ error: 'firedSince and firedBefore are days written YYYY-MM-DD.' });
+    }
+  });
+
+  it('drops an emphasis marker the model opened and never closed', async () => {
+    const model = new ScriptedModel(() => say('_There are 3 open alerts:\n- **EX-03**: hot'));
+    expect((await service(model).chat(acme, ask('Open alerts?'))).reply).toBe('There are 3 open alerts:\n- **EX-03**: hot');
+  });
+
+  describe('machine_geofences', () => {
+    const fix = (iso: string, lat: number) => [
+      { imei: 'L1', signal: 'latitude', value: lat, sourceTimestamp: iso },
+      { imei: 'L1', signal: 'longitude', value: 77.2, sourceTimestamp: iso },
+    ];
+    beforeEach(async () => {
+      const zones = app.get(GeofenceService);
+      await zones.create(acme, {
+        code: 'PIT', name: 'Blast pit', kind: 'restricted', appliesTo: 'account',
+        shape: { type: 'Circle', center: [77.2, 12.2], radiusM: 300 },
+      });
+      const recent = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+      await app.get(GeofenceTracker).trackWindow({
+        tenantId: 'acme', sourceSystem: 'ta-2.0', externalId: 'GEN-1',
+        start: new Date(Date.now() - 10 * 3_600_000), end: new Date(),
+        readings: [...fix(recent(5), 12.2), ...fix(recent(4), 12.6)],
+      });
+    });
+
+    it('gives the machine\'s zones by name, without coordinates, and its recent visits, saying which broke a rule', async () => {
+      const out = await tools.run(acme, 'machine_geofences', { code: 'GEN-1' }) as {
+        zones: Record<string, unknown>[]; visits: Record<string, unknown>[];
+      };
+      expect(out.zones).toEqual([{ code: 'PIT', name: 'Blast pit', kind: 'restricted', isSiteBoundary: false }]);
+      expect(out.visits).toHaveLength(1);
+      expect(out.visits[0]).toMatchObject({ zone: 'Blast pit', kind: 'restricted', stillInside: false, brokeRule: true });
+      expect(JSON.stringify(out)).not.toMatch(/radiusM|center|coordinates/);
+    });
+
+    it('another account\'s machine is an error the model reads, not an answer', async () => {
+      expect(await tools.run(acme, 'machine_geofences', { code: 'SECRET-9', sourceSystem: 'ta-2.0' }))
+        .toEqual({ error: 'No such machine in this account.' });
+    });
   });
 
   describe('over HTTP', () => {
@@ -280,5 +351,57 @@ describe('Gemini adapter', () => {
     expect(sent[1].contents[1]).toEqual({
       role: 'model', parts: [{ functionCall: { name: 'list_equipment', args: {} }, thoughtSignature: 'sig-1' }],
     });
+  });
+});
+
+describe('tidying a reply', () => {
+  it('keeps emphasis that closes, bold, bullets and plain text as they are', () => {
+    for (const text of ['_Note_: two alerts.', '**EX-03** is hot.', '* EX-03\n* EX-02', 'Two alerts.', '']) {
+      expect(tidyReply(text)).toBe(text);
+    }
+  });
+
+  it('drops an unclosed opener on the first line only', () => {
+    expect(tidyReply('*Two alerts:\n- EX-03')).toBe('Two alerts:\n- EX-03');
+    expect(tidyReply('Two alerts:\n_EX-03')).toBe('Two alerts:\n_EX-03');
+  });
+});
+
+describe('Gemini adapter, when a call runs out of time', () => {
+  const ok = { candidates: [{ content: { parts: [{ text: 'answer' }] } }], usageMetadata: { totalTokenCount: 3 } };
+  const deadline = Object.assign(new Error('{"error":{"code":504,"message":"Deadline expired before operation could complete.","status":"DEADLINE_EXCEEDED"}}'), { status: 504 });
+  const failing = (...outcomes: unknown[]) => {
+    const model = new GeminiModel({ mode: 'api-key', apiKey: 'unused', model: 'gemini-3.5-flash-lite' });
+    const asked: string[] = [];
+    (model as unknown as { ai: unknown }).ai = {
+      models: {
+        generateContent: async (req: { model: string }) => {
+          asked.push(req.model);
+          const next = outcomes.shift();
+          if (next instanceof Error) throw next;
+          return next;
+        },
+      },
+    };
+    return { model, asked };
+  };
+  const input = { system: 's', turns: [{ role: 'user' as const, text: 'q' }], tools: [] };
+
+  it('asks once more, and answers, when the first call hits the deadline', async () => {
+    const { model, asked } = failing(deadline, ok);
+    expect(await model.generate(input)).toEqual({ text: 'answer', calls: [], tokens: 3 });
+    expect(asked).toEqual(['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite']);
+  });
+
+  it('gives up after the second deadline rather than keeping the person waiting', async () => {
+    const { model, asked } = failing(deadline, deadline, ok);
+    await expect(model.generate(input)).rejects.toThrow(/DEADLINE_EXCEEDED/);
+    expect(asked).toHaveLength(2);
+  });
+
+  it('does not retry a request Gemini refused outright', async () => {
+    const { model, asked } = failing(Object.assign(new Error('Request contains an invalid argument'), { status: 400 }), ok);
+    await expect(model.generate(input)).rejects.toThrow(/invalid argument/);
+    expect(asked).toHaveLength(1);
   });
 });

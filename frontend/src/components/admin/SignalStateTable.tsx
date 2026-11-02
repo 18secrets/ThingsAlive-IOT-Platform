@@ -5,6 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { SignalStateVocabEntry, SignalStateCode } from '../../lib/api';
 import { AddSignalStateModal } from './AddSignalStateModal';
 import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 interface SignalStateTableProps {
   states: SignalStateVocabEntry[];
@@ -21,6 +24,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
   states, error, onReplaceStates,
 }) => {
   const { t } = useTranslation('catalog');
+  const [viewMode, setViewMode] = useViewMode('admin-signal-states');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleGroup | null>(null);
@@ -50,6 +54,38 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
 
   const { pageItems: pagedRows, ...pager } = usePagination(filteredGroups);
 
+
+  // One definition for both views (tester request: cards or list on every list page).
+  const viewColumns = [
+    { label: t('states.measurementRole') },
+    { label: t('states.states') },
+    { label: t('common.action') },
+  ];
+  const viewCells = (g: (typeof pagedRows)[number]) => {
+    return [
+      <span className="font-mono text-sm text-slate-900 dark:text-white align-top">{g.role}</span>,
+      <><div className="flex flex-wrap gap-1.5 max-w-xl">
+                      {g.states.map((s) => (
+                        <span
+                          key={s.state}
+                          className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                        >
+                          {s.state} = {s.code}
+                        </span>
+                      ))}
+                    </div></>,
+      <span className="align-top"><div className="flex items-center justify-center">
+                      <button
+                        onClick={() => { setEditingRole(g); setIsModalOpen(true); }}
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                        title={t('states.edit')}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    </div></span>,
+    ];
+  };
+
   return (
     <div id="signal-state-view" className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -66,6 +102,8 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
           </div>
         </div>
 
+        <div className="flex items-center gap-3 shrink-0">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           id="add-signal-state-btn"
           onClick={() => { setEditingRole(null); setIsModalOpen(true); }}
@@ -74,6 +112,7 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
           <Plus className="w-4 h-4" />
           <span>{t('states.add')}</span>
         </button>
+        </div>
       </div>
 
       {error && (
@@ -84,62 +123,18 @@ export const SignalStateTable: React.FC<SignalStateTableProps> = ({
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-              <tr>
-                <th className="py-3 px-4">{t('states.measurementRole')}</th>
-                <th className="py-3 px-4">{t('states.states')}</th>
-                <th className="py-3 px-4 text-center">{t('common.action')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {pagedRows.map((g) => (
-                <tr key={g.role} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3.5 px-4 font-mono text-sm text-slate-900 dark:text-white align-top">
-                    {g.role}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-wrap gap-1.5 max-w-xl">
-                      {g.states.map((s) => (
-                        <span
-                          key={s.state}
-                          className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
-                        >
-                          {s.state} = {s.code}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 align-top">
-                    <div className="flex items-center justify-center">
-                      <button
-                        onClick={() => { setEditingRole(g); setIsModalOpen(true); }}
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                        title={t('states.edit')}
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredGroups.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-10 text-center text-slate-400 text-sm">
-                    {t('states.none')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {filteredGroups.length === 0 ? (
+          <div className="py-10 flex flex-col items-center gap-2 text-slate-400 text-sm">{t('states.none')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={viewColumns} rows={pagedRows} rowKey={(g) => String(g.role)} cells={viewCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(g) => String(g.role)} cells={viewCells} actionsIndex={2} /></div>
+        )}
 
         <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
           {t('states.footer')}
         </div>
-        <TablePagination {...pager} />
+        <TablePagination pinToBottom {...pager} />
       </div>
 
       <AddSignalStateModal

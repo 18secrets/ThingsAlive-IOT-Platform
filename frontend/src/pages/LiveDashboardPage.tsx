@@ -1,19 +1,25 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Bell, ChevronRight, ClipboardList, Cpu, Gauge, ShieldCheck, Siren, Sparkles, Wrench,
+  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
+  Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
+import { ConnectionBadge } from '../components/common/ConnectionBadge';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ListTable } from '../components/common/ListTable';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import {
-  AlertEvent, AssetForecast, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, OnboardingSummary,
-  Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
+  AlertEvent, AssetForecast, EquipmentAvailability, EquipmentProfile, FleetAvailability, FleetLinkRow, IncidentRecord, MyDevice,
+  OnboardingSummary, Plant, ShieldSummary, UtilizationSummaryRow, WorkOrder,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetOnboardingSummary, apiGetServiceForecast, apiGetShieldSummary,
-  apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListPlants, apiListWorkOrders,
+  apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListMyDevices, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
+import { severityTone } from '../components/common/statusTone';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -31,6 +37,7 @@ export const LiveDashboardPage: React.FC = () => {
   const equipment = useSlot<EquipmentProfile[]>(() => apiListEquipment());
   const plants = useSlot<Plant[]>(() => apiListPlants());
   const health = useSlot<FleetLinkRow[]>(() => apiGetDeviceHealthFleet({ days: 7 }));
+  const devices = useSlot<MyDevice[]>(() => apiListMyDevices());
   const alerts = useSlot<AlertEvent[]>(() => apiListAlerts({ state: ['open'] }));
   const incidents = useSlot<IncidentRecord[]>(() => apiListIncidentRecords({ status: 'live' }));
   const orders = useSlot<WorkOrder[]>(() => apiListWorkOrders({ status: ['created', 'in-progress'] }));
@@ -47,8 +54,19 @@ export const LiveDashboardPage: React.FC = () => {
   const plantName = (id: string | null) =>
     !id ? t('live.noSite') : plants.state === 'ok' ? plants.data.find((p) => p.id === id)?.name ?? id : id;
 
-  const online = health.state === 'ok' ? health.data.filter((r) => r.state !== 'dark').length : null;
-  const offline = health.state === 'ok' ? health.data.filter((r) => r.state === 'dark').length : null;
+  // Counted over the devices fitted now, as the Devices register counts them. Link
+  // health has a row for every IMEI heard in the week, including one taken off its
+  // machine since, which made "83 online" beside a register of 82 (test report MAJ-8).
+  // A fitted device with no window at all is silent, so offline. Without the register
+  // (a role that cannot read it) the week's rows are all there is.
+  const fitted = devices.state === 'ok' ? devices.data.filter((d) => d.state === 'assigned') : null;
+  const latestByImei = health.state === 'ok' ? new Map(health.data.map((r) => [r.imei, r])) : null;
+  const online = !latestByImei ? null
+    : fitted ? fitted.filter((d) => { const r = latestByImei.get(d.imei); return !!r && r.state !== 'dark'; }).length
+    : [...latestByImei.values()].filter((r) => r.state !== 'dark').length;
+  const offline = !latestByImei ? null
+    : fitted ? fitted.length - (online ?? 0)
+    : [...latestByImei.values()].filter((r) => r.state === 'dark').length;
   const overdueOrders = orders.state === 'ok' ? orders.data.filter((o) => o.dueAt && new Date(o.dueAt).getTime() < Date.now()).length : 0;
   const breached = incidents.state === 'ok'
     ? incidents.data.filter((i) => i.sla.acknowledge.state === 'breached' || i.sla.resolve.state === 'breached').length : 0;
@@ -65,7 +83,7 @@ export const LiveDashboardPage: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Tile icon={<Wrench className="w-4 h-4" />} label={t('live.machines')} slot={equipment} value={(d) => d.length}
           note={plants.state === 'ok' ? t('common.sites', { count: plants.data.length }) : undefined} onClick={() => navigate('/admin/equipment')} />
-        <Tile icon={<Cpu className="w-4 h-4" />} label={t('live.devicesOnline')} slot={health} value={() => online ?? 0}
+        <Tile icon={<Cpu className="w-4 h-4" />} label={t('live.devicesOnline')} slot={devices.state === 'loading' ? { state: 'loading' } as Slot<FleetLinkRow[]> : health} value={() => online ?? 0}
           note={offline ? t('live.offlineCount', { count: offline }) : t('live.noneOffline')} tone={offline ? 'warn' : undefined} onClick={() => navigate('/admin/devices')} />
         <Tile icon={<Bell className="w-4 h-4" />} label={t('live.openAlerts')} slot={alerts} value={(d) => d.length}
           tone={alerts.state === 'ok' && alerts.data.length ? 'bad' : undefined} onClick={() => navigate('/alerts')} />
@@ -104,7 +122,7 @@ export const LiveDashboardPage: React.FC = () => {
         <Panel title={t('live.availabilityTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')}>
           {availability.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex items-center gap-4">
-              <RingGauge value={availability.data.availability} size={72} colorClass="text-sky-500 dark:text-sky-400" />
+              <RingGauge value={availability.data.availability != null ? availability.data.availability * 100 : null} size={72} colorClass="text-sky-500 dark:text-sky-400" />
               <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5">
                 <p>{t('live.machinesMeasured', { count: availability.data.machinesMeasured })}</p>
                 {availability.data.uptimeHours != null && <p>{t('live.upDown', { up: availability.data.uptimeHours.toFixed(0), down: (availability.data.downtimeHours ?? 0).toFixed(0) })}</p>}
@@ -121,13 +139,13 @@ export const LiveDashboardPage: React.FC = () => {
         <Panel title={t('live.liveIncidents')} icon={<Siren className="w-4 h-4" />} onOpen={() => navigate('/incident-management')}>
           <List slot={incidents} empty={t('live.noLiveIncidents')} render={(d) => d.slice(0, 5).map((i) => (
             <Row key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} left={machineName(i.machine.sourceSystem, i.machine.externalId)}
-              right={<><Chip tone={i.severity === 'critical' ? 'rose' : i.severity === 'high' ? 'amber' : 'slate'}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
+              right={<><Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
           ))} />
         </Panel>
         <Panel title={t('live.openAlerts')} icon={<Bell className="w-4 h-4" />} onOpen={() => navigate('/alerts')}>
           <List slot={alerts} empty={t('live.noOpenAlerts')} render={(d) => d.slice(0, 5).map((a) => (
             <Row key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={`${machineName(a.sourceSystem, a.externalId)} · ${a.summary}`}
-              right={<Chip tone={a.severity === 'critical' ? 'rose' : a.severity === 'high' ? 'amber' : 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
+              right={<Chip tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.serviceDue')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
@@ -140,19 +158,42 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
       </div>
 
-      <Panel title={t('live.machines')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/admin/equipment')}>
-        <List slot={equipment} empty={t('live.noMachines')} render={(d) => (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            {d.map((m) => (
-              <Row key={m.id} onClick={() => openMachine(m.sourceSystem, m.externalId)} left={m.name ?? m.externalId}
-                right={<span className="text-slate-400">{plantName(m.plantId)}{m.equipmentClassSlug ? ` · ${m.equipmentClassSlug}` : ''}</span>} />
-            ))}
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('live.machines')}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('live.machinesHint')}</p>
           </div>
-        )} />
-      </Panel>
+          <button onClick={() => navigate('/admin/equipment')} className="inline-flex items-center gap-1 text-sm text-slate-400 dark:text-slate-500 hover:text-sky-600 cursor-pointer shrink-0">
+            {equipment.state === 'ok' ? t('live.machinesCount', { count: equipment.data.length }) : ''}
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        {equipment.state !== 'ok' || equipment.data.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+            <Muted>{equipment.state === 'loading' ? t('common.loading') : equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>
+          </div>
+        ) : (
+          <MachineCards
+            machines={equipment.data}
+            plantName={plantName}
+            // Same reading as Production Monitoring: `dark` is offline, any other recorded
+            // link state is reporting; no row at all is "no link data", not either.
+            connectionOf={(externalId) => {
+              if (health.state !== 'ok') return null;
+              const row = health.data.find((r) => r.externalId === externalId);
+              return row ? (row.state === 'dark' ? 'offline' : 'online') : null;
+            }}
+            availabilityOf={(m) => availability.state === 'ok'
+              ? availability.data.machines.find((a) => a.sourceSystem === m.sourceSystem && a.externalId === m.externalId)
+              : undefined}
+            onOpen={(m) => openMachine(m.sourceSystem, m.externalId)}
+          />
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Panel title="ThingsShield" icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
+        <Panel title={t('translation:sidebar.thingsShield')} icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
           {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex flex-wrap gap-1.5">
               <Chip tone="rose">{t('live.shieldCount.action_required', { count: shield.data.counts.action_required })}</Chip>
@@ -181,6 +222,119 @@ export const LiveDashboardPage: React.FC = () => {
   );
 };
 
+/**
+ * The equipment cards of the original dashboard, over live data. The original showed
+ * an illustrative OEE; per-machine OEE would cost one request per card, so the first
+ * chip is 7-day availability, which the fleet availability call already carries.
+ */
+const MachineCards: React.FC<{
+  machines: EquipmentProfile[];
+  plantName: (id: string | null) => string;
+  connectionOf: (externalId: string) => 'online' | 'offline' | null;
+  availabilityOf: (m: EquipmentProfile) => EquipmentAvailability | undefined;
+  onOpen: (m: EquipmentProfile) => void;
+}> = ({ machines, plantName, connectionOf, availabilityOf, onOpen }) => {
+  const { t } = useTranslation('dashboard');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('dashboard-machines');
+  // Eighty-odd machines over seven pages had no way to find one (test report MIN-7).
+  const [query, setQuery] = useState('');
+  const matching = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return !q ? machines : machines.filter((m) =>
+      (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q) || plantName(m.plantId).toLowerCase().includes(q));
+  }, [machines, query, plantName]);
+  const { pageItems, ...pager } = usePagination(matching, 12);
+  const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
+  // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
+  const figures = (m: EquipmentProfile) => {
+    const a = availabilityOf(m);
+    const ready = a?.readiness === 'ready';
+    return {
+      ready,
+      availability: ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—',
+      uptime: hours(ready ? a?.uptimeHours : null),
+      downtime: hours(ready ? a?.downtimeHours : null),
+      down: ready && Math.round(a?.downtimeHours ?? 0) > 0,
+    };
+  };
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('live.searchMachines')}
+            className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+          />
+        </div>
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+      <div className={LIST_PANEL}>
+        {matching.length === 0 ? (
+          <div className="p-4"><Muted>{t('live.noMachineMatches')}</Muted></div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare
+            columns={[
+              { label: ts('listCol.machine') }, { label: ts('listCol.type') }, { label: ts('listCol.site') },
+              { label: ts('listCol.connection') }, { label: t('common.availability'), align: 'right' },
+              { label: t('common.uptimeHours'), align: 'right' }, { label: t('common.downtimeHours'), align: 'right' },
+            ]}
+            rows={pageItems}
+            rowKey={(m) => m.id}
+            cells={(m) => {
+              const f = figures(m);
+              return [
+                <span><span className="font-medium">{m.name ?? m.externalId}</span> <span className="text-slate-400">{m.externalId}</span></span>,
+                m.equipmentClassSlug ?? t('live.notClassified'),
+                plantName(m.plantId),
+                <ConnectionBadge state={connectionOf(m.externalId)} />,
+                f.availability,
+                f.uptime,
+                <span className={f.down ? 'text-rose-600 dark:text-rose-400' : ''}>{f.downtime}</span>,
+              ];
+            }}
+            onOpen={onOpen}
+          />
+        ) : (
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pageItems.map((m) => {
+            const a = availabilityOf(m);
+            const ready = a?.readiness === 'ready';
+            return (
+              <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
+                <div className="flex items-center justify-between">
+                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
+                  <ConnectionBadge state={connectionOf(m.externalId)} />
+                </div>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{m.externalId} · {m.equipmentClassSlug ?? t('live.notClassified')}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{plantName(m.plantId)}</span></p>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Chip icon={Activity} title={ready ? t('common.availability') : t('live.availabilityNotReady')} size="md">
+                      {ready && a?.availability != null ? `${(a.availability * 100).toFixed(0)}%` : '—'}
+                    </Chip>
+                    <Chip icon={Clock3} title={t('common.uptimeHours')} size="md">{hours(ready ? a?.uptimeHours : null)}</Chip>
+                    <Chip icon={AlertTriangle} tone={ready && Math.round(a?.downtimeHours ?? 0) > 0 ? 'rose' : 'slate'} title={t('common.downtimeHours')} size="md">{hours(ready ? a?.downtimeHours : null)}</Chip>
+                  </div>
+                  <span className="inline-flex items-center text-xs font-medium text-sky-600 dark:text-sky-400 shrink-0">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        )}
+        <TablePagination {...pager} />
+      </div>
+    </div>
+  );
+};
+
 function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
   icon: React.ReactNode; label: string; slot: Slot<T>; value: (d: T) => number;
   note?: string; tone?: 'warn' | 'bad'; onClick: () => void;
@@ -193,7 +347,7 @@ function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
       <div className={`text-2xl font-bold mt-1 ${color}`}>
         {slot.state === 'ok' ? value(slot.data) : slot.state === 'loading' ? '…' : '—'}
       </div>
-      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : note}</div>
+      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
     </button>
   );
 }

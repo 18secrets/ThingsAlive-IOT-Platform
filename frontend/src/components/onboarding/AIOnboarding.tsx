@@ -34,9 +34,6 @@ function errorKey(err: unknown): string {
   return 'chat.error.generic';
 }
 
-interface AIOnboardingProps {
-  onSkipToManualSetup: () => void;
-}
 
 // Title, description and prompt are onboarding.json's chat.quick.<id>.*.
 const QUICK_CARDS: { id: string; icon: React.FC<{ className?: string }> }[] = [
@@ -66,7 +63,7 @@ function focusOf(p: AssistantProposal): OnboardingFocus | null {
   return null;
 }
 
-export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup }) => {
+export const AIOnboarding: React.FC = () => {
   const { t } = useTranslation('onboarding');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Hidden until the conversation is about setup; then re-read after each answer and
@@ -158,6 +155,14 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
 
       {/* Main Chat Column */}
       <div className="flex-1 min-w-0 max-w-3xl mx-auto flex flex-col h-full min-h-0">
+
+        {/* Below lg the side column is hidden, and the panel with it (TC_128): above the
+            chat instead, held short so the conversation still has the room. */}
+        {showStatus && (
+          <div className="lg:hidden shrink-0 max-h-64 overflow-y-auto mb-3">
+            <OnboardingStatusPanel focus={statusFocus} refreshKey={statusTick} onClearFocus={() => setStatusFocus(null)} />
+          </div>
+        )}
 
         {/* Scrollable: intro, chat thread, quick cards */}
         <div className="flex-1 min-h-0 overflow-y-auto pr-1">
@@ -274,14 +279,6 @@ export const AIOnboarding: React.FC<AIOnboardingProps> = ({ onSkipToManualSetup 
               <Send className="w-4 h-4" />
             </button>
           </form>
-
-          <button
-            type="button"
-            onClick={onSkipToManualSetup}
-            className="block text-center text-xs text-slate-500 dark:text-slate-400 underline hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer mt-3 mx-auto"
-          >
-            {t('chat.manualSetup')}
-          </button>
         </div>
       </div>
 

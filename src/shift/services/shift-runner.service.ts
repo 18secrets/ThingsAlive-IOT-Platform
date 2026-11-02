@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { GeofenceTracker } from '../../geofence/geofence-tracker.service';
 import { DataSource } from 'typeorm';
 import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
-import { LegacyTelemetryReader } from '../../legacy/legacy-telemetry.reader';
+import { LegacyTelemetryReader, PullResult } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
 import { TelemetryService } from '../../telemetry/telemetry.service';
 import { ChainService } from '../../intelligence/services/chain.service';
@@ -12,6 +13,7 @@ import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
 import { UtilizationService } from '../../utilization/services/utilization.service';
 import { alertWindow } from './alert-window';
+import { ownExpectedSignals, pullOwnTelemetry } from './own-telemetry';
 import { withTenantId } from '../../scope/tenant-session';
 import { ShiftRun } from '../entities/shift-run.entity';
 import { tryTakePassLock } from './pass-lock';
@@ -70,6 +72,9 @@ export class ShiftRunner {
     private readonly utilization: UtilizationService,
     private readonly deviceHealth: DeviceHealthService,
     private readonly chains: ChainService,
+    // Optional and last: Nest always supplies it, and a runner built by hand for a test
+    // that is not about geofences runs without it (QGEO2 stage 2).
+    @Optional() private readonly geofences?: GeofenceTracker,
   ) {}
 
   /**
@@ -111,14 +116,36 @@ export class ShiftRunner {
     if (owed.length === 0) return summary;
 
     if (!this.reader.connected) {
-      // Loud, and not a failure of any particular shift. Every window stays owed, so
-      // the moment a connection exists the backlog is scored rather than lost.
-      this.logger.warn(
-        `${owed.length} shift window(s) are owed, and there is no connection to the `
-        + 'existing platform to read them from. Nothing scored; nothing lost.',
-      );
-      summary.skipped = owed.length;
-      summary.outcomes = owed.map((w) => this.outcome(w, 'nothing-to-score', 'no connection'));
+      // No route to the existing platform, so the only readings are the ones that came
+      // to 2.0 directly — a logger or stream posting to ingest, or uploaded history. A
+      // window that has some is scored from them. A window that has none stays owed,
+      // exactly as before: its readings may be waiting in the existing platform, and
+      // marking it scored-and-empty would lose them for good when a route appears.
+      let waiting = 0;
+      for (const window of owed) {
+        const own = await pullOwnTelemetry(this.ds, {
+          tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+          from: window.start, to: window.end,
+        });
+        if (!own.envelope) {
+          waiting += 1;
+          summary.skipped += 1;
+          summary.outcomes.push(this.outcome(window, 'nothing-to-score', 'no connection'));
+          continue;
+        }
+        const startedAt = Date.now();
+        const outcome = await this.one(window, own);
+        await this.record(window, outcome, Date.now() - startedAt);
+        this.tally(summary, outcome);
+      }
+      if (waiting) {
+        // Loud, and not a failure of any particular shift: the backlog is scored the
+        // moment a connection exists, or the moment readings for it reach 2.0.
+        this.logger.warn(
+          `${waiting} of ${owed.length} owed shift window(s) have no readings in 2.0, and there is no `
+          + 'connection to the existing platform to read them from. Those stay owed; nothing lost.',
+        );
+      }
       return summary;
     }
 
@@ -126,13 +153,17 @@ export class ShiftRunner {
       const startedAt = Date.now();
       const outcome = await this.one(window);
       await this.record(window, outcome, Date.now() - startedAt);
-      summary.outcomes.push(outcome);
-      if (outcome.status === 'scored') summary.scored += 1;
-      else if (outcome.status === 'failed') summary.failed += 1;
-      else if (outcome.status === 'not-running') summary.idle += 1;
-      else summary.skipped += 1;
+      this.tally(summary, outcome);
     }
     return summary;
+  }
+
+  private tally(summary: RunSummary, outcome: RunOutcome): void {
+    summary.outcomes.push(outcome);
+    if (outcome.status === 'scored') summary.scored += 1;
+    else if (outcome.status === 'failed') summary.failed += 1;
+    else if (outcome.status === 'not-running') summary.idle += 1;
+    else summary.skipped += 1;
   }
 
   /**
@@ -183,15 +214,17 @@ export class ShiftRunner {
     return rewound;
   }
 
-  private async one(window: OwedWindow): Promise<RunOutcome> {
+  /** `own`: the window's readings already in 2.0 (`pullOwnTelemetry`), scored without ingesting them again. */
+  private async one(window: OwedWindow, own?: PullResult): Promise<RunOutcome> {
     try {
-      const pull = await this.reader.pull({
+      const pull = own ?? await this.reader.pull({
         tenantId: window.tenantId,
         sourceSystem: window.sourceSystem,
         externalId: window.externalId,
         from: window.start,
         to: window.end,
       });
+      const ingest = async () => (own ? { accepted: 0 } : this.telemetry.ingest(pull.envelope!));
 
       if (!pull.envelope) {
         // Silence is still worth evaluating, and this is the one case where that
@@ -231,17 +264,21 @@ export class ShiftRunner {
         // Ingested anyway: the readings are true, they belong to the history, and the
         // question of whether a baseline should be built from idle periods is a
         // separate one (P1-123) that this must not quietly decide.
-        await this.telemetry.ingest(pull.envelope);
+        await ingest();
+        // A machine with its engine off can still be moved — on a low-loader, or by
+        // somebody who should not be moving it. Where it went is not a question about
+        // whether it ran.
+        await this.trackGeofences(window, readings);
         // The shift the machine slept through is the one the utilization report exists
         // to show. Skipping it here would leave a hole that reads as a gap in the data
         // rather than as a machine that was paid for and not used.
         await this.recordUtilization(window, readings);
-        await this.recordLinkHealth(window, readings);
+        await this.recordLinkHealth(window, readings, !!own);
         await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
         return { ...this.outcome(window, 'not-running', 'engine-never-ran'), readings: readings.length };
       }
 
-      const ingested = await this.telemetry.ingest(pull.envelope);
+      const ingested = await ingest();
       const scope = this.runnerScope(window.tenantId);
       const result = await this.predictions.scoreAsset(
         scope, { sourceSystem: window.sourceSystem, externalId: window.externalId }, window.end,
@@ -264,15 +301,17 @@ export class ShiftRunner {
         chains,
       );
 
+      await this.trackGeofences(window, readings);
       await this.recordUtilization(window, readings);
-      await this.recordLinkHealth(window, readings);
+      await this.recordLinkHealth(window, readings, !!own);
 
       // Last, and only now. Everything above either happened or threw.
       await this.shifts.markScored(window.tenantId, window.shiftId, window.end);
 
       return {
         ...this.outcome(window, 'scored'),
-        readings: ingested.accepted,
+        // Ingested this pass, or, scored from what 2.0 already held, how many that was.
+        readings: own ? readings.length : ingested.accepted,
         predictions: result.written.length,
         raised: result.raised.length,
         alerts,
@@ -383,9 +422,23 @@ export class ShiftRunner {
   private async recordLinkHealth(
     window: OwedWindow,
     readings: { imei?: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[],
+    fromOwn = false,
   ): Promise<void> {
     try {
       const expected = await this.reader.expectedSignalsFor(window);
+      // Scored from 2.0's own readings, a logger commissioned here is judged too. Only
+      // then: a window pulled from the existing platform carries none of a 2.0 logger's
+      // readings, and judging it against that pull would call a reporting logger dark.
+      // A logger the sensor map already knows keeps the map's list, as before.
+      if (fromOwn) {
+        const own = await ownExpectedSignals(this.ds, {
+          tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+          from: window.start, to: window.end,
+        });
+        for (const [imei, signals] of own) {
+          if (!expected.has(imei)) expected.set(imei, signals);
+        }
+      }
       if (expected.size === 0) return;
 
       const arrivals = new Map(
@@ -514,6 +567,24 @@ export class ShiftRunner {
         `Scored ${window.externalId} but could not evaluate alerts: ${(error as Error).message}`,
       );
       return 0;
+    }
+  }
+
+  /**
+   * Zone visits from this window's positions. Never fatal, as alerts are not: losing a
+   * shift's scoring because a fence could not be checked would be the wrong way round.
+   */
+  private async trackGeofences(
+    window: OwedWindow, readings: { imei: string; signal: string; value: number; sourceTimestamp: string }[],
+  ): Promise<void> {
+    if (!this.geofences) return;
+    try {
+      await this.geofences.trackWindow({
+        tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+        start: window.start, end: window.end, readings,
+      });
+    } catch (error) {
+      this.logger.error(`Scored ${window.externalId} but could not track geofences: ${(error as Error).message}`);
     }
   }
 

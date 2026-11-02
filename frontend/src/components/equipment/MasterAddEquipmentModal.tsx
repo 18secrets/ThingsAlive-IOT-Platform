@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { ApiError, EquipmentInput, EquipmentProfile, Plant, ServiceTier } from '../../lib/api';
+import {
+  ApiError, EquipmentInput, EquipmentProfile, Plant, ServiceTier, apiListEntitlements, apiListEquipmentClasses,
+} from '../../lib/api';
 import { ClientAccount } from '../../types';
 
 interface MasterAddEquipmentModalProps {
@@ -18,13 +20,15 @@ interface MasterAddEquipmentModalProps {
   clients: ClientAccount[];
   onListPlantsForTenant: (tenantId: string) => Promise<Plant[]>;
   existingEquipment?: EquipmentProfile | null;
+  /** Every machine across accounts, to say before saving that a code is already taken in the chosen one. */
+  allEquipment?: EquipmentProfile[];
 }
 
 // Labels are equipment.tier.<value> in the devices namespace.
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
 
 export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = ({
-  isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment,
+  isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment, allEquipment = [],
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
   const TIER_OPTIONS = TIERS.map((tier) => ({ label: t(`equipment.tier.${tier}`), value: tier }));
@@ -37,6 +41,12 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
   const [modelNumber, setModelNumber] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [tier, setTier] = useState<ServiceTier>('basic');
+  const [equipmentClassSlug, setEquipmentClassSlug] = useState('');
+  // Machine types granted to each client, read once per opening (tester bug TC_145):
+  // a machine may only run a class its account was granted (decision D04), so the
+  // picker offers that client's grants, never the whole library.
+  const [grants, setGrants] = useState<{ tenantId: string; slug: string }[]>([]);
+  const [classNames, setClassNames] = useState<Record<string, string>>({});
   const [plants, setPlants] = useState<Plant[]>([]);
   const [plantsLoading, setPlantsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -56,6 +66,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
     setModelNumber('');
     setSerialNumber('');
     setTier('basic');
+    setEquipmentClassSlug('');
     setPlants([]);
     setError(undefined);
   };
@@ -72,12 +83,30 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
       setModelNumber(existingEquipment.modelNumber ?? '');
       setSerialNumber(existingEquipment.serialNumber ?? '');
       setTier(existingEquipment.tier);
+      setEquipmentClassSlug(existingEquipment.equipmentClassSlug ?? '');
     } else {
       reset();
     }
     setError(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, existingEquipment]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let live = true;
+    Promise.all([apiListEntitlements(), apiListEquipmentClasses()])
+      .then(([entitlements, classes]) => {
+        if (!live) return;
+        setGrants(entitlements.filter((e) => !e.revokedAt).map((e) => ({ tenantId: e.tenantId, slug: e.equipmentClassSlug })));
+        setClassNames(Object.fromEntries(classes.map((c) => [c.slug, c.name])));
+      })
+      .catch(() => { if (live) setGrants([]); });
+    return () => { live = false; };
+  }, [isOpen]);
+
+  const classOptions = grants
+    .filter((g) => g.tenantId === tenantId)
+    .map((g) => ({ label: classNames[g.slug] ?? g.slug, value: g.slug }));
 
   // The site picker is per-client — fetched fresh whenever the chosen client
   // changes, never preloaded for every account up front.
@@ -94,6 +123,12 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
   }, [tenantId]);
 
   if (!isOpen) return null;
+
+  // Said while typing, as on the client's own form (test report MAJ-4c). A code is unique
+  // within one account, so only the chosen client's machines can clash.
+  const duplicateOf = !existingEquipment && tenantId && code.trim()
+    ? allEquipment.find((e) => e.tenantId === tenantId && e.externalId.toLowerCase() === code.trim().toLowerCase())
+    : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +153,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
           modelNumber: modelNumber.trim() || undefined,
           serialNumber: serialNumber.trim() || undefined,
           tier,
+          equipmentClassSlug: equipmentClassSlug || null,
           tenantId,
         });
       } else {
@@ -130,6 +166,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
           modelNumber: modelNumber.trim() || undefined,
           serialNumber: serialNumber.trim() || undefined,
           tier,
+          equipmentClassSlug: equipmentClassSlug || undefined,
           tenantId,
         });
       }
@@ -169,7 +206,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
             <SelectPicker
               data={clientOptions}
               value={tenantId || null}
-              onChange={(value) => { setTenantId(value ?? ''); setPlantId(''); }}
+              onChange={(value) => { setTenantId(value ?? ''); setPlantId(''); setEquipmentClassSlug(''); }}
               placeholder={t('assign.selectClient')}
               disabled={isEditing}
               block
@@ -193,11 +230,17 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
                 placeholder={t('equipment.codePlaceholder')}
                 className="font-mono text-xs"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                {isEditing
-                  ? t('equipment.codeLocked')
-                  : t('equipment.codeHint')}
-              </p>
+              {duplicateOf ? (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  {t('equipment.codeTaken', { name: duplicateOf.name ?? duplicateOf.externalId })}
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {isEditing
+                    ? t('equipment.codeLocked')
+                    : t('equipment.codeHint')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -210,6 +253,25 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
                 placeholder={t('equipment.namePlaceholder')}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              {t('equipment.machineType')}
+            </label>
+            <SelectPicker
+              data={classOptions}
+              value={equipmentClassSlug || null}
+              onChange={(value) => setEquipmentClassSlug(value ?? '')}
+              placeholder={!tenantId ? t('equipment.pickClientFirst') : t('equipment.unclassified')}
+              disabled={!tenantId}
+              block
+              searchable={classOptions.length > 6}
+              cleanable
+            />
+            {tenantId && classOptions.length === 0 && (
+              <p className="text-[11px] text-slate-400 mt-1">{t('equipment.noGrantedTypes')}</p>
+            )}
           </div>
 
           <div>
@@ -308,7 +370,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
             </button>
             <button
               type="submit"
-              disabled={busy || !tenantId}
+              disabled={busy || !tenantId || !!duplicateOf}
               className="px-5 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />

@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
+import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { DeviceInventory } from '../../inventory/entities/device-inventory.entity';
 import { ToolMapping } from '../../device-catalog/entities/tool-mapping.entity';
@@ -79,7 +80,16 @@ export interface DiscoveryCandidate {
   imei: string | null;
   sensorName: string | null;
   sensorId: string | null;
+  /**
+   * The binding already in force or awaiting review for this signal from this logger,
+   * if any. Without it the panel offered Propose and Activate again after either had
+   * worked, and the tester read a successful call as a broken button (TC_129).
+   */
+  bindingStatus: 'proposed' | 'active' | null;
 }
+
+/** A candidate before its binding state is looked up. */
+type RawCandidate = Omit<DiscoveryCandidate, 'bindingStatus'>;
 
 export interface DiscoveryResult {
   equipment: EquipmentRef;
@@ -107,6 +117,8 @@ export interface ProposeBindingInput {
   validTo?: Date | null;
   discoveredBy?: SignalBindingDiscoveredBy;
   discoveredFrom?: string | null;
+  /** How often the sensor reports. Omitted: inherited, see `inheritedPeriod`. */
+  expectedPeriodSeconds?: number | null;
 }
 
 /**
@@ -117,6 +129,34 @@ export interface ProposeBindingInput {
  * (`signal_binding_version` and its exclusion constraint) already built. No
  * migration belongs here.
  */
+/**
+ * What coverage asks to be bound: the class's required signals, and a recommended one
+ * when an enabled scenario this account copied for the class cannot run without it.
+ * engine_load is "recommended" on the excavator class while three of its five scenarios
+ * need it, so coverage listed five signals and never asked for the sixth (test report
+ * OB-2). A recommended signal no scenario needs stays out, as before.
+ */
+async function coverageRequirements(
+  m: EntityManager, tenantId: string, classSlugs: string[],
+): Promise<EquipmentClassSensorRequirement[]> {
+  const [rows, scenarios] = await Promise.all([
+    m.getRepository(EquipmentClassSensorRequirement).find({
+      where: { classSlug: In(classSlugs), criticality: In(['required', 'recommended']) },
+    }),
+    m.getRepository(ClientScenario).find({
+      where: { tenantId, clientEquipmentClassSlug: In(classSlugs), enabled: true, status: 'active' },
+      select: { clientEquipmentClassSlug: true, requiredSignals: true },
+    }),
+  ]);
+  const needed = new Map<string, Set<string>>();
+  for (const s of scenarios) {
+    const set = needed.get(s.clientEquipmentClassSlug) ?? new Set<string>();
+    for (const sig of s.requiredSignals ?? []) set.add(sig);
+    needed.set(s.clientEquipmentClassSlug, set);
+  }
+  return rows.filter((r) => r.criticality === 'required' || needed.get(r.classSlug)?.has(r.measurementRole));
+}
+
 @Injectable()
 export class SignalBindingService {
   private readonly telemetryReader = new TelemetryWindowReader();
@@ -145,12 +185,8 @@ export class SignalBindingService {
       const profile = await this.findEquipment(m, scope.tenantId, equipment);
       if (!profile.equipmentClassSlug || !profile.classVersion) return computeCoverage(equipment, at, [], [], new Map(), null);
 
-      const requirements = await m.getRepository(EquipmentClassSensorRequirement).find({
-        where: {
-          classSlug: profile.equipmentClassSlug, classVersion: profile.classVersion,
-          criticality: 'required',
-        },
-      });
+      const requirements = (await coverageRequirements(m, scope.tenantId, [profile.equipmentClassSlug]))
+        .filter((r) => r.classVersion === profile.classVersion);
 
       // Freshness by the binding's device, over the binding's window (task
       // QFIX-DEVICES) — not `device_inventory`'s IMEIs. The KPI evaluator reads the
@@ -205,9 +241,7 @@ export class SignalBindingService {
 
       const slugs = [...new Set(profiles.map((p) => p.equipmentClassSlug).filter((s): s is string => !!s))];
       const [requirements, bindings, parameterRows] = await Promise.all([
-        slugs.length ? m.getRepository(EquipmentClassSensorRequirement).find({
-          where: { classSlug: In(slugs), criticality: 'required' },
-        }) : Promise.resolve([]),
+        slugs.length ? coverageRequirements(m, scope.tenantId, slugs) : Promise.resolve([]),
         m.getRepository(SignalBindingVersion).find({ where: { tenantId: scope.tenantId, externalId: In(externalIds) } }),
         latestParameterRows(m, scope.tenantId, 'stale_after_seconds', at),
       ]);
@@ -262,8 +296,8 @@ export class SignalBindingService {
       const expectedByKey = new Map(expected.map((c) => [c.signalKey, c]));
       const actualByKey = new Map(actual.map((c) => [c.signalKey, c]));
 
-      const matched: DiscoveryCandidate[] = [];
-      const expectedNotMapped: DiscoveryCandidate[] = [];
+      const matched: RawCandidate[] = [];
+      const expectedNotMapped: RawCandidate[] = [];
       for (const candidate of expected) {
         const found = actualByKey.get(candidate.signalKey);
         if (found) matched.push({ ...candidate, imei: found.imei, sensorName: found.sensorName });
@@ -272,13 +306,32 @@ export class SignalBindingService {
 
       const mappedNotExpected = actual.filter((c) => !expectedByKey.has(c.signalKey));
 
-      return { equipment, matched, expectedNotMapped, mappedNotExpected };
+      // Open versions only: a superseded or rejected one is history, not state.
+      const open = await m.getRepository(SignalBindingVersion).find({
+        where: {
+          tenantId: scope.tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+          validTo: IsNull(), status: In(['proposed', 'discovered_unreviewed', 'active']),
+        },
+      });
+      const statusOf = (c: RawCandidate): DiscoveryCandidate['bindingStatus'] => {
+        const mine = open.filter((b) => b.signalKey === c.signalKey && (c.imei === null || b.imei === c.imei));
+        if (mine.some((b) => b.status === 'active')) return 'active';
+        return mine.length ? 'proposed' : null;
+      };
+      const annotate = (list: RawCandidate[]): DiscoveryCandidate[] => list.map((c) => ({ ...c, bindingStatus: statusOf(c) }));
+
+      return {
+        equipment,
+        matched: annotate(matched),
+        expectedNotMapped: annotate(expectedNotMapped),
+        mappedNotExpected: annotate(mappedNotExpected),
+      };
     });
   }
 
   private async expectedFromToolMapping(
     m: EntityManager, devices: DeviceInventory[],
-  ): Promise<DiscoveryCandidate[]> {
+  ): Promise<RawCandidate[]> {
     const toolMappingIds = [...new Set(devices.map((d) => d.toolMappingId).filter((id): id is string => !!id))];
     if (!toolMappingIds.length) return [];
 
@@ -290,7 +343,7 @@ export class SignalBindingService {
     const sensorNameById = new Map(sensors.map((s) => [s.id, s.sensorName]));
     const capabilities = await m.getRepository(SensorRoleCapability).find({ where: { sensorId: In(sensorIds) } });
 
-    const out: DiscoveryCandidate[] = [];
+    const out: RawCandidate[] = [];
     const seen = new Set<string>();
     for (const device of devices) {
       if (!device.toolMappingId) continue;
@@ -319,7 +372,7 @@ export class SignalBindingService {
 
   private async actualFromSensorMap(
     m: EntityManager, tenantId: string, devices: DeviceInventory[],
-  ): Promise<DiscoveryCandidate[]> {
+  ): Promise<RawCandidate[]> {
     const imeis = [...new Set(devices.map((d) => d.imei))];
     if (!imeis.length) return [];
 
@@ -382,6 +435,7 @@ export class SignalBindingService {
         isPrimary: false,
         status: input.discoveredBy && input.discoveredBy !== 'manual' ? 'discovered_unreviewed' : 'proposed',
         discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
+        expectedPeriodSeconds: await inheritedPeriod(m, scope.tenantId, equipment, input, null),
       }));
     });
   }
@@ -413,6 +467,8 @@ export class SignalBindingService {
         },
       });
 
+      const expectedPeriodSeconds = await inheritedPeriod(m, scope.tenantId, equipment, input, existing);
+
       if (existing) {
         // If it is already active with the same device/channel, it is already satisfied
         if (
@@ -439,7 +495,7 @@ export class SignalBindingService {
           validFrom: input.validFrom, validTo: input.validTo ?? null,
           isPrimary: true, status: 'active',
           discoveredFrom: input.discoveredFrom ?? null, discoveredBy: input.discoveredBy ?? 'manual',
-          approvedBy: scope.userId, approvedAt: now,
+          approvedBy: scope.userId, approvedAt: now, expectedPeriodSeconds,
         }));
       } catch (err: any) {
         if (err?.message?.includes('ex_signal_binding_primary') || err?.code === '23P01') {
@@ -635,4 +691,32 @@ async function latestParameterRows(m: EntityManager, tenantId: string, name: str
     [tenantId, name, at],
   );
   return raw.map((r) => ({ ...r, effectiveFrom: new Date(r.effectiveFrom) }));
+}
+
+/**
+ * The reporting period a binding is created with when the caller gives none. Without
+ * one the KPI evaluator assumes 300 s, so a sensor reporting every 600 s reads half
+ * covered and every KPI on it `insufficient_coverage` (EX-01's fuel_level on dev, bound
+ * from sensor-map discovery on 22 Oct, beside six siblings declaring 600 s).
+ *
+ * In order: what the caller said; the binding this one replaces, which was the same
+ * sensor; otherwise the period the same device's other active bindings on this machine
+ * agree on, since a logger reports its channels at one cadence. Disagreement or none
+ * leaves it null, as before: a guess would be worse than the evaluator's default.
+ */
+async function inheritedPeriod(
+  m: EntityManager, tenantId: string, equipment: EquipmentRef, input: ProposeBindingInput,
+  replaced: SignalBindingVersion | null,
+): Promise<number | null> {
+  if (input.expectedPeriodSeconds) return input.expectedPeriodSeconds;
+  if (replaced?.expectedPeriodSeconds) return replaced.expectedPeriodSeconds;
+  if (!input.imei) return null;
+  const siblings = await m.getRepository(SignalBindingVersion).find({
+    where: {
+      tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId,
+      imei: input.imei, isPrimary: true, status: 'active',
+    },
+  });
+  const periods = new Set(siblings.map((b) => b.expectedPeriodSeconds).filter((p): p is number => p !== null));
+  return periods.size === 1 ? [...periods][0] : null;
 }

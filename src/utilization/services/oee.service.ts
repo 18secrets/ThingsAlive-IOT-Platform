@@ -106,14 +106,20 @@ export class OeeService {
   async forEquipment(
     scope: RequestScope, ref: { sourceSystem: string; externalId: string },
     window: OeeWindow, at: Date, now: Date = new Date(),
-  ): Promise<OeeResult> {
+  ): Promise<OeeResult & { breakdowns: BreakdownEvent[] }> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
       throw new NotFoundException('No such equipment in this account.');
     }
     const bounds = windowBounds(window, at, now);
     return withTenantSession(this.ds, scope, async (m) => {
       const profile = await this.profile(m, scope.tenantId, ref);
-      return this.measure(m, scope.tenantId, profile, window, bounds, now);
+      const result = await this.measure(m, scope.tenantId, profile, window, bounds, now);
+      // The rows Performance counted, read in the same transaction over the same bounds.
+      // A second request for the list re-ran detection and could land after the count,
+      // or fail on its own, leaving "7 breakdowns" above "none recorded".
+      const breakdowns = result.performance.breakdownCount > 0
+        ? await this.eventsIn(m, scope.tenantId, profile, bounds.from, bounds.to) : [];
+      return { ...result, breakdowns };
     });
   }
 

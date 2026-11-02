@@ -7,16 +7,20 @@ import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
+import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { statusTone, severityTone } from '../components/common/statusTone';
+import { ExportCsvButton } from '../components/common/ExportCsvButton';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
   apiAcknowledgeAlert, apiCreateAlertRule, apiDisableAlertRule, apiEnableAlertRule, apiListAlertRules,
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
+import { sortRows, useSort } from '../lib/useSort';
 
-const SEVERITY_TONE: Record<AlertRuleSeverity, 'slate' | 'sky' | 'amber' | 'rose'> = {
-  none: 'slate', low: 'sky', medium: 'sky', high: 'amber', critical: 'rose',
-};
+const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
 // The real backend whitelist for POST/PATCH /alerts/rules (alert.controller.ts's own
 // TRIGGERS) excludes fuel-loss and chain-origin from tenant-authored rules entirely —
@@ -40,6 +44,8 @@ function ruleScopeText(rule: AlertRule, plants: Plant[], equipment: EquipmentPro
 
 export const AlertsPage: React.FC = () => {
   const { t } = useTranslation('alerts');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('alerts');
   usePageHeader({ title: t('translation:pages.alerts.title'), subtitle: t('translation:pages.alerts.subtitle') });
   const navigate = useNavigate();
 
@@ -71,6 +77,8 @@ export const AlertsPage: React.FC = () => {
   }, []);
 
   async function acknowledge(id: string) {
+    // There is no un-acknowledge, so a stray click must not be the whole decision.
+    if (!window.confirm(t('prompts.acknowledgeConfirm'))) return;
     setBusyId(id);
     try {
       await apiAcknowledgeAlert(id);
@@ -97,6 +105,8 @@ export const AlertsPage: React.FC = () => {
   }
 
   async function toggleRule(rule: AlertRule) {
+    // Switching a rule off silences it for every machine it covers; switching on is harmless.
+    if (rule.enabled && !window.confirm(t('prompts.disableRuleConfirm', { name: rule.name }))) return;
     setBusyId(rule.id);
     try {
       if (rule.enabled) await apiDisableAlertRule(rule.id); else await apiEnableAlertRule(rule.id);
@@ -123,6 +133,70 @@ export const AlertsPage: React.FC = () => {
   }
 
   const openCount = useMemo(() => events.filter((e) => e.state === 'open').length, [events]);
+  // The list holds open and acknowledged alerts; this narrows it to one (test report MIN-7, MIN-9).
+  const [stateFilter, setStateFilter] = useState<'all' | 'open' | 'acknowledged'>('all');
+  const shown = useMemo(() => events.filter((e) => stateFilter === 'all' || e.state === stateFilter), [events, stateFilter]);
+
+  // Both lists are paged, in both views.
+  const { pageItems: ruleItems, ...rulePager } = usePagination(rules);
+  const rulePage = { pageItems: ruleItems };
+  // Sortable headers on the alerts (test report MAJ-9); newest first, as the list already ran.
+  const { sort: eventSort, toggle: toggleEventSort } = useSort<'severity' | 'state' | 'name' | 'machine' | 'fired'>({ key: 'fired', dir: 'desc' });
+  const sortedEvents = useMemo(() => sortRows(shown, eventSort, {
+    severity: (e) => SEVERITY_OPTIONS.indexOf(e.severity as AlertRuleSeverity),
+    state: (e) => e.state,
+    name: (e) => e.ruleName,
+    machine: (e) => equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
+    fired: (e) => e.firedAt,
+  }), [shown, eventSort, equipment]);
+  const { pageItems: eventItems, ...eventPager } = usePagination(sortedEvents);
+  const eventPage = { pageItems: eventItems };
+
+  type Rule = (typeof rules)[number];
+  type Event = (typeof events)[number];
+  // The card's controls, shared with the list row.
+  const ruleToggle = (r: Rule) => (
+    <button
+      disabled={busyId === r.id}
+      onClick={() => toggleRule(r)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${r.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+      title={r.enabled ? t('rules.disable') : t('rules.enable')}
+    >
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${r.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
+    </button>
+  );
+  const ruleChips = (r: Rule) => (
+    <>
+      <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+      <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
+      {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
+    </>
+  );
+  const ruleEdit = (r: Rule) => CREATABLE_TRIGGERS.includes(r.trigger) ? (
+    <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+      {t('rules.edit')}
+    </button>
+  ) : null;
+  const machineName = (e: Event) =>
+    equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
+  const eventActions = (e: Event) => (
+    <>
+      {e.state === 'open' && (
+        <button disabled={busyId === e.id} onClick={() => acknowledge(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+          {t('events.acknowledge')}
+        </button>
+      )}
+      <button disabled={busyId === e.id} onClick={() => resolve(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
+        {t('events.resolve')}
+      </button>
+      <button
+        onClick={() => navigate(`/admin/equipment/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}/page`)}
+        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer ml-auto"
+      >
+        {t('events.viewMachine')}
+      </button>
+    </>
+  );
 
   return (
     <div id="alerts-view" className="space-y-3">
@@ -141,7 +215,8 @@ export const AlertsPage: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('rules.heading')}</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
             <button
               onClick={() => setEditingRule('new')}
               className="px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer inline-flex items-center gap-1.5"
@@ -156,87 +231,123 @@ export const AlertsPage: React.FC = () => {
             </button>
           </div>
         </div>
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('loading')}</p>
-        ) : rules.length === 0 ? (
-          <p className="text-sm text-slate-400">{t('rules.empty')}</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {rules.map((r) => (
-              <div key={r.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{r.name}</h4>
-                  <button
-                    disabled={busyId === r.id}
-                    onClick={() => toggleRule(r)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${r.enabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                    title={r.enabled ? t('rules.disable') : t('rules.enable')}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${r.enabled ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                  </button>
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
+          ) : rules.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">{t('rules.empty')}</p>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              columns={[
+                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.scope') },
+                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+              ]}
+              rows={rulePage.pageItems}
+              rowKey={(r) => r.id}
+              cells={(r) => [
+                <span className="font-medium">{r.name}</span>,
+                <div className="flex items-center gap-1.5 flex-wrap">{ruleChips(r)}</div>,
+                <span className="text-[11px] text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
+                ruleToggle(r),
+                ruleEdit(r),
+              ]}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rulePage.pageItems.map((r) => (
+                <div key={r.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{r.name}</h4>
+                    {ruleToggle(r)}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {ruleChips(r)}
+                  </div>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{ruleScopeText(r, plants, equipment, t)}</p>
+                  {ruleEdit(r)}
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
-                  <Chip tone="slate">{t(`trigger.${r.trigger}`, { defaultValue: r.trigger })}</Chip>
-                  {r.templateSlug && <Chip tone="slate">{t('rules.fromTemplate')}</Chip>}
-                </div>
-                <p className="text-xs text-slate-400 dark:text-slate-500">{ruleScopeText(r, plants, equipment, t)}</p>
-                {CREATABLE_TRIGGERS.includes(r.trigger) && (
-                  <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                    {t('rules.edit')}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          {!loading && rules.length > 0 && <TablePagination {...rulePager} />}
+        </div>
       </div>
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-1">{t('events.heading')}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
+          <span className="flex items-center gap-2">
+          <SelectPicker
+            size="sm"
+            data={(['all', 'open', 'acknowledged'] as const).map((s) => ({ label: s === 'all' ? t('events.allStates') : t(`state.${s}`), value: s }))}
+            value={stateFilter}
+            onChange={(v) => setStateFilter((v ?? 'all') as 'all' | 'open' | 'acknowledged')}
+            searchable={false}
+            cleanable={false}
+            className="min-w-[150px]"
+          />
+          <ExportCsvButton
+            name="alerts"
+            disabled={!shown.length}
+            headers={['fired', 'machine', 'rule', 'severity', 'state', 'summary', 'acknowledgedAt'].map((c) => t(`events.col.${c}`))}
+            rows={() => sortedEvents.map((e) => [
+              e.firedAt, equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId,
+              e.ruleName, t(`severity.${e.severity}`), t(`state.${e.state}`), e.summary, e.acknowledgedAt,
+            ])}
+          />
+          </span>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
-        {loading ? (
-          <p className="text-sm text-slate-500">{t('loading')}</p>
-        ) : events.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
-            <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {events.map((e) => {
-              const name = equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
-              return (
+        <div className={LIST_PANEL}>
+          {loading ? (
+            <p className="p-4 text-sm text-slate-500">{t('loading')}</p>
+          ) : shown.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+              <CheckCircle2 className="w-6 h-6" /> {t('events.empty')}
+            </div>
+          ) : viewMode === 'list' ? (
+            <ListTable bare
+              sort={eventSort}
+              onSort={(key) => { toggleEventSort(key as typeof eventSort.key, key === 'fired' || key === 'severity' ? 'desc' : 'asc'); eventPager.setPage(1); }}
+              columns={[
+                { label: ts('listCol.severity'), sortKey: 'severity' }, { label: ts('listCol.state'), sortKey: 'state' }, { label: ts('listCol.name'), sortKey: 'name' },
+                { label: ts('listCol.machine'), sortKey: 'machine' }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt'), sortKey: 'fired' },
+                { label: ts('listCol.actions'), width: 310 },
+              ]}
+              rows={eventPage.pageItems}
+              rowKey={(e) => e.id}
+              cells={(e) => [
+                <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
+                <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
+                <span className="font-medium">{e.ruleName}</span>,
+                machineName(e),
+                e.summary,
+                new Date(e.firedAt).toLocaleString(),
+                <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
+              ]}
+            />
+          ) : (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {eventPage.pageItems.map((e) => (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE[e.severity]}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
-                    <Chip tone={e.state === 'open' ? 'rose' : 'amber'}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
+                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
+                    <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{name}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString()}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    {e.state === 'open' && (
-                      <button disabled={busyId === e.id} onClick={() => acknowledge(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-                        {t('events.acknowledge')}
-                      </button>
-                    )}
-                    <button disabled={busyId === e.id} onClick={() => resolve(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-300 disabled:opacity-50 cursor-pointer">
-                      {t('events.resolve')}
-                    </button>
-                    <button
-                      onClick={() => navigate(`/admin/equipment/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}/page`)}
-                      className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer ml-auto"
-                    >
-                      {t('events.viewMachine')}
-                    </button>
+                    {eventActions(e)}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          {!loading && shown.length > 0 && <TablePagination pinToBottom {...eventPager} />}
+        </div>
       </div>
 
       <Modal
@@ -291,8 +402,8 @@ const AlertRuleForm: React.FC<{
     if (trigger === 'signal-threshold') {
       return {
         signal: signal.trim(),
-        min: min.trim() ? Number(min) : null,
-        max: max.trim() ? Number(max) : null,
+        min: minValue,
+        max: maxValue,
       };
     }
     if (trigger === 'prediction-severity') {
@@ -301,9 +412,19 @@ const AlertRuleForm: React.FC<{
     return {};
   }
 
+  // An unreadable bound would go out as null (JSON has no NaN) and the rule would save
+  // watching one side only, so each is checked here and the reason shown under it.
+  const asNumber = (raw: string) => (raw.trim() === '' ? null : Number(raw.trim()));
+  const minValue = asNumber(min);
+  const maxValue = asNumber(max);
+  const minError = minValue !== null && !Number.isFinite(minValue) ? t('form.notANumber') : undefined;
+  const maxError = maxValue !== null && !Number.isFinite(maxValue) ? t('form.notANumber')
+    : minValue !== null && maxValue !== null && !minError && minValue >= maxValue ? t('form.minBelowMax') : undefined;
+
   function valid(): boolean {
     if (!name.trim()) return false;
     if (trigger === 'signal-threshold' && (!signal.trim() || (!min.trim() && !max.trim()))) return false;
+    if (trigger === 'signal-threshold' && (minError || maxError)) return false;
     if (appliesTo === 'plant' && !plantId) return false;
     if (appliesTo === 'equipment' && !equipmentKey) return false;
     return true;
@@ -356,11 +477,13 @@ const AlertRuleForm: React.FC<{
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.min')}</span>
-            <Input value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
+            {minError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{minError}</span>}
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.max')}</span>
-            <Input value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
+            {maxError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
         </div>
       )}

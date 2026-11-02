@@ -15,6 +15,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CatalogImportModule } from './catalog-import/catalog-import.module';
 import { ClientCatalogModule } from './client-catalog/client-catalog.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { GeofenceModule } from './geofence/geofence.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { FleetImportModule } from './fleet-import/fleet-import.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
@@ -35,6 +36,8 @@ import { ParameterModule } from './parameters/parameter.module';
 import { LegacyModule } from './legacy/legacy.module';
 import { ShiftModule } from './shift/shift.module';
 import { ForecastModule } from './forecast/forecast.module';
+import { ReadingsImportModule } from './readings-import/readings-import.module';
+import { ForecastApiModule } from './forecast/forecast-api.module';
 import { ForecastSchedulingModule } from './forecast/forecast.scheduler';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { TelemetryPartitionModule } from './telemetry/telemetry-partition.module';
@@ -104,6 +107,7 @@ export class AppModule {
               MailModule,
               TenancyModule,
               EquipmentModule,
+              GeofenceModule,
               FleetImportModule,
               SignalBindingModule,
               KpiModule,
@@ -115,6 +119,8 @@ export class AppModule {
               WorkModule,
               ShiftModule,
               ForecastModule,
+              ReadingsImportModule,
+              ForecastApiModule,
               ForecastSchedulingModule,
               EvaluationModule,
               TelemetryPartitionModule,

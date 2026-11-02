@@ -7,6 +7,7 @@ export type NavigationTab =
   | 'ai-onboarding'
   | 'alert-agent'
   | 'alerts'
+  | 'geofence'
   | 'predictions'
   | 'scenarios'
   | 'work-orders'
@@ -100,6 +101,10 @@ export interface AuthUser {
   allowedTabs?: NavigationTab[];
   /** Whether this client user holds the built-in Super Admin role. */
   isSuperAdmin?: boolean;
+  /** Things Alive staff only: their own platform role (master-admin, catalog-author, platform-support). */
+  platformRole?: string;
+  /** What this person may do, from /me/permissions — the same answer the API enforces. */
+  capabilities?: Record<string, boolean>;
 }
 
 export type PlatformUserRole = 'Operational' | 'Executive' | 'Support' | 'Admin' | 'Super Admin';

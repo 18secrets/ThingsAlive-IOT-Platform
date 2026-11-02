@@ -32,12 +32,23 @@ Two consequences worth knowing before something confuses you:
 | Service | What it is | Replicas | Scales on |
 |---|---|---|---|
 | `api` | NestJS HTTP. Serves `/api/v1`, runs migrations before traffic. | 1+ | Request volume |
-| `scheduler` | The same image with `SHIFT_RUNNER_ENABLED=true`. Runs the shift pass. | **Exactly 1** | Nothing — it is a singleton |
+| `scheduler` | The api's code with `SHIFT_RUNNER_ENABLED=true` and `FORECAST_ENABLED=true`. Runs the shift pass and the forecast pass. | **Exactly 1** | Nothing — it is a singleton |
 
-Both build from the same `Dockerfile` and run the same `dist/main.js`. The only thing
-that distinguishes them is one environment variable, which is deliberate: two images
-would drift, and the day they drifted would be the day the scheduler scored a shift
-with last month's code.
+Both run the same `dist/main.js`, built from the same source in the same commit. The
+scheduler's image is the `scheduler` stage: the api's, plus Python 3.11, CPU torch,
+granite-tsfm and the pinned TTM weights for the forecast worker (D46 §2). The api image
+never carries Python or torch. Built as the api image, every forecast pass fails with
+`worker could not start: spawn python3 ENOENT`.
+
+**The scheduler is chosen by `IMAGE_ROLE=scheduler`, a variable on the scheduler service,**
+not by Dockerfile Path alone. Railway's builder stopped honouring a service's Dockerfile
+Path on 2026-10-26 (it builds `Dockerfile` whatever the setting says, or reports the file
+missing from the archive), so `Dockerfile` itself builds either image: the `api` stage by
+default, the `scheduler` stage when the build sees `IMAGE_ROLE=scheduler`.
+`Dockerfile.scheduler` is the same file with that default flipped, kept for a builder
+that does honour the path; `test/dockerfile-image-role.spec.ts` keeps the two identical.
+To check a scheduler build, its log must show `python3-venv` and `snapshot_download`,
+and no `[model 1/3]` step.
 
 **The scheduler is one replica on purpose.** The pass takes a Postgres advisory lock,
 so a second instance is harmless rather than dangerous — but it would double the work
@@ -60,6 +71,8 @@ dashboard.
 
 | Setting | `api` | `scheduler` |
 |---|---|---|
+| Dockerfile Path (Settings → Build) | `Dockerfile` | `Dockerfile.scheduler` |
+| `IMAGE_ROLE` (Variables) | unset (`api`) | **`scheduler`** |
 | Healthcheck Path | `/api/v1/ready` | `/api/v1/ready` |
 | Pre-deploy step | `npm run migration:run` | **empty** |
 | Replicas | 1+ | **exactly 1** |

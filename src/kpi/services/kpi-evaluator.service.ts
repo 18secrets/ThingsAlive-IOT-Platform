@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
-import { WindowReading } from '../../alert/services/alert-rules';
 import {
   alertExcludedRanges, ExcludedRange, OperatingGate, openWorkOrderExcludedRanges, Reading,
 } from '../../catalog/formula/baseline-operators';
@@ -13,15 +12,19 @@ import { ClientFormula } from '../../client-catalog/entities/client-formula.enti
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { Plant } from '../../equipment/entities/plant.entity';
 import { SiteBoundary } from '../../catalog/formula/geofence';
+import { GeofenceZone } from '../../geofence/entities/geofence-zone.entity';
+import { zoneAppliesTo } from '../../geofence/geofence.service';
+import { ZoneShape } from '../../geofence/geometry';
 import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantSession } from '../../scope/tenant-session';
-import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { BindingSegment, bindingSegments, overlapping, SignalBindingService } from '../../signal-binding/services/signal-binding.service';
 import { classifyFreshness, DEFAULT_STALE_AFTER_SECONDS, resolveStaleAfterSeconds } from '../../signal-binding/services/signal-freshness';
-import { AVAILABILITY_SIGNALS, operatingIntervals } from '../../utilization/services/availability';
 import { WorkOrder } from '../../work/entities/work-order.entity';
 import { Coverage, EquipmentRef, KpiEnvelope, Readiness, Reason, SeriesPoint } from '../types';
 import { BucketAggregate, TelemetrySegment, TelemetryWindowReader } from './telemetry-window-reader';
+import { loadOperatingGate } from './operating-gate';
+import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
+import { scheduledIntervals } from '../../utilization/services/availability';
 import { MAX_BUCKETS_OVERRIDE, pickBucketSeconds } from './bucketing';
 
 const HOUR = 3_600_000;
@@ -53,6 +56,8 @@ interface PlanEvalContext {
   /** The machine's site boundary (task QGEO1); null when it has no site or the site
    * is unfenced. */
   siteBoundary: SiteBoundary | null;
+  /** The machine's enabled geofence zones by code (task QGEO2). */
+  zones: Map<string, ZoneShape>;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -147,6 +152,14 @@ export class KpiEvaluatorService {
     return envelope;
   }
 
+  /** Each active formula's `display_format`, by key, for the routes that show its value. */
+  async displayFormats(scope: RequestScope, equipment: EquipmentRef): Promise<Map<string, string>> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const { formulas } = await this.loadFormulas(m, scope.tenantId, equipment);
+      return new Map(formulas.map((f) => [f.formulaKey, f.displayFormat]));
+    });
+  }
+
   private async loadFormulas(
     m: EntityManager, tenantId: string, equipment: EquipmentRef,
   ): Promise<{ formulas: ClientFormula[]; profile: EquipmentProfile }> {
@@ -178,8 +191,16 @@ export class KpiEvaluatorService {
     // window they render — see collectSignalLookback).
     const perTargetWindow = new Map<string, Window | null>();
     const signalLookbackHours = new Map<string, number>();
+    // A `shift` window is the machine's own shift, so it needs the machine's schedule:
+    // read once for the batch, and only when some formula asks for it.
+    const shift = !explicitWindow && targets.some((t) => t.aggregationWindow === 'shift')
+      ? shiftWindow(await m.getRepository(EquipmentShift).find({
+        where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, status: 'active' },
+      }), at)
+      : null;
     for (const target of targets) {
-      const display = explicitWindow ?? resolveWindow(target.aggregationWindow, at);
+      const display = explicitWindow
+        ?? (target.aggregationWindow === 'shift' ? shift : resolveWindow(target.aggregationWindow, at));
       perTargetWindow.set(target.formulaKey, display);
       if (!target.compiledPlan) continue;
       collectSignalLookback(target.compiledPlan, signalLookbackHours);
@@ -302,6 +323,14 @@ export class KpiEvaluatorService {
       : null;
     const siteBoundary = plant?.boundary ?? null;
 
+    // The machine's geofence zones (task QGEO2), by code — the same rule the zone API
+    // uses for "which zones apply to this machine". Few rows per account; read whole.
+    const zones = new Map(
+      (await m.getRepository(GeofenceZone).find({ where: { tenantId, enabled: true } }))
+        .filter((z) => zoneAppliesTo(z, profile))
+        .map((z) => [z.code, z.shape] as [string, ZoneShape]),
+    );
+
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
       const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
@@ -313,48 +342,18 @@ export class KpiEvaluatorService {
     return Promise.all(targets.map((target) => this.buildEnvelope(
       target, perTargetWindow.get(target.formulaKey) ?? null,
       {
-        signals, parameters, excludedRangesBySignal, siteBoundary, operating,
+        signals, parameters, excludedRangesBySignal, siteBoundary, zones, operating,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
       m, tenantId, toTelemetry(segments),
     )));
   }
 
-  /**
-   * The machine's operating periods across the read window (task QFIX-BASELINE) —
-   * Availability's own definition, `operatingIntervals`, over the same shift schedule
-   * and engine-state signals. The engine-state readings come through the bindings like
-   * every other signal this evaluator reads (task QFIX-DEVICES), not through
-   * `device_projection`. Shifts are applied across the whole lookback as they stand
-   * today, as Availability applies them to a period.
-   */
-  /** Public for the forecast band (QML1 Q12): one operating gate, not a second. */
+  /** Public for the forecast band (QML1 Q12): one operating gate, not a second (`operating-gate.ts`). */
   async loadOperatingGate(
     m: EntityManager, tenantId: string, equipment: EquipmentRef, from: Date, to: Date,
   ): Promise<OperatingGate> {
-    const shifts = await m.getRepository(EquipmentShift).find({
-      where: { tenantId, sourceSystem: equipment.sourceSystem, externalId: equipment.externalId, status: 'active' },
-    });
-    if (!shifts.length) return { scheduled: false, periods: [] };
-
-    const segments = await bindingSegments(
-      m, tenantId, equipment, [...AVAILABILITY_SIGNALS], { by: 'signalKey', componentId: '' },
-    );
-    const bySignal = await this.reader.readSegments(
-      m, tenantId,
-      overlapping(segments, from, to).map(({ signal, imei, from: f, to: t }) => ({ signal, imei, from: f, to: t })),
-      from, to,
-    );
-    const readings: WindowReading[] = [];
-    for (const [signal, rows] of bySignal) {
-      for (const r of rows) readings.push({ signal, value: r.value, sourceTimestamp: r.at.toISOString() });
-    }
-    // A millisecond past `to`: the KPI window includes its end instant and the interval
-    // arithmetic is half-open, so a reading taken exactly at evaluation time — the one a
-    // z-score judges — would otherwise always fall just outside every operating period.
-    const periods = operatingIntervals(shifts, readings, { from, to: new Date(to.getTime() + 1) })
-      .map((i) => ({ start: new Date(i.start), end: new Date(i.end) }));
-    return { scheduled: true, periods };
+    return loadOperatingGate(m, tenantId, equipment, from, to, this.reader);
   }
 
   /** Condition (a) of task QCE2.1 §5 — the same four-branch `appliesTo`
@@ -419,7 +418,7 @@ export class KpiEvaluatorService {
     ctxBase: {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
-      siteBoundary: SiteBoundary | null; operating?: OperatingGate;
+      siteBoundary: SiteBoundary | null; zones: Map<string, ZoneShape>; operating?: OperatingGate;
     },
     m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<KpiEnvelope> {
@@ -442,8 +441,9 @@ export class KpiEvaluatorService {
       };
     }
     if (!window) {
-      // aggregation_window: 'shift' — no shift-schedule resolution built here. An
-      // explicit from/to still answers, so the reason says which half is missing.
+      // A `shift` formula on a machine with no shift schedule (or none in the last
+      // eight days): nothing to resolve the window from. An explicit from/to still
+      // answers, so the reason says which half is missing.
       return { ...base, value: null, readiness: 'not_configured', reason: 'window_not_resolved', coverage: zeroCoverage() };
     }
     if (!formula.compiledPlan) {
@@ -476,7 +476,7 @@ export class KpiEvaluatorService {
     const ctx: PlanEvalContext = {
       window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal, siteBoundary: ctxBase.siteBoundary,
-      operating: ctxBase.operating,
+      zones: ctxBase.zones, operating: ctxBase.operating,
     };
 
     if (resultKind === 'series') {
@@ -659,7 +659,7 @@ function resolveWindow(aggWindow: string, at: Date): Window | null {
     case 'today': return { from: new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())), to: at };
     case 'mtd': return { from: new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1)), to: at };
     case 'ytd': return { from: new Date(Date.UTC(at.getUTCFullYear(), 0, 1)), to: at };
-    case 'shift': return null;
+    case 'shift': return null; // resolved from the machine's schedule: see shiftWindow
     default: return { from: new Date(at.getTime() - DAY), to: at };
   }
 }
@@ -755,6 +755,13 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       if (opEntry.needsSiteBoundary && !ctx.siteBoundary) {
         return { ok: false, readiness: 'not_configured', reason: 'site_boundary_not_set' };
       }
+      // A zone this machine does not have is not one it is outside of (task QGEO2).
+      let zoneShape: ZoneShape | null = null;
+      if (opEntry.needsZone) {
+        const zoneArg = node.args.find((a: { type: string }) => a.type === 'zone');
+        zoneShape = zoneArg ? ctx.zones.get(zoneArg.code) ?? null : null;
+        if (!zoneShape) return { ok: false, readiness: 'not_configured', reason: 'zone_not_applied' };
+      }
       const seriesArgs: Reading[][] = [];
       const scalarArgs: number[] = [];
       const durationArgs: number[] = [];
@@ -766,6 +773,8 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           durationArgs.push(argNode.hours);
           continue;
         }
+        if (kind === 'zone') continue; // resolved above, into zoneShape
+
         // A state's code, resolved at publish (task QCAT1). Null only in a plan that
         // never went through publish — not configured, rather than a guessed state.
         if (kind === 'state') {
@@ -794,7 +803,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
         windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
-        siteBoundary: ctx.siteBoundary, operating: ctx.operating,
+        siteBoundary: ctx.siteBoundary, zoneShape, operating: ctx.operating,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
       if (result.ok === false) return { ok: false, readiness: readinessFor(result.reason), reason: result.reason };
@@ -907,4 +916,20 @@ function evalBucketNode(
     default:
       return null;
   }
+}
+
+/**
+ * A `shift` aggregation window: the machine's current shift up to `at` while one is
+ * running, else the most recent shift that ended. Availability's own arithmetic
+ * (`scheduledIntervals`) over the last eight days, enough for a weekly schedule with a
+ * long weekend. No schedule, or none scheduled in that span: no window, and the
+ * envelope says `window_not_resolved` as it always has.
+ */
+export function shiftWindow(shifts: EquipmentShift[], at: Date): Window | null {
+  if (!shifts.length) return null;
+  const intervals = scheduledIntervals(shifts, { from: new Date(at.getTime() - 8 * DAY), to: at })
+    .filter((i) => i.end > i.start)
+    .sort((a, b) => a.end - b.end);
+  const last = intervals[intervals.length - 1];
+  return last ? { from: new Date(last.start), to: new Date(last.end) } : null;
 }

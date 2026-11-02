@@ -7,6 +7,8 @@
 // sign-out against Platform 2.0's actual /auth routes. Every other screen in
 // this app still reads and writes mock data — see App.tsx.
 
+import { mutationKind, reportMutation } from "./mutationNotice";
+
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
 
@@ -75,6 +77,16 @@ export function hasStoredSession(): boolean {
 let onSessionDead: (() => void) | null = null;
 export function setSessionDeadHandler(handler: (() => void) | null): void {
   onSessionDead = handler;
+}
+
+// Why the server last refused to renew the session ("This account has been
+// suspended."), so the sign-in screen can say it instead of appearing for no reason
+// (tester bugs TC_136, TC_137). Read once: it explains one sign-out, not the next.
+let sessionEndReason: string | null = null;
+export function takeSessionEndReason(): string | null {
+  const reason = sessionEndReason;
+  sessionEndReason = null;
+  return reason;
 }
 
 export async function apiSignIn(
@@ -150,9 +162,88 @@ export async function apiResume(): Promise<SignedInUser | null> {
     const body: SessionTokens = await parse(res);
     store(body);
     return body.user;
-  } catch {
+  } catch (err) {
     clear();
+    // Only the server's own refusal; a network failure says nothing about the account.
+    sessionEndReason = err instanceof ApiError && err.status === 401 ? err.message : null;
     return null;
+  }
+}
+
+// ------------------------------------------------------------- tab handoff
+
+/**
+ * A new tab gets its session from a signed-in one (test report MAJ-5: a second tab or
+ * a deep link landed on /sign-in). Sessions stay per tab, so each tab can still sign
+ * in as somebody else; what changes is that a tab opened with none asks the others.
+ * A signed-in tab answers with a fork — its own refresh token in the same sign-in
+ * (POST /auth/fork) — never its own token: tokens rotate, and two tabs presenting one
+ * would trip reuse detection and sign both out. BroadcastChannel never leaves this
+ * origin and this browser.
+ */
+const CHANNEL = "ta-session";
+/** How long a new tab waits for any tab to say it can help — no network in between. */
+const OFFER_WAIT_MS = 250;
+/** How long it then waits for the fork itself, one request away. */
+const FORK_WAIT_MS = 4000;
+
+type HandoffMessage =
+  | { type: "need"; id: string }
+  | { type: "offer"; id: string }
+  | { type: "claimed"; id: string }
+  | { type: "session"; id: string; tokens: SessionTokens };
+
+/** Answer other tabs' requests while this tab is signed in. Returns the stop function. */
+export function shareSessionWithNewTabs(): () => void {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const channel = new BroadcastChannel(CHANNEL);
+  const claimed = new Set<string>();
+  channel.onmessage = async (event: MessageEvent<HandoffMessage>) => {
+    const msg = event.data;
+    if (msg?.type === "claimed") { claimed.add(msg.id); return; }
+    if (msg?.type !== "need" || !hasStoredSession()) return;
+    channel.postMessage({ type: "offer", id: msg.id } satisfies HandoffMessage);
+    // Several open tabs all offer; the new tab takes the first and says so, and a tab
+    // that hears that before forking skips it. A fork that loses the race is an unused
+    // row in the same sign-in, and ends with it.
+    await new Promise((r) => setTimeout(r, Math.random() * 60));
+    if (claimed.has(msg.id)) return;
+    try {
+      const tokens: SessionTokens = await authFetch("/auth/fork", { method: "POST" });
+      channel.postMessage({ type: "session", id: msg.id, tokens } satisfies HandoffMessage);
+    } catch {
+      // This tab could not fork (signed out meanwhile, say); the new tab times out to sign-in.
+    }
+  };
+  return () => channel.close();
+}
+
+/** For a tab opened with no session: a signed-in user, or null to show sign-in. */
+export async function apiSessionFromOtherTab(): Promise<SignedInUser | null> {
+  if (typeof BroadcastChannel === "undefined") return null;
+  const channel = new BroadcastChannel(CHANNEL);
+  const id = Math.random().toString(36).slice(2);
+  try {
+    return await new Promise<SignedInUser | null>((resolve) => {
+      let offered = false;
+      const giveUp = setTimeout(() => { if (!offered) resolve(null); }, OFFER_WAIT_MS);
+      const tooLong = setTimeout(() => resolve(null), OFFER_WAIT_MS + FORK_WAIT_MS);
+      channel.onmessage = (event: MessageEvent<HandoffMessage>) => {
+        const msg = event.data;
+        if (msg?.id !== id) return;
+        if (msg.type === "offer") { offered = true; return; }
+        if (msg.type === "session") {
+          channel.postMessage({ type: "claimed", id } satisfies HandoffMessage);
+          clearTimeout(giveUp);
+          clearTimeout(tooLong);
+          store(msg.tokens);
+          resolve(msg.tokens.user);
+        }
+      };
+      channel.postMessage({ type: "need", id } satisfies HandoffMessage);
+    });
+  } finally {
+    channel.close();
   }
 }
 
@@ -185,14 +276,21 @@ async function authFetch(
   init: RequestInit = {},
   retried = false,
 ): Promise<any> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...init.headers,
-    },
-  });
+  const kind = mutationKind(path, init.method);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (err) {
+    if (kind) reportMutation({ ok: false, kind, message: null });
+    throw err;
+  }
   if (res.status === 401 && !retried) {
     const resumed = await apiResume();
     if (resumed) return authFetch(path, init, true);
@@ -202,7 +300,17 @@ async function authFetch(
     // exists.
     onSessionDead?.();
   }
-  return parse(res);
+  // Only the final answer is reported: a 401 that a refresh then retried is not a
+  // failure, and one that ends the session is the sign-in screen's to explain.
+  if (!kind || res.status === 401) return parse(res);
+  try {
+    const body = await parse(res);
+    reportMutation({ ok: true, kind });
+    return body;
+  } catch (err) {
+    reportMutation({ ok: false, kind, message: err instanceof ApiError ? err.message : null });
+    throw err;
+  }
 }
 
 /**
@@ -227,6 +335,12 @@ async function authFetchRaw(
     const resumed = await apiResume();
     if (resumed) return authFetchRaw(path, init, true);
     onSessionDead?.();
+  }
+  const kind = mutationKind(path, init.method);
+  if (kind && res.status !== 401) {
+    // A clone, so the caller still reads the body it expects.
+    const message = res.ok ? null : (await res.clone().json().catch(() => ({})))?.error?.message ?? `Request failed (${res.status}).`;
+    reportMutation(res.ok ? { ok: true, kind } : { ok: false, kind, message });
   }
   return res;
 }
@@ -1254,6 +1368,8 @@ export interface ClassDiffEntry {
   slug: string;
   action: ClassDiffAction;
   countsBySheet: Record<string, number>;
+  /** Apply refuses a class carrying these unless acknowledgeWarnings is sent. */
+  warnings?: ('incomplete_class' | 'content_regression')[];
 }
 
 export interface RejectedImportRow {
@@ -1295,6 +1411,8 @@ export interface ClassApplyResult {
   action: ClassDiffAction;
   version: number;
   created: Record<string, number>;
+  /** Draft alert templates made from the signal sheet's limits. */
+  draftedAlertTemplates?: number;
 }
 
 export interface CatalogImportApplySummary {
@@ -1334,10 +1452,11 @@ export function apiGetCatalogImportDiff(
 
 export function apiApplyCatalogImport(
   id: string,
+  acknowledgeWarnings = false,
 ): Promise<CatalogImportApplySummary> {
   return authFetch(
     `/platform/catalog/imports/${encodeURIComponent(id)}/apply`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ acknowledgeWarnings }) },
   );
 }
 
@@ -1870,6 +1989,8 @@ export interface DiscoveryCandidate {
   imei: string | null;
   sensorName: string | null;
   sensorId: string | null;
+  /** The open binding for this signal from this logger, if any. */
+  bindingStatus: 'proposed' | 'active' | null;
 }
 
 export interface DiscoveryResult {
@@ -2294,6 +2415,8 @@ export interface EquipmentOee {
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
   };
   oee: OeeFactor;
+  /** The rows Performance counted. On one machine's OEE only, not on a site's machines. */
+  breakdowns?: BreakdownEvent[];
 }
 
 export interface SiteOee {
@@ -2664,6 +2787,37 @@ export function apiGetPredictionHistory(
   );
 }
 
+/** One watched signal of a scenario, opened up: its readings over a window ending at
+ *  the latest verdict, and the lines that verdict was judged against. The bands come
+ *  back computed (overrides applied) so the chart never draws a threshold the scorer
+ *  did not use. `baseline` is null for an influence-model score or before a baseline
+ *  exists; `verdict` is null before the first score. */
+export interface PredictionSignalDetail {
+  clientScenarioSlug: string;
+  signal: string;
+  predictionId: string | null;
+  occurredAt: string | null;
+  modelRef: string | null;
+  verdict: (SignalVerdict & { expected?: number; residual?: number }) | null;
+  baseline: {
+    windowDays: number; mean: number; stddev: number; sampleCount: number; coverageRatio: number;
+    warningSigma: number; criticalSigma: number;
+    warning: { lo: number; hi: number };
+    critical: { lo: number; hi: number };
+  } | null;
+  window: { from: string; to: string; bucketSeconds: number };
+  readings: { at: string; avg: number; min: number; max: number; count: number }[];
+}
+
+export function apiGetPredictionSignalDetail(
+  sourceSystem: string, externalId: string, clientScenarioSlug: string, signal: string, hours?: number,
+): Promise<PredictionSignalDetail> {
+  const qs = hours ? `?hours=${hours}` : "";
+  return authFetch(
+    `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/${encodeURIComponent(clientScenarioSlug)}/signals/${encodeURIComponent(signal)}${qs}`,
+  );
+}
+
 /** Scores every active scenario on this asset right now, rather than waiting for the
  *  next arrival to trigger it — the one case the route exists for. */
 export function apiScorePredictionsNow(sourceSystem: string, externalId: string): Promise<ScoreResult> {
@@ -2743,6 +2897,9 @@ export interface EditMyEquipmentClassInput {
   failureModes?: FailureMode[];
   defaultThresholds?: Record<string, unknown>;
 }
+
+/** What the equipment register needs of a class: its key and the name to show. */
+export type ClassOption = { slug: string; name: string };
 
 export function apiListMyCatalogEquipmentClasses(): Promise<(MyEquipmentClass & { provenance: ScenarioProvenance })[]> {
   return authFetch("/my-catalog/equipment-classes");
@@ -3344,6 +3501,13 @@ export function apiSetCurrency(currency: string | null): Promise<CurrencyResult>
 export interface MeDiagnostics {
   tenantId: string;
   userId: string;
+  /** Null for a token that names no account row (one minted by the CLI). */
+  email: string | null;
+  fullName: string | null;
+  /** The role's own name ("CEO/Manager"); null for staff and CLI tokens. */
+  roleName?: string | null;
+  tenantName?: string | null;
+  tenantSince?: string | null;
   roles: string[];
   isPlatformRole: boolean;
   scope: {
@@ -4586,3 +4750,93 @@ export function apiEnableProposalRule(id: string, ruleId: string): Promise<unkno
 export function apiListPublishedNamedFormulas(): Promise<NamedFormula[]> {
   return authFetch("/catalog/named-formulas");
 }
+
+// ---------------------------------------------------------------- geofence fleet map (QGEO2)
+// Shape: docs/ai/contracts/geofence/fleet-status.v1.schema.json. Positions are
+// [longitude, latitude], as GeoJSON has them.
+
+export type GeofenceShape =
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "Circle"; center: [number, number]; radiusM: number }
+  | { type: "Corridor"; path: [number, number][]; widthM: number };
+
+export interface GeofenceFleetZone {
+  key: string;
+  id: string | null;
+  source: "zone" | "site-boundary";
+  code: string;
+  name: string;
+  kind: "allowed" | "restricted" | "corridor";
+  shape: GeofenceShape;
+  appliesTo: string;
+}
+
+export interface GeofenceFleetMachine {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  site: { id: string; code: string; name: string } | null;
+  position: { lng: number; lat: number; at: string; ageSeconds: number; imei: string } | null;
+  positionStatus: "live" | "stale" | "none";
+  zones: { key: string; inside: boolean; violation: boolean }[];
+  violating: boolean;
+}
+
+export interface GeofenceFleetStatus {
+  asOf: string;
+  zones: GeofenceFleetZone[];
+  machines: GeofenceFleetMachine[];
+  summary: { machines: number; live: number; stale: number; noPosition: number; violating: number };
+}
+
+/** Every machine's latest position against its fences, for the fleet map. */
+export function apiGeofenceFleetStatus(siteId?: string): Promise<GeofenceFleetStatus> {
+  return authFetch(`/geofences/fleet-status${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`);
+}
+
+/** A zone as authored (GET /geofences): disabled ones included, unlike the fleet map's. */
+export interface GeofenceZoneRecord {
+  id: string;
+  code: string;
+  name: string;
+  kind: "allowed" | "restricted" | "corridor";
+  shape: GeofenceShape;
+  appliesTo: "account" | "plant" | "equipment" | "equipment-class";
+  plantId: string | null;
+  sourceSystem: string | null;
+  externalId: string | null;
+  equipmentClassSlug: string | null;
+  enabled: boolean;
+}
+
+export interface GeofenceZoneInput {
+  code: string;
+  name: string;
+  kind: GeofenceZoneRecord["kind"];
+  shape: GeofenceShape;
+  appliesTo: GeofenceZoneRecord["appliesTo"];
+  plantId?: string;
+  sourceSystem?: string;
+  externalId?: string;
+  equipmentClassSlug?: string;
+}
+
+export function apiListGeofences(): Promise<GeofenceZoneRecord[]> {
+  return authFetch("/geofences");
+}
+
+export function apiCreateGeofence(input: GeofenceZoneInput): Promise<GeofenceZoneRecord> {
+  return authFetch("/geofences", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Code and target never change after creation (the backend refuses it); a new target is a new zone. */
+export function apiUpdateGeofence(
+  id: string, patch: { name?: string; kind?: GeofenceZoneRecord["kind"]; shape?: GeofenceShape; enabled?: boolean },
+): Promise<GeofenceZoneRecord> {
+  return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function apiDeleteGeofence(id: string): Promise<{ id: string; deleted: true }> {
+  return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+

@@ -4,6 +4,9 @@ import { AlertCircle, Archive, Info, RotateCw } from 'lucide-react';
 import { ApiError, TelemetryArchiveRow, TelemetryPartitionDrop, apiListTelemetryArchives } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { TablePagination, usePagination } from '../common/TablePagination';
+import { ListColumn, ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' });
 const bytes = (n: string) => {
@@ -20,6 +23,8 @@ const bytes = (n: string) => {
  */
 export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => string }> = ({ clientName }) => {
   const { t } = useTranslation('admin');
+  const { t: ts } = useTranslation('shared');
+  const [viewMode, setViewMode] = useViewMode('admin-telemetry-archive');
   const [archives, setArchives] = useState<TelemetryArchiveRow[] | null>(null);
   const [drops, setDrops] = useState<TelemetryPartitionDrop[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -37,6 +42,38 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
   const { pageItems: pagedArchives, ...archivePager } = usePagination(archives ?? []);
   const { pageItems: pagedDrops, ...dropPager } = usePagination(drops);
 
+  // One definition per list for both views (cards or list on every list page).
+  const archiveColumns: ListColumn[] = [
+    { label: t('archive.month') },
+    { label: t('archive.account') },
+    { label: t('archive.part') },
+    { label: t('archive.rows'), align: 'right' },
+    { label: t('archive.size'), align: 'right' },
+    { label: t('archive.exported') },
+    { label: t('archive.verified') },
+  ];
+  const archiveCells = (a: TelemetryArchiveRow) => [
+    <>{monthLabel(a.month)}</>,
+    <>{clientName(a.tenantId)}</>,
+    <>{a.part}</>,
+    <span className="font-mono">{Number(a.rowCount).toLocaleString()}</span>,
+    <span className="font-mono">{bytes(a.byteSize)}</span>,
+    <span className="text-slate-500">{new Date(a.exportedAt).toLocaleString()}</span>,
+    <>{a.verifiedAt ? <Chip tone="emerald">{t('archive.status.verified')}</Chip>
+                      : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">{t('archive.status.failed')}</Chip></span>
+                        : <Chip tone="amber">{t('archive.status.pending')}</Chip>}</>,
+  ];
+  const dropColumns: ListColumn[] = [
+    { label: ts('listCol.partition') }, { label: t('archive.month') },
+    { label: t('archive.rows'), align: 'right' as const }, { label: ts('listCol.droppedAt') },
+  ];
+  const dropCells = (d: TelemetryPartitionDrop) => [
+    <span className="font-mono">{d.partition_name}</span>,
+    monthLabel(d.month),
+    Number(d.rows_dropped).toLocaleString(),
+    new Date(d.dropped_at).toLocaleString(),
+  ];
+
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -46,9 +83,12 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
             {t('archive.intro')}
           </span>
         </div>
+        <div className="flex items-center gap-3 shrink-0">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button onClick={load} disabled={loading} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer shrink-0" title={t('archive.refresh')}>
           <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
+        </div>
       </div>
 
       {error && (
@@ -62,42 +102,15 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
           <Archive className="w-4 h-4 text-slate-400" />
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.exports')}</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-semibold">
-              <tr>
-                <th className="py-2.5 px-4">{t('archive.month')}</th>
-                <th className="py-2.5 px-4">{t('archive.account')}</th>
-                <th className="py-2.5 px-4">{t('archive.part')}</th>
-                <th className="py-2.5 px-4 text-right">{t('archive.rows')}</th>
-                <th className="py-2.5 px-4 text-right">{t('archive.size')}</th>
-                <th className="py-2.5 px-4">{t('archive.exported')}</th>
-                <th className="py-2.5 px-4">{t('archive.verified')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
-              {archives === null ? (
-                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{error ? '—' : t('archive.loading')}</td></tr>
-              ) : archives.length === 0 ? (
-                <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t('archive.noArchives')}</td></tr>
-              ) : pagedArchives.map((a) => (
-                <tr key={a.id}>
-                  <td className="py-2.5 px-4">{monthLabel(a.month)}</td>
-                  <td className="py-2.5 px-4">{clientName(a.tenantId)}</td>
-                  <td className="py-2.5 px-4">{a.part}</td>
-                  <td className="py-2.5 px-4 text-right font-mono">{Number(a.rowCount).toLocaleString()}</td>
-                  <td className="py-2.5 px-4 text-right font-mono">{bytes(a.byteSize)}</td>
-                  <td className="py-2.5 px-4 text-slate-500">{new Date(a.exportedAt).toLocaleString()}</td>
-                  <td className="py-2.5 px-4">
-                    {a.verifiedAt ? <Chip tone="emerald">{t('archive.status.verified')}</Chip>
-                      : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">{t('archive.status.failed')}</Chip></span>
-                        : <Chip tone="amber">{t('archive.status.pending')}</Chip>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {archives === null ? (
+          <div className="py-6 text-center text-slate-400 text-xs">{error ? '—' : t('archive.loading')}</div>
+        ) : archives.length === 0 ? (
+          <div className="py-6 text-center text-slate-400 text-xs">{t('archive.noArchives')}</div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={archiveColumns} rows={pagedArchives} rowKey={(a) => a.id} cells={archiveCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={archiveColumns} rows={pagedArchives} rowKey={(a) => a.id} cells={archiveCells} /></div>
+        )}
         {!!archives?.length && <TablePagination {...archivePager} />}
       </div>
 
@@ -106,17 +119,14 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.droppedPartitions')}</h3>
           <p className="text-[11px] text-slate-400">{t('archive.droppedHint')}</p>
         </div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-          {drops.length === 0 ? (
-            <p className="py-6 text-center text-slate-400">{t('archive.noDrops')}</p>
-          ) : pagedDrops.map((d) => (
-            <div key={d.partition_name} className="flex items-center justify-between gap-3 px-4 py-2.5">
-              <span className="font-mono text-slate-700 dark:text-slate-200">{d.partition_name}</span>
-              <span className="text-slate-500">{monthLabel(d.month)} · {t('archive.rowsDropped', { count: Number(d.rows_dropped), formatted: Number(d.rows_dropped).toLocaleString() })} · {new Date(d.dropped_at).toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-        {drops.length > 0 && <TablePagination {...dropPager} />}
+        {drops.length === 0 ? (
+          <p className="py-6 text-center text-slate-400 text-xs">{t('archive.noDrops')}</p>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={dropColumns} rows={pagedDrops} rowKey={(d) => d.partition_name} cells={dropCells} />
+        ) : (
+          <div className="p-4"><RecordCards columns={dropColumns} rows={pagedDrops} rowKey={(d) => d.partition_name} cells={dropCells} /></div>
+        )}
+        {drops.length > 0 && <TablePagination pinToBottom {...dropPager} />}
       </div>
     </div>
   );

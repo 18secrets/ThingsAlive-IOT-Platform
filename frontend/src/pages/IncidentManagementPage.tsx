@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
+import { StatusTone, statusTone, severityTone } from '../components/common/statusTone';
+import { ListTable } from '../components/common/ListTable';
+import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
+import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { Modal } from '../components/common/Modal';
 import {
   ApiError, EquipmentProfile, INCIDENT_SEVERITIES, IncidentDetail, IncidentMachineView,
@@ -13,6 +17,8 @@ import {
   apiListIncidentRecords, apiListIncidentSlaPolicies, apiListIncidentView, apiListPlants, apiListWorkOrderPeople,
   apiRaiseIncidentWorkOrder, apiResolveIncident, apiSetIncidentSlaPolicy,
 } from '../lib/api';
+import { sortRows, useSort } from '../lib/useSort';
+import { SortSelect } from '../components/common/SortSelect';
 
 /**
  * Incident Management on the incident entity (3d83cec): one live incident per machine,
@@ -22,10 +28,10 @@ import {
  * a copy of its own.
  */
 
-const SEVERITY_TONE: Record<IncidentSeverity, 'rose' | 'amber' | 'sky' | 'slate'> = {
-  critical: 'rose', high: 'amber', medium: 'sky', low: 'slate', none: 'slate',
-};
-const STATUS_TONE: Record<IncidentStatus, 'rose' | 'amber' | 'emerald'> = { open: 'rose', acknowledged: 'amber', resolved: 'emerald' };
+const SEVERITY_ORDER: IncidentSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
+const STATUS_ORDER: IncidentStatus[] = ['open', 'acknowledged', 'resolved'];
+const SEVERITY_TONE = (s: string) => severityTone(s);
+const STATUS_TONE: Record<IncidentStatus, StatusTone> = { open: statusTone('open'), acknowledged: statusTone('acknowledged'), resolved: statusTone('resolved') };
 const SLA_TONE: Record<SlaState, 'slate' | 'sky' | 'emerald' | 'rose'> = { no_policy: 'slate', on_track: 'sky', met: 'emerald', breached: 'rose' };
 // Status, SLA-state, event, severity and priority labels are key maps in incidents.json
 // (status.*, sla.*, event.*, severity.*, priority.*), so logic keeps the raw values.
@@ -34,7 +40,8 @@ const PRIORITIES: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 type StatusFilter = 'live' | IncidentStatus;
 
 export const IncidentManagementPage: React.FC = () => {
-  const { t } = useTranslation('incidents');
+  const { t } = useTranslation(['incidents', 'shared']);
+  const [viewMode, setViewMode] = useViewMode('incident-management');
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [records, setRecords] = useState<IncidentRecord[]>([]);
   const [view, setView] = useState<IncidentMachineView[]>([]);
@@ -113,6 +120,18 @@ export const IncidentManagementPage: React.FC = () => {
     breached: visible.filter((r) => r.sla.acknowledge.state === 'breached' || r.sla.resolve.state === 'breached').length,
   };
 
+  // The shared rsuite pager, in both views; back to page 1 when the filters change the count.
+  // Most severe first: the page exists to say which incident to pick up (test report MAJ-9).
+  const { sort, setSort, toggle } = useSort<'machine' | 'severity' | 'status' | 'opened'>({ key: 'severity', dir: 'desc' });
+  const sorted = useMemo(() => sortRows(visible, sort, {
+    machine: (r) => machineName(r.machine),
+    severity: (r) => SEVERITY_ORDER.indexOf(r.severity),
+    status: (r) => STATUS_ORDER.indexOf(r.status),
+    opened: (r) => r.openedAt,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [visible, sort, equipment]);
+  const { pageItems, ...pager } = usePagination(sorted, 12);
+
   return (
     <div id="incident-management-view" className="space-y-3">
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
@@ -123,7 +142,7 @@ export const IncidentManagementPage: React.FC = () => {
               <Info className="w-4 h-4 text-sky-200" />
             </span>
           </div>
-          <h2 className="text-xl font-bold">{t('page.title')}</h2>
+          <h2 className="text-xl font-bold">{t('page.heading')}</h2>
         </div>
         <button
           onClick={() => setPoliciesOpen(true)}
@@ -141,6 +160,7 @@ export const IncidentManagementPage: React.FC = () => {
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <EquipmentFilters
+        showConnection={false}
           scope={scope}
           onChange={setScope}
           plants={plants}
@@ -165,49 +185,90 @@ export const IncidentManagementPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" />
-        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" />
-        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" />
-        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" />
+        <KpiTile label={t('tiles.open')} value={tiles.open} tone="bad" loading={loading} />
+        <KpiTile label={t('status.acknowledged')} value={tiles.acknowledged} tone="warn" loading={loading} />
+        <KpiTile label={t('tiles.critical')} value={tiles.critical} tone="bad" loading={loading} />
+        <KpiTile label={t('tiles.breached')} value={tiles.breached} tone="warn" loading={loading} />
       </div>
 
-      {loading ? (
-        <p className="text-sm text-slate-500">{t('page.loading')}</p>
-      ) : visible.length === 0 ? (
-        <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col items-center gap-2">
-          <Siren className="w-6 h-6" />
-          {t('page.empty')}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visible.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => setOpenId(r.id)}
-              className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2 hover:border-sky-300 cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <Chip tone={SEVERITY_TONE[r.severity]}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
-                <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>
-              </div>
-              <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{machineName(r.machine)}</h4>
-              <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <UserRound className="w-3.5 h-3.5" />{personName(r.ownerUserId) ?? t('page.unassigned')}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <SortSelect
+          sort={sort}
+          onChange={(next) => { setSort(next); pager.setPage(1); }}
+          options={[
+            { key: 'severity', dir: 'desc', label: t('shared:sort.severityHigh') },
+            { key: 'opened', dir: 'desc', label: t('shared:sort.newest') },
+            { key: 'opened', dir: 'asc', label: t('shared:sort.oldest') },
+            { key: 'machine', dir: 'asc', label: t('shared:sort.nameAz') },
+          ]}
+        />
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+
+      <div className={LIST_PANEL}>
+        {loading ? (
+          <p className="p-4 text-sm text-slate-500">{t('page.loading')}</p>
+        ) : visible.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+            <Siren className="w-6 h-6" />
+            {t('page.empty')}
+          </div>
+        ) : viewMode === 'list' ? (
+          <ListTable bare
+            columns={[
+              { label: t('listCol.machine'), sortKey: 'machine' }, { label: t('listCol.severity'), sortKey: 'severity' }, { label: t('listCol.status'), sortKey: 'status' },
+              { label: t('listCol.owner') }, { label: t('listCol.ack') }, { label: t('listCol.resolve') }, { label: t('listCol.opened'), sortKey: 'opened' },
+            ]}
+            sort={sort}
+            onSort={(key) => { toggle(key as typeof sort.key, key === 'severity' || key === 'opened' ? 'desc' : 'asc'); pager.setPage(1); }}
+            rows={pageItems}
+            rowKey={(r) => r.id}
+            cells={(r) => [
+              <span className="font-medium">{machineName(r.machine)}</span>,
+              <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>,
+              <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>,
+              <span>
+                {personName(r.ownerUserId) ?? <span className="text-slate-400">{t('page.unassigned')}</span>}
                 {r.escalationLevel > 0 && <span className="text-rose-500 font-semibold"> · {t('page.escalated', { level: r.escalationLevel })}</span>}
-              </p>
-              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                <Chip tone={SLA_TONE[r.sla.acknowledge.state]} title={r.sla.acknowledge.dueAt ? t('sla.ackBy', { date: new Date(r.sla.acknowledge.dueAt).toLocaleString() }) : t('sla.noPolicy')}>
-                  {t('sla.ackChip', { state: t(`sla.state.${r.sla.acknowledge.state}`) })}
-                </Chip>
-                <Chip tone={SLA_TONE[r.sla.resolve.state]} title={r.sla.resolve.dueAt ? t('sla.resolveBy', { date: new Date(r.sla.resolve.dueAt).toLocaleString() }) : t('sla.noPolicy')}>
-                  {t('sla.resolveChip', { state: t(`sla.state.${r.sla.resolve.state}`) })}
-                </Chip>
-              </div>
-              <small className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{t('page.openedAt', { date: new Date(r.openedAt).toLocaleString() })}</small>
-            </button>
-          ))}
-        </div>
-      )}
+              </span>,
+              <Chip tone={SLA_TONE[r.sla.acknowledge.state]}>{t(`sla.state.${r.sla.acknowledge.state}`)}</Chip>,
+              <Chip tone={SLA_TONE[r.sla.resolve.state]}>{t(`sla.state.${r.sla.resolve.state}`)}</Chip>,
+              <span className="text-slate-500 whitespace-nowrap">{new Date(r.openedAt).toLocaleString()}</span>,
+            ]}
+            onOpen={(r) => setOpenId(r.id)}
+          />
+        ) : (
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pageItems.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setOpenId(r.id)}
+                className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2 hover:border-sky-300 cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Chip tone={SEVERITY_TONE(r.severity)}>{t(`severity.${r.severity}`, { defaultValue: r.severity })}</Chip>
+                  <Chip tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Chip>
+                </div>
+                <h4 className="font-semibold text-slate-900 dark:text-white text-base truncate">{machineName(r.machine)}</h4>
+                <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  <UserRound className="w-3.5 h-3.5" />{personName(r.ownerUserId) ?? t('page.unassigned')}
+                  {r.escalationLevel > 0 && <span className="text-rose-500 font-semibold"> · {t('page.escalated', { level: r.escalationLevel })}</span>}
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <Chip tone={SLA_TONE[r.sla.acknowledge.state]} title={r.sla.acknowledge.dueAt ? t('sla.ackBy', { date: new Date(r.sla.acknowledge.dueAt).toLocaleString() }) : t('sla.noPolicy')}>
+                    {t('sla.ackChip', { state: t(`sla.state.${r.sla.acknowledge.state}`) })}
+                  </Chip>
+                  <Chip tone={SLA_TONE[r.sla.resolve.state]} title={r.sla.resolve.dueAt ? t('sla.resolveBy', { date: new Date(r.sla.resolve.dueAt).toLocaleString() }) : t('sla.noPolicy')}>
+                    {t('sla.resolveChip', { state: t(`sla.state.${r.sla.resolve.state}`) })}
+                  </Chip>
+                </div>
+                <small className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{t('page.openedAt', { date: new Date(r.openedAt).toLocaleString() })}</small>
+              </button>
+            ))}
+          </div>
+        )}
+        {visible.length > 0 && <TablePagination pinToBottom {...pager} />}
+      </div>
 
       {unrecorded.length > 0 && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
@@ -217,7 +278,7 @@ export const IncidentManagementPage: React.FC = () => {
             <div key={`${v.machine.sourceSystem}/${v.machine.externalId}`} className="flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-2">
               <span className="text-slate-700 dark:text-slate-200">{v.machine.name ?? v.machine.externalId}</span>
               <span className="flex items-center gap-1.5">
-                <Chip tone={SEVERITY_TONE[v.worstSeverity]}>{t(`severity.${v.worstSeverity}`, { defaultValue: v.worstSeverity })}</Chip>
+                <Chip tone={SEVERITY_TONE(v.worstSeverity)}>{t(`severity.${v.worstSeverity}`, { defaultValue: v.worstSeverity })}</Chip>
                 <span className="text-slate-400">{t('unrecorded.openAlerts', { count: v.openAlerts.length })}</span>
               </span>
             </div>
@@ -244,11 +305,12 @@ export const IncidentManagementPage: React.FC = () => {
   );
 };
 
-const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad' }> = ({ label, value, tone }) => {
+// A 0 before the first answer reads as "no incidents" — the dash says "not known yet".
+const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad'; loading?: boolean }> = ({ label, value, tone, loading }) => {
   const toneClass = tone === 'bad' ? 'text-rose-600 dark:text-rose-400' : tone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100';
   return (
     <div className="border rounded-xl p-4 shadow-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-      <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
+      <div className={`text-2xl font-bold ${toneClass}`}>{loading ? '…' : value}</div>
       <div className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{label}</div>
     </div>
   );
@@ -303,7 +365,7 @@ const IncidentPanel: React.FC<{
   return (
     <div className="space-y-4 text-xs">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Chip tone={SEVERITY_TONE[detail.severity]}>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Chip>
+        <Chip tone={SEVERITY_TONE(detail.severity)}>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Chip>
         <Chip tone={STATUS_TONE[detail.status]}>{t(`status.${detail.status}`)}</Chip>
         <Chip tone={SLA_TONE[detail.sla.acknowledge.state]}>{t('sla.ackChip', { state: t(`sla.state.${detail.sla.acknowledge.state}`) })}</Chip>
         <Chip tone={SLA_TONE[detail.sla.resolve.state]}>{t('sla.resolveChip', { state: t(`sla.state.${detail.sla.resolve.state}`) })}</Chip>
@@ -320,7 +382,7 @@ const IncidentPanel: React.FC<{
       {live && (
         <div className="flex items-center gap-2 flex-wrap">
           {detail.status === 'open' && (
-            <button disabled={busy} onClick={() => run(() => apiAcknowledgeIncident(id))} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
+            <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
           )}
           <SelectPicker
             size="sm"
@@ -367,7 +429,7 @@ const IncidentPanel: React.FC<{
           <div key={a.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg px-2.5 py-1.5">
             <span className="text-slate-700 dark:text-slate-200 truncate">{a.summary}</span>
             <span className="flex items-center gap-1.5 shrink-0">
-              <Chip tone={SEVERITY_TONE[(a.severity as IncidentSeverity)] ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
+              <Chip tone={SEVERITY_TONE((a.severity as IncidentSeverity)) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
               <span className="text-slate-400">{t(`alertState.${a.state}`, { defaultValue: a.state })} · {new Date(a.firedAt).toLocaleString()}</span>
             </span>
           </div>
@@ -447,7 +509,7 @@ const SlaPolicies: React.FC = () => {
         const valid = (d.ack ?? 0) >= 1 && (d.resolve ?? 0) >= 1;
         return (
           <div key={s} className="grid grid-cols-[90px_1fr_1fr_auto] gap-2 items-center">
-            <Chip tone={SEVERITY_TONE[s]}>{t(`severity.${s}`)}</Chip>
+            <Chip tone={SEVERITY_TONE(s)}>{t(`severity.${s}`)}</Chip>
             <InputNumber size="sm" min={1} value={d.ack} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, ack: v == null || v === '' ? null : Number(v) } }))} />
             <InputNumber size="sm" min={1} value={d.resolve} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, resolve: v == null || v === '' ? null : Number(v) } }))} />
             <div className="flex items-center gap-1">

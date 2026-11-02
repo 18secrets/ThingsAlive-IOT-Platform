@@ -1,6 +1,12 @@
 import { Client } from 'pg';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:CdhlqhgUKSBzboKMRAItBDaYHJiMgYsI@crossover.proxy.rlwy.net:47609/railway';
+// Read from the environment only. A literal fallback here is a live credential in a
+// public repository, which is exactly how this line leaked once (2026-10-22).
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Run with: DATABASE_URL=... npx ts-node scripts/onboard-all-machines.ts');
+  process.exit(1);
+}
 const TENANT_ID = 'demo-construction';
 const USER_ID = '5cf45f74-f668-40d8-b064-83fad9862db5'; // tapas.m@thingsalive.io
 
