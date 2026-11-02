@@ -2,7 +2,7 @@ import { retiredSignalProblems, rethrowSensorContentError } from '../../device-c
 import { loadSignalStates } from '../../device-catalog/services/signal-state.service';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { assignDefined } from '../../common/assign-defined';
 import { compileClassFormulas } from '../formula/formula-compiler';
@@ -11,6 +11,7 @@ import {
 } from '../formula/named-formula-binding';
 import { EquipmentClassFormula } from '../entities/equipment-class-formula.entity';
 import { EquipmentClassProfile } from '../entities/equipment-class-profile.entity';
+import { EquipmentClassSensorRequirement } from '../entities/equipment-class-sensor-requirement.entity';
 import { NamedFormula } from '../entities/named-formula.entity';
 import { ScenarioDefinition } from '../entities/scenario-definition.entity';
 import { SignalAlias } from '../entities/signal-alias.entity';
@@ -56,6 +57,26 @@ type AlertTemplateDraft = Partial<Pick<AlertRuleTemplate,
  * that record a lie, which costs exactly when somebody is trying to work out why a
  * customer's scenario behaves differently from the one they think they shipped.
  */
+/**
+ * A fork carries the version's sensor requirements and formulas as well. Without them
+ * the draft declares no KPIs, its layout's KPI widgets point at nothing and publish
+ * refuses it — or, for a class with no layout, publishes it and every account that
+ * upgrades loses its KPIs. Copied as they stand, approval included: the fork changes
+ * nothing about them, and publish compiles them again regardless.
+ */
+async function copyRequirementsAndFormulas(m: EntityManager, classSlug: string, fromVersion: number, toVersion: number) {
+  const requirements = m.getRepository(EquipmentClassSensorRequirement);
+  const fromRequirements = await requirements.find({ where: { classSlug, classVersion: fromVersion } });
+  if (fromRequirements.length) {
+    await requirements.save(fromRequirements.map(({ id: _id, ...r }) => requirements.create({ ...r, classVersion: toVersion })));
+  }
+  const formulas = m.getRepository(EquipmentClassFormula);
+  const fromFormulas = await formulas.find({ where: { classSlug, classVersion: fromVersion } });
+  if (fromFormulas.length) {
+    await formulas.save(fromFormulas.map(({ id: _id, createdAt: _at, ...f }) => formulas.create({ ...f, classVersion: toVersion })));
+  }
+}
+
 @Injectable()
 export class CatalogAuthoringService {
   private readonly logger = new Logger(CatalogAuthoringService.name);
@@ -118,6 +139,7 @@ export class CatalogAuthoringService {
         await copyLayout(m, slug, working.version - 1, working.version);
         await copyVisual(m, slug, working.version - 1, working.version);
         await copyModel(m, slug, working.version - 1, working.version);
+        await copyRequirementsAndFormulas(m, slug, working.version - 1, working.version);
       }
       if (draft.failureModes) {
         try {
