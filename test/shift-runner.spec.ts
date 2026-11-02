@@ -73,6 +73,10 @@ describeDb('the shift runner', () => {
     owner = await createTestDataSource();
     await owner.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     await owner.runMigrations({ transaction: 'all' });
+    // The fixtures are pinned to August–September 2026, but the migration only builds
+    // partitions from two months before the day it runs, so a fresh database stops
+    // covering them as the calendar moves on. Build the fixture months explicitly.
+    await owner.query(`SELECT ensure_telemetry_partition('2026-08-01'::date), ensure_telemetry_partition('2026-09-01'::date)`);
 
     // Their table, as their entity declares it. Standing it up here is what lets the
     // query be the real query rather than a promise about one.
