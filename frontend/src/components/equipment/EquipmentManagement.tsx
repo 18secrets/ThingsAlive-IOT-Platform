@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
   ApiError, CoverageResult, DiscoveryResult, EquipmentClass, EquipmentInput, EquipmentProfile, EquipmentPlacementEvent,
   ImportResult, MyDevice, Plant, ProposeOrActivateBindingInput, SignalBindingVersion,
@@ -141,6 +142,9 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   const onSort = (key: string) => { toggle(key as typeof sort.key); pager.setPage(1); };
 
   const { pageItems: paginatedList, ...pager } = usePagination(sortedList);
+  const navigate = useNavigate();
+  const openPage = (item: EquipmentProfile) =>
+    navigate(`/admin/equipment/${encodeURIComponent(item.sourceSystem)}/${encodeURIComponent(item.externalId)}/page`);
 
   // One definition for both views (cards or list on every list page).
   const viewColumns: ListColumn[] = [
@@ -348,9 +352,9 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         {filteredList.length === 0 ? (
           <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('equipmentList.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} />
+          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} />
         ) : (
-          <div className="p-4"><RecordCards columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} actionsIndex={9} /></div>
+          <div className="p-4"><RecordCards columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} actionsIndex={9} onOpen={openPage} /></div>
         )}
 
         <TablePagination pinToBottom loading={loading} {...pager} />

@@ -32,7 +32,7 @@ export const SortLabel: React.FC<{ label: string; sortKey: string; sort?: SortSt
 type Row<T> = { key: string; row: T };
 
 /** A click on a control inside the row (an action button, a link) is that control's, not the row's. */
-const fromControl = (event: React.MouseEvent) =>
+export const fromControl = (event: React.MouseEvent) =>
   (event.target as HTMLElement | null)?.closest('button, a, input, select, label, [role="button"], .rs-picker') != null;
 
 /**
