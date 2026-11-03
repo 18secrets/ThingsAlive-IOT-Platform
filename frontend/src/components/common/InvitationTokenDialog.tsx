@@ -61,7 +61,7 @@ export const InvitationTokenDialog: React.FC<InvitationTokenDialogProps> = ({ re
                 {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               {t('token.expires', { when: new Date(result.invitationExpiresAt).toLocaleString() })}
             </p>
           </div>

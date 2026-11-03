@@ -103,10 +103,10 @@ export const DevicePoolManagement: React.FC<DevicePoolManagementProps> = ({
     { label: t('pool.col.action'), width: 200 },
   ];
   const viewCells = (d: (typeof pagedRows)[number]) => [
-    <span className="font-mono text-[11px]">{d.imei}</span>,
+    <span className="font-mono text-xs">{d.imei}</span>,
     <span className="text-slate-600 dark:text-slate-400">{d.model || '—'}</span>,
     <span className="text-slate-600 dark:text-slate-400">{d.toolMappingName || '—'}</span>,
-    <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
+    <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
                         {t(`state.${d.state}`, { defaultValue: d.state })}
                       </span></>,
     <span className="text-slate-600 dark:text-slate-400">{clientName(d.tenantId) || <span className="text-slate-400 italic">{t('pool.unassigned')}</span>}</span>,
@@ -361,7 +361,7 @@ const EditDeviceModal: React.FC<{
             placeholder={t('edit.none')}
           />
           {!inStock && (
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               {t('edit.profileLocked', { state: t(`state.${device.state}`, { defaultValue: device.state }) })}
             </p>
           )}

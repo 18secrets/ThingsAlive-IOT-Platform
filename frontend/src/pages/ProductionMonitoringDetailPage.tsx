@@ -33,7 +33,7 @@ const FactorTile: React.FC<{ kind: 'availability' | 'performance' | 'quality'; l
   const { t } = useTranslation('production');
   return (
     <div className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       {factor.readiness === 'ready' ? (
         <p className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{pct(factor.value)}</p>
       ) : reasonShown ? (
@@ -104,7 +104,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="flex flex-col items-center justify-center gap-1.5 text-center rounded-lg bg-slate-50 dark:bg-slate-800/40 p-3">
               <RingGauge value={oee.oee.value != null ? oee.oee.value * 100 : null} size={72} colorClass="text-emerald-500 dark:text-emerald-400" />
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 {oee.oee.readiness === 'ready'
                   ? `${new Date(oee.from).toLocaleString()} – ${new Date(oee.to).toLocaleString()}`
                   : sharedReason
@@ -115,44 +115,44 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               </p>
             </div>
             <FactorTile kind="availability" label={t('oee.availability')} factor={oee.availability} reasonShown={!!sharedReason}>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 {oee.availability.availableMinutes != null
                   ? t('oee.availableOfScheduled', { available: Math.round(oee.availability.availableMinutes), scheduled: Math.round(oee.availability.scheduledMinutes) })
                   : t('oee.scheduled', { scheduled: Math.round(oee.availability.scheduledMinutes) })}
               </p>
             </FactorTile>
             <FactorTile kind="performance" label={t('oee.performance')} factor={oee.performance} reasonShown={!!sharedReason}>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 {t('oee.breakdowns', { count: oee.performance.breakdownCount, minutes: Math.round(oee.performance.breakdownMinutes) })}
                 {oee.performance.openBreakdown ? ` · ${t('oee.oneOngoing')}` : ''}
               </p>
               {oee.performance.thresholdMinutes != null && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {oee.performance.parameterSource
                     ? t('oee.idleThresholdSetBy', { minutes: oee.performance.thresholdMinutes, source: t(`source.${oee.performance.parameterSource}`) })
                     : t('oee.idleThreshold', { minutes: oee.performance.thresholdMinutes })}
                 </p>
               )}
-              {oee.performance.warning && <p className="text-[11px] text-amber-600 dark:text-amber-400">{oee.performance.warning}</p>}
+              {oee.performance.warning && <p className="text-xs text-amber-600 dark:text-amber-400">{oee.performance.warning}</p>}
             </FactorTile>
             <FactorTile kind="quality" label={t('oee.quality')} factor={oee.quality} reasonShown={!!sharedReason}>
               {oee.quality.nominalFuel != null && oee.quality.actualFuel != null && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {t('oee.burnedVsNominal', { actual: oee.quality.actualFuel.toFixed(1), unit: oee.quality.unit, nominal: oee.quality.nominalFuel.toFixed(1) })}
                 </p>
               )}
               {oee.quality.wasteLitres != null && oee.quality.wasteLitres > 0 && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">{t('oee.overNominal', { litres: oee.quality.wasteLitres.toFixed(1) })}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">{t('oee.overNominal', { litres: oee.quality.wasteLitres.toFixed(1) })}</p>
               )}
               {oee.quality.parameterSource && (
-                <p className="text-[11px] text-slate-400">{t('oee.nominalSetBy', { source: t(`source.${oee.quality.parameterSource}`) })}</p>
+                <p className="text-xs text-slate-400">{t('oee.nominalSetBy', { source: t(`source.${oee.quality.parameterSource}`) })}</p>
               )}
             </FactorTile>
           </div>
 
           {/* Listed only when there are some: Performance already says "0 breakdowns". */}
           {breakdowns.length > 0 && <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('oee.breakdownsInWindow')}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('oee.breakdownsInWindow')}</p>
             {(
               breakdowns.map((b) => (
                 <div key={b.id} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
@@ -263,7 +263,7 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
+                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[0.6875rem]">
                   <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.date')}</th>
                   <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.shift')}</th>
                   <th className="px-4 py-2.5 text-left font-semibold">{t('shifts.col.productive')}</th>

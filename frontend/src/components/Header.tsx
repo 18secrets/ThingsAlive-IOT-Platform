@@ -13,6 +13,7 @@ import {
   User,
   Sparkles
 } from 'lucide-react';
+import { TextSizeSelector } from './common/TextSizeSelector';
 
 interface HeaderProps {
   title: string;
@@ -108,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
         {/* Every time on screen is formatted in the viewer's own zone, and nothing said
             which (test report MIN-12) — the fleet is in India, a viewer may not be. */}
-        <span className="hidden md:inline text-[11px] text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
+        <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
           {t('header.timeZone', { zone: VIEWER_ZONE.short })}
         </span>
         {/* Notification Bell */}
@@ -127,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <span className="font-semibold text-xs text-slate-800 dark:text-slate-100">{t('header.telemetryNotifications')}</span>
                 {Array.isArray(notificationList) && notificationList.length > 0 && (
-                  <span className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 px-2 py-0.5 rounded-full font-bold">{t('header.newCount', { count: notificationList.length })}</span>
+                  <span className="text-[0.6875rem] bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300 px-2 py-0.5 rounded-full font-bold">{t('header.newCount', { count: notificationList.length })}</span>
                 )}
               </div>
               <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -143,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer bg-sky-50/50 dark:bg-sky-950/20"
                   >
                     <div className="font-medium text-slate-800 dark:text-slate-200">{item.summary}</div>
-                    <div className="text-[10px] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString()}</div>
+                    <div className="text-[0.6875rem] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString()}</div>
                   </button>
                 ))}
               </div>
@@ -177,6 +178,10 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Moon className="w-3.5 h-3.5" />
           </button>
+        </div>
+
+        <div className="hidden sm:block">
+          <TextSizeSelector />
         </div>
 
         <LanguageSelector />

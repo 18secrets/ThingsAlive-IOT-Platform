@@ -47,7 +47,14 @@
     "noNotifications": "తెరిచిన హెచ్చరికలు లేవు.",
     "loadingNotifications": "లోడ్ అవుతోంది…",
     "timeZone": "సమయాలు {{zone}} లో",
-    "timeZoneTitle": "ప్రతి తేదీ, సమయం మీ బ్రౌజర్ టైమ్ జోన్ {{zone}} లో చూపబడుతుంది."
+    "timeZoneTitle": "ప్రతి తేదీ, సమయం మీ బ్రౌజర్ టైమ్ జోన్ {{zone}} లో చూపబడుతుంది.",
+    "textSize": "అక్షర పరిమాణం",
+    "textSizes": {
+      "small": "చిన్నది",
+      "default": "సాధారణం",
+      "large": "పెద్దది",
+      "xlarge": "చాలా పెద్దది"
+    }
   },
   "login": {
     "title": "సైన్ ఇన్",

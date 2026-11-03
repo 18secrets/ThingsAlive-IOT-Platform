@@ -33,7 +33,7 @@ export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => vo
           <SeverityIcon className={`w-4.5 h-4.5 shrink-0 ${SEVERITY_TEXT[incident.severity]}`} />
           <h4 className="font-semibold text-slate-800 dark:text-white text-base truncate">{incident.title}</h4>
         </div>
-        <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-white dark:bg-slate-900/50 ${SEVERITY_TEXT[incident.severity]}`}>
+        <span className={`shrink-0 px-1.5 py-0.5 text-[0.6875rem] font-bold uppercase rounded bg-white dark:bg-slate-900/50 ${SEVERITY_TEXT[incident.severity]}`}>
           {t(`mock.severity.${incident.severity}`, { defaultValue: incident.severity })}
         </span>
       </div>
@@ -52,7 +52,7 @@ export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => vo
             {t('mock.workOrder')}
           </button>
         </div>
-        <span className="text-[11px] text-slate-400" title={t('mock.historyNote')}>
+        <span className="text-xs text-slate-400" title={t('mock.historyNote')}>
           {new Date(incident.createdAt).toLocaleDateString()}
         </span>
       </div>
@@ -179,7 +179,7 @@ export const IncidentForm: React.FC<{
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('mock.recordedBy')}</span>
         <Input value={recordedBy} onChange={(value) => setRecordedBy(value)} className="w-full" />
       </label>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('mock.closureRule')}</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500">{t('mock.closureRule')}</p>
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
         <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
           {t('mock.cancel')}

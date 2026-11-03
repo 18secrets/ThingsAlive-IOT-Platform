@@ -322,12 +322,12 @@ export const ThingsCareDetailPage: React.FC = () => {
                     </div>
                     <RiskTrend history={history.get(p.clientScenarioSlug) ?? []} />
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     {t('detail.footer', { count: p.windowDays, model: p.modelRef, at: readingAt })}
                   </p>
                   {signals.length > 0 && sourceSystem && externalId && (
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <p className="text-[11px] text-slate-400 mb-1">{t('detail.clickSignal')}</p>
+                      <p className="text-xs text-slate-400 mb-1">{t('detail.clickSignal')}</p>
                       {signals.map((s) => {
                         const open = openHere === s.signal;
                         return (
@@ -348,7 +348,7 @@ export const ThingsCareDetailPage: React.FC = () => {
                                   </span>
                                 )}
                                 {typeof s.z === 'number' && (
-                                  <span className="font-mono text-[11px] text-slate-400 w-12 text-right" title={t('detail.sigmaTitle')}>
+                                  <span className="font-mono text-xs text-slate-400 w-12 text-right" title={t('detail.sigmaTitle')}>
                                     {s.z >= 0 ? '+' : '−'}{Math.abs(s.z).toFixed(1)}σ
                                   </span>
                                 )}

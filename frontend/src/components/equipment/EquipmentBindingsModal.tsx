@@ -291,7 +291,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
       >
         <div className="min-w-0">
           <p className="font-mono text-xs text-slate-800 dark:text-slate-100 truncate">{candidate.signalKey}</p>
-          <p className="text-[11px] text-slate-400 truncate">
+          <p className="text-xs text-slate-400 truncate">
             {candidate.imei ? `IMEI ${candidate.imei}` : t('bindings.noDevice')}
             {candidate.sensorName ? ` • ${candidate.sensorName}` : ''}
             {candidate.unit ? ` • ${candidate.unit}` : ''}
@@ -301,26 +301,26 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
           {/* The binding's state, so a Propose or Activate that worked shows it did
               (TC_129); an active one needs neither button again. */}
           {candidate.bindingStatus === 'active' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900">
               <CheckCircle2 className="w-3 h-3" /> {t('bindings.statusActive')}
             </span>
           )}
           {candidate.bindingStatus === 'proposed' && (
-            <span className="px-2 py-0.5 rounded-md border text-[11px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900">
+            <span className="px-2 py-0.5 rounded-md border text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900">
               {t('bindings.statusProposed')}
             </span>
           )}
           {!candidate.bindingStatus && <button
             onClick={() => handleBind('propose', candidate, discoveredBy)}
             disabled={busyKey === proposeKey || !candidate.imei}
-            className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-sky-300 hover:text-sky-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-sky-300 hover:text-sky-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busyKey === proposeKey ? t('bindings.proposing') : t('bindings.propose')}
           </button>}
           {candidate.bindingStatus !== 'active' && <button
             onClick={() => handleBind('activate', candidate, discoveredBy)}
             disabled={busyKey === activateKey || !candidate.imei}
-            className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busyKey === activateKey ? t('bindings.activating') : t('bindings.activate')}
           </button>}
@@ -338,7 +338,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('bindings.title')}</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">{equipment.name ?? equipment.externalId}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{equipment.name ?? equipment.externalId}</p>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -451,7 +451,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                   </h4>
                   <button
                     onClick={handleTogglePlacements}
-                    className="text-[11px] font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
+                    className="text-xs font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <span>{plantName(equipment.plantId)}</span>
                     <span className="text-slate-300 dark:text-slate-600">·</span>
@@ -462,13 +462,13 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
 
                 {placementsOpen && (
                   <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
-                    {placementsLoading && <p className="text-[11px] text-slate-400">{t('common.loading')}</p>}
-                    {placementsError && <p className="text-[11px] text-rose-600 dark:text-rose-400">{placementsError}</p>}
+                    {placementsLoading && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+                    {placementsError && <p className="text-xs text-rose-600 dark:text-rose-400">{placementsError}</p>}
                     {!placementsLoading && !placementsError && placements.length === 0 && (
-                      <p className="text-[11px] text-slate-400">{t('bindings.noPlacementHistory')}</p>
+                      <p className="text-xs text-slate-400">{t('bindings.noPlacementHistory')}</p>
                     )}
                     {placements.map((p) => (
-                      <div key={p.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                      <div key={p.id} className="text-xs text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
                         <span>
                           {plantName(p.fromPlantId)} → {plantName(p.toPlantId)}
                           {p.reason ? `: "${p.reason}"` : ''}
@@ -488,19 +488,19 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                   </h4>
                   {discovery.matched.length > 0 && (
                     <div>
-                      <p className="text-[11px] text-slate-400 mb-1.5">{t('bindings.matched')}</p>
+                      <p className="text-xs text-slate-400 mb-1.5">{t('bindings.matched')}</p>
                       <ul className="space-y-1.5">{discovery.matched.map((c) => renderCandidateRow(c, 'both'))}</ul>
                     </div>
                   )}
                   {discovery.expectedNotMapped.length > 0 && (
                     <div>
-                      <p className="text-[11px] text-slate-400 mb-1.5">{t('bindings.expectedNotMapped')}</p>
+                      <p className="text-xs text-slate-400 mb-1.5">{t('bindings.expectedNotMapped')}</p>
                       <ul className="space-y-1.5">{discovery.expectedNotMapped.map((c) => renderCandidateRow(c, 'tool-mapping'))}</ul>
                     </div>
                   )}
                   {discovery.mappedNotExpected.length > 0 && (
                     <div>
-                      <p className="text-[11px] text-slate-400 mb-1.5">{t('bindings.mappedNotExpected')}</p>
+                      <p className="text-xs text-slate-400 mb-1.5">{t('bindings.mappedNotExpected')}</p>
                       <ul className="space-y-1.5">{discovery.mappedNotExpected.map((c) => renderCandidateRow(c, 'sensor-map'))}</ul>
                     </div>
                   )}
@@ -515,7 +515,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                   </h4>
                   <button
                     onClick={handleToggleHistory}
-                    className="text-[11px] font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
+                    className="text-xs font-medium text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <History className="w-3.5 h-3.5" />
                     <span>{t('bindings.history')}</span>
@@ -525,13 +525,13 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
 
                 {historyOpen && (
                   <div className="mb-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
-                    {historyLoading && <p className="text-[11px] text-slate-400">{t('common.loading')}</p>}
-                    {historyError && <p className="text-[11px] text-rose-600 dark:text-rose-400">{historyError}</p>}
+                    {historyLoading && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+                    {historyError && <p className="text-xs text-rose-600 dark:text-rose-400">{historyError}</p>}
                     {!historyLoading && !historyError && history.length === 0 && (
-                      <p className="text-[11px] text-slate-400">{t('bindings.noActivationHistory')}</p>
+                      <p className="text-xs text-slate-400">{t('bindings.noActivationHistory')}</p>
                     )}
                     {history.map((h) => (
-                      <div key={h.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                      <div key={h.id} className="text-xs text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
                         <span>
                           <span className="font-medium text-slate-800 dark:text-slate-100">{h.clientScenarioSlug}</span>
                           {' — '}
@@ -563,12 +563,12 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                             <span className="font-medium text-slate-800 dark:text-slate-100">{s.name}</span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {!state && recommendation && (
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${BUCKET_STYLE[recommendation.bucket]}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-medium ${BUCKET_STYLE[recommendation.bucket]}`}>
                                   {t(`bindings.bucket.${recommendation.bucket}`)}
                                 </span>
                               )}
                               <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-medium ${
                                   state === 'active'
                                     ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
                                     : state === 'paused'
@@ -583,14 +583,14 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                           {!!activation?.blockersAtActivation.length && (
                             <ul className="space-y-0.5">
                               {activation.blockersAtActivation.map((b, i) => (
-                                <li key={i} className="text-[11px] text-amber-700 dark:text-amber-400">{blockerLabel(b, t)}</li>
+                                <li key={i} className="text-xs text-amber-700 dark:text-amber-400">{blockerLabel(b, t)}</li>
                               ))}
                             </ul>
                           )}
                           {!state && !!recommendation?.blockedBy.length && (
                             <ul className="space-y-0.5">
                               {recommendation.blockedBy.map((b, i) => (
-                                <li key={i} className="text-[11px] text-amber-700 dark:text-amber-400">{blockerLabel(b, t)}</li>
+                                <li key={i} className="text-xs text-amber-700 dark:text-amber-400">{blockerLabel(b, t)}</li>
                               ))}
                             </ul>
                           )}
@@ -599,7 +599,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                               <button
                                 onClick={() => handleActivation('propose', s.slug)}
                                 disabled={busyKey === `propose-${s.slug}`}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-sky-300 hover:text-sky-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-sky-300 hover:text-sky-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {busyKey === `propose-${s.slug}` ? t('bindings.proposing') : t('bindings.propose')}
                               </button>
@@ -608,7 +608,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                               <button
                                 onClick={() => handleActivation('activate', s.slug)}
                                 disabled={busyKey === `activate-${s.slug}`}
-                                className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {busyKey === `activate-${s.slug}` ? t('bindings.activating') : t('bindings.activate')}
                               </button>
@@ -617,7 +617,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                               <button
                                 onClick={() => handleActivation('pause', s.slug)}
                                 disabled={busyKey === `pause-${s.slug}`}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-amber-300 hover:text-amber-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-amber-300 hover:text-amber-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {busyKey === `pause-${s.slug}` ? t('bindings.pausing') : t('bindings.pause')}
                               </button>
@@ -626,7 +626,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                               <button
                                 onClick={() => handleActivation('resume', s.slug)}
                                 disabled={busyKey === `resume-${s.slug}`}
-                                className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {busyKey === `resume-${s.slug}` ? t('bindings.resuming') : t('bindings.resume')}
                               </button>
@@ -635,7 +635,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                               <button
                                 onClick={() => handleActivation('deactivate', s.slug)}
                                 disabled={busyKey === `deactivate-${s.slug}`}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:border-rose-300 hover:text-rose-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-500 dark:text-slate-400 hover:border-rose-300 hover:text-rose-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {busyKey === `deactivate-${s.slug}` ? t('bindings.deactivating') : t('bindings.deactivate')}
                               </button>

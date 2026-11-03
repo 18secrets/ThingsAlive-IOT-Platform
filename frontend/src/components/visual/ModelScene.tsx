@@ -67,7 +67,7 @@ const ModelScene: React.FC<{
             </mesh>
             <Html center distanceFactor={undefined} style={{ pointerEvents: 'none', transform: 'translateY(-18px)' }}>
               <span
-                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap shadow ${
+                className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold whitespace-nowrap shadow ${
                   m.tone === 'selected' ? 'bg-sky-600 text-white' : m.tone === 'recheck' ? 'bg-amber-500 text-white' : 'bg-white/90 text-slate-800'
                 }`}
               >

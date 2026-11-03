@@ -63,9 +63,9 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
 
                 const key = `${a.sourceSystem}|${a.alias}`;
     return [
-      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{a.sourceSystem}</span>,
+      <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{a.sourceSystem}</span>,
       <span className="font-mono text-sm text-slate-900 dark:text-white">{a.alias}</span>,
-      <><span className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+      <><span className="px-2 py-0.5 text-xs font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
                         {a.canonical}
                       </span></>,
       <span className="text-slate-500 dark:text-slate-400">{a.unit ?? '—'}</span>,
@@ -135,7 +135,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(a) => `${a.sourceSystem}|${a.alias}`} cells={viewCells} actionsIndex={5} /></div>
         )}
 
-        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 font-sans">
           {t('aliases.footer')}
         </div>
         <TablePagination pinToBottom {...pager} />

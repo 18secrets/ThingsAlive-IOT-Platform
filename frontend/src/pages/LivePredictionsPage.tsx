@@ -198,7 +198,7 @@ export const LivePredictionsPage: React.FC = () => {
             {t('scenarios.manage')} <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+        <p className="flex items-center gap-1.5 text-xs text-slate-400">
           <Info className="w-3.5 h-3.5" />{t('scenarios.info')}
         </p>
         <div className={LIST_PANEL}>
@@ -217,7 +217,7 @@ export const LivePredictionsPage: React.FC = () => {
               cells={(s) => [
                 <span className="font-medium">{s.name}</span>,
                 <div className="flex items-center gap-1.5 flex-wrap">{scenarioChips(s)}</div>,
-                <span className="text-[11px] text-slate-500">{scenarioNeeds(s)}</span>,
+                <span className="text-xs text-slate-500">{scenarioNeeds(s)}</span>,
                 scenarioToggle(s),
               ]}
             />
@@ -232,7 +232,7 @@ export const LivePredictionsPage: React.FC = () => {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {scenarioChips(s)}
                   </div>
-                  <p className="text-[11px] text-slate-400">{scenarioNeeds(s)}</p>
+                  <p className="text-xs text-slate-400">{scenarioNeeds(s)}</p>
                 </div>
               ))}
             </div>
@@ -280,7 +280,7 @@ export const LivePredictionsPage: React.FC = () => {
                   <span><span className="font-medium">{m.name ?? m.externalId}</span> <span className="text-slate-400">{m.externalId}</span></span>,
                   worst ? <Chip tone={SEVERITY_TONE(worst.severity)}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip> : '—',
                   worst ? worst.riskScore : '—',
-                  <span className="text-[11px] text-slate-500">{scoreSummary(p, worst)}</span>,
+                  <span className="text-xs text-slate-500">{scoreSummary(p, worst)}</span>,
                   machineActions(m),
                 ];
               }}
@@ -307,7 +307,7 @@ export const LivePredictionsPage: React.FC = () => {
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {worst.clientScenarioSlug} · {t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · {t('kpis.scenariosScored', { count: (p as Prediction[]).length })}
                         </p>
-                        <p className="text-[11px] text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(), count: worst.windowDays })}</p>
+                        <p className="text-xs text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(), count: worst.windowDays })}</p>
                       </>
                     )}
                     <div className="pt-1">{machineActions(m)}</div>

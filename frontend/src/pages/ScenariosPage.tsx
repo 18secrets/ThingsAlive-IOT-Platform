@@ -167,7 +167,7 @@ export const ScenariosPage: React.FC = () => {
               cells={(s) => [
                 <span className="font-medium">{s.name}</span>,
                 <div className="flex items-center gap-1.5 flex-wrap">{tagChips(s)}</div>,
-                <span className="text-[11px] text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
+                <span className="text-xs text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
                 enabledToggle(s),
                 editButton(s),
               ]}
@@ -184,7 +184,7 @@ export const ScenariosPage: React.FC = () => {
                     {tagChips(s)}
                   </div>
                   {s.description && <p className="text-xs text-slate-400 dark:text-slate-500">{s.description}</p>}
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     {t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}
                   </p>
                   {editButton(s)}
@@ -328,14 +328,14 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('manage.layout')}</h4>
-          {fallback && <span className="text-[11px] text-slate-400">{t('manage.fallback')}</span>}
+          {fallback && <span className="text-xs text-slate-400">{t('manage.fallback')}</span>}
         </div>
         <div className="space-y-1.5">
           {widgets.map((w, i) => (
             <div key={w.widgetKey} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{w.title ?? w.widgetKey}</p>
-                <p className="text-[11px] text-slate-400">{w.widgetType}{w.positionCustom ? ` · ${t('manage.reordered')}` : ''}</p>
+                <p className="text-xs text-slate-400">{w.widgetType}{w.positionCustom ? ` · ${t('manage.reordered')}` : ''}</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button disabled={fallback || busyKey === w.widgetKey || i === 0} onClick={() => move(i, -1)} className="p-1.5 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed">
@@ -550,9 +550,9 @@ const ClassUpgradeSection: React.FC<{ slug: string; onUpgraded: () => Promise<vo
         ))}
       </dl>
       {lines.slice(1).every(([, text]) => !text) && (
-        <p className="text-[11px] text-slate-500">{t('upgrade.noChanges')}</p>
+        <p className="text-xs text-slate-500">{t('upgrade.noChanges')}</p>
       )}
-      {notice && <p className="text-[11px] text-slate-500">{notice}</p>}
+      {notice && <p className="text-xs text-slate-500">{notice}</p>}
     </div>
   );
 };
@@ -648,7 +648,7 @@ const ScenarioEditForm: React.FC<{
             <InputNumber min={0} max={365} value={minimumHistoryDays} onChange={(value) => setMinimumHistoryDays(Number(value) || 0)} />
           </div>
         </div>
-        <p className="text-[11px] text-slate-400">{t('form.requiredSignals', { signals: scenario.requiredSignals.join(', ') || t('form.none') })}</p>
+        <p className="text-xs text-slate-400">{t('form.requiredSignals', { signals: scenario.requiredSignals.join(', ') || t('form.none') })}</p>
 
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">

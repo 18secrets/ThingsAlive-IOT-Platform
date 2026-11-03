@@ -153,12 +153,12 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
             <div className="space-y-2">
               <div className="flex items-end gap-6 flex-wrap">
                 <div>
-                  <p className="text-[11px] text-slate-400">{t('kpiExplorer.latest')}</p>
+                  <p className="text-xs text-slate-400">{t('kpiExplorer.latest')}</p>
                   <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{fmt(values[values.length - 1] ?? null)} <span className="text-sm font-normal text-slate-400">{result.unit}</span></p>
                 </div>
-                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.min')}</p><p className="font-mono">{fmt(values.length ? Math.min(...values) : null)}</p></div>
-                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.max')}</p><p className="font-mono">{fmt(values.length ? Math.max(...values) : null)}</p></div>
-                <div><p className="text-[11px] text-slate-400">{t('kpiExplorer.points')}</p><p className="font-mono">{series.length}</p></div>
+                <div><p className="text-xs text-slate-400">{t('kpiExplorer.min')}</p><p className="font-mono">{fmt(values.length ? Math.min(...values) : null)}</p></div>
+                <div><p className="text-xs text-slate-400">{t('kpiExplorer.max')}</p><p className="font-mono">{fmt(values.length ? Math.max(...values) : null)}</p></div>
+                <div><p className="text-xs text-slate-400">{t('kpiExplorer.points')}</p><p className="font-mono">{series.length}</p></div>
               </div>
               {values.length >= 2 && <Sparkline values={values} width={560} height={80} colorClass="text-sky-600 dark:text-sky-400" />}
             </div>

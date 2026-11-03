@@ -203,19 +203,19 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
                 {t('industry.unmatchedHint')}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {unmatched.map((u) => (
-                  <span key={u.text} className="text-[11px] font-medium px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
+                  <span key={u.text} className="text-xs font-medium px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
                     {u.text} <span className="text-amber-500">×{u.mappings}</span>
                   </span>
                 ))}
               </div>
             </>
           )}
-          {notice && <p className="text-[11px] text-amber-800 dark:text-amber-300">{notice}</p>}
+          {notice && <p className="text-xs text-amber-800 dark:text-amber-300">{notice}</p>}
         </div>
       )}
 
@@ -255,7 +255,7 @@ export const IndustryTypeView: React.FC<IndustryTypeViewProps> = ({
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">
                   {item.name}
                 </h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5">
                   {t('industry.created', { date: createdOn(item) })}
                 </p>
               </div>
@@ -357,7 +357,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
   const sitePageButton = (plant: Plant) => (
     <button
       onClick={() => onOpenSitePage(plant.id)}
-      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
+      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-sky-100 dark:hover:bg-sky-950/70 transition-colors cursor-pointer"
     >
       <LayoutDashboard className="w-3.5 h-3.5" />
       <span>{t('plants.sitePage')}</span>
@@ -366,7 +366,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
   const boundaryButton = (plant: Plant) => (
     <button
       onClick={() => setBoundaryPlant(plant)}
-      className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+      className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
         plant.boundary
           ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
           : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
@@ -464,7 +464,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
                   {plant.name}
                 </h4>
                 {plant.address && (
-                  <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-rose-500" />
                     {plant.address}
                   </p>

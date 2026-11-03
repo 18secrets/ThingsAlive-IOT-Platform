@@ -157,7 +157,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 <Trans
                   t={t}
                   i18nKey="addClient.tokenHelp"
@@ -202,7 +202,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 placeholder={t('addClient.accountIdPlaceholder')}
                 className="font-mono"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 {isEditing
                   ? t('addClient.accountIdLocked')
                   : t('addClient.accountIdHint')}
@@ -249,7 +249,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 />
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 -mt-2">
+            <p className="text-xs text-slate-400 -mt-2">
               {isEditing
                 ? t('addClient.emailEditHint')
                 : t('addClient.emailHint')}

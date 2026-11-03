@@ -127,7 +127,7 @@ export const ThingsShieldPage: React.FC = () => {
         <KpiTile label={t('status.current')} value={totals.current} tone="good" />
         <KpiTile label={t('status.not_recorded')} value={totals.not_recorded} />
       </div>
-      <p className="text-[11px] text-slate-400">{t('page.countNote')}</p>
+      <p className="text-xs text-slate-400">{t('page.countNote')}</p>
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">

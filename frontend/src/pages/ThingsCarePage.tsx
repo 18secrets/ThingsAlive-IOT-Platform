@@ -255,14 +255,14 @@ const ThingsCareCard: React.FC<{
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <span className="inline-block px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
               {prediction ? t(`severity.${prediction.severity}`, { defaultValue: prediction.severity }) : t('card.noScenario')}
             </span>
             <ConnectionBadge state={connection} />
           </div>
           <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{externalId}</p>
-          {prediction && <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString() })}</p>}
+          {prediction && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString() })}</p>}
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">

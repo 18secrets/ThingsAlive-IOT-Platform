@@ -219,7 +219,7 @@ export const OnboardingList: React.FC<OnboardingListProps> = ({
                     </td>
                     <td className="py-3 px-4">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                           s.status === 'Completed'
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
@@ -228,10 +228,10 @@ export const OnboardingList: React.FC<OnboardingListProps> = ({
                         {s.status === 'Completed' ? t('siteStatus.completed') : s.status === 'In Progress' ? t('siteStatus.in_progress') : s.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
                       {s.createdAt}
                     </td>
-                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
                       {s.updatedAt}
                     </td>
 
@@ -331,7 +331,7 @@ export const OnboardingList: React.FC<OnboardingListProps> = ({
                 <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">
                   {qrSession.name}
                 </div>
-                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                <div className="text-xs font-mono text-slate-400 mt-0.5">
                   {qrSession.id.toUpperCase()}
                 </div>
               </div>

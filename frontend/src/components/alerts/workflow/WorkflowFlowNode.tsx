@@ -25,7 +25,7 @@ export const WorkflowFlowNode: React.FC<NodeProps<WorkflowNode>> = ({ data, sele
       </div>
       <div className="min-w-0">
         <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{title}</div>
-        {subtitle && <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{subtitle}</div>}
+        {subtitle && <div className="text-[0.6875rem] text-slate-500 dark:text-slate-400 truncate">{subtitle}</div>}
       </div>
       {!isSink(data.type) && <Handle type="source" position={Position.Right} className={handleClass} />}
     </div>

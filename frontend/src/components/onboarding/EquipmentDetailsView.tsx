@@ -174,19 +174,19 @@ const AlertCard: React.FC<{ alert: AlertInsightItem }> = ({ alert }) => {
   <div className={`rounded-lg border border-slate-100 dark:border-slate-800 border-l-4 p-3 ${SEVERITY_CARD_STYLE[alert.severity]}`}>
     <div className="flex items-center justify-between gap-2">
       <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{alert.parameter}</span>
-      <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${SEVERITY_BADGE_STYLE[alert.severity]}`}>
+      <span className={`shrink-0 px-2 py-0.5 rounded-full text-[0.6875rem] font-bold uppercase ${SEVERITY_BADGE_STYLE[alert.severity]}`}>
         {t(`details.severity.${alert.severity}`, { defaultValue: alert.severity })}
       </span>
     </div>
-    <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
       <span>{t('details.value')}</span>
       <span className="font-semibold text-slate-700 dark:text-slate-200">{alert.actualValue}</span>
     </div>
-    <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
+    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
       <span>{t('details.threshold')}</span>
       <span className="font-semibold text-slate-700 dark:text-slate-200">{alert.thresholdValue}</span>
     </div>
-    <div className="text-[10px] text-slate-400 dark:text-slate-500 text-right mt-1 italic">{alert.occurredAt}</div>
+    <div className="text-[0.6875rem] text-slate-400 dark:text-slate-500 text-right mt-1 italic">{alert.occurredAt}</div>
   </div>
   );
 };
@@ -267,7 +267,7 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
                 className="bg-white dark:bg-slate-900 rounded-lg shadow-xs p-3 flex flex-col items-center justify-between gap-1"
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 text-center">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 text-center">
                     {t(`details.param.${p.key}`, { defaultValue: p.label })}
                   </span>
                   {p.showStatusDot && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
@@ -293,7 +293,7 @@ export const EquipmentDetailsView: React.FC<EquipmentDetailsViewProps> = ({ equi
                   </div>
                 )}
 
-                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{p.unit}</div>
+                <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">{p.unit}</div>
               </div>
             ))}
           </div>

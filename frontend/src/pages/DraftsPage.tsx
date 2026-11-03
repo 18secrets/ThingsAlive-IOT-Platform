@@ -71,8 +71,8 @@ export const DraftsPage: React.FC = () => {
   const viewCells = (d: (typeof pageItems)[number]) => [
     <span className="font-semibold">{t(`kind.${d.kind}`)}</span>,
     <><div>{d.rendering[0] ?? d.sentence}</div>
-                    {d.unvalidated && <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">{t('unvalidatedShort')}</div>}</>,
-    <span className="font-mono text-[11px]">{machineOf(d)}</span>,
+                    {d.unvalidated && <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{t('unvalidatedShort')}</div>}</>,
+    <span className="font-mono text-xs">{machineOf(d)}</span>,
     <><Chip tone={STATUS_TONE[d.status]}>{t(`status.${d.expired ? 'expired' : d.status}`)}</Chip></>,
     <span className="text-slate-500">{new Date(d.provenance.proposedAt).toLocaleString()}</span>,
   ];
@@ -208,7 +208,7 @@ const DraftDetail: React.FC<{ id: string; onChanged: () => void }> = ({ id, onCh
                   <td className="py-1.5 pr-3">{r.fires}</td>
                   <td className="py-1.5 pr-3">
                     <span className={r.outcome === 'pass' ? 'text-emerald-600' : r.outcome === 'refuse' ? 'text-rose-600' : 'text-amber-600'}>{t(`gate.${r.outcome}`)}</span>
-                    <span className="block text-[11px] text-slate-500">{r.outcomeReason}</span>
+                    <span className="block text-xs text-slate-500">{r.outcomeReason}</span>
                   </td>
                   <td className="py-1.5 text-right">
                     {r.fires > 0 && (
@@ -270,7 +270,7 @@ const DraftDetail: React.FC<{ id: string; onChanged: () => void }> = ({ id, onCh
 
 const Block: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="space-y-1.5">
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
     <div className="text-slate-700 dark:text-slate-200">{children}</div>
   </div>
 );

@@ -48,7 +48,14 @@
     "noNotifications": "No open alerts.",
     "loadingNotifications": "Loading…",
     "timeZone": "Times in {{zone}}",
-    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}."
+    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}.",
+    "textSize": "Text size",
+    "textSizes": {
+      "small": "Small",
+      "default": "Default",
+      "large": "Large",
+      "xlarge": "Extra large"
+    }
   },
   "login": {
     "title": "Sign in",

@@ -116,7 +116,7 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
               <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
               <span>{dt.label}</span>
               {dt.count !== undefined && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{dt.count}</span>
+                <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{dt.count}</span>
               )}
             </button>
           );

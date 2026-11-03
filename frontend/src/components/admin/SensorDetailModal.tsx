@@ -42,21 +42,21 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
         <div className="p-6 space-y-4 text-xs overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.identifier')}</span>
+              <span className="text-[0.6875rem] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.identifier')}</span>
               <div className="font-semibold text-slate-800 dark:text-white font-mono text-sm mt-0.5">{sensor.sensorName}</div>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorModal.sensorCategory')}</span>
+              <span className="text-[0.6875rem] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorModal.sensorCategory')}</span>
               <div className="font-semibold text-slate-800 dark:text-white mt-0.5">{categoryName || '—'}</div>
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/60">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-sky-700 dark:text-sky-300">
+              <span className="text-[0.6875rem] uppercase tracking-wider font-bold text-sky-700 dark:text-sky-300">
                 {t('sensorModal.telemetryParameters')}
               </span>
-              <span className="text-[10px] bg-sky-200 dark:bg-sky-900 text-sky-800 dark:text-sky-200 px-2 py-0.5 rounded-full font-bold">
+              <span className="text-[0.6875rem] bg-sky-200 dark:bg-sky-900 text-sky-800 dark:text-sky-200 px-2 py-0.5 rounded-full font-bold">
                 {t('sensorDetail.channelCount', { count: sensor.parameterSpecs.length })}
               </span>
             </div>
@@ -64,7 +64,7 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
               <div className="overflow-x-auto -mx-1">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[10px] uppercase tracking-wider text-sky-700/80 dark:text-sky-300/80">
+                    <tr className="text-[0.6875rem] uppercase tracking-wider text-sky-700/80 dark:text-sky-300/80">
                       <th className="px-1.5 py-1 font-semibold">{t('sensorDetail.parameter')}</th>
                       <th className="px-1.5 py-1 font-semibold">{t('sensorModal.unit')}</th>
                       <th className="px-1.5 py-1 font-semibold">{t('sensorDetail.range')}</th>
@@ -91,13 +91,13 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
           </div>
 
           <div className="space-y-2 text-slate-600 dark:text-slate-300 leading-relaxed">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.functionalDescription')}</span>
+            <span className="text-[0.6875rem] text-slate-400 uppercase tracking-wider font-semibold">{t('sensorDetail.functionalDescription')}</span>
             <p className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700">
               {sensor.description || t('sensorDetail.defaultDescription')}
             </p>
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700">
             <span>{t('sensorDetail.created', { date: new Date(sensor.createdAt).toLocaleDateString() })}</span>
             <span>{t('sensorDetail.updated', { date: new Date(sensor.updatedAt).toLocaleDateString() })}</span>
           </div>

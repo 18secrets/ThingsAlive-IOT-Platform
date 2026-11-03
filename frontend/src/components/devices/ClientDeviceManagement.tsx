@@ -89,9 +89,9 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
     { label: t('devices.col.fittedTo'), sortKey: 'fitted' }, { label: t('devices.col.action') },
   ];
   const viewCells = (d: (typeof pagedRows)[number]) => [
-    <span className="font-mono text-[11px]">{d.imei}</span>,
+    <span className="font-mono text-xs">{d.imei}</span>,
     <span className="text-slate-600 dark:text-slate-400">{d.model || '—'}</span>,
-    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
       {t(`deviceState.${d.state}`, { defaultValue: d.state })}
     </span>,
     <span className="text-slate-600 dark:text-slate-400">
@@ -229,14 +229,14 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>
           <p className="text-slate-500 dark:text-slate-400">{w.detail}</p>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             {t('devices.samples', { count: w.samples })}
             {w.signalBand ? ` · ${t('devices.signal', { band: w.signalBand })}` : ''}
             {minutes(w.longestGapSeconds, t) ? ` · ${t('devices.longestGap', { value: minutes(w.longestGapSeconds, t) })}` : ''}
             {minutes(w.medianLagSeconds, t) ? ` · ${t('devices.medianLag', { value: minutes(w.medianLagSeconds, t) })}` : ''}
           </p>
           {w.missingSignals.length > 0 && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400">{t('devices.missing', { list: w.missingSignals.join(', ') })}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">{t('devices.missing', { list: w.missingSignals.join(', ') })}</p>
           )}
         </li>
       ))}

@@ -247,7 +247,7 @@ export const AlertsPage: React.FC = () => {
               cells={(r) => [
                 <span className="font-medium">{r.name}</span>,
                 <div className="flex items-center gap-1.5 flex-wrap">{ruleChips(r)}</div>,
-                <span className="text-[11px] text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
+                <span className="text-xs text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
                 ruleToggle(r),
                 ruleEdit(r),
               ]}
@@ -478,12 +478,12 @@ const AlertRuleForm: React.FC<{
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.min')}</span>
             <Input type="number" inputMode="decimal" value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
-            {minError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{minError}</span>}
+            {minError && <span className="text-xs text-rose-600 dark:text-rose-400">{minError}</span>}
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.max')}</span>
             <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
-            {maxError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{maxError}</span>}
+            {maxError && <span className="text-xs text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
         </div>
       )}

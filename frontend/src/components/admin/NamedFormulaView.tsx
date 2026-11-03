@@ -96,7 +96,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                 </div>
   );
   const statusBadge = (f: Formula) => (
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
                 {t(`common.status.${f.status}`, { defaultValue: f.status })}
               </span>
   );
@@ -106,7 +106,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                 <button
                   onClick={() => handlePublish(f)}
                   disabled={busySlug === f.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{t('common.publish')}</span>
@@ -117,7 +117,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   const publishErrorNote = (f: Formula) => (
     <>
             {publishError[f.slug] && (
-              <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
+              <div className="flex items-start gap-1.5 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <span>{t('formulas.notPublished', { error: publishError[f.slug] })}</span>
               </div>
@@ -175,9 +175,9 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
             rowKey={(f) => f.slug}
             cells={(f) => [
               <span className="font-mono">{f.slug}</span>,
-              <span><span className="font-medium">{f.name}</span>{f.category && <span className="block text-[11px] text-slate-400">{f.category}</span>}</span>,
+              <span><span className="font-medium">{f.name}</span>{f.category && <span className="block text-xs text-slate-400">{f.category}</span>}</span>,
               `v${f.version}`,
-              <span className="font-mono text-[11px]">{f.expression}</span>,
+              <span className="font-mono text-xs">{f.expression}</span>,
               statusBadge(f),
               <div className="flex flex-wrap items-center gap-2">{headerButtons(f)}{publishButton(f)}{publishErrorNote(f)}</div>,
             ]}
@@ -194,16 +194,16 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                   {headerButtons(f)}
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{f.name}</h4>
-                {f.category && <p className="text-[11px] text-slate-400 mt-0.5">{f.category}</p>}
+                {f.category && <p className="text-xs text-slate-400 mt-0.5">{f.category}</p>}
               </div>
 
               {f.description && <p className="text-slate-600 dark:text-slate-300 line-clamp-2 text-xs leading-relaxed">{f.description}</p>}
 
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700 w-fit">
                 <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0" />
                 <span className="truncate">{f.expression}</span>
               </div>
-              <p className="text-[11px] text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
+              <p className="text-xs text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                 {statusBadge(f)}
@@ -270,20 +270,20 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">v{v.version}</span>
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
                 {t(`common.status.${v.status}`, { defaultValue: v.status })}
               </span>
             </div>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-xs text-slate-400">
               {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString() }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString() })}
             </span>
           </div>
           {v.name !== versions[0].name && <p className="text-xs text-slate-600 dark:text-slate-300">{v.name}</p>}
-          <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+          <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-xs rounded-md border border-slate-200 dark:border-slate-700">
             <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0 mt-0.5" />
             <span className="break-all">{v.expression}</span>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             {v.inputs.length ? v.inputs.map((i) => `${i.role} (${i.dimension})`).join(', ') : t('formulas.noInputRoles')}
             {' · '}
             {v.resultDimension ?? (v.resultUnit ? t('formulas.unit', { unit: v.resultUnit }) : t('formulas.dimensionInferred'))}

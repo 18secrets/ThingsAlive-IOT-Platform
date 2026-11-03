@@ -141,7 +141,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
                   {answer.hypotheses.map((h, i) => (
                     <div key={i} className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-1">
                       <p className="text-slate-800 dark:text-slate-100">{h.claim}</p>
-                      {h.limitations.map((l, j) => <p key={j} className="text-[11px] text-slate-500 dark:text-slate-400">{l}</p>)}
+                      {h.limitations.map((l, j) => <p key={j} className="text-xs text-slate-500 dark:text-slate-400">{l}</p>)}
                     </div>
                   ))}
                 </Block>
@@ -153,7 +153,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
                     {answer.next_steps.map((s, i) => (
                       <li key={i}>
                         <span className="text-slate-800 dark:text-slate-100">{s.aim}</span>
-                        {s.expected_outcome && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{s.expected_outcome}</span>}
+                        {s.expected_outcome && <span className="block text-xs text-slate-500 dark:text-slate-400">{s.expected_outcome}</span>}
                       </li>
                     ))}
                   </ol>
@@ -182,7 +182,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
               )}
 
               {frame?.provenance && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {frame.provenance.renderer === 'model'
                     ? t('rec.byModel', { model: frame.provenance.modelId ?? '' })
                     : t('rec.byTemplate', { version: frame.provenance.rendererVersion ?? '' })}
@@ -198,7 +198,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
 
 const Block: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="space-y-1.5">
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
     <div className="text-slate-700 dark:text-slate-200">{children}</div>
   </div>
 );

@@ -186,7 +186,7 @@ export const CostAdministrationPage: React.FC = () => {
                     </div>
                     {entry.description && <p className="text-xs text-slate-400 dark:text-slate-500">{entry.description}</p>}
                     {entry.requiredBy.length > 0 && (
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
                         {t('param.neededBy')} {entry.requiredBy.map((r) => `${r.classSlug}/${r.formulaKey}`).join(', ')}
                       </p>
                     )}
@@ -195,7 +195,7 @@ export const CostAdministrationPage: React.FC = () => {
                     <div className="text-base font-mono font-semibold text-slate-800 dark:text-slate-100">
                       {eff?.value != null ? `${eff.value} ${entry.unit ?? ''}` : '—'}
                     </div>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[0.6875rem] text-slate-400">
                       {eff?.source ? (setHere ? t('param.setHere') : t('param.inherited', { scope: t(`scope.${eff.source.scope}`) })) : t('param.notConfigured')}
                     </p>
                   </div>

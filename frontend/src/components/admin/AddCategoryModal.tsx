@@ -179,7 +179,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                 onChange={(value) => { setSlug(value); setSlugTouched(true); }}
                 placeholder={t('classModal.slugPlaceholder')}
               />
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-[0.6875rem] text-slate-400 mt-1">
                 {isEditing ? t('classModal.slugPermanent') : t('classModal.slugHint')}
               </p>
             </div>
@@ -217,13 +217,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               <button
                 type="button"
                 onClick={addSignalRow}
-                className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
+                className="text-xs text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{t('classModal.addSignal')}</span>
               </button>
             </div>
-            <p className="text-[10px] text-slate-400 -mt-1">
+            <p className="text-[0.6875rem] text-slate-400 -mt-1">
               {t('classModal.signalsHint')}
             </p>
 
@@ -241,7 +241,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   onChange={(value) => updateSignal(i, 'unit', value)}
                   placeholder={t('classModal.unitPlaceholder')}
                 />
-                <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={s.required}
@@ -268,13 +268,13 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               <button
                 type="button"
                 onClick={addFailureModeRow}
-                className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
+                className="text-xs text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{t('classModal.addFailureMode')}</span>
               </button>
             </div>
-            <p className="text-[10px] text-slate-400 -mt-1">
+            <p className="text-[0.6875rem] text-slate-400 -mt-1">
               {t('classModal.failureModesHint')}
             </p>
 
@@ -309,9 +309,9 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
                   placeholder={t('classModal.symptomPlaceholder')}
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="text-[10px] text-slate-400">{t('classModal.signalsThatMove')}</span>
+                  <span className="text-[0.6875rem] text-slate-400">{t('classModal.signalsThatMove')}</span>
                   {signals.filter((s) => s.signal.trim()).length === 0 ? (
-                    <span className="text-[10px] text-slate-400 italic">{t('classModal.addSignalFirst')}</span>
+                    <span className="text-[0.6875rem] text-slate-400 italic">{t('classModal.addSignalFirst')}</span>
                   ) : (
                     <CheckPicker
                       size="sm"
@@ -335,7 +335,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

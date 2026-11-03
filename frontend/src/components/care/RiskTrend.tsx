@@ -24,7 +24,7 @@ export const RiskTrend: React.FC<{ history: Prediction[]; width?: number; height
 
   if (points.length < 2) {
     return (
-      <p className="text-[11px] text-slate-400 text-right w-[168px] leading-snug">
+      <p className="text-xs text-slate-400 text-right w-[168px] leading-snug">
         {t('trend.tooFew', { count: points.length })}
       </p>
     );
@@ -42,10 +42,10 @@ export const RiskTrend: React.FC<{ history: Prediction[]; width?: number; height
         <Tooltip
           labelFormatter={(ms) => new Date(Number(ms)).toLocaleString()}
           formatter={(value) => [`${value}`, t('trend.risk')]}
-          contentStyle={{ fontSize: 11, borderRadius: 8, padding: '4px 8px' }}
+          contentStyle={{ fontSize: '0.75rem', borderRadius: 8, padding: '4px 8px' }}
         />
       </LineChart>
-      <span className="text-[10px] text-slate-400">{t('trend.caption', { count: points.length })}</span>
+      <span className="text-[0.6875rem] text-slate-400">{t('trend.caption', { count: points.length })}</span>
     </div>
   );
 };

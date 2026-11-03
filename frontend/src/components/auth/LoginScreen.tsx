@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from '../common/LanguageSelector';
+import { TextSizeSelector } from '../common/TextSizeSelector';
 import { AlertCircle, Info, MailCheck } from 'lucide-react';
 import { Input } from 'rsuite';
 import { PasswordField } from '../common/PasswordField';
@@ -53,7 +54,8 @@ export const LoginScreen: React.FC = () => {
   return (
     <div id="login-screen" className="min-h-screen w-full flex items-center justify-center bg-[#F4F7FB] dark:bg-slate-950 p-4">
       {/* Chosen before signing in, so the whole first visit is in that language. */}
-      <div className="fixed top-4 right-4">
+      <div className="fixed top-4 right-4 flex items-center gap-4">
+        <TextSizeSelector />
         <LanguageSelector />
       </div>
       <div className="w-full max-w-sm">
@@ -84,7 +86,7 @@ export const LoginScreen: React.FC = () => {
                 aria-invalid={triedSubmit && emailMalformed}
               />
               {triedSubmit && emailMalformed && (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">{t('login.emailMalformed')}</p>
+                <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">{t('login.emailMalformed')}</p>
               )}
             </div>
 
@@ -146,7 +148,7 @@ export const LoginScreen: React.FC = () => {
             <span>{showHints ? 'Hide' : 'Show'} sign-in notes</span>
           </button>
           {showHints && (
-            <div className="mt-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-[11px] text-slate-500 dark:text-slate-400 space-y-1.5 font-mono">
+            <div className="mt-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs text-slate-500 dark:text-slate-400 space-y-1.5 font-mono">
               <div><strong className="text-slate-700 dark:text-slate-300">Master Admin:</strong> support@thingsalive.io / Admin@2026!!</div>
               <div><strong className="text-slate-700 dark:text-slate-300">Everyone else:</strong> a real email + password from the API's own database</div>
             </div>

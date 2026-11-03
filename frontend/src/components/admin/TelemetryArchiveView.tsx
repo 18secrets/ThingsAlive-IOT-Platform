@@ -117,7 +117,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.droppedPartitions')}</h3>
-          <p className="text-[11px] text-slate-400">{t('archive.droppedHint')}</p>
+          <p className="text-xs text-slate-400">{t('archive.droppedHint')}</p>
         </div>
         {drops.length === 0 ? (
           <p className="py-6 text-center text-slate-400 text-xs">{t('archive.noDrops')}</p>

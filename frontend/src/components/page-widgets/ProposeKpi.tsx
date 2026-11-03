@@ -109,7 +109,7 @@ export const ProposeKpi: React.FC<{ sourceSystem: string; externalId: string; cl
             <div key={r.role} className="block space-y-1">
               <span className="font-medium text-slate-600 dark:text-slate-300">{t('propose.signalFor', { role: r.role })}</span>
               <SelectPicker data={pick(signals)} value={bindings[r.role] ?? null} onChange={(v) => setBindings((b) => ({ ...b, [r.role]: v ?? '' }))} block size="sm" />
-              <span className="block text-[11px] text-amber-600 dark:text-amber-400">{r.detail}</span>
+              <span className="block text-xs text-amber-600 dark:text-amber-400">{r.detail}</span>
             </div>
           ))}
         </div>
