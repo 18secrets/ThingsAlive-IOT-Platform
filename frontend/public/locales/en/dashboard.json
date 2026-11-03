@@ -126,7 +126,9 @@
     "onboarding": "Onboarding",
     "onboarded": "{{done}}/{{total}} machines fully onboarded",
     "searchMachines": "Search machines by name, code or site",
-    "noMachineMatches": "No machine matches that search."
+    "noMachineMatches": "No machine matches that search.",
+    "hoursLeft": "{{hours}} h left",
+    "hoursOverdue": "{{hours}} h overdue"
   },
   "classic": {
     "title": "Enterprise Command Center",
