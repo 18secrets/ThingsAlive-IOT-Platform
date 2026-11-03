@@ -42,6 +42,10 @@
     "loadFailed": "Could not load fuel forecast accuracy.",
     "loading": "Loading…",
     "empty": "No machine has a completed shift with fuel figures in the dates picked.",
+    "noMatch": "No machine matches the search and filter.",
+    "search": "Search equipment",
+    "showIdle_one": "Show the {{count}} machine that didn't run",
+    "showIdle_other": "Show the {{count}} machines that didn't run",
     "totalsLine_one": "Totals over the {{count}} machine that burned fuel in the dates picked. Machines that didn't run are left out.",
     "totalsLine_other": "Totals over the {{count}} machines that burned fuel in the dates picked. Machines that didn't run are left out.",
     "tiles": {
@@ -81,6 +85,7 @@
       "shifts": "Only completed shifts count. A shift belongs to the date it starts on: shift 1 runs 08:00–20:00 and shift 2 runs 20:00–08:00 the next morning (India time).",
       "actual": "Actual is the existing platform's fuel total for the shift, copied into 2.0 every hour. A shift it has no figure for is not counted.",
       "forecast": "Forecast is the figure issued for the shift before it ended. A shift with no forecast is left out of the score, never counted as a forecast of zero, and the note under the tile says how many.",
+      "backfilled": "Forecasts for shifts before 3 Nov 2026, when the forecast went live, are back-calculated: each is what the same method gives from only the shifts that had ended before that shift started. They are marked as such in the database and scored the same way.",
       "inShift": "The in-shift forecast at 2, 4 or 6 hours is the newest re-forecast made by that point in the shift: litres burned so far plus the forecast’s share of the hours left. A shift with none by then is left out of that checkpoint.",
       "formula": "Accuracy = 100 − (miss ÷ actual litres × 100), rounded, and never below 0. A machine that burned nothing has no percentage: it shows “Didn’t run”.",
       "levels": "“Count misses per” decides what a miss is. Shift: every machine-shift’s gap counts. Day: each machine’s day total against its forecast day total, so an over-forecast morning can offset an under-forecast night; the fleet tiles use the whole fleet’s day totals. Whole range: one total against the other.",

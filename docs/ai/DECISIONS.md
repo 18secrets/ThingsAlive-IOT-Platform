@@ -544,6 +544,27 @@ whenever those are.
   (CLAUDE.md: the UI team builds pages) is unchanged; the user chose to have this page
   built in the 2.0 console.
 
+## D54 — Past shifts get a back-calculated forecast, marked as one
+
+Decided 2026-11-03 by Tapas. D50 forecasts only from the day it went live, so the accuracy
+page (D53) had weeks of synced shift totals and nothing to score them against. Each
+completed shift with a synced total and no forecast gets what D50's method gives from the
+same machine's shifts before it — `forecastShift`, which reads only earlier days of the
+same shift, so nothing the live pass could not have seen before the shift started. Code:
+`src/shift-fuel/shift-fuel-backfill.ts`, run by hand with
+`scripts/backfill-shift-fuel-forecasts.ts <from> <to>` on the owner's login.
+
+- **Marked, not dated back.** `shift_fuel_forecast.backfilled` is true and `issued_at` is
+  when it was really written. The rule that a forecast is issued before its shift ends
+  now holds for every row that is not back-calculated, and only for those.
+- **The app role cannot write the column.** Its INSERT is narrowed to the columns the
+  hourly pass writes, so neither kind can pass as the other.
+- **A live forecast always wins.** Insert-if-absent, so running it again, or over a range
+  the live pass has reached, changes nothing.
+- The page scores both kinds alike and says, under "How accuracy is measured", that
+  forecasts before 3 Nov 2026 are back-calculated. The same page now has an equipment
+  search and hides machines that did not run unless asked.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

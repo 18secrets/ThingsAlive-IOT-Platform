@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Info } from 'lucide-react';
+import { Input } from 'rsuite';
+import { AlertCircle, Info, Search } from 'lucide-react';
 import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { sortRows, useSort } from '../lib/useSort';
@@ -92,6 +93,10 @@ export const FuelForecastAccuracyPage: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const { sort, toggle } = useSort<SortKey>({ key: 'accuracy', dir: 'desc' });
+  const [search, setSearch] = useState('');
+  // Most of the fleet sits idle on a given day; a table led by rows that say so buries the
+  // machines whose forecast there is something to say about. The tiles leave them out too.
+  const [showIdle, setShowIdle] = useState(false);
 
   const load = useCallback(async (live: () => boolean) => {
     setLoading(true);
@@ -123,8 +128,14 @@ export const FuelForecastAccuracyPage: React.FC = () => {
     return () => { alive = false; window.clearInterval(timer); };
   }, [load]);
 
-  const machines = data?.machines ?? [];
+  const allMachines = data?.machines ?? [];
   const nameOf = (m: MachineFuelAccuracy) => m.name ?? m.externalId;
+  const idleCount = allMachines.filter((m) => m.actualL === 0).length;
+  const machines = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allMachines.filter((m) => (showIdle || m.actualL > 0)
+      && (!q || (m.name ?? m.externalId).toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q)));
+  }, [allMachines, search, showIdle]);
   const sorted = useMemo(() => sortRows(machines, sort, {
     equipment: (m) => nameOf(m),
     actual: (m) => m.actualL,
@@ -243,12 +254,27 @@ export const FuelForecastAccuracyPage: React.FC = () => {
               options={LEVELS.map((l) => ({ value: l, label: t(`fuelAccuracy.levels.${l}`) }))}
             />
           </div>
+          <div className="relative w-full sm:w-64 sm:ml-auto">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+            <Input
+              id="fuel-accuracy-search"
+              value={search}
+              onChange={(v) => setSearch(v)}
+              placeholder={t('fuelAccuracy.search')}
+              size="sm"
+              className="w-full pl-9!"
+            />
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 pb-1.5 cursor-pointer">
+            <input id="fuel-accuracy-show-idle" type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} />
+            {t('fuelAccuracy.showIdle', { count: idleCount })}
+          </label>
           {loading && <span className="text-xs text-slate-400 pb-2">{t('fuelAccuracy.loading')}</span>}
         </div>
 
         {machines.length === 0 ? (
           <p className="p-4 text-sm text-slate-500 dark:text-slate-400">
-            {loading && !data ? t('fuelAccuracy.loading') : t('fuelAccuracy.empty')}
+            {loading && !data ? t('fuelAccuracy.loading') : allMachines.length > 0 ? t('fuelAccuracy.noMatch') : t('fuelAccuracy.empty')}
           </p>
         ) : (
           // Wide enough for every column, and scrolled sideways on a phone rather than squeezed.
@@ -285,7 +311,7 @@ export const FuelForecastAccuracyPage: React.FC = () => {
       <section id="fuel-accuracy-how" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2 text-sm text-slate-600 dark:text-slate-300">
         <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{t('fuelAccuracy.how.title')}</h3>
         <ul className="list-disc pl-5 space-y-1.5">
-          {(['shifts', 'actual', 'forecast', 'inShift', 'formula', 'levels', 'fleet', 'didntRun'] as const).map((k) => (
+          {(['shifts', 'actual', 'forecast', 'backfilled', 'inShift', 'formula', 'levels', 'fleet', 'didntRun'] as const).map((k) => (
             <li key={k}>{t(`fuelAccuracy.how.${k}`)}</li>
           ))}
         </ul>
