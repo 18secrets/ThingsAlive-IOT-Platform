@@ -39,7 +39,8 @@ const ACTIVITY_COLOUR: Record<SiteTwinActivity, string> = {
   productive: '#16a34a', idle: '#f59e0b', 'running-unclassified': '#0ea5e9', off: '#64748b', unknown: '#94a3b8',
 };
 const STATUS_ORDER: SiteTwinStatus[] = ['live', 'alert', 'no_data', 'blocked', 'not_configured'];
-const REFRESH_MS = 60_000;
+// The fleet reports about every 20 s; the twin follows it.
+const REFRESH_MS = 20_000;
 const LANE_SPACING = 9;
 
 type Pos = { x: number; z: number; headingDeg: number; route: string[] };
@@ -129,6 +130,26 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
       };
     });
   }, [twin, draft, extent.depthM, zones]);
+
+  // Demo only: a site with no haul fleet of its own gets three simulated tippers running
+  // between its fronts, so the picture shows work being carried. Never on a real
+  // account, never saved, and labelled as what they are.
+  const shown: SceneMachine[] = useMemo(() => {
+    if (!twin?.simulated || draft) return machines;
+    if (machines.some((m) => /tipper|dumper|truck|transport|haul|transit/i.test(m.classSlug ?? ''))) return machines;
+    const pick = (...keys: string[]) => keys.map((k) => zones.find((z) => z.key === k)).find(Boolean);
+    const from = pick('quarry', 'excavation', 'road-b');
+    const to = pick('batching-plant', 'building', 'road-c', 'access-road');
+    const gate = pick('gate');
+    if (!from || !to || !gate) return machines;
+    const path: [number, number][] = [[gate.x, gate.z], [from.x, from.z], [to.x, to.z]];
+    return [...machines, ...[0, 1, 2].map((i) => ({
+      key: `demo-tipper-${i}`, name: t('siteTwin.demoTipper', { defaultValue: 'Demo tipper {{n}} (simulated)', n: i + 1 }),
+      classSlug: 'rock-tipper-truck', status: 'live' as SiteTwinStatus, placed: true,
+      x: gate.x, z: gate.z, headingDeg: 0, activity: 'productive' as SiteTwinActivity,
+      path, engagedLabel: null, breakdown: false,
+    }))];
+  }, [machines, twin?.simulated, draft, zones, t]);
 
   const focus: SceneFocus = useMemo(() => {
     const z = zones[focusIndex];
@@ -294,6 +315,11 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+          {twin.simulated && (
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 font-semibold" title={t('siteTwin.simulatedHint', { defaultValue: 'Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform.' })}>
+              {t('siteTwin.simulated', { defaultValue: 'Demo · simulated movement' })}
+            </span>
+          )}
           <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-200">
             {t('siteTwin.onSite', { defaultValue: '{{n}} machines on site', n: twin.summary.total })}
           </span>
@@ -394,9 +420,12 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[640px]'}`}>
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
             <SiteTwinScene
-              extent={extent} zones={zones} machines={machines} classModels={twin.classModels}
+              extent={extent} zones={zones} machines={shown}
+              // The demo tippers use the stand-in model the frontend ships, not a class copy.
+              classModels={twin.simulated ? { 'rock-tipper-truck': { modelUrl: '/models/classes/rock-tipper-truck.glb', bounds: null }, ...twin.classModels } : twin.classModels}
               showLabels={showLabels} selectedKey={selected} onSelect={setSelected}
               editing={!!draft} onDrag={onDrag} focus={focus} zoomCommand={zoom} autoRotate={autoRotate}
+              simulated={twin.simulated}
             />
           </Suspense>
 

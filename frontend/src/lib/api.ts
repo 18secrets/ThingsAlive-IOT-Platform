@@ -2333,6 +2333,9 @@ export interface SiteTwin {
   summary: { total: number; placed: number } & Record<SiteTwinStatus, number>;
   /** Saved structures not drawn: no machine assigned here backs them any more. */
   hiddenZones: string[];
+  /** The demo tenant: every machine at a work front is animated and the twin says it is
+   *  a simulation. Always false for a real account. */
+  simulated: boolean;
 }
 
 export interface SiteTwinLayoutInput {

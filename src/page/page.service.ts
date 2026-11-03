@@ -36,6 +36,7 @@ import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
+import { SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
 import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
@@ -104,6 +105,9 @@ export interface SiteTwinView {
   }[];
   /** Saved structures not drawn because no machine assigned here backs them any more. */
   hiddenZones: string[];
+  /** The demo tenant: the page animates every machine at a work front and labels the
+   * twin a simulation. False for every real account. */
+  simulated: boolean;
   summary: { total: number; placed: number } & Record<TwinMachineStatus, number>;
 }
 
@@ -673,6 +677,7 @@ export class PageService {
       site: { plantId: layout.plant.id, code: layout.plant.code, name: layout.plant.name, address: layout.plant.address },
       saved: layout.saved, version: layout.version, extent: layout.extent, zones: layout.zones,
       classModels: Object.fromEntries(models), machines: rows, summary, hiddenZones: layout.hiddenZones,
+      simulated: SIMULATED_TENANTS.has(scope.tenantId),
     };
   }
 
