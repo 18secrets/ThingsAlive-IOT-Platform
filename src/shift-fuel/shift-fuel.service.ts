@@ -5,7 +5,7 @@ import { LegacyShiftMetricRow, LegacyShiftMetricsReader, ShiftMetricsSource } fr
 import { runTenantSpanning, withTenantId } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import {
-  addDays, forecastShift, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHOD, ShiftKey, ShiftObservation, targetShifts,
+  addDays, forecastShift, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHOD, shiftEnd, ShiftKey, ShiftObservation, targetShifts,
 } from './shift-fuel-forecast';
 
 /** Beside the shift pass (…001) and the forecast pass (…002): its own, so none waits on another. */
@@ -242,7 +242,11 @@ export class ShiftFuelService {
         addDays(dates[0], -HISTORY_DAYS), dates[dates.length - 1]],
     )).map((r: { external_id: string; sdate: string; shift: 1 | 2; fuel_l: number | null }) => ({
       external_id: r.external_id, sdate: r.sdate, shift: r.shift, fuelL: r.fuel_l,
-    }));
+    }))
+      // The existing platform opens a shift's row when the shift starts and fills it as it
+      // runs. Read as history, a shift ten minutes old is one that burned almost nothing,
+      // and as the newest of its kind it would carry half the forecast's weight.
+      .filter((h) => shiftEnd({ sdate: h.sdate, shift: h.shift }) <= now);
 
     const rows = targets.map((t) => ({
       ...t, ...forecastShift(history.filter((h) => h.external_id === t.externalId), t as ShiftKey),
