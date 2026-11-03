@@ -95,7 +95,7 @@ function useGroundLabel(text: string) {
   return label;
 }
 
-const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
+export const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
   const { texture, aspect } = useGroundLabel(text.toUpperCase());
   // About 5 m tall letters, so a zone name reads at the overview, shrunk to fit its zone.
   const width = Math.min(maxWidth, aspect * 5);
@@ -107,7 +107,7 @@ const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: numb
   );
 };
 
-const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
+export const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
   const area = AREA_KINDS.has(zone.kind);
   return (
     <group>
@@ -140,7 +140,7 @@ const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGr
 };
 
 /** The site slab, its perimeter fence and a 10 m grid, so distance reads at a glance. */
-const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
+export const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
   const fence = 1.8;
   const posts = useMemo(() => {
     const out: [number, number][] = [];
@@ -391,7 +391,7 @@ const Exhaust: React.FC<{ height: number; seed: number }> = ({ height, seed }) =
   );
 };
 
-const Machine: React.FC<{
+export const Machine: React.FC<{
   m: SceneMachine; modelUrl: string | null; radius: number; showLabel: boolean; selected: boolean;
   editing: boolean; onSelect: (key: string) => void; onGrab: (t: DragTarget) => void;
   /** 0, 1 or 2: how many steps up its label sits, so neighbours' labels do not stack. */
@@ -512,7 +512,7 @@ const Machine: React.FC<{
 
 /** A route, dashed on the ground: where this machine shuttles when it works. Drawn as
  * illustrative, because nothing here knows the real track. */
-const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
+export const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
   const line = useMemo(() => {
     const g = new THREE.BufferGeometry().setFromPoints(path.map(([x, z]) => new THREE.Vector3(x, 0.45, z)));
     const l = new THREE.Line(g, new THREE.LineDashedMaterial({ color: active ? '#0284c7' : '#94a3b8', dashSize: 2, gapSize: 1.5 }));

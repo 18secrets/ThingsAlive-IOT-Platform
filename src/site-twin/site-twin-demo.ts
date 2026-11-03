@@ -29,6 +29,10 @@ const DEMO_USER = 'demo-stream';
  * customer's twin is: theirs moves only on their own live data. */
 export const SIMULATED_TENANTS: ReadonlySet<string> = new Set(['demo-construction']);
 
+/** The demo port's workforce, as described for the demo (Tapas, 2026-11-03): about twenty
+ * thousand across its sites. Simulated and labelled so; a real account has no figure. */
+export const DEMO_WORKFORCE = 20_000;
+
 /** Progress per tick, in percentage points, for what the composer builds in stages. The
  * road is laid section by section: B until it is done, then C. */
 const PROGRESS_ORDER: { keys: string[]; step: number }[] = [

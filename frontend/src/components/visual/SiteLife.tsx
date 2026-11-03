@@ -117,7 +117,7 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
  * and back with a box. Scenery for the demo, outside the site and labelled with it.
  */
 const PORT_BOX = ['#dc2626', '#2563eb', '#16a34a', '#f59e0b', '#0891b2', '#7c3aed', '#ea580c', '#475569'];
-const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) => {
+export const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) => {
   const edge = -depthM / 2;
   const quayD = 28;
   const quayZ = edge - 6 - quayD / 2;
@@ -160,7 +160,9 @@ const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) 
   });
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, edge - 6 - quayD - 130]}>
+      {/* Above the grass (which sits at -0.08 and runs out under everything), so the
+          sea is not hidden by the land around the sites. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, edge - 6 - quayD - 130]}>
         <planeGeometry args={[widthM * 8, 260]} />
         <meshStandardMaterial color="#2b7fb5" roughness={0.35} metalness={0.1} />
       </mesh>
@@ -336,9 +338,9 @@ const Roller: React.FC<{ zone: SiteTwinZone }> = ({ zone }) => {
   );
 };
 
-const SiteLife: React.FC<{ zones: SiteTwinZone[]; extent: { widthM: number; depthM: number } }> = ({ zones, extent }) => (
+const SiteLife: React.FC<{ zones: SiteTwinZone[]; extent: { widthM: number; depthM: number }; withPort?: boolean }> = ({ zones, extent, withPort = true }) => (
   <group>
-    <Port widthM={extent.widthM} depthM={extent.depthM} />
+    {withPort && <Port widthM={extent.widthM} depthM={extent.depthM} />}
     <Workers zones={zones} />
     {zones.filter((z) => z.kind === 'building' && (z.progressPct ?? 0) < 100).map((z) => <TowerCrane key={z.key} zone={z} />)}
     {zones.filter((z) => z.kind === 'quarry').map((z) => <Dust key={z.key} zone={z} />)}

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  Anchor,
   Search,
   Plus,
   AlertCircle,
@@ -309,6 +311,7 @@ export const PlantView: React.FC<PlantViewProps> = ({
 }) => {
   const { t } = useTranslation('equipment');
   const { t: ts } = useTranslation('shared');
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useViewMode('admin-plant');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -401,6 +404,15 @@ export const PlantView: React.FC<PlantViewProps> = ({
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        {/* Every site in one twin: the port as a whole. */}
+        <button
+          id="port-overview-btn"
+          onClick={() => navigate('/admin/sites/port')}
+          className="flex-1 sm:flex-none px-4 py-2.5 border border-[#0B7285] text-[#0B7285] hover:bg-[#0B7285]/5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <Anchor className="w-4 h-4" />
+          <span>{t('portTwin.open', { defaultValue: 'Port overview' })}</span>
+        </button>
         <button
           id="add-plant-btn"
           onClick={() => {

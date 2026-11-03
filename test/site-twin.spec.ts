@@ -532,6 +532,20 @@ describeDb('site twin: layout and live view', () => {
     expect(view.machines[0]).toMatchObject({ externalId: 'TEST-DIPPY-NOLIB-01', status: 'live', activity: 'productive' });
   });
 
+  it('the port overview draws every laid-out site in scope, lists the rest, and has no workforce on a real account', async () => {
+    const port = await pages.portTwin(acme, NOW);
+    expect(port.simulated).toBe(false);
+    expect(port.summary.workforce).toBeNull();
+    const codes = port.sites.map((s) => s.site.code);
+    expect(codes).toContain('yard');
+    for (const s of port.sites) expect(s.saved).toBe(true);
+    expect(port.summary.machines).toBe(port.sites.reduce((a, s) => a + s.summary.total, 0));
+    // Scope narrows it like every other site read.
+    const narrow = await pages.portTwin({ ...acme, plantIds: [plantId] }, NOW);
+    expect(narrow.sites.map((s) => s.site.plantId)).toEqual([plantId]);
+    expect((await pages.portTwin(globex, NOW)).sites).toEqual([]);
+  });
+
   it('draws an open alert as an alert, whatever the readiness', () => {
     expect(twinStatus('ready', 2)).toBe('alert');
     expect(twinStatus('blocked', 0)).toBe('blocked');
