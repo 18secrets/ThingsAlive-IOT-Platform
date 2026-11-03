@@ -70,7 +70,9 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
+  // Labels on by default only where they fit: sixty names over sixty machines is a wall
+  // of text. Hovering or selecting a machine always shows its own.
+  const [showLabels, setShowLabels] = useState<boolean | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
   const [focusIndex, setFocusIndex] = useState<number>(-1);
   const [zoom, setZoom] = useState<{ n: number; dir: -1 | 0 | 1 }>({ n: 0, dir: 0 });
@@ -285,6 +287,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     );
   }
   if (!twin) return <div className="h-[520px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+  const labelsOn = showLabels ?? twin.machines.length <= 12;
 
   // Nothing is assigned here: there is no site to draw, and a yard of offices would be
   // a picture of plant this site does not have.
@@ -423,7 +426,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
               extent={extent} zones={zones} machines={shown}
               // The demo tippers use the stand-in model the frontend ships, not a class copy.
               classModels={twin.simulated ? { 'rock-tipper-truck': { modelUrl: '/models/classes/rock-tipper-truck.glb', bounds: null }, ...twin.classModels } : twin.classModels}
-              showLabels={showLabels} selectedKey={selected} onSelect={setSelected}
+              showLabels={labelsOn} selectedKey={selected} onSelect={setSelected}
               editing={!!draft} onDrag={onDrag} focus={focus} zoomCommand={zoom} autoRotate={autoRotate}
               simulated={twin.simulated}
             />
@@ -433,7 +436,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             <button className={btn} title={t('siteTwin.zoomIn', { defaultValue: 'Zoom in' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: 1 }))}><Plus className="w-4 h-4" /></button>
             <button className={btn} title={t('siteTwin.zoomOut', { defaultValue: 'Zoom out' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: -1 }))}><Minus className="w-4 h-4" /></button>
             <button className={btn} title={t('siteTwin.resetView', { defaultValue: 'Reset view' })} onClick={() => { setFocusIndex(-1); setZoom((z) => ({ n: z.n + 1, dir: 0 })); }}><RotateCcw className="w-4 h-4" /></button>
-            <button className={btn} title={t('siteTwin.labels', { defaultValue: 'Show or hide labels' })} onClick={() => setShowLabels((v) => !v)}>{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
+            <button className={btn} title={t('siteTwin.labels', { defaultValue: 'Show or hide labels' })} onClick={() => setShowLabels(!labelsOn)}>{labelsOn ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
             {!draft && (
               <button className={btn} title={t('siteTwin.tour', { defaultValue: 'Rotate slowly' })} onClick={() => setAutoRotate((v) => !v)}>{autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
             )}

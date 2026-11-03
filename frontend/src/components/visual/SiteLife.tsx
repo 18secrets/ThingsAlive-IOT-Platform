@@ -21,74 +21,200 @@ function rng(seed: number) {
   return () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
 }
 
-/** One worker: boots, hi-vis vest, helmet — 1.7 m, readable when the camera is close. */
-const Worker: React.FC<{ vest: string; helmet: string }> = ({ vest, helmet }) => (
-  <group>
-    <mesh position={[0, 0.45, 0]} castShadow>
-      <boxGeometry args={[0.36, 0.9, 0.24]} />
-      <meshStandardMaterial color="#1e3a8a" />
-    </mesh>
-    <mesh position={[0, 1.15, 0]} castShadow>
-      <boxGeometry args={[0.46, 0.55, 0.3]} />
-      <meshStandardMaterial color={vest} emissive={vest} emissiveIntensity={0.25} />
-    </mesh>
-    <mesh position={[0, 1.55, 0]}>
-      <sphereGeometry args={[0.15, 10, 8]} />
-      <meshStandardMaterial color="#d6a27a" />
-    </mesh>
-    <mesh position={[0, 1.66, 0]} castShadow>
-      <sphereGeometry args={[0.19, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
-      <meshStandardMaterial color={helmet} />
-    </mesh>
-  </group>
-);
+interface Hand { cx: number; cz: number; y: number; rx: number; rz: number; speed: number; phase: number; walks: boolean }
 
-interface Round { cx: number; cz: number; rx: number; rz: number; speed: number; phase: number; vest: string; helmet: string; still: boolean }
+const VEST_COLOURS = VEST.map((c) => new THREE.Color(c));
+const HELMETS = [new THREE.Color('#facc15'), new THREE.Color('#ffffff'), new THREE.Color('#facc15')];
 
-/** Workers walking loops inside each zone; at the breakdown bay and the gate they stand. */
+/**
+ * The workforce, as one instanced crowd so a big site can carry hundreds: about half walk
+ * their rounds, the rest work where they stand — bending to the job and straightening, as
+ * a man tying rebar or swinging a hammer does. Denser where the work is: the building, the
+ * quarry, the road face; a few at the offices and the gate; a handful at the bay.
+ */
 const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
-  const rounds = useMemo(() => {
-    const out: Round[] = [];
+  const hands = useMemo(() => {
+    const out: Hand[] = [];
     zones.forEach((z, zi) => {
-      if (z.kind === 'road' && (z.progressPct ?? 100) >= 100) return;
-      const r = rng(zi * 977 + Math.round(z.x * 13 + z.z * 7));
-      const still = z.kind === 'maintenance_workshop' || z.kind === 'gate';
-      const n = z.kind === 'gate' ? 1 : Math.max(2, Math.min(7, Math.round((z.widthM * z.depthM) / 220)));
+      if (z.kind === 'road' && ((z.progressPct ?? 100) >= 100 || (z.progressPct ?? 0) <= 0)) return;
+      const r = rng(zi * 977 + Math.round(z.x * 13 + z.z * 7) + 11);
+      const dense = ['building', 'quarry', 'work_area', 'batching_plant', 'road', 'substation', 'quay'].includes(z.kind);
+      const per = dense ? 40 : z.kind === 'gate' ? 400 : 160;
+      const n = Math.max(2, Math.min(dense ? 140 : 12, Math.round((z.widthM * z.depthM) / per)));
+      // On a building the crew is up on the slab being cast, inside its footprint.
+      const onSlab = z.kind === 'building';
+      const y = onSlab ? (z.floors ?? 4) * 3.3 * ((z.progressPct ?? 0) / 100) + 0.3 : 0;
+      const spread = onSlab ? 0.6 : 0.85;
       for (let i = 0; i < n; i += 1) {
+        const walks = r() < (dense ? 0.4 : 0.7);
         out.push({
-          cx: z.x + (r() - 0.5) * z.widthM * 0.5, cz: z.z + (r() - 0.5) * z.depthM * 0.5,
-          rx: 1.5 + r() * Math.min(8, z.widthM * 0.25), rz: 1 + r() * Math.min(6, z.depthM * 0.25),
-          speed: 0.9 + r() * 0.5, phase: r() * Math.PI * 2,
-          vest: VEST[Math.floor(r() * VEST.length)], helmet: r() > 0.8 ? '#ffffff' : '#facc15', still,
+          cx: z.x + (r() - 0.5) * z.widthM * spread, cz: z.z + (r() - 0.5) * z.depthM * spread, y,
+          rx: walks ? 1.5 + r() * Math.min(onSlab ? 4 : 8, z.widthM * 0.15) : 0, rz: walks ? 1 + r() * Math.min(onSlab ? 3 : 6, z.depthM * 0.15) : 0,
+          speed: 0.9 + r() * 0.5, phase: r() * Math.PI * 2, walks,
         });
       }
     });
-    return out;
+    return out.slice(0, 3000);
   }, [zones]);
-  const refs = useRef<THREE.Group[]>([]);
+
+  const body = useRef<THREE.InstancedMesh>(null);
+  const helmet = useRef<THREE.InstancedMesh>(null);
+  const tmp = useMemo(() => new THREE.Object3D(), []);
+  React.useLayoutEffect(() => {
+    hands.forEach((_, i) => {
+      body.current?.setColorAt(i, VEST_COLOURS[i % VEST_COLOURS.length]);
+      helmet.current?.setColorAt(i, HELMETS[i % HELMETS.length]);
+    });
+    if (body.current?.instanceColor) body.current.instanceColor.needsUpdate = true;
+    if (helmet.current?.instanceColor) helmet.current.instanceColor.needsUpdate = true;
+  }, [hands]);
+
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    rounds.forEach((w, i) => {
-      const g = refs.current[i];
-      if (!g) return;
-      if (w.still) {
-        g.position.set(w.cx, 0, w.cz);
-        g.rotation.y = w.phase + 0.3 * Math.sin(t * 0.4 + i);
-        return;
+    hands.forEach((w, i) => {
+      let x = w.cx; let z = w.cz; let yaw = w.phase; let bend = 0;
+      if (w.walks) {
+        const a = w.phase + (t * w.speed) / ((w.rx + w.rz) / 2);
+        x = w.cx + w.rx * Math.cos(a); z = w.cz + w.rz * Math.sin(a);
+        yaw = Math.atan2(-w.rz * Math.cos(a), -w.rx * Math.sin(a)) + Math.PI / 2;
+      } else {
+        bend = 0.55 * Math.max(0, Math.sin(t * 2.2 + w.phase));
       }
-      // Walk an ellipse at walking pace: angular speed is speed / mean radius.
-      const a = w.phase + (t * w.speed) / ((w.rx + w.rz) / 2);
-      g.position.set(w.cx + w.rx * Math.cos(a), Math.abs(Math.sin(t * 8 + i)) * 0.04, w.cz + w.rz * Math.sin(a));
-      g.rotation.y = Math.atan2(-w.rz * Math.cos(a), -w.rx * Math.sin(a)) + Math.PI / 2;
+      tmp.position.set(x, w.y, z);
+      tmp.rotation.set(0, yaw, 0);
+      tmp.updateMatrix();
+      // The body pivots at the hips; the helmet follows the bend.
+      const hip = new THREE.Matrix4().makeTranslation(0, 0.75, 0)
+        .multiply(new THREE.Matrix4().makeRotationZ(-bend))
+        .multiply(new THREE.Matrix4().makeTranslation(0, 0.1, 0));
+      const m = tmp.matrix.clone().multiply(hip);
+      body.current?.setMatrixAt(i, m);
+      const h = m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.85, 0));
+      helmet.current?.setMatrixAt(i, h);
+    });
+    if (body.current) body.current.instanceMatrix.needsUpdate = true;
+    if (helmet.current) helmet.current.instanceMatrix.needsUpdate = true;
+  });
+
+  if (!hands.length) return null;
+  return (
+    <group>
+      <instancedMesh ref={body} args={[undefined, undefined, hands.length]} castShadow>
+        <boxGeometry args={[0.45, 1.6, 0.3]} />
+        <meshStandardMaterial vertexColors={false} />
+      </instancedMesh>
+      <instancedMesh ref={helmet} args={[undefined, undefined, hands.length]}>
+        <sphereGeometry args={[0.22, 8, 6]} />
+        <meshStandardMaterial />
+      </instancedMesh>
+    </group>
+  );
+};
+
+/**
+ * The port beyond the north fence: water, a quay with container stacks, a container ship
+ * alongside, and ship-to-shore cranes working it — a trolley running out over the ship
+ * and back with a box. Scenery for the demo, outside the site and labelled with it.
+ */
+const PORT_BOX = ['#dc2626', '#2563eb', '#16a34a', '#f59e0b', '#0891b2', '#7c3aed', '#ea580c', '#475569'];
+const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) => {
+  const edge = -depthM / 2;
+  const quayD = 28;
+  const quayZ = edge - 6 - quayD / 2;
+  const shipZ = edge - 6 - quayD - 16;
+  const shipL = Math.min(widthM * 0.8, 180);
+  const cranes = Math.max(2, Math.min(4, Math.floor(shipL / 45)));
+  const trolleys = useRef<THREE.Group[]>([]);
+  const boxes = useMemo(() => {
+    const out: { x: number; y: number; z: number; c: string }[] = [];
+    const r = rng(Math.round(widthM * 31));
+    // Containers on deck, in bays across the ship.
+    for (let bx = 0; bx < Math.floor(shipL / 7) - 2; bx += 1) {
+      for (let row = 0; row < 4; row += 1) {
+        const tiers = 1 + Math.floor(r() * 3);
+        for (let tier = 0; tier < tiers; tier += 1) {
+          out.push({ x: -shipL / 2 + 10 + bx * 7, y: 4.5 + tier * 2.6, z: shipZ - 4.5 + row * 3, c: PORT_BOX[Math.floor(r() * PORT_BOX.length)] });
+        }
+      }
+    }
+    // Stacks on the quay apron, behind the crane legs.
+    for (let bx = 0; bx < Math.floor((widthM - 20) / 7); bx += 1) {
+      if (r() < 0.35) continue;
+      const tiers = 1 + Math.floor(r() * 3);
+      for (let tier = 0; tier < tiers; tier += 1) {
+        out.push({ x: -widthM / 2 + 12 + bx * 7, y: 1.3 + tier * 2.6, z: quayZ + 8 + (bx % 2) * 3, c: PORT_BOX[Math.floor(r() * PORT_BOX.length)] });
+      }
+    }
+    return out;
+  }, [widthM, shipL, shipZ, quayZ]);
+  useFrame(({ clock }) => {
+    trolleys.current.forEach((g, i) => {
+      if (!g) return;
+      // Out over the ship and back, lowering at each end.
+      const t = clock.elapsedTime * 0.12 + i * 0.37;
+      const f = (Math.sin(t * Math.PI * 2) + 1) / 2;
+      g.position.set(0, 0, -6 - f * 30);
+      const hoist = g.children[1] as THREE.Object3D | undefined;
+      if (hoist) hoist.position.y = -6 - 10 * Math.pow(Math.abs(Math.cos(t * Math.PI * 2)), 4);
     });
   });
   return (
     <group>
-      {rounds.map((w, i) => (
-        <group key={i} ref={(g) => { if (g) refs.current[i] = g; }}>
-          <Worker vest={w.vest} helmet={w.helmet} />
-        </group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, edge - 6 - quayD - 130]}>
+        <planeGeometry args={[widthM * 8, 260]} />
+        <meshStandardMaterial color="#2b7fb5" roughness={0.35} metalness={0.1} />
+      </mesh>
+      <mesh position={[0, 0.6, quayZ]} receiveShadow>
+        <boxGeometry args={[widthM + 40, 1.4, quayD]} />
+        <meshStandardMaterial color="#c8c3b8" />
+      </mesh>
+      {/* The ship: hull, superstructure aft. */}
+      <mesh position={[0, 1.2, shipZ]} castShadow>
+        <boxGeometry args={[shipL, 6, 16]} />
+        <meshStandardMaterial color="#1e3a5f" />
+      </mesh>
+      <mesh position={[0, -1.4, shipZ]}>
+        <boxGeometry args={[shipL + 0.2, 1.2, 16.2]} />
+        <meshStandardMaterial color="#9f1239" />
+      </mesh>
+      <mesh position={[shipL / 2 - 10, 10, shipZ]} castShadow>
+        <boxGeometry args={[10, 12, 14]} />
+        <meshStandardMaterial color="#f8fafc" />
+      </mesh>
+      {boxes.map((b, i) => (
+        <mesh key={i} position={[b.x, b.y, b.z]} castShadow>
+          <boxGeometry args={[6.1, 2.5, 2.4]} />
+          <meshStandardMaterial color={b.c} />
+        </mesh>
       ))}
+      {/* Ship-to-shore cranes on the quay edge. */}
+      {Array.from({ length: cranes }, (_, i) => {
+        const x = -shipL / 2 + (shipL / (cranes + 1)) * (i + 1) - 10;
+        return (
+          <group key={i} position={[x, 0, quayZ - quayD / 2 + 4]}>
+            {[[-5, 0], [5, 0], [-5, 14], [5, 14]].map(([lx, lz], k) => (
+              <mesh key={k} position={[lx, 14, lz]} castShadow>
+                <boxGeometry args={[1, 28, 1]} />
+                <meshStandardMaterial color="#dc2626" />
+              </mesh>
+            ))}
+            <mesh position={[0, 28.5, -10]} castShadow>
+              <boxGeometry args={[11, 1.4, 52]} />
+              <meshStandardMaterial color="#dc2626" />
+            </mesh>
+            <group position={[0, 27.6, 0]} ref={(g) => { if (g) trolleys.current[i] = g; }}>
+              <mesh>
+                <boxGeometry args={[4, 1.2, 3]} />
+                <meshStandardMaterial color="#334155" />
+              </mesh>
+              <mesh position={[0, -6, 0]} castShadow>
+                <boxGeometry args={[6.1, 2.5, 2.4]} />
+                <meshStandardMaterial color={PORT_BOX[i % PORT_BOX.length]} />
+              </mesh>
+            </group>
+          </group>
+        );
+      })}
     </group>
   );
 };
@@ -210,8 +336,9 @@ const Roller: React.FC<{ zone: SiteTwinZone }> = ({ zone }) => {
   );
 };
 
-const SiteLife: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => (
+const SiteLife: React.FC<{ zones: SiteTwinZone[]; extent: { widthM: number; depthM: number } }> = ({ zones, extent }) => (
   <group>
+    <Port widthM={extent.widthM} depthM={extent.depthM} />
     <Workers zones={zones} />
     {zones.filter((z) => z.kind === 'building' && (z.progressPct ?? 0) < 100).map((z) => <TowerCrane key={z.key} zone={z} />)}
     {zones.filter((z) => z.kind === 'quarry').map((z) => <Dust key={z.key} zone={z} />)}
