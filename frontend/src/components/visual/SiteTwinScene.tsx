@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { CameraControls, Html, useGLTF } from '@react-three/drei';
+import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import type { SiteTwin, SiteTwinActivity, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
 import { AREA_KINDS, Structure } from './SiteStructures';
@@ -242,6 +243,7 @@ const StatusRing: React.FC<{ status: SiteTwinStatus; radius: number; selected: b
 /** Travel speed along an illustrative route, m/s: a loaded tipper on a site road. */
 const SPEED = 4;
 
+/** English for each activity; the label itself is siteTwin.activity.* in equipment.json. */
 export const ACTIVITY_LABEL: Record<SiteTwinActivity, string> = {
   productive: 'Working', idle: 'Idling', 'running-unclassified': 'Engine on', off: 'Engine off', unknown: 'No activity data',
 };
@@ -274,6 +276,7 @@ const Machine: React.FC<{
   /** 0, 1 or 2: how many steps up its label sits, so neighbours' labels do not stack. */
   lift: number;
 }> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift }) => {
+  const { t } = useTranslation('equipment');
   const outer = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const travelled = useRef(0);
@@ -323,15 +326,17 @@ const Machine: React.FC<{
               background: selected ? '#0284c7' : 'rgba(255,255,255,0.96)', color: selected ? '#fff' : '#0f172a',
               borderRadius: 8, padding: '3px 8px', boxShadow: '0 1px 4px rgba(15,23,42,0.25)', lineHeight: 1.25,
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: STATUS_COLOUR[m.status], display: 'inline-block' }} />
                 {m.name}
               </div>
               {/* At the overview a site of thirty machines is thirty names; what each is
                   doing and where shows for the one selected, and in the zone strip. */}
               {selected && (
-                <div style={{ fontSize: 10, opacity: 0.85 }}>
-                  {m.breakdown ? 'Breakdown' : ACTIVITY_LABEL[m.activity]}{m.engagedLabel ? ` · ${m.engagedLabel}` : ''}
+                <div style={{ fontSize: '0.625rem', opacity: 0.85 }}>
+                  {m.breakdown
+                    ? t('siteTwin.breakdown', { defaultValue: 'Breakdown' })
+                    : t(`siteTwin.activity.${m.activity}`, { defaultValue: ACTIVITY_LABEL[m.activity] })}{m.engagedLabel ? ` · ${m.engagedLabel}` : ''}
                 </div>
               )}
             </div>
@@ -382,6 +387,7 @@ const GroundDrag: React.FC<{ target: React.MutableRefObject<DragTarget | null>; 
 
 const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
   const { extent, zones, machines, classModels, showLabels, selectedKey, onSelect, editing, onDrag, focus, zoomCommand, autoRotate } = props;
+  const { t } = useTranslation('equipment');
   const controls = useRef<CameraControls>(null);
   const drag = useRef<DragTarget | null>(null);
   const span = Math.max(extent.widthM, extent.depthM);
@@ -444,7 +450,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       <SiteGround widthM={extent.widthM} depthM={extent.depthM} onEmptyClick={() => onSelect(null)} />
       {zones.map((z, i) => <Zone key={z.id ?? i} zone={z} index={i} editing={editing} onGrab={grab} />)}
       {machines.some((m) => !m.placed) && (
-        <GroundLabel text="Not yet placed" x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
+        <GroundLabel text={t('siteTwin.notPlacedRow', { defaultValue: 'Not yet placed' })} x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
       )}
       {!editing && machines.filter((m) => m.placed && m.path.length > 1).map((m) => (
         <RoutePath key={`route-${m.key}`} path={m.path} active={m.activity === 'productive'} />

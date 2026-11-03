@@ -314,7 +314,10 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
       </div>
 
       {/* ------------------------------------------------------------- zone tabs */}
-      <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto border-b border-slate-100 dark:border-slate-800">
+      {/* The tabs scroll; the buttons stay put beside them. Inside the scroll, a site with
+          a dozen zones pushed Save out of sight while its layout was being edited. */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
         {[{ label: t('siteTwin.overview', { defaultValue: 'Overview' }), i: -1 }, ...zones.map((z, i) => ({ label: z.label, i }))].map((tab) => (
           <button
             key={tab.i}
@@ -326,7 +329,8 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             {tab.label}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2 pl-3">
+        </div>
+        <div className="shrink-0 flex items-center gap-2">
           {canEdit && !draft && (
             <button onClick={startEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 flex items-center gap-1.5 whitespace-nowrap">
               <Move className="w-3.5 h-3.5" /> {t('siteTwin.edit', { defaultValue: 'Edit layout' })}
@@ -334,10 +338,10 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           )}
           {draft && (
             <>
-              <button onClick={() => { setDraft(null); setSaveError(undefined); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5">
+              <button onClick={() => { setDraft(null); setSaveError(undefined); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 whitespace-nowrap">
                 <X className="w-3.5 h-3.5" /> {t('common.cancel', { defaultValue: 'Cancel' })}
               </button>
-              <button disabled={saving} onClick={() => void save()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
+              <button disabled={saving} onClick={() => void save()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap">
                 <Save className="w-3.5 h-3.5" /> {saving ? t('siteTwin.saving', { defaultValue: 'Saving…' }) : t('siteTwin.save', { defaultValue: 'Save layout' })}
               </button>
             </>
@@ -412,7 +416,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           </div>
 
           {/* --------------------------------------------------------- legend */}
-          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-[11px] text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
+          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-xs text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {STATUS_ORDER.map((s) => (
                 <span key={s} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_COLOUR[s] }} /> {statusLabel(s)}</span>
