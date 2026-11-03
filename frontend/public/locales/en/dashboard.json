@@ -197,9 +197,9 @@
     "notShown": "Device connectivity and onboarding activity across clients are not shown: the backend answers both per account only, with no cross-tenant read for Master Admin yet."
   },
   "thingLive": {
-    "subtitle": "Machine detail · live",
+    "subtitle": "Machine summary",
     "notInRegister": "This machine is not in your register.",
-    "banner": "Machine detail · live",
+    "banner": "Machine summary",
     "notClassified": "not classified",
     "oeeCalendarWeek": "OEE this calendar week",
     "onlineState": "online · {{state}}",
@@ -214,8 +214,8 @@
       "unbound": "a needed signal is not bound",
       "stale": "readings are stale"
     },
-    "equipmentDetail": "Machine detail",
-    "equipmentPage": "Machine page",
+    "equipmentDetail": "Machine summary",
+    "equipmentPage": "Machine live",
     "production": "Production",
     "predictions": "Predictions",
     "predictionsEmpty": "No active scenario has produced a prediction for this machine yet.",

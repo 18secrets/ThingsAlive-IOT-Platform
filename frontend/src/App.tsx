@@ -29,7 +29,7 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { ForgotPasswordScreen } from './components/auth/ForgotPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
-import { firstAllowedAdminSubTab } from './lib/pageAccess';
+import { firstAllowedAdminSubTab, canOpenPath } from './lib/pageAccess';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { SitePagePage } from './pages/SitePagePage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
@@ -474,6 +474,9 @@ function AppData() {
     const master = authUser.role === 'master-admin';
     const path = location.pathname;
     if (/^\/admin\/(equipment|sites)\/.+\/page$/.test(path)) return;
+    // Not for a page the person may not open: Shell shows them "no access" there, and its
+    // lists would only come back refused (TC_149, a Platform Support role on Equipment Classes).
+    if (!canOpenPath(authUser, path)) return;
     const sub = path.startsWith('/admin/') ? path.split('/')[2] : path.split('/')[1];
     const sensors = () => refreshSensorCatalog();
     const forMaster: Record<string, (() => Promise<void>)[]> = {
@@ -499,8 +502,15 @@ function AppData() {
       'client-users': [refreshTenantUsers, refreshRoles, refreshPlants, refreshEquipment],
       roles: [refreshRoles, refreshTenantUsers],
     };
+    // Client names come from the accounts list, which only Master Admin may read; other
+    // staff see the account id rather than a refused call.
+    // The sensor catalogue likewise needs device-catalog.read, which a Catalog Author lacks.
+    const readsAccounts = authUser.capabilities?.['tenant.provision'] === true;
+    const readsSensors = authUser.capabilities?.['device-catalog.read'] === true;
+    const loaders = ((master ? forMaster : forClient)[sub] ?? []).filter((refresh) => !master
+      || (refresh !== refreshAccounts || readsAccounts) && (refresh !== sensors || readsSensors));
     // Each refresher records its own failure on its own screen; none may stop another.
-    void Promise.allSettled(((master ? forMaster : forClient)[sub] ?? []).map((refresh) => refresh()));
+    void Promise.allSettled(loaders.map((refresh) => refresh()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, restoringSession, authUser?.role]);
 

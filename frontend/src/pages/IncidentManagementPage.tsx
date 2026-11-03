@@ -130,7 +130,7 @@ export const IncidentManagementPage: React.FC = () => {
     opened: (r) => r.openedAt,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [visible, sort, equipment]);
-  const { pageItems, ...pager } = usePagination(sorted, 12);
+  const { pageItems, ...pager } = usePagination(sorted);
 
   return (
     <div id="incident-management-view" className="space-y-3">
@@ -192,17 +192,19 @@ export const IncidentManagementPage: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <SortSelect
-          sort={sort}
-          onChange={(next) => { setSort(next); pager.setPage(1); }}
-          options={[
-            { key: 'severity', dir: 'desc', label: t('shared:sort.severityHigh') },
-            { key: 'opened', dir: 'desc', label: t('shared:sort.newest') },
-            { key: 'opened', dir: 'asc', label: t('shared:sort.oldest') },
-            { key: 'machine', dir: 'asc', label: t('shared:sort.nameAz') },
-          ]}
-        />
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <span className="inline-flex items-center gap-2">
+          <SortSelect
+            sort={sort}
+            onChange={(next) => { setSort(next); pager.setPage(1); }}
+            options={[
+              { key: 'severity', dir: 'desc', label: t('shared:sort.severityHigh') },
+              { key: 'opened', dir: 'desc', label: t('shared:sort.newest') },
+              { key: 'opened', dir: 'asc', label: t('shared:sort.oldest') },
+              { key: 'machine', dir: 'asc', label: t('shared:sort.nameAz') },
+            ]}
+          />
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </span>
       </div>
 
       <div className={LIST_PANEL}>

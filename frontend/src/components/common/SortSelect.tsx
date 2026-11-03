@@ -12,6 +12,9 @@ export function SortSelect<K extends string>({ options, sort, onChange }: {
   const value = `${sort.key}:${sort.dir}`;
   const data = options.map((o) => ({ label: o.label, value: `${o.key}:${o.dir}` }));
   // A header click can pick a pairing the menu does not list; show it rather than blank.
+  // No fixed width: rsuite draws the box as wide as the chosen label inside whatever width
+  // it is given, so a minimum left a gap before the view switch that grew as the label
+  // shrank. As wide as its label, the gap beside it is the same for every choice.
   const known = data.some((d) => d.value === value);
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -27,7 +30,6 @@ export function SortSelect<K extends string>({ options, sort, onChange }: {
         }}
         searchable={false}
         cleanable={false}
-        className="min-w-[170px]"
       />
     </span>
   );

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, Search } from 'lucide-react';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -53,7 +53,6 @@ export const WorkOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | WorkOrderPriority>('all');
-  const [search, setSearch] = useState('');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
@@ -137,7 +136,6 @@ export const WorkOrdersPage: React.FC = () => {
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
-    const text = search.trim().toLowerCase();
     const matching = orders.filter((o) => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
@@ -147,12 +145,11 @@ export const WorkOrdersPage: React.FC = () => {
       const matchesPlant = scope.plantId === 'all' || profile?.plantId === scope.plantId;
       const matchesClass = scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug;
       const matchesConnection = scope.connection === 'all' || connectionOf(o.externalId) === scope.connection;
-      const matchesQuery = !term || o.title.toLowerCase().includes(term) || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
-      // The list's own search, beside the sort: the Filters panel's box finds machines, and
-      // a WO reference is what people quote to each other (test report P3-A10).
-      const matchesText = !text || o.reference.toLowerCase().includes(text) || o.title.toLowerCase().includes(text)
-        || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(text);
-      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery && matchesText;
+      // The Filters panel's search finds a job by its reference too: that is what people
+      // quote to each other (test report P3-A10). One box, not a second one above the list.
+      const matchesQuery = !term || o.reference.toLowerCase().includes(term) || o.title.toLowerCase().includes(term)
+        || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
+      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery;
     });
     // By reference, not the API's created-at: seeded and imported jobs carry backdated
     // creation times, which put WO-000003 ahead of 6, 5 and 4 (test report MIN-8).
@@ -161,7 +158,7 @@ export const WorkOrdersPage: React.FC = () => {
       status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort, search]);
+  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
@@ -254,7 +251,7 @@ export const WorkOrdersPage: React.FC = () => {
   );
 
   // The shared rsuite pager, in both views; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(visible, 12);
+  const { pageItems, ...pager } = usePagination(visible);
 
   return (
     <div id="work-orders-view" className="space-y-3">
@@ -310,7 +307,7 @@ export const WorkOrdersPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <EquipmentFilters
           scope={scope}
           onChange={setScope}
@@ -319,6 +316,8 @@ export const WorkOrdersPage: React.FC = () => {
           equipmentOptions={equipmentOptions}
           selectedKey={selectedKey}
           onSelect={setSelectedKey}
+          findLabel={t('filters.find')}
+          findPlaceholder={t('filters.search')}
         />
         <SelectPicker
           data={[{ label: t('filters.allStatuses'), value: 'all' }, ...STATUS_OPTIONS.map((s) => ({ label: t(`status.${s}`, { defaultValue: s }), value: s }))]}
@@ -326,7 +325,6 @@ export const WorkOrdersPage: React.FC = () => {
           onChange={(value) => setStatusFilter((value ?? 'all') as 'all' | WorkOrderStatus)}
           searchable={false}
           cleanable={false}
-          className="min-w-[180px]"
         />
         <SelectPicker
           data={[{ label: t('filters.allPriorities'), value: 'all' }, ...PRIORITY_OPTIONS.map((p) => ({ label: t(`priority.${p}`, { defaultValue: p }), value: p }))]}
@@ -334,25 +332,8 @@ export const WorkOrdersPage: React.FC = () => {
           onChange={(value) => setPriorityFilter((value ?? 'all') as 'all' | WorkOrderPriority)}
           searchable={false}
           cleanable={false}
-          className="min-w-[160px]"
         />
-      </div>
-
-      <div className="flex justify-end items-center gap-2 flex-wrap">
-        <div className="relative w-full sm:w-72 sm:mr-auto">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
-          <Input value={search} onChange={(v) => setSearch(v)} placeholder={t('filters.search')} size="sm" className="w-full pl-9!" />
-        </div>
-        <SortSelect
-          sort={sort}
-          onChange={setSort}
-          options={[
-            { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
-            { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
-            { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
-            { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
-          ]}
-        />
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
         <ExportCsvButton
           name="work-orders"
           disabled={!visible.length}
@@ -363,7 +344,20 @@ export const WorkOrdersPage: React.FC = () => {
             o.dueAt ? o.dueAt.slice(0, 10) : '',
           ])}
         />
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <span className="inline-flex items-center gap-2">
+          <SortSelect
+            sort={sort}
+            onChange={setSort}
+            options={[
+              { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
+              { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
+              { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
+              { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
+            ]}
+          />
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </span>
+        </div>
       </div>
 
       <div className={LIST_PANEL}>

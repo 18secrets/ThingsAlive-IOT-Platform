@@ -18,7 +18,6 @@ import {
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
 } from '../lib/api';
 
-const PAGE_SIZE = 12;
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
   // Low is sky, as on every other page's severity scale (test report COS-1); green stays for none.
@@ -118,7 +117,7 @@ export const ThingsCarePage: React.FC = () => {
   }), [rows, sort]);
 
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted);
 
   return (
     <div id="things-care-view" className="space-y-3">
@@ -164,17 +163,19 @@ export const ThingsCarePage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
-                <SortSelect
-                  sort={sort}
-                  onChange={(next) => { setSort(next); pager.setPage(1); }}
-                  options={[
-                    { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
-                    { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
-                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
-                    { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
-                  ]}
-                />
-                <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                <span className="inline-flex items-center gap-2">
+                  <SortSelect
+                    sort={sort}
+                    onChange={(next) => { setSort(next); pager.setPage(1); }}
+                    options={[
+                      { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+                      { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+                      { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                      { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+                    ]}
+                  />
+                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                </span>
               </div>
             </div>
 

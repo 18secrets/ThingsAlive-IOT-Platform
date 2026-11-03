@@ -40,7 +40,12 @@ export const EquipmentFilters: React.FC<{
   /** Off where the cards carry no connection status and the page never applies the
    *  choice (TC_124): a filter that changes nothing reads as broken. */
   showConnection?: boolean;
-}> = ({ scope, onChange, plants, classes, equipmentOptions, selectedKey, onSelect, showConnection = true }) => {
+  /** The search box's label and hint where it finds more than machines (Work Orders: a job by reference or title too). */
+  findLabel?: string;
+  findPlaceholder?: string;
+  /** A page's own control shown just before the machine selector, on the same line (Production's availability period). */
+  beside?: React.ReactNode;
+}> = ({ scope, onChange, plants, classes, equipmentOptions, selectedKey, onSelect, showConnection = true, findLabel, findPlaceholder, beside }) => {
   const { t } = useTranslation('shared');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(scope);
@@ -90,8 +95,12 @@ export const EquipmentFilters: React.FC<{
         {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
       </button>
 
+      {beside && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-sm w-full sm:w-auto sm:ml-auto min-w-0">{beside}</div>
+      )}
+
       {equipmentOptions && onSelect && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-sm w-full sm:w-auto sm:ml-auto min-w-0">
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-sm w-full sm:w-auto min-w-0 ${beside ? '' : 'sm:ml-auto'}`}>
           <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{t('filters.selectedEquipment')}</span>
           <SelectPicker
             data={[{ label: t('filters.allMatchingEquipment'), value: 'all' }, ...equipmentOptions.map((e) => ({ label: e.label, value: `${e.sourceSystem}|${e.externalId}` }))]}
@@ -164,13 +173,13 @@ export const EquipmentFilters: React.FC<{
                 />
               </div>}
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('filters.findEquipment')}</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{findLabel ?? t('filters.findEquipment')}</span>
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 z-10" />
                   <Input
                     value={draft.query}
                     onChange={(value) => setDraft({ ...draft, query: value })}
-                    placeholder={t('filters.findPlaceholder')}
+                    placeholder={findPlaceholder ?? t('filters.findPlaceholder')}
                     className="pl-8!"
                   />
                 </div>

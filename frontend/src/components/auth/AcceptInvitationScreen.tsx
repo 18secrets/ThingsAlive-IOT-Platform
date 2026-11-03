@@ -39,8 +39,9 @@ export const AcceptInvitationScreen: React.FC = () => {
     setBusy(true);
     setError(undefined);
     try {
+      // GuestOnly lands them on their first page once they are signed in; /dashboard was
+      // wrong for a role without one.
       await acceptInvitation(trimmedToken, trimmedNew);
-      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : isReset ? t('invite.failedReset') : t('invite.failedAccept'));
     } finally {

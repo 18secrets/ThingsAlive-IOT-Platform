@@ -16,7 +16,6 @@ import {
 import { sortRows, useSort, SortValue } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
 
-const PAGE_SIZE = 12;
 
 const STATUS_TONE: Record<ShieldStatus, 'emerald' | 'amber' | 'rose' | 'slate'> = {
   current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate',
@@ -89,7 +88,7 @@ export const ThingsShieldPage: React.FC = () => {
     code: (m: ShieldMachine) => m.machine.externalId,
     ...Object.fromEntries(SHIELD_CATEGORIES.map((c) => [c, (m: ShieldMachine): SortValue => URGENCY[m.categories[c].status]])),
   }), [matching, sort]);
-  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted);
   const open = (m: ShieldMachine) => navigate(`/things-shield/${encodeURIComponent(m.machine.sourceSystem)}/${encodeURIComponent(m.machine.externalId)}`);
 
   return (
@@ -135,16 +134,18 @@ export const ThingsShieldPage: React.FC = () => {
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('page.machines')}</h3>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.machineCount', { count: matching.length })}</span>
-            <SortSelect
-              sort={sort}
-              onChange={(next) => { setSort(next); pager.setPage(1); }}
-              options={[
-                { key: 'attention', dir: 'desc', label: t('shared:sort.attentionFirst') },
-                { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
-                { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
-              ]}
-            />
-            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+            <span className="inline-flex items-center gap-2">
+              <SortSelect
+                sort={sort}
+                onChange={(next) => { setSort(next); pager.setPage(1); }}
+                options={[
+                  { key: 'attention', dir: 'desc', label: t('shared:sort.attentionFirst') },
+                  { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                  { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+                ]}
+              />
+              <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+            </span>
           </div>
         </div>
 

@@ -19,7 +19,9 @@ import { AdminSubTab, AuthUser, NavigationTab } from '../types';
 const STAFF_ADMIN_CAPABILITY: Record<AdminSubTab | 'catalog-import', string | null> = {
   industry: 'device-catalog.write',
   sensor: 'device-catalog.read',
-  category: 'catalog.read',
+  // The class list is read from the catalog's authoring routes, which need write: with
+  // read alone (Platform Support) every call came back refused (TC_149, 30 Oct).
+  category: 'catalog.write',
   'named-formula': 'catalog.write',
   'tool-mapping': 'device-catalog.read',
   'signal-alias': 'catalog.write',
@@ -91,7 +93,7 @@ export function canOpenPath(user: AuthUser, pathname: string): boolean {
     if (!second) return firstAllowedAdminSubTab(user) !== null;
     if (isMachineOrSitePage) return staffCan(user, 'catalog.read');
     if (second === 'devices') return staffCan(user, 'device.manage'); // and devices/new
-    if (second === 'category') return staffCan(user, 'catalog.read'); // and a class's own page
+    if (second === 'category') return staffCan(user, 'catalog.write'); // and a class's own page
     return canOpenAdminSubTab(user, second as AdminSubTab);
   }
   if (first === 'equipment' || first === 'sites') return staffCan(user, 'catalog.read');
@@ -122,7 +124,9 @@ export function firstAllowedAdminSubTab(user: AuthUser): AdminSubTab | null {
 /** Where to land someone whose landing page (or the page they asked for) is not theirs. */
 const LANDING_ORDER: NavigationTab[] = [
   'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding',
-  'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
+  'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin',
+  // Staff whose only page is the machine list (Platform Support) land there, not on Settings.
+  'equipment', 'settings',
 ];
 
 export function firstAllowedPath(user: AuthUser): string | null {

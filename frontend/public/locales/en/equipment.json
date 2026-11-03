@@ -163,7 +163,7 @@
     "noWidgets": "No widgets configured for this site's class yet."
   },
   "equipmentPage": {
-    "title": "Machine page",
+    "title": "Machine live",
     "loadFailed": "Could not load this machine page.",
     "notClassified": "Not classified",
     "exploreKpis": "Explore KPIs",

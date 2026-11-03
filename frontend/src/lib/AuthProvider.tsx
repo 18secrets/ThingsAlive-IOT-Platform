@@ -64,6 +64,9 @@ interface AuthContextValue {
   signIn: (identifier: string, password: string) => Promise<void>;
   acceptInvitation: (token: string, password: string) => Promise<void>;
   signOut: () => void;
+  /** True after the person pressed Log out, until the next sign-in: the page they left
+   *  is not a place to come back to, least of all for whoever signs in next. */
+  signedOutOnPurpose: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // handoff); that wait is a quarter-second unless one of them answers.
   const [restoringSession, setRestoringSession] = useState(() => hasStoredSession() || !loadSession());
   const [sessionEndedReason, setSessionEndedReason] = useState<string | null>(null);
+  const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
 
   // Resume a real session on a cold load. The cached AuthUser in
   // sessionStorage is what lets the shell render immediately without a flash
@@ -136,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (identifier: string, password: string) => {
     setSessionEndedReason(null);
     const user = await apiSignIn(identifier, password);
+    setSignedOutOnPurpose(false);
     setAuthUser(await authUserFromApi(user));
   };
 
@@ -149,11 +154,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // way, so a dead or unreachable server can't trap someone signed in.
     if (authUser) void apiSignOut();
     setSessionEndedReason(null);
+    setSignedOutOnPurpose(true);
     setAuthUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ authUser, restoringSession, sessionEndedReason, signIn, acceptInvitation, signOut }}>
+    <AuthContext.Provider value={{ authUser, restoringSession, sessionEndedReason, signIn, acceptInvitation, signOut, signedOutOnPurpose }}>
       {children}
     </AuthContext.Provider>
   );
