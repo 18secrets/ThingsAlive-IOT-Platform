@@ -77,7 +77,7 @@ const Tile: React.FC<{ label: string; value: string; note?: string | null; child
       {children}
     </div>
     <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{value}</p>
-    {note && <p className="text-[11px] text-amber-700 dark:text-amber-400">{note}</p>}
+    {note && <p className="text-xs text-amber-700 dark:text-amber-400">{note}</p>}
   </div>
 );
 
@@ -143,7 +143,8 @@ export const FuelForecastAccuracyPage: React.FC = () => {
     accuracy: (m) => m.accuracy,
     checkpoint: (m) => m.checkpoints[checkpoint],
   }), [machines, sort, checkpoint]);
-  const { pageItems, ...pager } = usePagination(sorted, 20);
+  // 10 rows to start, as every list does since 2 Nov (TablePagination's PAGE_SIZES).
+  const { pageItems, ...pager } = usePagination(sorted);
 
   const shownFrom = range?.from ?? data?.from ?? '';
   const shownTo = range?.to ?? data?.to ?? '';
@@ -163,7 +164,7 @@ export const FuelForecastAccuracyPage: React.FC = () => {
       <div className="space-y-1">
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('fuelAccuracy.title')}</h2>
         {data && (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             {t('fuelAccuracy.updated', { time: new Date(data.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
           </p>
         )}

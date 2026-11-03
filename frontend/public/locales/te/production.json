@@ -61,7 +61,9 @@
     "unit_mismatch": "ఇంధన యూనిట్లు నామమాత్ర విలువతో సరిపోలడం లేదు",
     "stale": "రీడింగ్‌లు పాతవి",
     "undefined_result": "కొలవడానికి అందుబాటులో సమయం లేదు",
-    "not_available": "అందుబాటులో లేదు"
+    "not_available": "అందుబాటులో లేదు",
+    "performance_not_set": "యంత్ర రకంలో నడుస్తున్నట్టు చూపే సిగ్నల్‌లు పేర్కొనలేదు",
+    "quality_not_set": "గంటకు నామమాత్ర ఇంధనం సెట్ చేయలేదు"
   },
   "source": {
     "equipment": "ఈ యంత్రం",
@@ -98,10 +100,12 @@
     "nominalSetBy": "నామమాత్రం సెట్ చేసింది: {{source}}",
     "breakdownsInWindow": "ఈ వ్యవధిలో బ్రేక్‌డౌన్‌లు",
     "noneRecorded": "ఏదీ నమోదు కాలేదు.",
-    "ongoing": "కొనసాగుతోంది"
+    "ongoing": "కొనసాగుతోంది",
+    "waitingOn": "OEE కు ముందుగా {{factors}} కావాలి"
   },
   "detail": {
-    "availabilityNotAvailable": "లభ్యత సమాచారం అందుబాటులో లేదు"
+    "availabilityNotAvailable": "లభ్యత సమాచారం అందుబాటులో లేదు",
+    "lastDays": "గత {{count}} రోజులు"
   },
   "shifts": {
     "title": "షిఫ్ట్ చరిత్ర",

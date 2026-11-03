@@ -164,18 +164,18 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
     <span className="font-mono text-slate-500 dark:text-slate-400">{item.externalId}</span>,
     <span className="font-semibold text-slate-900 dark:text-white">{item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}</span>,
     <span className="text-slate-700 dark:text-slate-300">{item.equipmentClassSlug ? (
-                        <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium text-[11px] border border-sky-200 dark:border-sky-800/60">
+                        <span className="px-2 py-0.5 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium text-xs border border-sky-200 dark:border-sky-800/60">
                           {classBySlug.get(item.equipmentClassSlug)?.name ?? item.equipmentClassSlug}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-slate-400 italic">{t('common.unclassified')}</span>
+                        <span className="text-xs text-slate-400 italic">{t('common.unclassified')}</span>
                       )}</span>,
     <span className="text-slate-600 dark:text-slate-400 font-sans">{item.plantId ? (plantById.get(item.plantId)?.name ?? '—') : <span className="text-slate-400 italic">{t('common.unassigned')}</span>}</span>,
     <>{item.manufacturer ?? '—'}</>,
     <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{item.modelNumber ?? '—'}</span>,
     <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{item.serialNumber ?? '—'}</span>,
     <span className="capitalize text-slate-600 dark:text-slate-400">{t(`tier.${item.tier}`, { defaultValue: item.tier })}</span>,
-    <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+    <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                         item.status === 'active'
                           ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                           : 'bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'

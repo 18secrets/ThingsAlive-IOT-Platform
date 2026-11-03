@@ -126,7 +126,9 @@
     "onboarding": "ఆన్‌బోర్డింగ్",
     "onboarded": "{{done}}/{{total}} యంత్రాలు పూర్తిగా ఆన్‌బోర్డ్ అయ్యాయి",
     "searchMachines": "పేరు, కోడ్ లేదా సైట్ ద్వారా యంత్రాలను వెతకండి",
-    "noMachineMatches": "ఈ శోధనకు సరిపోయే యంత్రం లేదు."
+    "noMachineMatches": "ఈ శోధనకు సరిపోయే యంత్రం లేదు.",
+    "hoursLeft": "{{hours}} గం. మిగిలి ఉంది",
+    "hoursOverdue": "{{hours}} గం. ఆలస్యం"
   },
   "classic": {
     "title": "ఎంటర్‌ప్రైజ్ కమాండ్ సెంటర్",

@@ -196,7 +196,7 @@ export const AIOnboarding: React.FC = () => {
                       ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                   }`}>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 mb-1">
+                    <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 mb-1">
                       {t('chat.assistantName')}
                     </div>
                     <div className={`text-sm leading-relaxed ${msg.error ? 'text-amber-800 dark:text-amber-200' : 'text-slate-700 dark:text-slate-200'}`}>
@@ -326,10 +326,10 @@ const ProposalCard: React.FC<{ proposal: AssistantProposal; onDecided: (p: Assis
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           {t(`chat.proposal.kind.${proposal.kind}`)}
         </span>
-        <span className={`text-[10px] font-bold uppercase tracking-wider ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
+        <span className={`text-[0.6875rem] font-bold uppercase tracking-wider ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
           {t(`chat.proposal.status.${proposal.status}`)}
         </span>
       </div>

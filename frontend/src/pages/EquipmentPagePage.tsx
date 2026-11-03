@@ -121,7 +121,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
             <div key={s.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
                     // 0–1440, or an end at its own start the next day, is round the clock;
                     // both printed "00:00–00:00", which read as no shift at all (MIN-14).
@@ -133,7 +133,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
                 <button
                   disabled={busyId === s.id}
                   onClick={() => setEditing(s)}
-                  className="px-2 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                  className="px-2 py-1 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
                 >
                   {t('common.edit')}
                 </button>
@@ -153,9 +153,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
 
       {runs.length > 0 && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
           {runs.slice(0, 5).map((r) => (
-            <div key={r.id} className="flex items-center justify-between text-[11px]">
+            <div key={r.id} className="flex items-center justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock3 className="w-3 h-3" />{r.localDate} · {r.shiftName}</span>
               <Chip tone={RUN_STATUS_TONE[r.status] ?? 'slate'}>{r.detail ?? t(`runStatus.${r.status}`, { defaultValue: r.status })}</Chip>
             </div>
@@ -309,7 +309,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
                     <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
                   )}
                 </p>
-                {r.notes && <p className="text-[11px] text-slate-400 mt-0.5">{r.notes}</p>}
+                {r.notes && <p className="text-xs text-slate-400 mt-0.5">{r.notes}</p>}
               </div>
               <Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>
             </div>
@@ -386,7 +386,7 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
         </div>
       </div>
       {meterReading.trim() !== '' !== !!meterUnit && (
-        <p className="text-[11px] text-rose-500">{t('service.readingUnitPair')}</p>
+        <p className="text-xs text-rose-500">{t('service.readingUnitPair')}</p>
       )}
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.notes')}</span>

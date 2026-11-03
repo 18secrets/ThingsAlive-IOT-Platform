@@ -10,6 +10,7 @@ import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { Modal } from '../components/common/Modal';
+import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
 import {
   ApiError, EquipmentProfile, INCIDENT_SEVERITIES, IncidentDetail, IncidentMachineView,
   IncidentRecord, IncidentSeverity, IncidentSlaPolicy, IncidentStatus, Plant, SlaState, WorkOrderPriority,
@@ -169,19 +170,23 @@ export const IncidentManagementPage: React.FC = () => {
           selectedKey={selectedKey}
           onSelect={setSelectedKey}
         />
-        <SelectPicker
-          data={[
-            { label: t('filter.live'), value: 'live' },
-            { label: t('status.open'), value: 'open' },
-            { label: t('status.acknowledged'), value: 'acknowledged' },
-            { label: t('status.resolved'), value: 'resolved' },
-          ]}
-          value={statusFilter}
-          onChange={(value) => setStatusFilter((value ?? 'live') as StatusFilter)}
-          searchable={false}
-          cleanable={false}
-          className="min-w-[220px]"
-        />
+        {/* A fixed width the picker fills: sized to its label, it grew and shrank with each
+            choice and its edge stopped meeting the tiles' below. */}
+        <div className="w-full sm:w-64">
+          <SelectPicker
+            data={[
+              { label: t('filter.live'), value: 'live' },
+              { label: t('status.open'), value: 'open' },
+              { label: t('status.acknowledged'), value: 'acknowledged' },
+              { label: t('status.resolved'), value: 'resolved' },
+            ]}
+            value={statusFilter}
+            onChange={(value) => setStatusFilter((value ?? 'live') as StatusFilter)}
+            searchable={false}
+            cleanable={false}
+            block
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -256,7 +261,7 @@ export const IncidentManagementPage: React.FC = () => {
                   <UserRound className="w-3.5 h-3.5" />{personName(r.ownerUserId) ?? t('page.unassigned')}
                   {r.escalationLevel > 0 && <span className="text-rose-500 font-semibold"> · {t('page.escalated', { level: r.escalationLevel })}</span>}
                 </p>
-                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                <div className="flex items-center gap-1.5 flex-wrap text-xs">
                   <Chip tone={SLA_TONE[r.sla.acknowledge.state]} title={r.sla.acknowledge.dueAt ? t('sla.ackBy', { date: new Date(r.sla.acknowledge.dueAt).toLocaleString() }) : t('sla.noPolicy')}>
                     {t('sla.ackChip', { state: t(`sla.state.${r.sla.acknowledge.state}`) })}
                   </Chip>
@@ -275,7 +280,7 @@ export const IncidentManagementPage: React.FC = () => {
       {unrecorded.length > 0 && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('unrecorded.title')}</p>
-          <p className="text-[11px] text-slate-400">{t('unrecorded.note')}</p>
+          <p className="text-xs text-slate-400">{t('unrecorded.note')}</p>
           {unrecorded.map((v) => (
             <div key={`${v.machine.sourceSystem}/${v.machine.externalId}`} className="flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-2">
               <span className="text-slate-700 dark:text-slate-200">{v.machine.name ?? v.machine.externalId}</span>
@@ -300,7 +305,7 @@ export const IncidentManagementPage: React.FC = () => {
         )}
       </Modal>
 
-      <Modal isOpen={policiesOpen} onClose={() => setPoliciesOpen(false)} title={t('sla.title')} subtitle={t('sla.subtitle')} maxWidth="max-w-xl">
+      <Modal isOpen={policiesOpen} onClose={() => setPoliciesOpen(false)} title={t('sla.title')} subtitle={t('sla.subtitle')} maxWidth="max-w-2xl">
         {policiesOpen && <SlaPolicies />}
       </Modal>
     </div>
@@ -318,7 +323,13 @@ const KpiTile: React.FC<{ label: string; value: number; tone?: 'warn' | 'bad'; l
   );
 };
 
-const ACTION_BUTTON = 'px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer';
+// h-8 is rsuite's small picker height, so the owner picker and the buttons share one line.
+const ACTION_BUTTON = 'h-8 px-3 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer';
+const ACTION_ON = 'border-sky-400 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40';
+const SECTION_LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
+// Severity, two inputs, then room for Save and Clear together: a fixed last column, so a row
+// with Clear and one without keep their inputs the same width.
+const SLA_GRID = 'gap-2 items-center sm:grid-cols-[5.5rem_1fr_1fr_8rem]';
 
 /** One incident: its alerts, the work raised on them, the timeline, and every action. */
 const IncidentPanel: React.FC<{
@@ -365,13 +376,14 @@ const IncidentPanel: React.FC<{
   const live = detail.status !== 'resolved';
 
   return (
-    <div className="space-y-4 text-xs">
+    <div className="space-y-5 text-xs">
       <div className="flex items-center gap-1.5 flex-wrap">
         <Chip tone={SEVERITY_TONE(detail.severity)}>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Chip>
         <Chip tone={STATUS_TONE[detail.status]}>{t(`status.${detail.status}`)}</Chip>
         <Chip tone={SLA_TONE[detail.sla.acknowledge.state]}>{t('sla.ackChip', { state: t(`sla.state.${detail.sla.acknowledge.state}`) })}</Chip>
         <Chip tone={SLA_TONE[detail.sla.resolve.state]}>{t('sla.resolveChip', { state: t(`sla.state.${detail.sla.resolve.state}`) })}</Chip>
-        <span className="text-slate-500">{t('panel.owner', { name: personName(detail.ownerUserId) ?? t('page.unassigned') })}</span>
+        {/* While live the owner picker below says who owns it; said here too, it read twice. */}
+        {!live && <span className="text-slate-500">{t('panel.owner', { name: personName(detail.ownerUserId) ?? t('page.unassigned') })}</span>}
       </div>
       {detail.resolutionNote && <p className="text-slate-600 dark:text-slate-300">{t('panel.resolution', { note: detail.resolutionNote })}</p>}
 
@@ -382,80 +394,93 @@ const IncidentPanel: React.FC<{
       )}
 
       {live && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {detail.status === 'open' && (
-            <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
-          )}
-          <SelectPicker
-            size="sm"
-            data={[{ label: t('page.unassigned'), value: '__none__' }, ...people.map((p) => ({ label: p.fullName, value: p.id }))]}
-            value={detail.ownerUserId ?? '__none__'}
-            onChange={(value) => run(() => apiAssignIncident(id, !value || value === '__none__' ? null : value))}
-            searchable={people.length > 8}
-            cleanable={false}
-            disabled={busy}
-            placeholder={t('panel.ownerPlaceholder')}
-            className="min-w-[180px]"
-          />
-          <button disabled={busy} onClick={() => setMode(mode === 'work' ? 'none' : 'work')} className={ACTION_BUTTON}>{t('panel.raiseWorkOrder')}</button>
-          <button disabled={busy} onClick={() => setMode(mode === 'resolve' ? 'none' : 'resolve')} className={ACTION_BUTTON}>{t('panel.resolve')}</button>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <label className="flex flex-col gap-1 w-full sm:w-56">
+            <span className={SECTION_LABEL}>{t('panel.ownerPlaceholder')}</span>
+            <SelectPicker
+              size="sm"
+              data={[{ label: t('page.unassigned'), value: '__none__' }, ...people.map((p) => ({ label: p.fullName, value: p.id }))]}
+              value={detail.ownerUserId ?? '__none__'}
+              onChange={(value) => run(() => apiAssignIncident(id, !value || value === '__none__' ? null : value))}
+              searchable={people.length > 8}
+              cleanable={false}
+              disabled={busy}
+              placeholder={t('panel.ownerPlaceholder')}
+              block
+            />
+          </label>
+          <div className="flex items-center gap-2 flex-wrap">
+            {detail.status === 'open' && (
+              <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
+            )}
+            <button disabled={busy} aria-pressed={mode === 'work'} onClick={() => setMode(mode === 'work' ? 'none' : 'work')} className={`${ACTION_BUTTON} ${mode === 'work' ? ACTION_ON : ''}`}>{t('panel.raiseWorkOrder')}</button>
+            <button disabled={busy} aria-pressed={mode === 'resolve'} onClick={() => setMode(mode === 'resolve' ? 'none' : 'resolve')} className={`${ACTION_BUTTON} ${mode === 'resolve' ? ACTION_ON : ''}`}>{t('panel.resolve')}</button>
+          </div>
         </div>
       )}
 
       {mode === 'resolve' && (
         <div className="space-y-2 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-          <span className="text-slate-600 dark:text-slate-300 font-medium">{t('panel.whatWasDone')}</span>
+          <span className="block text-slate-600 dark:text-slate-300 font-medium">{t('panel.whatWasDone')}</span>
           <Input as="textarea" rows={2} value={note} onChange={(v) => setNote(v)} />
-          <button disabled={busy || !note.trim()} onClick={() => run(() => apiResolveIncident(id, note.trim()))} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
-            {t('panel.resolveIncident')}
-          </button>
+          <div className="flex justify-end">
+            <button disabled={busy || !note.trim()} onClick={() => run(() => apiResolveIncident(id, note.trim()))} className="h-8 px-3 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
+              {t('panel.resolveIncident')}
+            </button>
+          </div>
         </div>
       )}
 
       {mode === 'work' && (
         <div className="space-y-2 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-          <span className="text-slate-600 dark:text-slate-300 font-medium">{t('panel.workOrderNote')}</span>
+          <span className="block text-slate-600 dark:text-slate-300 font-medium">{t('panel.workOrderNote')}</span>
           <Input value={title} onChange={(v) => setTitle(v)} placeholder={t('panel.workOrderPlaceholder')} />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <SelectPicker size="sm" data={PRIORITIES.map((p) => ({ label: t(`priority.${p}`), value: p }))} value={priority} onChange={(v) => setPriority((v ?? 'high') as WorkOrderPriority)} searchable={false} cleanable={false} />
-            <button disabled={busy || !title.trim()} onClick={() => run(() => apiRaiseIncidentWorkOrder(id, { title: title.trim(), priority }))} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer">
+            <button disabled={busy || !title.trim()} onClick={() => run(() => apiRaiseIncidentWorkOrder(id, { title: title.trim(), priority }))} className="h-8 px-3 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer">
               {t('panel.raise')}
             </button>
           </div>
         </div>
       )}
 
-      <section className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('panel.alerts', { count: detail.alerts.length })}</p>
-        {detail.alerts.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg px-2.5 py-1.5">
-            <span className="text-slate-700 dark:text-slate-200 truncate">{a.summary}</span>
-            <span className="flex items-center gap-1.5 shrink-0">
-              <Chip tone={SEVERITY_TONE((a.severity as IncidentSeverity)) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
-              <span className="text-slate-400">{t(`alertState.${a.state}`, { defaultValue: a.state })} · {new Date(a.firedAt).toLocaleString()}</span>
-            </span>
-          </div>
-        ))}
+      <section>
+        <p className={SECTION_LABEL}>{t('panel.alerts', { count: detail.alerts.length })}</p>
+        <PanelRows>
+          {detail.alerts.map((a) => (
+            <PanelRow
+              key={a.id}
+              wrapTitle
+              title={a.summary}
+              detail={`${t(`alertState.${a.state}`, { defaultValue: a.state })} · ${shortWhen(a.firedAt)}`}
+              right={<Chip tone={SEVERITY_TONE((a.severity as IncidentSeverity)) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>}
+            />
+          ))}
+        </PanelRows>
       </section>
 
-      <section className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('panel.workOrders', { count: detail.workOrders.length })}</p>
-        {detail.workOrders.length === 0 && <p className="text-slate-400">{t('panel.noneRaised')}</p>}
-        {detail.workOrders.map((w) => (
-          <div key={w.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg px-2.5 py-1.5">
-            <span className="text-slate-700 dark:text-slate-200 truncate">{w.title}</span>
-            <span className="text-slate-400 shrink-0">{t(`workOrderStatus.${w.status}`, { defaultValue: w.status })} · {t(`priority.${w.priority}`, { defaultValue: w.priority })}{w.assignedToUserId ? ` · ${personName(w.assignedToUserId)}` : ''}</span>
-          </div>
-        ))}
+      <section>
+        <p className={SECTION_LABEL}>{t('panel.workOrders', { count: detail.workOrders.length })}</p>
+        {detail.workOrders.length === 0 && <p className="py-2 text-slate-500">{t('panel.noneRaised')}</p>}
+        <PanelRows>
+          {detail.workOrders.map((w) => (
+            <PanelRow
+              key={w.id}
+              title={w.title}
+              detail={[t(`priority.${w.priority}`, { defaultValue: w.priority }), w.assignedToUserId ? personName(w.assignedToUserId) : null].filter(Boolean).join(' · ')}
+              right={<Chip tone={statusTone(w.status)}>{t(`workOrderStatus.${w.status}`, { defaultValue: w.status })}</Chip>}
+            />
+          ))}
+        </PanelRows>
       </section>
 
-      <section className="space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('panel.timeline')}</p>
-        <ol className="space-y-1">
+      <section>
+        <p className={SECTION_LABEL}>{t('panel.timeline')}</p>
+        <ol className="mt-1 divide-y divide-slate-100 dark:divide-slate-800">
           {detail.timeline.map((ev, i) => (
-            <li key={i} className="flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
-              <span>{t(`event.${ev.kind}`, { defaultValue: ev.kind })}{ev.actor && ev.actor !== 'system' ? ` · ${personName(ev.actor) ?? ev.actor}` : ''}</span>
-              <span className="text-slate-400">{new Date(ev.at).toLocaleString()}</span>
+            <li key={i} className="flex items-center justify-between gap-3 py-1.5 text-slate-600 dark:text-slate-300">
+              <span className="min-w-0 truncate">{t(`event.${ev.kind}`, { defaultValue: ev.kind })}{ev.actor && ev.actor !== 'system' ? ` · ${personName(ev.actor) ?? ev.actor}` : ''}</span>
+              <span className="shrink-0 text-slate-500 tabular-nums">{shortWhen(ev.at)}</span>
             </li>
           ))}
         </ol>
@@ -502,7 +527,9 @@ const SlaPolicies: React.FC = () => {
   return (
     <div className="space-y-2 text-xs">
       {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
-      <div className="grid grid-cols-[90px_1fr_1fr_auto] gap-2 items-center text-[11px] font-semibold text-slate-400 uppercase">
+      {/* Heading and rows share SLA_GRID's fixed outer columns, so each heading stands over
+          its own input whether or not a row has a Clear button. */}
+      <div className={`hidden sm:grid ${SLA_GRID} text-xs font-semibold text-slate-500 uppercase whitespace-nowrap`}>
         <span>{t('sla.severity')}</span><span>{t('sla.ackWithin')}</span><span>{t('sla.resolveWithin')}</span><span />
       </div>
       {INCIDENT_SEVERITIES.map((s) => {
@@ -510,33 +537,39 @@ const SlaPolicies: React.FC = () => {
         const saved = policies.find((p) => p.severity === s);
         const valid = (d.ack ?? 0) >= 1 && (d.resolve ?? 0) >= 1;
         return (
-          <div key={s} className="grid grid-cols-[90px_1fr_1fr_auto] gap-2 items-center">
-            <Chip tone={SEVERITY_TONE(s)}>{t(`severity.${s}`)}</Chip>
-            <InputNumber size="sm" min={1} value={d.ack} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, ack: v == null || v === '' ? null : Number(v) } }))} />
-            <InputNumber size="sm" min={1} value={d.resolve} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, resolve: v == null || v === '' ? null : Number(v) } }))} />
-            <div className="flex items-center gap-1">
-              <button
-                disabled={!valid || busy === s}
-                onClick={() => run(s, () => apiSetIncidentSlaPolicy(s, { ackWithinMinutes: d.ack!, resolveWithinMinutes: d.resolve! }))}
-                className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 cursor-pointer"
-              >
-                {t('sla.save')}
-              </button>
+          <div key={s} className={`grid grid-cols-2 ${SLA_GRID} border-t border-slate-100 dark:border-slate-800 pt-2 sm:border-0 sm:pt-0`}>
+            <span className="order-1 sm:order-none"><Chip tone={SEVERITY_TONE(s)}>{t(`severity.${s}`)}</Chip></span>
+            <label className="order-3 sm:order-none self-end sm:self-auto flex flex-col gap-1">
+              <span className="sm:hidden text-slate-500">{t('sla.ackWithin')}</span>
+              <InputNumber size="sm" min={1} value={d.ack} aria-label={t('sla.ackWithin')} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, ack: v == null || v === '' ? null : Number(v) } }))} />
+            </label>
+            <label className="order-4 sm:order-none self-end sm:self-auto flex flex-col gap-1">
+              <span className="sm:hidden text-slate-500">{t('sla.resolveWithin')}</span>
+              <InputNumber size="sm" min={1} value={d.resolve} aria-label={t('sla.resolveWithin')} placeholder={t('sla.state.no_policy')} onChange={(v) => setDrafts((p) => ({ ...p, [s]: { ...d, resolve: v == null || v === '' ? null : Number(v) } }))} />
+            </label>
+            <div className="order-2 sm:order-none flex items-center justify-end gap-1.5">
               {saved && (
                 <button
                   disabled={busy === s}
                   onClick={() => run(s, () => apiDeleteIncidentSlaPolicy(s))}
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-rose-300 disabled:opacity-40 cursor-pointer"
+                  className="h-8 px-2.5 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-rose-300 disabled:opacity-40 cursor-pointer"
                   title={t('sla.clearTitle')}
                 >
                   {t('sla.clear')}
                 </button>
               )}
+              <button
+                disabled={!valid || busy === s}
+                onClick={() => run(s, () => apiSetIncidentSlaPolicy(s, { ackWithinMinutes: d.ack!, resolveWithinMinutes: d.resolve! }))}
+                className="h-8 px-3 text-xs font-semibold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 cursor-pointer"
+              >
+                {t('sla.save')}
+              </button>
             </div>
           </div>
         );
       })}
-      <p className="text-[11px] text-slate-400 pt-1">{t('sla.note')}</p>
+      <p className="text-xs text-slate-500 pt-2">{t('sla.note')}</p>
     </div>
   );
 };

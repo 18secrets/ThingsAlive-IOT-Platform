@@ -129,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {clientName && !isCollapsed && (
           <div className="px-5 -mt-1.5 text-end">
-            <span className="text-[15px] font-semibold text-sky-600 dark:text-sky-400 truncate block" title={clientName}>
+            <span className="text-[0.9375rem] font-semibold text-sky-600 dark:text-sky-400 truncate block" title={clientName}>
               {clientName}
             </span>
           </div>
@@ -172,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Version Footer */}
       {!isCollapsed && (
-        <div className="shrink-0 px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500">
+        <div className="shrink-0 px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500">
           <span>{t('sidebar.version', { version: '1.0.5' })}</span>
         </div>
       )}

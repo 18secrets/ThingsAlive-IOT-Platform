@@ -61,7 +61,9 @@
     "unit_mismatch": "Fuel units do not match the nominal figure",
     "stale": "Readings are stale",
     "undefined_result": "No available time to measure against",
-    "not_available": "Not available"
+    "not_available": "Not available",
+    "performance_not_set": "The machine type doesn't say which signals mean running",
+    "quality_not_set": "Nominal fuel per hour is not set"
   },
   "source": {
     "equipment": "this machine",
@@ -98,10 +100,12 @@
     "nominalSetBy": "Nominal set by {{source}}",
     "breakdownsInWindow": "Breakdowns in this window",
     "noneRecorded": "None recorded.",
-    "ongoing": "ongoing"
+    "ongoing": "ongoing",
+    "waitingOn": "OEE needs {{factors}} first"
   },
   "detail": {
-    "availabilityNotAvailable": "Availability not available"
+    "availabilityNotAvailable": "Availability not available",
+    "lastDays": "last {{count}} days"
   },
   "shifts": {
     "title": "Shift history",

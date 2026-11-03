@@ -223,7 +223,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
               <span className="text-xs font-bold text-slate-800 dark:text-white">{t('alertModal.threshold')}</span>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.signal')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.signal')}</label>
                   <SelectPicker
                     data={availableSignals.map((s) => ({ label: s, value: s }))}
                     value={thresholdParams.signal ?? ''}
@@ -236,21 +236,21 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.minOptional')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.minOptional')}</label>
                   <InputNumber
                     value={thresholdParams.min ?? ''}
                     onChange={(value) => setParams({ ...thresholdParams, min: value === '' ? null : Number(value) })}
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.maxOptional')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.maxOptional')}</label>
                   <InputNumber
                     value={thresholdParams.max ?? ''}
                     onChange={(value) => setParams({ ...thresholdParams, max: value === '' ? null : Number(value) })}
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400">{t('alertModal.minOrMax')}</p>
+              <p className="text-[0.6875rem] text-slate-400">{t('alertModal.minOrMax')}</p>
             </div>
           )}
 
@@ -265,12 +265,12 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                 searchable={false}
                 cleanable={false}
               />
-              <p className="text-[10px] text-slate-400">{t('alertModal.watchesEveryScenario')}</p>
+              <p className="text-[0.6875rem] text-slate-400">{t('alertModal.watchesEveryScenario')}</p>
             </div>
           )}
 
           {trigger === 'no-telemetry' && (
-            <p className="text-[11px] text-slate-400 italic">
+            <p className="text-xs text-slate-400 italic">
               {t('alertModal.noTelemetryHint')}
             </p>
           )}
@@ -280,7 +280,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
               <span className="text-xs font-bold text-slate-800 dark:text-white">{t('alertModal.firesWhenChain')}</span>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('common.severityLabel')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('common.severityLabel')}</label>
                   <SelectPicker
                     data={[{ label: severityLabel('warning'), value: 'warning' }, { label: severityLabel('critical'), value: 'critical' }]}
                     value={chainParams.atLeast ?? 'warning'}
@@ -291,7 +291,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.stageSignal')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.stageSignal')}</label>
                   <SelectPicker
                     data={availableSignals.map((s) => ({ label: s, value: s }))}
                     value={chainParams.stageSignal ?? null}
@@ -303,7 +303,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.chainSlug')}</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.chainSlug')}</label>
                   <Input
                     value={chainParams.chainSlug ?? ''}
                     onChange={(value) => setParams({ ...chainParams, chainSlug: value.trim() || null })}
@@ -312,7 +312,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[0.6875rem] text-slate-400">
                 {t('alertModal.chainHint')}
               </p>
             </div>
@@ -335,7 +335,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

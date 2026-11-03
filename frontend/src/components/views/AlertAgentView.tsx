@@ -205,7 +205,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
                     })}
                     className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors align-top cursor-pointer"
                   >
-                    <td className="py-3 px-4 text-center font-mono font-medium text-slate-400 text-[11px]">
+                    <td className="py-3 px-4 text-center font-mono font-medium text-slate-400 text-xs">
                       {rule.workflow.slug}
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white max-w-[220px] break-words">
@@ -216,22 +216,22 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
                     </td>
                     <td className="py-3 px-4 space-y-1">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLES[rule.status]}`}
+                        className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLES[rule.status]}`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${STATUS_DOT[rule.status]}`}></span>
                         {t(`agentList.status.${rule.status}`, { defaultValue: rule.status })}
                       </span>
                       {rule.pendingDraft != null && (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400">{t('agentList.pendingDraft', { version: rule.pendingDraft })}</div>
+                        <div className="text-[0.6875rem] text-amber-600 dark:text-amber-400">{t('agentList.pendingDraft', { version: rule.pendingDraft })}</div>
                       )}
                       {rule.rulesOff > 0 && (
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{t('agentList.rulesOff', { count: rule.rulesOff })}</div>
+                        <div className="text-[0.6875rem] text-slate-500 dark:text-slate-400">{t('agentList.rulesOff', { count: rule.rulesOff })}</div>
                       )}
                     </td>
                     <td className="py-3 px-4 font-normal text-slate-600 dark:text-slate-400">
                       {rule.sensors.join(', ')}
                     </td>
-                    <td className="py-3 px-4 font-normal text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+                    <td className="py-3 px-4 font-normal text-xs text-slate-500 dark:text-slate-400 space-y-1">
                       {rule.conditions.map((c, i) => <div key={i}>{c}</div>)}
                     </td>
                     <td className="py-3 px-4 text-right">
@@ -240,7 +240,7 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
                           type="button"
                           disabled={retiring === rule.workflow.id}
                           onClick={(e) => { e.stopPropagation(); retire(rule.workflow); }}
-                          className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-40 cursor-pointer"
+                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-40 cursor-pointer"
                         >
                           {t('agentList.retire')}
                         </button>

@@ -78,7 +78,7 @@ export const SignalDrilldown: React.FC<{
               key={h}
               onClick={() => setHours(h)}
               aria-pressed={hours === h}
-              className={`px-2 py-0.5 text-[11px] font-medium cursor-pointer ${hours === h
+              className={`px-2 py-0.5 text-xs font-medium cursor-pointer ${hours === h
                 ? 'bg-sky-600 text-white'
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
             >
@@ -123,7 +123,7 @@ export const SignalDrilldown: React.FC<{
                 formatter={(value, name) => (name === 'range'
                   ? [Array.isArray(value) ? `${fmt(Number(value[0]))} – ${fmt(Number(value[1]))}` : String(value), t('drill.minMax')]
                   : [fmt(Number(value)), t('drill.average')])}
-                contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                contentStyle={{ fontSize: '0.75rem', borderRadius: 8 }}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -131,7 +131,7 @@ export const SignalDrilldown: React.FC<{
       )}
 
       {detail && (
-        <div className="flex items-center gap-3 flex-wrap text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500 dark:text-slate-400">
           <Legend swatch={<span className="inline-block w-4 h-0.5" style={{ background: C.line }} />} label={t('drill.legend.reading')} />
           {b && <Legend swatch={<span className="inline-block w-4 h-2 rounded-sm" style={{ background: C.normal, opacity: 0.25 }} />} label={t('drill.legend.normal', { lo: fmt(b.warning.lo), hi: fmt(b.warning.hi) })} />}
           {b && <Legend swatch={<span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: C.warning }} />} label={t('drill.legend.warning', { sigma: b.warningSigma })} />}

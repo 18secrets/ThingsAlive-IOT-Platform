@@ -145,7 +145,7 @@ export const ClassVisualPanel: React.FC<{ slug: string; version: number; isDraft
           <div className="relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800">
             <img src={visual.imageUrl} alt={t('visual.schematicAlt')} className="w-full h-auto block" />
             {visual.anchors.map((a) => (
-              <span key={a.signal} style={{ left: `${a.hotspotX}%`, top: `${a.hotspotY}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-800 shadow">
+              <span key={a.signal} style={{ left: `${a.hotspotX}%`, top: `${a.hotspotY}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold bg-white/90 text-slate-800 shadow">
                 {a.label || a.signal}
               </span>
             ))}

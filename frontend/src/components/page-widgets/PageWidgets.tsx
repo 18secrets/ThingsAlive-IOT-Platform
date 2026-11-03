@@ -46,7 +46,7 @@ const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode }>
 const ExploreLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
   const { t } = useTranslation('equipment');
   return (
-    <button onClick={onClick} className="text-[11px] font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+    <button onClick={onClick} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
       {t('widgets.details')}
     </button>
   );
@@ -77,7 +77,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
             <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
               {latest != null ? latest.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
             </div>
-            <p className="text-[11px] text-slate-400">{data.window.from.slice(0, 10)} – {data.window.to.slice(0, 10)}</p>
+            <p className="text-xs text-slate-400">{data.window.from.slice(0, 10)} – {data.window.to.slice(0, 10)}</p>
           </div>
           {points.length >= 2 && <Sparkline values={points} colorClass="text-sky-600 dark:text-sky-400" />}
         </div>
@@ -95,9 +95,9 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
           <div className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">
             {value != null ? value.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
           </div>
-          {data.target != null && <p className="text-[11px] text-slate-400">{t('widgets.target', { value: data.target, unit: data.unit ?? '' })}</p>}
+          {data.target != null && <p className="text-xs text-slate-400">{t('widgets.target', { value: data.target, unit: data.unit ?? '' })}</p>}
           {(data.targetMin != null || data.targetMax != null) && (
-            <p className="text-[11px] text-slate-400">{t('widgets.range', { min: data.targetMin ?? '—', max: data.targetMax ?? '—', unit: data.unit ?? '' })}</p>
+            <p className="text-xs text-slate-400">{t('widgets.range', { min: data.targetMin ?? '—', max: data.targetMax ?? '—', unit: data.unit ?? '' })}</p>
           )}
         </div>
       </div>
@@ -122,7 +122,7 @@ function SignalChartWidget({ widget }: { widget: PageWidget }) {
         </div>
         {values.length >= 2 && <Sparkline values={values} colorClass="text-sky-600 dark:text-sky-400" />}
       </div>
-      <p className="text-[11px] text-slate-400">{t('widgets.last24h')}</p>
+      <p className="text-xs text-slate-400">{t('widgets.last24h')}</p>
     </WidgetShell>
   );
 }
@@ -151,14 +151,14 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
           <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
             {fmt(values[values.length - 1])} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
           </div>
-          <p className="text-[11px] text-slate-400">{t('widgets.forecastIn', { signal: data.signal, hours })}</p>
+          <p className="text-xs text-slate-400">{t('widgets.forecastIn', { signal: data.signal, hours })}</p>
         </div>
         {values.length >= 2 && <Sparkline values={values} colorClass="text-violet-600 dark:text-violet-400" />}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <Chip tone={ANOMALY_TONE[anomaly.state]}>{t(`widgets.anomaly.${anomaly.state}`)}</Chip>
         {anomaly.band && anomaly.actual != null && anomaly.predicted != null && (
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {/* The band bounds the residual (actual − predicted), so the expected reading is
                 the prediction plus the band, not the band itself. */}
             {t('widgets.anomalyDetail', {
@@ -168,10 +168,10 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
           </span>
         )}
         {!anomaly.band && anomaly.baselineReason === 'no_shift_schedule' && (
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('widgets.noShiftSchedule')}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t('widgets.noShiftSchedule')}</span>
         )}
       </div>
-      <p className="text-[11px] text-slate-400">
+      <p className="text-xs text-slate-400">
         {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(), model: data.model.key })}
       </p>
     </WidgetShell>
@@ -213,7 +213,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
             <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-[11px] text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString()}</p>
+                <p className="text-xs text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString()}</p>
               </div>
               <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
@@ -240,7 +240,7 @@ function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
               <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-[11px] text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}</p>
+                <p className="text-xs text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}</p>
               </div>
             </div>
           ))}
@@ -261,7 +261,7 @@ function ServiceDueWidget({ widget }: { widget: PageWidget }) {
       <div className="text-xl font-bold text-slate-800 dark:text-slate-100">
         {data.hoursRemaining != null ? t('widgets.hoursRemaining', { hours: data.hoursRemaining.toFixed(0) }) : '—'}
       </div>
-      <p className="text-[11px] text-slate-400">
+      <p className="text-xs text-slate-400">
         {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString() }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
       </p>
     </WidgetShell>
@@ -283,7 +283,7 @@ function FailureModesWidget({ widget }: { widget: PageWidget }) {
           <div key={f.code} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
             <div>
               <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{f.name}</p>
-              <p className="text-[11px] text-slate-400">{f.symptom}</p>
+              <p className="text-xs text-slate-400">{f.symptom}</p>
             </div>
             <Chip tone={FAILURE_TONE[f.status]}>{t(`failureStatus.${f.status}`, { defaultValue: f.status })}</Chip>
           </div>
@@ -306,7 +306,7 @@ function RecommendationsWidget({ widget }: { widget: PageWidget }) {
         {rows.map((r, i) => (
           <div key={i} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
             <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{r.action}</p>
-            <p className="text-[11px] text-slate-400">{t(`urgency.${r.urgency}`, { defaultValue: r.urgency })}{r.estimatedHours != null ? ` · ~${r.estimatedHours}h` : ''}</p>
+            <p className="text-xs text-slate-400">{t(`urgency.${r.urgency}`, { defaultValue: r.urgency })}{r.estimatedHours != null ? ` · ~${r.estimatedHours}h` : ''}</p>
           </div>
         ))}
         {rows.length === 0 && <p className="text-xs text-slate-400">{t('widgets.noRecommendations')}</p>}
@@ -368,7 +368,7 @@ function SchematicWidget({ widget }: { widget: PageWidget }) {
         ))}
       </div>
       {data.unplacedSignals.length > 0 && (
-        <p className="text-[11px] text-slate-400">{t('widgets.unplacedSignals', { count: data.unplacedSignals.length })}</p>
+        <p className="text-xs text-slate-400">{t('widgets.unplacedSignals', { count: data.unplacedSignals.length })}</p>
       )}
     </WidgetShell>
   );

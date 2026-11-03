@@ -165,11 +165,11 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
     const busy = retiringKey === k;
     return [
       <span className="text-slate-600 dark:text-slate-400">{clientName(item.tenantId)}</span>,
-      <span className="font-mono text-[11px]">{item.externalId}</span>,
+      <span className="font-mono text-xs">{item.externalId}</span>,
       <span className="text-slate-900 dark:text-white">{item.name || '—'}</span>,
       <span className="text-slate-600 dark:text-slate-400">{plantName(item.tenantId, item.plantId)}</span>,
       <span className="capitalize text-slate-600 dark:text-slate-400">{t(`equipment.tier.${item.tier}`, { defaultValue: item.tier })}</span>,
-      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                             item.status === 'active'
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
@@ -273,16 +273,16 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
             table, which has no room for that; one panel under the list serves both views. */}
         {historyItem && (
           <div ref={historyPanel} className="px-4 pb-3 pt-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-1.5">
-            <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               {t('equipment.placementHistory')}: {historyItem.name || historyItem.externalId}
             </p>
             <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 p-2.5 space-y-1.5 max-h-40 overflow-y-auto">
-                              {historyLoading && <p className="text-[11px] text-slate-400">{t('shared:loading')}</p>}
+                              {historyLoading && <p className="text-xs text-slate-400">{t('shared:loading')}</p>}
                               {!historyLoading && history.length === 0 && (
-                                <p className="text-[11px] text-slate-400">{t('equipment.noHistory')}</p>
+                                <p className="text-xs text-slate-400">{t('equipment.noHistory')}</p>
                               )}
                               {history.map((h) => (
-                                <div key={h.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                                <div key={h.id} className="text-xs text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
                                   <span>
                                     {plantName(historyItem.tenantId, h.fromPlantId)} → {plantName(historyItem.tenantId, h.toPlantId)}
                                     {h.reason ? `: "${h.reason}"` : ''}

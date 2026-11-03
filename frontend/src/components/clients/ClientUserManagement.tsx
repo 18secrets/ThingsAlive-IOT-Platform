@@ -120,7 +120,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                           size="sm"
                         />
                       </span></>,
-      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[u.status]}`}>
                         {t(`userStatus.${u.status}`, { defaultValue: u.status })}
                       </span></>,
       <><div className="flex items-center justify-center gap-2">

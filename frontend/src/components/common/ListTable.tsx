@@ -54,7 +54,7 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
 }) {
   const data: Row<T>[] = rows.map((row) => ({ key: rowKey(row), row }));
   return (
-    <div className={`${bare ? '' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs '}overflow-hidden [&_.rs-table-cell-content]:text-[13px] [&_.rs-table-cell-header_.rs-table-cell-content]:text-xs`}>
+    <div className={`${bare ? '' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs '}overflow-hidden [&_.rs-table-cell-content]:text-[0.8125rem] [&_.rs-table-cell-header_.rs-table-cell-content]:text-xs`}>
       <Table<Row<T>, string>
         data={data}
         rowKey="key"

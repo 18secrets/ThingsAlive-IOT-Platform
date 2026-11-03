@@ -103,7 +103,7 @@ export const ManageSensorCategoriesModal: React.FC<ManageSensorCategoriesModalPr
                     <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</div>
                   )}
                   {retired && (
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-xs text-slate-400">
                       {t('sensorCategories.retiredOn', { date: new Date(c.retiredAt!).toLocaleDateString() })}
                     </div>
                   )}

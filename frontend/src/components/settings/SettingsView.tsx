@@ -7,13 +7,13 @@ import {
   Calendar,
   KeyRound,
   CheckCircle2,
-  AlertCircle
-} from 'lucide-react';
+  AlertCircle, Type } from 'lucide-react';
 import { AuthUser, ClientAccount } from '../../types';
 import { PasswordField } from '../common/PasswordField';
 import { PasswordChecklist, passwordMeetsRules } from '../common/PasswordChecklist';
 import { SessionDiagnostics } from './SessionDiagnostics';
 import { MeDiagnostics, apiGetMe } from '../../lib/api';
+import { TEXT_SIZES, useTextSize } from '../../lib/textSize';
 
 interface SettingsViewProps {
   authUser: AuthUser;
@@ -23,6 +23,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, onChangePassword }) => {
   const { t } = useTranslation();
+  const [textSize, setTextSize] = useTextSize();
   const isMasterAdmin = authUser.role === 'master-admin';
 
   // For a client, look up their live account record for status / created date
@@ -121,7 +122,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               </span>
             </div>
             {!isMasterAdmin && authUser.isSuperAdmin && (
-              <p className="text-[11px] text-slate-400 -mt-2">{t('settings.superAdminNote')}</p>
+              <p className="text-xs text-slate-400 -mt-2">{t('settings.superAdminNote')}</p>
             )}
 
             <div className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/60">
@@ -160,6 +161,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
               <span className="font-medium text-slate-700 dark:text-slate-200">
                 {isMasterAdmin ? t('settings.allPlantsAndClients') : since}
               </span>
+            </div>
+
+            {/* The text size, as in the header — and the place to change it on a phone, where
+                the header has no room for it. */}
+            <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+              <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                <Type className="w-4 h-4 text-sky-600" />
+                {t('header.textSize')}
+              </span>
+              <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden" role="radiogroup" aria-label={t('header.textSize')}>
+                {TEXT_SIZES.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={textSize === s.id}
+                    onClick={() => setTextSize(s.id)}
+                    className={`px-2.5 py-1 text-xs font-semibold cursor-pointer ${textSize === s.id ? 'bg-sky-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  >
+                    {t(`header.textSizes.${s.id}`)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

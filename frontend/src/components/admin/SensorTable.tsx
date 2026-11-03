@@ -81,7 +81,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
       <span className="font-normal">{categoryName(sensor.categoryId)}</span>,
       <span className="font-normal text-slate-800 dark:text-slate-200">{sensor.sensorName}</span>,
       <span className="text-slate-500 dark:text-slate-400 text-xs">{sensor.parameterSpecs.length}</span>,
-      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                         retired
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                           : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'

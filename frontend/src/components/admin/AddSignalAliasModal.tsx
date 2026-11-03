@@ -164,7 +164,7 @@ export const AddSignalAliasModal: React.FC<AddSignalAliasModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

@@ -99,7 +99,7 @@ export const ChainDiagnosisPanel: React.FC<{ sourceSystem: string; externalId: s
 
           {chains.length > 0 && (
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('chain.whatIf')}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('chain.whatIf')}</p>
               {chains.map((c) => (
                 <WhatIf key={c.slug} chain={c} observed={diagnosis?.chains.find((d) => d.slug === c.slug)} />
               ))}
@@ -195,7 +195,7 @@ const WhatIf: React.FC<{ chain: CausalChain; observed?: { stages: ChainStageResu
         <div className="flex items-end gap-2 flex-wrap">
           {inputs.map((s) => (
             <label key={s} className="space-y-0.5">
-              <span className="block text-[11px] text-slate-500">{s}</span>
+              <span className="block text-xs text-slate-500">{s}</span>
               <InputNumber
                 size="sm"
                 value={valueOf(s)}

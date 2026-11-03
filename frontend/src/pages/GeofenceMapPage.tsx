@@ -508,7 +508,7 @@ const SiteMap: React.FC<{
       href="https://www.openstreetmap.org/copyright"
       target="_blank"
       rel="noreferrer"
-      className="absolute bottom-1 right-1 rounded bg-white/85 dark:bg-slate-900/85 px-1.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 hover:underline"
+      className="absolute bottom-1 right-1 rounded bg-white/85 dark:bg-slate-900/85 px-1.5 py-0.5 text-[0.6875rem] text-slate-600 dark:text-slate-300 hover:underline"
     >
       © OpenStreetMap contributors
     </a>

@@ -22,6 +22,7 @@ import {
 import { severityTone } from '../components/common/statusTone';
 import { MachineIcon } from '../components/common/MachineIcon';
 import { SelectPicker } from 'rsuite';
+import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -140,23 +141,26 @@ export const LiveDashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Panel title={t('live.liveIncidents')} icon={<Siren className="w-4 h-4" />} onOpen={() => navigate('/incident-management')}>
           <List slot={incidents} empty={t('live.noLiveIncidents')} render={(d) => d.slice(0, 5).map((i) => (
-            <Row key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} left={machineName(i.machine.sourceSystem, i.machine.externalId)}
-              right={<><Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
+            <PanelRow key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} title={machineName(i.machine.sourceSystem, i.machine.externalId)}
+              detail={`${t(`state.${i.status}`, { defaultValue: i.status })} · ${shortWhen(i.openedAt)}`}
+              right={<Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.openAlerts')} icon={<Bell className="w-4 h-4" />} onOpen={() => navigate('/alerts')}>
           <List slot={alerts} empty={t('live.noOpenAlerts')} render={(d) => d.slice(0, 5).map((a) => (
-            <Row key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={`${machineName(a.sourceSystem, a.externalId)} · ${a.summary}`}
+            <PanelRow key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} title={machineName(a.sourceSystem, a.externalId)}
+              detail={a.summary} meta={shortWhen(a.firedAt)}
               right={<Chip tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.serviceDue')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
           {service.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : service.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : serviceDue.length === 0 ? (
             <Muted>{t('live.nothingDue')}</Muted>
-          ) : serviceDue.slice(0, 5).map((a) => (
-            <Row key={`${a.sourceSystem}/${a.externalId}`} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={a.name ?? a.externalId}
-              right={<Chip tone={a.status === 'overdue' ? 'rose' : 'amber'}>{a.status ? t(`serviceStatus.${a.status}`, { defaultValue: a.status }) : a.status}{a.hoursRemaining != null ? ` · ${Math.abs(a.hoursRemaining)} h` : ''}</Chip>} />
-          ))}
+          ) : <PanelRows>{serviceDue.slice(0, 5).map((a) => (
+            <PanelRow key={`${a.sourceSystem}/${a.externalId}`} onClick={() => openMachine(a.sourceSystem, a.externalId)} title={a.name ?? a.externalId}
+              detail={a.hoursRemaining != null ? t(a.hoursRemaining < 0 ? 'live.hoursOverdue' : 'live.hoursLeft', { hours: Math.abs(a.hoursRemaining) }) : undefined}
+              right={<Chip tone={a.status === 'overdue' ? 'rose' : 'amber'}>{a.status ? t(`serviceStatus.${a.status}`, { defaultValue: a.status }) : a.status}</Chip>} />
+          ))}</PanelRows>}
         </Panel>
       </div>
 
@@ -396,7 +400,7 @@ function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
       <div className={`text-2xl font-bold mt-1 ${color}`}>
         {slot.state === 'ok' ? value(slot.data) : slot.state === 'loading' ? '…' : '—'}
       </div>
-      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
+      <div className="text-xs text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
     </button>
   );
 }
@@ -413,21 +417,12 @@ const Panel: React.FC<{ title: string; icon: React.ReactNode; onOpen: () => void
 
 const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-xs text-slate-400">{children}</p>;
 
-const Row: React.FC<{ left: string; right: React.ReactNode; onClick?: () => void }> = ({ left, right, onClick }) => (
-  <div
-    onClick={onClick}
-    className={`flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-1.5 ${onClick ? 'cursor-pointer hover:text-sky-600' : ''}`}
-  >
-    <span className="text-slate-700 dark:text-slate-200 truncate">{left}</span>
-    <span className="flex items-center gap-1.5 shrink-0">{right}</span>
-  </div>
-);
 
 function List<T>({ slot, empty, render }: { slot: Slot<T[]>; empty: string; render: (d: T[]) => React.ReactNode }) {
   const { t } = useTranslation('dashboard');
   if (slot.state === 'loading') return <Muted>{t('common.loading')}</Muted>;
   if (slot.state === 'unavailable') return <Muted>{t('common.unavailable')}</Muted>;
   if (slot.data.length === 0) return <Muted>{empty}</Muted>;
-  return <div className="space-y-1">{render(slot.data)}</div>;
+  return <PanelRows>{render(slot.data)}</PanelRows>;
 }
 

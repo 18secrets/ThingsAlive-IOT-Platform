@@ -170,7 +170,7 @@ const FleetImportBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
               {errors.map((e, i) => (
                 <div key={`${e.sheet}-${e.row}-${i}`} className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
                   <p className="text-rose-700 dark:text-rose-300">{t('fleetImport.rowRef', { sheet: e.sheet, row: e.row })}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{e.message}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{e.message}</p>
                 </div>
               ))}
             </Section>
@@ -204,20 +204,20 @@ const FleetImportBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
                   <p className="text-slate-700 dark:text-slate-200">
                     <span className="font-mono">{c.code}</span> · {t('fleetImport.differs', { fields: c.fields.join(', ') })}
                   </p>
-                  <p className="text-[11px] text-slate-400">{c.detail}</p>
+                  <p className="text-xs text-slate-400">{c.detail}</p>
                 </div>
               ))}
               {plan.devices.conflicts.map((c) => (
                 <div key={`dc-${c.row}`} className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
                   <p className="text-slate-700 dark:text-slate-200"><span className="font-mono">{c.imei}</span> · {conflictLabel(t, c.reason)}</p>
-                  <p className="text-[11px] text-slate-400">{c.detail}</p>
+                  <p className="text-xs text-slate-400">{c.detail}</p>
                 </div>
               ))}
             </Section>
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-slate-400">
+            <span className="text-xs text-slate-400">
               {!plan.canApply ? t('fleetImport.fixErrors') : toAdd === 0 ? t('fleetImport.nothingToAdd') : t('fleetImport.changesToAdd', { count: toAdd })}
             </span>
             <button
@@ -241,13 +241,13 @@ const conflictLabel = (t: (key: string, opts?: { defaultValue: string }) => stri
 const Stat: React.FC<{ label: string; value: number; muted?: boolean; tone?: 'rose' }> = ({ label, value, muted, tone }) => (
   <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
     <div className={`text-xl font-bold ${tone === 'rose' ? 'text-rose-600 dark:text-rose-400' : muted ? 'text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{value}</div>
-    <div className="text-[11px] text-slate-400">{label}</div>
+    <div className="text-xs text-slate-400">{label}</div>
   </div>
 );
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
   <div className="space-y-1.5">
-    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{icon}{title}</p>
+    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{icon}{title}</p>
     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">{children}</div>
   </div>
 );

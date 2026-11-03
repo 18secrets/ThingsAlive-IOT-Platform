@@ -230,20 +230,20 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
               <button
                 type="button"
                 onClick={addNode}
-                className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
+                className="text-xs text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{t('chainModal.addStage')}</span>
               </button>
             </div>
-            <p className="text-[10px] text-slate-400 -mt-2">
+            <p className="text-[0.6875rem] text-slate-400 -mt-2">
               {t('chainModal.stagesHint')}
             </p>
 
             {nodes.map((node, ni) => (
               <div key={ni} className="p-3.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.stage', { n: ni + 1 })}</span>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.stage', { n: ni + 1 })}</span>
                   <button
                     type="button"
                     onClick={() => removeNode(ni)}
@@ -257,7 +257,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                   <div className="col-span-2 md:col-span-1">
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.signal')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('alertModal.signal')}</label>
                     <SelectPicker
                       size="sm"
                       data={availableSignals.map((s) => ({ label: s, value: s }))}
@@ -271,15 +271,15 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.label')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.label')}</label>
                     <Input size="sm" value={node.label ?? ''} onChange={(value) => updateNode(ni, { label: value })} placeholder={t('chainModal.optionalPlaceholder')} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.intercept')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.intercept')}</label>
                     <InputNumber size="sm" value={node.intercept} onChange={(value) => updateNode(ni, { intercept: Number(value) || 0 })} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.directionLabel')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.directionLabel')}</label>
                     <SelectPicker
                       size="sm"
                       data={DIRECTION_OPTIONS}
@@ -291,22 +291,22 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.warnAbove')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.warnAbove')}</label>
                     <InputNumber size="sm" value={node.warnAbove} onChange={(value) => updateNode(ni, { warnAbove: Number(value) || 0 })} />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.criticalAbove')}</label>
+                    <label className="block text-[0.6875rem] text-slate-500 dark:text-slate-400 mb-1">{t('chainModal.criticalAbove')}</label>
                     <InputNumber size="sm" value={node.criticalAbove} onChange={(value) => updateNode(ni, { criticalAbove: Number(value) || 0 })} />
                   </div>
                 </div>
 
                 <div className="pl-3 border-l-2 border-amber-200 dark:border-amber-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.drivers')}</span>
+                    <span className="text-[0.6875rem] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('chainModal.drivers')}</span>
                     <button
                       type="button"
                       onClick={() => addDriver(ni)}
-                      className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
+                      className="text-[0.6875rem] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       <span>{t('chainModal.addDriver')}</span>
@@ -361,7 +361,7 @@ export const AddCausalChainModal: React.FC<AddCausalChainModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

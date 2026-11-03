@@ -255,7 +255,7 @@ export const WorkOrdersPage: React.FC = () => {
 
   return (
     <div id="work-orders-view" className="space-y-3">
-      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
           <h2 className="text-xl font-bold">{t('hero.heading')}</h2>
           <p className="text-sm text-sky-100">{t('hero.subtitle')}</p>
@@ -469,7 +469,7 @@ const todayLocal = () => {
 };
 
 const TitleCounter: React.FC<{ title: string }> = ({ title }) => (
-  <span className={`text-[11px] ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+  <span className={`text-xs ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
     {title.length}/{MAX_TITLE}
   </span>
 );
@@ -543,7 +543,7 @@ const CreateWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
-          {pastDue && <span className="text-[11px] text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
+          {pastDue && <span className="text-xs text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -622,7 +622,7 @@ const EditWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
-          {movedIntoPast && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
+          {movedIntoPast && <span className="text-xs text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -709,7 +709,7 @@ const WorkOrderHistory: React.FC<{
         <li key={e.id} className="border-l-2 border-sky-200 dark:border-sky-800 pl-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t(`event.${e.kind}`, { defaultValue: e.kind })}</span>
-            <span className="text-[11px] text-slate-400">{new Date(e.at).toLocaleString()}</span>
+            <span className="text-xs text-slate-400">{new Date(e.at).toLocaleString()}</span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('history.by', { name: personName(e.actorUserId) })}

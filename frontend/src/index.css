@@ -36,6 +36,24 @@
   font-display: swap;
 }
 
+/* Readability (team feedback, 3 Nov 2026). Light grey text — Tailwind's slate-400, used
+ * for every secondary line — sat at 2.6:1 on white, under the 4.5:1 a reader needs. In light
+ * mode it is darkened to 4.6:1 here, once, rather than in 576 class names; it stays a shade
+ * lighter than slate-500 so the two levels still read as two. Dark mode was already fine.
+ * The few slate-300 texts (meant to be faint) take that same readable grey. */
+:root:not(.dark) {
+  --color-slate-400: #66768a;
+}
+:root:not(.dark) .text-slate-300 {
+  color: var(--color-slate-400);
+}
+
+/* The text size the reader picked (Small / Default / Large / Extra large, lib/textSize.ts)
+ * is the root font size; Tailwind and rsuite size everything in rem, so all of it follows. */
+html {
+  font-size: var(--ta-text-size, 100%);
+}
+
 @layer base {
   body {
     font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

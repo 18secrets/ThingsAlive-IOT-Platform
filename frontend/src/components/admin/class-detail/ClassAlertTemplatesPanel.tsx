@@ -100,7 +100,7 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                 </span>
                 <button
                   onClick={() => { setEditingTemplate(tpl); setIsModalOpen(true); }}
-                  className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
+                  className="text-xs font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
                   title={tpl.status === 'published'
                     ? t('scenarios.newVersionHint', { next: tpl.version + 1, current: tpl.version })
                     : undefined}
@@ -117,30 +117,30 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 ${SEVERITY_STYLE[tpl.severity]}`}>
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700 ${SEVERITY_STYLE[tpl.severity]}`}>
                 <ShieldAlert className="w-3 h-3" />
                 <span className="capitalize">{t(`common.severity.${tpl.severity}`, { defaultValue: tpl.severity })}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700">
                 <Bell className="w-3 h-3 text-sky-600" />
                 <span>{t(`alertTemplates.trigger.${tpl.trigger}`, { defaultValue: tpl.trigger })}</span>
               </div>
               {!tpl.enabledOnCopy && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700">
                   <span>{t('alertTemplates.offByDefault')}</span>
                 </div>
               )}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[tpl.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[tpl.status]}`}>
                 {t(`common.status.${tpl.status}`, { defaultValue: tpl.status })}
               </span>
               {tpl.status === 'draft' && (
                 <button
                   onClick={() => handlePublish(tpl.slug)}
                   disabled={busySlug === tpl.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{t('common.publish')}</span>
@@ -150,7 +150,7 @@ export const ClassAlertTemplatesPanel: React.FC<ClassAlertTemplatesPanelProps> =
                 <button
                   onClick={() => handleRetire(tpl.slug)}
                   disabled={busySlug === tpl.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 cursor-pointer disabled:opacity-50"
                 >
                   <Archive className="w-3.5 h-3.5" />
                   <span>{t('common.retire')}</span>

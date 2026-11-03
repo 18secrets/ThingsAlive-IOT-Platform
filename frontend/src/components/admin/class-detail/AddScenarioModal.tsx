@@ -207,11 +207,11 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
 
           <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-2">
             <span className="text-xs font-bold text-slate-800 dark:text-white">{t('scenarioModal.requiredSignals')}</span>
-            <p className="text-[10px] text-slate-400 -mt-1">
+            <p className="text-[0.6875rem] text-slate-400 -mt-1">
               {t('scenarioModal.requiredSignalsHint')}
             </p>
             {availableSignals.length === 0 ? (
-              <p className="text-[11px] text-slate-400 italic">
+              <p className="text-xs text-slate-400 italic">
                 {t('common.noClassSignals')}
               </p>
             ) : (
@@ -223,7 +223,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
                       type="button"
                       key={signal}
                       onClick={() => toggleSignal(signal)}
-                      className={`px-2.5 py-1 rounded-md border text-[11px] font-mono transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md border text-xs font-mono transition-colors cursor-pointer ${
                         checked
                           ? 'bg-sky-600 border-sky-600 text-white'
                           : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-sky-400'
@@ -244,7 +244,7 @@ export const AddScenarioModal: React.FC<AddScenarioModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

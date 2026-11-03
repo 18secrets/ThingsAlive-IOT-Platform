@@ -149,7 +149,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               <Layers className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               <span><Trans t={t} i18nKey="mapSensors.catalogSource" count={availableSensors.length} components={{ b: <strong /> }} /></span>
             </div>
-            <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-300 uppercase tracking-wider">{t('mapSensors.masterData')}</span>
+            <span className="text-xs font-semibold text-sky-700 dark:text-sky-300 uppercase tracking-wider">{t('mapSensors.masterData')}</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -180,7 +180,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
                 searchable={industryOptions.length > 8}
               />
               {!industryTypeId && existingMapping?.industryTypeLegacy && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                   {t('mapSensors.previouslyTyped', { value: existingMapping.industryTypeLegacy })}
                 </p>
               )}

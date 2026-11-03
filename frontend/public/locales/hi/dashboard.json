@@ -126,7 +126,9 @@
     "onboarding": "ऑनबोर्डिंग",
     "onboarded": "{{done}}/{{total}} मशीनें पूरी तरह ऑनबोर्ड",
     "searchMachines": "नाम, कोड या साइट से मशीन खोजें",
-    "noMachineMatches": "कोई मशीन इस खोज से मेल नहीं खाती।"
+    "noMachineMatches": "कोई मशीन इस खोज से मेल नहीं खाती।",
+    "hoursLeft": "{{hours}} घंटे बाकी",
+    "hoursOverdue": "{{hours}} घंटे देर"
   },
   "classic": {
     "title": "एंटरप्राइज़ कमांड सेंटर",

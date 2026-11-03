@@ -1,5 +1,5 @@
 import React from 'react';
-import { severityTone } from '../components/common/statusTone';
+import { severityTone, statusTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   apiGetDeviceHealthFleet, apiGetEffectiveParameters, apiGetEquipmentAvailability, apiGetEquipmentOee, apiGetLatestPredictions,
   apiGetShieldSummary, apiListAlerts, apiListEquipment, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
+import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
 
 const DAY = 86_400_000;
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
@@ -109,58 +110,68 @@ export const ThingDetailLivePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Panel title={t('thingLive.predictions')} icon={<Activity className="w-4 h-4" />} slot={predictions} empty={t('thingLive.predictionsEmpty')}
           render={(d) => d.map((x) => (
-            <Row key={x.id} left={x.clientScenarioSlug}
-              right={<><Chip tone={SEVERITY_TONE(x.severity) ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip><span className="text-slate-400">{t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}</span></>} />
+            <PanelRow key={x.id} title={x.clientScenarioSlug}
+              detail={t('thingLive.risk', { score: x.riskScore, confidence: t(`confidence.${x.confidence}`, { defaultValue: x.confidence }) })}
+              right={<Chip tone={SEVERITY_TONE(x.severity) ?? 'slate'}>{t(`severity.${x.severity}`, { defaultValue: x.severity })}</Chip>} />
           ))} />
         <Panel title={t('thingLive.openAlerts')} icon={<Bell className="w-4 h-4" />} slot={alerts} empty={t('thingLive.openAlertsEmpty')}
           render={(d) => d.map((a) => (
-            <Row key={a.id} left={a.summary} right={<><Chip tone={SEVERITY_TONE(a.severity) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip><span className="text-slate-400">{t(`state.${a.state}`, { defaultValue: a.state })}</span></>} />
+            <PanelRow key={a.id} title={a.ruleName} detail={a.summary}
+              meta={`${t(`state.${a.state}`, { defaultValue: a.state })} · ${shortWhen(a.firedAt)}`}
+              right={<Chip tone={SEVERITY_TONE(a.severity) ?? 'slate'}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
           ))} />
-        <Panel title={t('thingLive.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} slot={orders} empty={t('thingLive.openWorkOrdersEmpty')}
-          action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
-          render={(d) => d.map((o) => (
-            <Row key={o.id} left={`${o.reference} · ${o.title}`} right={<span className="text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })} · {t(`priority.${o.priority}`, { defaultValue: o.priority })}{o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}</span>} />
-          ))} />
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><ShieldCheck className="w-4 h-4" />{t('thingLive.compliance')}</p>
-          {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : !shieldCells ? <Muted>{t('common.unavailable')}</Muted> : (
-            <div className="flex gap-1.5 flex-wrap">
-              {(['compliance', 'safety', 'security'] as const).map((c) => (
-                <Chip key={c} tone={{ current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate' }[shieldCells[c].status] as 'emerald'}>
-                  {t('thingLive.shieldCell', { category: t(`shieldCategory.${c}`), status: t(`shieldStatus.${shieldCells[c].status}`, { defaultValue: shieldCells[c].status.replace('_', ' ') }) })}
-                </Chip>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
+      {/* Work, compliance and this week's OEE down the left; the long cost list down the right,
+          beside all three rather than stretching one card to its height. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><Gauge className="w-4 h-4" />{t('thingLive.thisWeekOee')}</p>
-          {oee.state !== 'ok' ? <Muted>{oee.state === 'loading' ? t('common.loading') : t('common.unavailable')}</Muted> : (
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              {([[t('common.availability'), oee.data.availability], [t('common.performance'), oee.data.performance], [t('common.quality'), oee.data.quality]] as const).map(([label, f]) => (
-                <div key={label} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-                  <p className="text-[11px] text-slate-400">{label}</p>
-                  <p className="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">{f.readiness === 'ready' ? pct(f.value) : '—'}</p>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="flex flex-col gap-3">
+          <Panel title={t('thingLive.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} slot={orders} empty={t('thingLive.openWorkOrdersEmpty')}
+            action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
+            render={(d) => d.map((o) => (
+              <PanelRow key={o.id} title={o.title}
+                detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}`}
+                right={<Chip tone={statusTone(o.status)}>{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}</Chip>} />
+            ))} />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><ShieldCheck className="w-4 h-4" />{t('thingLive.compliance')}</p>
+            {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : !shieldCells ? <Muted>{t('common.unavailable')}</Muted> : (
+              <div className="flex gap-1.5 flex-wrap">
+                {(['compliance', 'safety', 'security'] as const).map((c) => (
+                  <Chip key={c} tone={{ current: 'emerald', due_soon: 'amber', overdue: 'rose', action_required: 'rose', not_recorded: 'slate' }[shieldCells[c].status] as 'emerald'}>
+                    {t('thingLive.shieldCell', { category: t(`shieldCategory.${c}`), status: t(`shieldStatus.${shieldCells[c].status}`, { defaultValue: shieldCells[c].status.replace('_', ' ') }) })}
+                  </Chip>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><Gauge className="w-4 h-4" />{t('thingLive.thisWeekOee')}</p>
+            {oee.state !== 'ok' ? <Muted>{oee.state === 'loading' ? t('common.loading') : t('common.unavailable')}</Muted> : (
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {([[t('common.availability'), oee.data.availability], [t('common.performance'), oee.data.performance], [t('common.quality'), oee.data.quality]] as const).map(([label, f]) => (
+                  <div key={label} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
+                    <p className="text-xs text-slate-400">{label}</p>
+                    <p className="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">{f.readiness === 'ready' ? pct(f.value) : '—'}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><Wrench className="w-4 h-4" />{t('thingLive.costParams')}</p>
           {params.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : params.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
-            <div className="space-y-1">
+            <PanelRows>
               {/* Cost units are stored as "currency/L"; the account's currency is itself a parameter. */}
               {params.data.map((x) => (
-                <Row key={x.name} left={x.name.replace(/_/g, ' ')}
+                <PanelRow key={x.name} title={x.name.replace(/_/g, ' ')}
+                  detail={x.source && x.value != null ? t(`paramScope.${x.source.scope}`, { defaultValue: x.source.scope }) : t('thingLive.notSet')}
                   right={x.source && x.value != null
-                    ? <><span className="font-mono text-slate-700 dark:text-slate-200">{String(x.value)}{x.unit && x.name !== 'currency' ? ` ${x.unit.replace(/currency/g, String(params.data.find((c) => c.name === 'currency')?.value ?? 'currency'))}` : ''}</span><Chip tone="slate">{t(`paramScope.${x.source.scope}`, { defaultValue: x.source.scope })}</Chip></>
-                    : <span className="text-slate-400">{t('thingLive.notSet')}</span>} />
+                    ? <span className="font-mono text-sm text-slate-700 dark:text-slate-200">{String(x.value)}{x.unit && x.name !== 'currency' ? ` ${x.unit.replace(/currency/g, String(params.data.find((c) => c.name === 'currency')?.value ?? 'currency'))}` : ''}</span>
+                    : <span className="text-slate-400">—</span>} />
               ))}
-            </div>
+            </PanelRows>
           )}
         </div>
       </div>
@@ -169,13 +180,6 @@ export const ThingDetailLivePage: React.FC = () => {
 };
 
 const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-xs text-slate-400">{children}</p>;
-
-const Row: React.FC<{ left: string; right: React.ReactNode }> = ({ left, right }) => (
-  <div className="flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-1.5">
-    <span className="text-slate-700 dark:text-slate-200 truncate">{left}</span>
-    <span className="flex items-center gap-1.5 shrink-0">{right}</span>
-  </div>
-);
 
 function Panel<T>({ title, icon, slot, empty, render, action }: {
   title: string; icon: React.ReactNode; slot: Slot<T[]>; empty: string; render: (d: T[]) => React.ReactNode; action?: React.ReactNode;
@@ -190,7 +194,7 @@ function Panel<T>({ title, icon, slot, empty, render, action }: {
       {slot.state === 'loading' ? <Muted>{t('common.loading')}</Muted>
         : slot.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted>
           : slot.data.length === 0 ? <Muted>{empty}</Muted>
-            : <div className="space-y-1">{render(slot.data)}</div>}
+            : <PanelRows>{render(slot.data)}</PanelRows>}
     </div>
   );
 }

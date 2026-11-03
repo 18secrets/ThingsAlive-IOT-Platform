@@ -47,7 +47,14 @@
     "noNotifications": "कोई खुला अलर्ट नहीं।",
     "loadingNotifications": "लोड हो रहा है…",
     "timeZone": "समय {{zone}} में",
-    "timeZoneTitle": "हर तारीख और समय आपके ब्राउज़र के समय क्षेत्र {{zone}} में दिखाया जाता है।"
+    "timeZoneTitle": "हर तारीख और समय आपके ब्राउज़र के समय क्षेत्र {{zone}} में दिखाया जाता है।",
+    "textSize": "पाठ का आकार",
+    "textSizes": {
+      "small": "छोटा",
+      "default": "सामान्य",
+      "large": "बड़ा",
+      "xlarge": "बहुत बड़ा"
+    }
   },
   "login": {
     "title": "साइन इन",

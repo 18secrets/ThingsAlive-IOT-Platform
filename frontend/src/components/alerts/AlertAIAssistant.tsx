@@ -79,7 +79,7 @@ const ItemCard: React.FC<{ item: CardItem; tag: string; tagClass: string; button
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${item.iconBg}`}>
           <Icon className={`w-4 h-4 ${item.iconColor}`} />
         </div>
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${tagClass}`}>{tag}</span>
+        <span className={`px-2 py-0.5 rounded text-[0.6875rem] font-bold uppercase border ${tagClass}`}>{tag}</span>
       </div>
       <div className="font-semibold text-sm text-slate-800 dark:text-slate-100 mb-1 break-words">{item.title}</div>
       <p className="text-xs text-slate-500 dark:text-slate-400 flex-1 leading-relaxed line-clamp-3">{item.description}</p>
@@ -272,7 +272,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 space-y-3">
           <div>
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t('assistant.fromFailureMode')}</div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{t('assistant.fromFailureModeHint')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('assistant.fromFailureModeHint')}</p>
           </div>
           {failureModes.length === 0 ? (
             <p className="text-xs text-slate-400">{t('assistant.noFailureModes')}</p>
@@ -319,7 +319,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
             </div>
           )}
           {chosenMode && (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {chosenMode.symptom} · {t('assistant.watches', { signals: chosenMode.signals.join(', ') })}
             </p>
           )}
@@ -393,7 +393,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                     {ex.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-[10px] text-slate-500 dark:text-slate-400"
+                        className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-[0.6875rem] text-slate-500 dark:text-slate-400"
                       >
                         {t(`assistant.tags.${tag}`, { defaultValue: tag })}
                       </span>
@@ -431,14 +431,14 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                       {t(`assistant.steps.${step.id}`)}
                     </span>
                   </div>
-                  <span className={`text-[9px] font-bold uppercase tracking-wider shrink-0 ${STATUS_BADGE_STYLES[step.status]}`}>
+                  <span className={`text-[0.625rem] font-bold uppercase tracking-wider shrink-0 ${STATUS_BADGE_STYLES[step.status]}`}>
                     {t(`assistant.stepStatus.${step.status}`)}
                   </span>
                 </div>
               ))}
             </div>
-            {notice && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-3 leading-relaxed">{notice}</p>}
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
+            {notice && <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 leading-relaxed">{notice}</p>}
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
               {t('assistant.clarifyHint', { example: 'temperature above 80°C for 5 minutes' })}
             </p>
           </div>

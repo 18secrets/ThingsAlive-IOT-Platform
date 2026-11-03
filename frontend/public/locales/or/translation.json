@@ -47,7 +47,14 @@
     "noNotifications": "କୌଣସି ଖୋଲା ସତର୍କତା ନାହିଁ।",
     "loadingNotifications": "ଲୋଡ୍ ହେଉଛି…",
     "timeZone": "ସମୟ {{zone}} ରେ",
-    "timeZoneTitle": "ପ୍ରତ୍ୟେକ ତାରିଖ ଓ ସମୟ ଆପଣଙ୍କ ବ୍ରାଉଜରର ସମୟ ମଣ୍ଡଳ {{zone}} ରେ ଦେଖାଯାଏ।"
+    "timeZoneTitle": "ପ୍ରତ୍ୟେକ ତାରିଖ ଓ ସମୟ ଆପଣଙ୍କ ବ୍ରାଉଜରର ସମୟ ମଣ୍ଡଳ {{zone}} ରେ ଦେଖାଯାଏ।",
+    "textSize": "ଅକ୍ଷର ଆକାର",
+    "textSizes": {
+      "small": "ଛୋଟ",
+      "default": "ସାଧାରଣ",
+      "large": "ବଡ଼",
+      "xlarge": "ଅତି ବଡ଼"
+    }
   },
   "login": {
     "title": "ସାଇନ୍ ଇନ୍",

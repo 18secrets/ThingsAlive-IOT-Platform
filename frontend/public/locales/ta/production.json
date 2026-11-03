@@ -61,7 +61,9 @@
     "unit_mismatch": "எரிபொருள் அலகுகள் பெயரளவு மதிப்புடன் பொருந்தவில்லை",
     "stale": "அளவீடுகள் பழையவை",
     "undefined_result": "ஒப்பிட்டு அளக்கக் கிடைக்கும் நேரம் இல்லை",
-    "not_available": "கிடைக்கவில்லை"
+    "not_available": "கிடைக்கவில்லை",
+    "performance_not_set": "இயந்திர வகையில் இயக்க சிக்னல்கள் குறிப்பிடப்படவில்லை",
+    "quality_not_set": "மணிக்கான பெயரளவு எரிபொருள் அமைக்கப்படவில்லை"
   },
   "source": {
     "equipment": "இந்த இயந்திரம்",
@@ -98,10 +100,12 @@
     "nominalSetBy": "பெயரளவை அமைத்தது: {{source}}",
     "breakdownsInWindow": "இந்தச் சாளரத்தில் பழுதுகள்",
     "noneRecorded": "எதுவும் பதிவாகவில்லை.",
-    "ongoing": "நடப்பில்"
+    "ongoing": "நடப்பில்",
+    "waitingOn": "OEE-க்கு முதலில் {{factors}} தேவை"
   },
   "detail": {
-    "availabilityNotAvailable": "கிடைப்புத்தன்மை தகவல் இல்லை"
+    "availabilityNotAvailable": "கிடைப்புத்தன்மை தகவல் இல்லை",
+    "lastDays": "கடந்த {{count}} நாட்கள்"
   },
   "shifts": {
     "title": "ஷிஃப்ட் வரலாறு",

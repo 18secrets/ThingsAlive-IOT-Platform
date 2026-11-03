@@ -148,7 +148,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
               />
   );
   const statusBadge = (s: Staff) => (
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[s.status]}`}>
                 {t(`staff.status.${s.status}`, { defaultValue: s.status })}
               </span>
   );
@@ -158,7 +158,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                 <button
                   onClick={() => handleResend(s)}
                   disabled={busyId === s.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 transition-colors cursor-pointer"
                   title={t('staff.resendHint')}
                 >
                   <RotateCw className={`w-3 h-3 ${busyId === s.id ? 'animate-spin' : ''}`} />
@@ -176,7 +176,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                 </button>
               )}
               {s.suspendedReason && s.status === 'suspended' && (
-                <span className="text-[10px] text-slate-400 truncate max-w-[140px]" title={s.suspendedReason}>
+                <span className="text-[0.6875rem] text-slate-400 truncate max-w-[140px]" title={s.suspendedReason}>
                   {s.suspendedReason}
                 </span>
               )}
@@ -278,14 +278,14 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={s.fullName}>
                   {s.fullName}
                 </h4>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate">
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5 truncate">
                   <Mail className="w-3 h-3 shrink-0" />
                   <span className="truncate">{s.email}</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">{t('translation:settings.role')}</label>
+                <label className="block text-[0.6875rem] font-semibold text-slate-400 uppercase mb-1">{t('translation:settings.role')}</label>
                 {rolePicker(s, true)}
               </div>
 
