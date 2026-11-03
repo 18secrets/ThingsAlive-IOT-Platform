@@ -39,8 +39,9 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
       if (z.kind === 'road' && ((z.progressPct ?? 100) >= 100 || (z.progressPct ?? 0) <= 0)) return;
       const r = rng(zi * 977 + Math.round(z.x * 13 + z.z * 7) + 11);
       const dense = ['building', 'quarry', 'work_area', 'batching_plant', 'road', 'substation', 'quay'].includes(z.kind);
-      const per = dense ? 40 : z.kind === 'gate' ? 400 : 160;
-      const n = Math.max(2, Math.min(dense ? 140 : 12, Math.round((z.widthM * z.depthM) / per)));
+      // Calm enough to read: a crew at each front, not confetti across the site.
+      const per = dense ? 70 : z.kind === 'gate' ? 400 : 260;
+      const n = Math.max(2, Math.min(dense ? 60 : 6, Math.round((z.widthM * z.depthM) / per)));
       // On a building the crew is up on the slab being cast, inside its footprint.
       const onSlab = z.kind === 'building';
       const y = onSlab ? (z.floors ?? 4) * 3.3 * ((z.progressPct ?? 0) / 100) + 0.3 : 0;
@@ -116,7 +117,8 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
  * alongside, and ship-to-shore cranes working it — a trolley running out over the ship
  * and back with a box. Scenery for the demo, outside the site and labelled with it.
  */
-const PORT_BOX = ['#dc2626', '#2563eb', '#16a34a', '#f59e0b', '#0891b2', '#7c3aed', '#ea580c', '#475569'];
+// Weathered shipping colours, not a rainbow: the eye should go to the work, not the boxes.
+const PORT_BOX = ['#9f4a3c', '#3f6e8f', '#5f7f5a', '#b8893f', '#4f7c86', '#7a8691', '#8a5a44', '#56606b'];
 export const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) => {
   const edge = -depthM / 2;
   const quayD = 28;
@@ -197,12 +199,12 @@ export const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, dep
             {[[-5, 0], [5, 0], [-5, 14], [5, 14]].map(([lx, lz], k) => (
               <mesh key={k} position={[lx, 14, lz]} castShadow>
                 <boxGeometry args={[1, 28, 1]} />
-                <meshStandardMaterial color="#dc2626" />
+                <meshStandardMaterial color="#c2410c" />
               </mesh>
             ))}
             <mesh position={[0, 28.5, -10]} castShadow>
               <boxGeometry args={[11, 1.4, 52]} />
-              <meshStandardMaterial color="#dc2626" />
+              <meshStandardMaterial color="#c2410c" />
             </mesh>
             <group position={[0, 27.6, 0]} ref={(g) => { if (g) trolleys.current[i] = g; }}>
               <mesh>
