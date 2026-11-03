@@ -18,13 +18,14 @@ export const STATUS_COLOUR: Record<SiteTwinStatus, string> = {
   alert: '#e11d48', live: '#16a34a', no_data: '#f59e0b', blocked: '#7c3aed', not_configured: '#94a3b8',
 };
 
-/** Ground colour under each kind. A structure's pad is drawn paler than an area. */
+/** Ground colour under each kind: muted earth and stone tones, one family, so the zones
+ * read as parts of one site rather than a set of competing swatches. */
 export const ZONE_COLOUR: Record<SiteZoneKind, string> = {
-  work_area: '#86efac', material_yard: '#fcd34d', parking: '#c4b5fd', restricted: '#fca5a5',
-  head_office: '#bfdbfe', site_office: '#a5f3fc', batching_plant: '#e7e5e4', maintenance_workshop: '#e2e8f0',
-  gate: '#cbd5e1', road: '#a8a29e', building: '#e7e5e4', substation: '#d4d4d8', quay: '#bae6fd',
-  container_yard: '#e2e8f0', quay_crane_berth: '#bae6fd',
-  generator_room: '#e5e7eb', compressor_house: '#e5e7eb', quarry: '#d6a77a',
+  work_area: '#a7c4a0', material_yard: '#d9c48f', parking: '#b9bfcc', restricted: '#d9a3a3',
+  head_office: '#cdd5df', site_office: '#cdd5df', batching_plant: '#d4d0c8', maintenance_workshop: '#d4d0c8',
+  gate: '#cdd5df', road: '#a8a29e', building: '#d4d0c8', substation: '#cdd5df', quay: '#c9d6df',
+  container_yard: '#d4d0c8', quay_crane_berth: '#c9d6df',
+  generator_room: '#d4d0c8', compressor_house: '#d4d0c8', quarry: '#c9a57e',
 };
 
 export interface SceneMachine {
@@ -82,7 +83,7 @@ function useGroundLabel(text: string) {
     const w = Math.ceil(ctx.measureText(text).width) + 48;
     canvas.width = w; canvas.height = 96;
     ctx.font = font;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.fillStyle = 'rgba(51, 65, 85, 0.78)';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     ctx.fillText(text, w / 2, 50);
@@ -98,7 +99,8 @@ function useGroundLabel(text: string) {
 export const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
   const { texture, aspect } = useGroundLabel(text.toUpperCase());
   // About 5 m tall letters, so a zone name reads at the overview, shrunk to fit its zone.
-  const width = Math.min(maxWidth, aspect * 5);
+  // One letter height everywhere (about 4.5 m), shrunk only when the zone is too narrow.
+  const width = Math.min(maxWidth, aspect * 4.5);
   return (
     <mesh position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
       <planeGeometry args={[width, width / aspect]} />
@@ -116,9 +118,17 @@ export const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolea
         receiveShadow
         onPointerDown={editing ? (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); onGrab({ kind: 'zone', index }); } : undefined}
       >
-        <boxGeometry args={[zone.widthM, area ? 0.2 : 0.08, zone.depthM]} />
-        <meshStandardMaterial color={ZONE_COLOUR[zone.kind]} transparent opacity={area ? 0.85 : 0.7} />
+        <boxGeometry args={[zone.widthM, area ? 0.1 : 0.08, zone.depthM]} />
+        <meshStandardMaterial color={ZONE_COLOUR[zone.kind]} transparent opacity={area ? 0.55 : 0.75} roughness={1} />
       </mesh>
+      {/* A painted boundary, as on a real site plan: the zone reads by its edge, not by
+          a slab of colour. Roads carry their own markings. */}
+      {zone.kind !== 'road' && (
+        <lineSegments position={[zone.x, area ? 0.2 : 0.14, zone.z]}>
+          <edgesGeometry args={[new THREE.BoxGeometry(zone.widthM, 0.01, zone.depthM)]} />
+          <lineBasicMaterial color="#f8fafc" transparent opacity={0.9} />
+        </lineSegments>
+      )}
       {zone.kind === 'restricted' && (
         <lineSegments position={[zone.x, 0.24, zone.z]}>
           <edgesGeometry args={[new THREE.BoxGeometry(zone.widthM, 0.02, zone.depthM)]} />
@@ -164,7 +174,7 @@ export const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick
     let seed = Math.round(widthM * 7 + depthM * 13);
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const ring = Math.max(widthM, depthM) * 0.45;
-    for (let i = 0; i < 90; i += 1) {
+    for (let i = 0; i < 44; i += 1) {
       const side = i % 4;
       const along = rnd() - 0.5;
       const out_ = 8 + rnd() * ring;
@@ -479,7 +489,11 @@ export const Machine: React.FC<{
         {motion === 'haul' && <Load visible={loaded} />}
         {simulated && working && isCrane && <CraneLift seed={phase} />}
       </group>
-      <StatusRing status={m.status} radius={radius} selected={selected} placed={m.placed} />
+      {/* A ring only where it says something: trouble, or the machine you are looking at.
+          Sixty green rings round sixty healthy machines is what made the site look busy. */}
+      {(selected || hovered || m.status !== 'live' || !m.placed) && (
+        <StatusRing status={m.status} radius={radius} selected={selected || hovered} placed={m.placed} />
+      )}
       {working && motion === 'exhaust' && <Exhaust height={3.2} seed={phase} />}
       {(showLabel || selected || hovered) && (
         // Inline styles, not utility classes: the label must read the same wherever the
@@ -598,10 +612,13 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       {/* Sky, and haze toward the horizon so the grass fades out instead of ending. */}
       <color attach="background" args={['#cfe3f3']} />
       <fog attach="fog" args={['#cfe3f3', span * 1.6, span * 4.5]} />
-      <hemisphereLight args={['#f8fbff', '#a3b18a', 0.85]} />
+      <hemisphereLight args={['#eef4fb', '#b5a98f', 0.75]} />
+      {/* A cool fill from the north-west, so the shaded sides keep their detail. */}
+      <directionalLight position={[-span * 0.5, span * 0.4, -span * 0.4]} intensity={0.35} color="#dbeafe" />
       <directionalLight
         position={[span * 0.4, span * 0.8, span * 0.3]}
-        intensity={1.6}
+        intensity={1.25}
+        color="#fff4e0"
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-span * 0.7}
@@ -618,10 +635,9 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       {machines.some((m) => !m.placed) && (
         <GroundLabel text="Not yet placed" x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
       )}
-      {/* One line per distinct route: a fleet of ten on one route is one road, not ten. */}
-      {!editing && [...new Map(machines.filter((m) => m.placed && m.path.length > 1)
-        .map((m) => [m.path.slice(1).map((p) => p.join(',')).join(';'), m])).values()].map((m) => (
-          <RoutePath key={`route-${m.key}`} path={m.path} active={simulated || m.activity === 'productive'} />
+      {/* Only the selected machine's route: sixty dashed lines over a site is noise. */}
+      {!editing && machines.filter((m) => m.key === selectedKey && m.placed && m.path.length > 1).map((m) => (
+        <RoutePath key={`route-${m.key}`} path={m.path} active />
       ))}
       {machines.map((m, i) => {
         const model = m.classSlug ? classModels[m.classSlug] : null;
@@ -649,7 +665,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
 };
 
 const SiteTwinCanvas: React.FC<SiteTwinSceneProps> = (props) => (
-  <Canvas shadows camera={{ fov: FOV, near: 0.5, far: 20000, position: [150, 150, 150] }} dpr={[1, 2]}>
+  <Canvas shadows="soft" camera={{ fov: FOV, near: 0.5, far: 20000, position: [150, 150, 150] }} dpr={[1, 2]}>
     <SiteTwinScene {...props} />
   </Canvas>
 );
