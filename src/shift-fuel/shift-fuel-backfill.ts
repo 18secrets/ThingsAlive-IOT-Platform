@@ -1,4 +1,5 @@
 import { DataSource } from 'typeorm';
+import { runTenantSpanning } from '../scope/tenant-session';
 import { addDays, forecastShift, HISTORY_DAYS, SHIFT_FUEL_METHOD, shiftEnd, ShiftNo, ShiftObservation } from './shift-fuel-forecast';
 
 export interface BackfillSummary {
@@ -20,8 +21,9 @@ export interface BackfillSummary {
 export async function backfillShiftFuelForecasts(
   owner: DataSource, range: { from: string; to: string }, now: Date = new Date(),
 ): Promise<BackfillSummary> {
-  return owner.transaction(async (m) => {
-    await m.query(`SELECT set_config('ta.bypass', 'on', true)`);
+  // Every account at once, as the hourly sync places equipment numbers: the producer of
+  // these rows, not a reader of any one account's.
+  return runTenantSpanning(owner, 'shift fuel: back-calculating past forecasts', async (m) => {
     const targets: { tenant_id: string; source_system: string; external_id: string; sdate: string; shift: ShiftNo }[] = await m.query(
       `SELECT a."tenant_id", a."source_system", a."external_id", a."sdate"::text AS sdate, a."shift"::int AS shift
          FROM "legacy_shift_metric" a
