@@ -352,7 +352,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           machines, and a picker holds them all without running off the card. */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
         <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          {t('siteTwin.place', { defaultValue: 'Place' })}
+          {t('siteTwin.placePicker', { defaultValue: 'Place' })}
           <select
             value={focusMachine ? '' : String(focusIndex)}
             onChange={(e) => { setFocusMachine(null); setSelected(null); setFocusIndex(Number(e.target.value)); }}

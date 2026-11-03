@@ -482,7 +482,7 @@
     "noMachines": "No machines are assigned to this site yet, so its digital twin has nothing to show. Assign equipment to the site and it appears here.",
     "title": "Site digital twin",
     "onSite": "{{n}} machines on site",
-    "overview": "Overview",
+    "overview": "Whole site",
     "edit": "Edit layout",
     "saving": "Saving…",
     "save": "Save layout",
@@ -498,7 +498,7 @@
     "labels": "Show or hide labels",
     "tour": "Rotate slowly",
     "fullscreen": "Full screen",
-    "routeNote": "Dashed line: illustrative route, travelled only while the machine’s own data says it is working. Not GPS.",
+    "routeNote": "Dashed line: illustrative route, travelled while the machine’s data is live and nothing says it is stopped. Not GPS.",
     "dragHint": "Drag a machine or a zone to move it.",
     "openAlerts": "{{n}} open alerts",
     "breakdown": "Breakdown",
@@ -560,6 +560,31 @@
       "running-unclassified": "Engine on",
       "off": "Engine off",
       "unknown": "No activity data"
-    }
+    },
+    "placePicker": "Place",
+    "equipment": "Equipment",
+    "allEquipment": "All equipment",
+    "demoTipper": "Demo tipper {{n}} (simulated)",
+    "simulated": "Demo · simulated movement",
+    "simulatedHint": "Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform."
+  },
+  "portTwin": {
+    "title": "Port overview",
+    "open": "Port overview",
+    "subtitle": "Every site, one digital twin",
+    "loadFailed": "The port overview could not be loaded.",
+    "hint": "Click a site to open it.",
+    "sites": "Sites",
+    "machines": "Machines",
+    "live": "Live",
+    "alerts": "Alerts",
+    "workforce": "Workforce (simulated)",
+    "site": "Site",
+    "machinesShort": "machines",
+    "workersShort": "workers",
+    "allSites": "All sites — the whole port",
+    "openSite": "Open site page →",
+    "empty": "No site has been laid out yet. Open a site and use \"Auto-arrange from equipment\".",
+    "notLaidOut": "Not drawn yet (no layout):"
   }
 }
