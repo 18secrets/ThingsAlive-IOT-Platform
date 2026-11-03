@@ -1,9 +1,10 @@
 import { DataSource } from 'typeorm';
-import { RequestScope } from '../src/auth/types/request-scope';
-import { SiteTwinService } from '../src/site-twin/site-twin.service';
+import { RequestScope } from '../auth/types/request-scope';
+import { SiteTwinService } from './site-twin.service';
 
 /**
- * The demo sites' digital twins, for `stream-demo-telemetry.ts`.
+ * The demo sites' digital twins, for the demo streams: `seed-demo --top-up --follow`
+ * (what Railway's demo-stream runs) and `scripts/stream-demo-telemetry.ts`.
  *
  * Demo only. Each demo site with machines gets its layout once, if nobody has laid it
  * out yet — composed from the machines assigned to it and their categories, so the
@@ -50,9 +51,15 @@ export async function ensureSiteTwinDemo(ds: DataSource, tenantId: string): Prom
   }
 }
 
-/** One tick of site life: engine load for the reporting machines, progress on what is
- * being built. */
-export async function tickSiteTwinDemo(ds: DataSource, tenantId: string, now: Date): Promise<void> {
+/** One tick of site life: progress on what is being built and, with `writeLoad`, engine
+ * load for the reporting machines. `seed-demo`'s top-up already writes engine load, so it
+ * passes false; a second writer would put two values on one machine's minute. */
+export async function tickSiteTwinDemo(ds: DataSource, tenantId: string, now: Date, opts: { writeLoad?: boolean } = {}): Promise<void> {
+  if (opts.writeLoad ?? true) await writeEngineLoad(ds, tenantId, now);
+  await advanceProgress(ds, tenantId, now);
+}
+
+async function writeEngineLoad(ds: DataSource, tenantId: string, now: Date): Promise<void> {
   // Engine load through each machine's own bound device, only for machines that
   // reported their engine running in the last two minutes — a machine that has gone
   // quiet stays quiet rather than coming back to life on load alone.
@@ -83,6 +90,9 @@ export async function tickSiteTwinDemo(ds: DataSource, tenantId: string, now: Da
     );
   }
 
+}
+
+async function advanceProgress(ds: DataSource, tenantId: string, now: Date): Promise<void> {
   const twins = new SiteTwinService(ds);
   const scope = scopeFor(tenantId);
   const plants: { id: string; code: string }[] = await ds.query(
