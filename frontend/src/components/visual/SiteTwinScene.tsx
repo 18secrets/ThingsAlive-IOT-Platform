@@ -4,6 +4,7 @@ import { CameraControls, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { SiteTwin, SiteTwinActivity, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
 import { AREA_KINDS, Structure } from './SiteStructures';
+import SiteLife from './SiteLife';
 
 /**
  * The site's digital twin, drawn. Loaded lazily (SiteTwinCard), so three.js is fetched
@@ -572,6 +573,8 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       />
       <SiteGround widthM={extent.widthM} depthM={extent.depthM} onEmptyClick={() => onSelect(null)} />
       {zones.map((z, i) => <Zone key={z.id ?? i} zone={z} index={i} editing={editing} onGrab={grab} />)}
+      {/* People and work, demo only: nothing tracks a worker or a crane hook. */}
+      {simulated && !editing && <SiteLife zones={zones} />}
       {machines.some((m) => !m.placed) && (
         <GroundLabel text="Not yet placed" x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
       )}
