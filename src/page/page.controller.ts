@@ -32,4 +32,11 @@ export class PageController {
   sitePage(@CurrentScope() scope: RequestScope, @Param('plantId', ParseUUIDPipe) plantId: string) {
     return this.pages.sitePage(scope, plantId);
   }
+
+  @Get('sites/:plantId/twin')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "One site's digital twin: layout, every machine with its live status, one model per class" })
+  siteTwin(@CurrentScope() scope: RequestScope, @Param('plantId', ParseUUIDPipe) plantId: string) {
+    return this.pages.siteTwin(scope, plantId);
+  }
 }

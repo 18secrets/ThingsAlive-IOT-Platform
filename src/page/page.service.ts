@@ -35,6 +35,8 @@ import { classifyFreshness } from '../signal-binding/services/signal-freshness';
 import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
+import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
 import { isUnobserved, observeSignals } from '../rec-engine/observe';
@@ -68,6 +70,37 @@ export interface SitePage {
   site: { plantId: string; code: string; name: string; siteClass: { slug: string; version: number } };
   layout: { fallback: boolean };
   widgets: PageWidget[];
+}
+
+/**
+ * What the site twin draws a machine as. An open alert outranks everything; otherwise
+ * it is the machine's worst signal readiness, renamed for a legend — `no_data` is
+ * stale or silent, `blocked` is a required sensor not bound. Never "running": nothing
+ * here knows the engine is on, and a twin that guessed would look healthy when it is not.
+ */
+export type TwinMachineStatus = 'alert' | 'live' | 'no_data' | 'blocked' | 'not_configured';
+
+export interface SiteTwinView {
+  site: { plantId: string; code: string; name: string; address: string | null };
+  /** False until somebody saves a layout: the extent is the default and nobody is placed. */
+  saved: boolean;
+  /** Send this back as `expectedVersion` when saving. */
+  version: number;
+  extent: { widthM: number; depthM: number };
+  zones: ZoneView[];
+  /** One per class on the site; null where the class has no confirmed model. */
+  classModels: Record<string, { modelUrl: string; bounds: ReturnType<typeof boundsOf> } | null>;
+  machines: {
+    sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
+    placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
+    readiness: PageReadiness; openAlerts: number; status: TwinMachineStatus;
+    /** What the machine is doing now, from its own engine, utilization and load signals
+     * (duty-cycle's `classify`), read no further back than one sample may speak for. */
+    activity: DutyState;
+    /** The key of the zone it stands in, or null when unplaced or outside every zone. */
+    engagedAt: string | null;
+  }[];
+  summary: { total: number; placed: number } & Record<TwinMachineStatus, number>;
 }
 
 /**
@@ -117,6 +150,7 @@ export class PageService {
     private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
     private readonly forecasts: ForecastReader,
+    private readonly twins: SiteTwinService,
   ) {}
 
   // ================================================================ machine page
@@ -594,6 +628,96 @@ export class PageService {
     };
   }
 
+  // ==================================================================== site twin
+
+  /**
+   * The site's digital twin: the saved layout, every machine the caller can see on the
+   * site with its status, and one model per class. The status is the site page's own
+   * readiness and alert count, from the same two batched reads, so the twin and the
+   * machine list cannot disagree about a machine.
+   */
+  async siteTwin(scope: RequestScope, plantId: string, at: Date = new Date()): Promise<SiteTwinView> {
+    const layout = await this.twins.read(scope, plantId);
+    const { machines } = layout;
+    const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
+    const slugs = [...new Set(machines.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))];
+    const [worst, alerts, models, activity] = await Promise.all([
+      this.machineReadiness(scope, machines, at),
+      refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
+      Promise.all(slugs.map(async (slug) => [slug, await this.twinClassModel(scope, slug)] as const)),
+      this.machineActivity(scope, refs, at),
+    ]);
+
+    const rows = machines.map((e, i) => {
+      const k = machineKey(e.sourceSystem, e.externalId);
+      const openAlerts = alerts?.countByMachine.get(k) ?? 0;
+      const readiness = worst[i];
+      const placement = layout.placements.get(k) ?? null;
+      return {
+        sourceSystem: e.sourceSystem, externalId: e.externalId, name: e.name, classSlug: e.equipmentClassSlug,
+        placement, readiness, openAlerts,
+        status: twinStatus(readiness, openAlerts),
+        activity: activity.get(k) ?? 'unknown',
+        engagedAt: placement ? zoneAt(layout.zones, placement.x, placement.z)?.key ?? null : null,
+      };
+    });
+    const summary = { total: rows.length, placed: 0, alert: 0, live: 0, no_data: 0, blocked: 0, not_configured: 0 };
+    for (const r of rows) { summary[r.status] += 1; if (r.placement) summary.placed += 1; }
+
+    return {
+      site: { plantId: layout.plant.id, code: layout.plant.code, name: layout.plant.name, address: layout.plant.address },
+      saved: layout.saved, version: layout.version, extent: layout.extent, zones: layout.zones,
+      classModels: Object.fromEntries(models), machines: rows, summary,
+    };
+  }
+
+  /**
+   * Each machine's duty state now, in one query for the whole site: the newest reading
+   * of each duty signal through the machine's own primary bindings, no older than
+   * `MAX_CARRY_SECONDS` — the longest a sample may speak for in the duty cycle, so the
+   * twin and the utilization report cannot disagree about whether a machine was on.
+   * Nothing recent is `unknown`, never `off`.
+   */
+  private async machineActivity(scope: RequestScope, refs: EquipmentRef[], at: Date): Promise<Map<string, DutyState>> {
+    const result = new Map<string, DutyState>();
+    if (!refs.length) return result;
+    const rows: { source_system: string; external_id: string; role: string; value: number }[] = await withTenantSession(this.ds, scope, (m) => m.query(
+      `SELECT DISTINCT ON (b.source_system, b.external_id, b.measurement_role)
+              b.source_system, b.external_id, b.measurement_role AS role, r.value
+         FROM signal_binding_version b
+         JOIN unnest($2::text[], $3::text[]) AS e(source_system, external_id)
+           ON b.source_system = e.source_system AND b.external_id = e.external_id
+         JOIN telemetry_reading r
+           ON r.tenant_id = b.tenant_id AND r.imei = b.imei AND r.signal = b.signal_key
+          AND r.source_timestamp >= b.valid_from AND (b.valid_to IS NULL OR r.source_timestamp < b.valid_to)
+          AND r.source_timestamp >= $5 AND r.source_timestamp <= $6
+        WHERE b.tenant_id = $1 AND b.measurement_role = ANY($4::text[]) AND b.is_primary AND b.status = 'active'
+          AND b.imei IS NOT NULL AND b.component_id = ''
+        ORDER BY b.source_system, b.external_id, b.measurement_role, r.source_timestamp DESC`,
+      [scope.tenantId, refs.map((r) => r.sourceSystem), refs.map((r) => r.externalId), [...DUTY_SIGNALS],
+        new Date(at.getTime() - MAX_CARRY_SECONDS * 1000), at],
+    ));
+    const snapshots = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+      const k = machineKey(r.source_system, r.external_id);
+      if (!snapshots.has(k)) snapshots.set(k, new Map());
+      snapshots.get(k)!.set(r.role, Number(r.value));
+    }
+    for (const ref of refs) {
+      const k = machineKey(ref.sourceSystem, ref.externalId);
+      result.set(k, classify(snapshots.get(k) ?? new Map(), DEFAULT_LOAD_THRESHOLD));
+    }
+    return result;
+  }
+
+  /** The class's confirmed model, or null — the machine-page twin's rule (QTWIN1): no
+   * model, an unconfirmed upload and no storage all draw the same stand-in block. */
+  private async twinClassModel(scope: RequestScope, slug: string) {
+    const source = await this.modelSource(scope, slug);
+    if (!source?.model?.assetKey || !this.storage.configured) return null;
+    return { modelUrl: await this.storage.readUrl(source.model.assetKey), bounds: boundsOf(source.model) };
+  }
+
   /** The signals this machine's class version declares a forecast for (QREC0a) — the
    * forecast pass's own definition (QML1 §3), so the two cannot disagree. */
   private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
@@ -641,6 +765,16 @@ export class PageService {
       result.set(key, machines.map((machine, i) => ({ machine, env: perMachine[i].get(key) ?? null })));
     }
     return result;
+  }
+}
+
+export function twinStatus(readiness: PageReadiness, openAlerts: number): TwinMachineStatus {
+  if (openAlerts > 0) return 'alert';
+  switch (readiness) {
+    case 'ready': return 'live';
+    case 'not_available': return 'no_data';
+    case 'blocked': return 'blocked';
+    default: return 'not_configured';
   }
 }
 
