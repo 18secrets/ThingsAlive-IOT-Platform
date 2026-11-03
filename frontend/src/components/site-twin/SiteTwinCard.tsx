@@ -391,7 +391,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
       <div className={`relative flex ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
         {/* ------------------------------------------------------------- canvas */}
-        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[560px]'}`}>
+        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[640px]'}`}>
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
             <SiteTwinScene
               extent={extent} zones={zones} machines={machines} classModels={twin.classModels}
@@ -427,7 +427,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             )}
             {!draft && twin.machines.some((m) => m.placement && m.placement.route.length) && (
               <div className="text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-                {t('siteTwin.routeNote', { defaultValue: 'Dashed line: illustrative route, travelled only while the machine’s own data says it is working. Not GPS.' })}
+                {t('siteTwin.routeNote', { defaultValue: 'Dashed line: illustrative route, travelled while the machine’s data is live and nothing says it is stopped. Not GPS.' })}
               </div>
             )}
             {draft && <div className="text-sky-700 dark:text-sky-300 pt-1">{t('siteTwin.dragHint', { defaultValue: 'Drag a machine or a zone to move it.' })}</div>}
@@ -505,7 +505,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
         {/* ------------------------------------------------------- layout editor */}
         {draft && (
-          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[560px]'}`}>
+          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[640px]'}`}>
             <button
               disabled={composing} onClick={() => void compose()}
               className="w-full px-3 py-2 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold disabled:opacity-60"
