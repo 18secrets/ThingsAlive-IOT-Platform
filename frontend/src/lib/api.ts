@@ -2281,6 +2281,7 @@ export const SITE_AREA_KINDS = ['work_area', 'material_yard', 'parking', 'restri
 export const SITE_STRUCTURE_KINDS = [
   'head_office', 'site_office', 'batching_plant', 'maintenance_workshop', 'gate', 'road',
   'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth',
+  'generator_room', 'compressor_house', 'quarry',
 ] as const;
 /** The legend a zone is drawn from. The API refuses any other kind. */
 export const SITE_ZONE_KINDS = [...SITE_AREA_KINDS, ...SITE_STRUCTURE_KINDS] as const;
@@ -2313,6 +2314,8 @@ export interface SiteTwinMachine {
   activity: SiteTwinActivity;
   /** Key of the zone it stands in. */
   engagedAt: string | null;
+  /** A breakdown has started and not ended. */
+  breakdown: boolean;
 }
 
 /** A site's digital twin (`GET /sites/:plantId/twin`, `catalog.read`). */
@@ -2328,6 +2331,8 @@ export interface SiteTwin {
   classModels: Record<string, { modelUrl: string; bounds: ModelBounds | null } | null>;
   machines: SiteTwinMachine[];
   summary: { total: number; placed: number } & Record<SiteTwinStatus, number>;
+  /** Saved structures not drawn: no machine assigned here backs them any more. */
+  hiddenZones: string[];
 }
 
 export interface SiteTwinLayoutInput {
@@ -2339,6 +2344,14 @@ export interface SiteTwinLayoutInput {
 
 export function apiGetSiteTwin(plantId: string): Promise<SiteTwin> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin`);
+}
+
+/** A first layout composed from the machines assigned to the site and their
+ *  categories (`GET /sites/:plantId/twin/proposal`). Not saved: the editor starts
+ *  from it. Equipment-backed structures (generator room, quarry, batching plant…)
+ *  appear only when such a machine is assigned. */
+export function apiGetSiteTwinProposal(plantId: string): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`);
 }
 
 /** Replaces the whole layout (`equipment.write`) and answers with the fresh twin. */

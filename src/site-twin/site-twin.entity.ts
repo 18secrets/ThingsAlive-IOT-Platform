@@ -6,6 +6,7 @@ export const AREA_KINDS = ['work_area', 'material_yard', 'parking', 'restricted'
 export const STRUCTURE_KINDS = [
   'head_office', 'site_office', 'batching_plant', 'maintenance_workshop', 'gate', 'road',
   'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth',
+  'generator_room', 'compressor_house', 'quarry',
 ] as const;
 /** The database holds the same list (`ck_site_twin_zone_kind`). */
 export const ZONE_KINDS = [...AREA_KINDS, ...STRUCTURE_KINDS] as const;
@@ -13,8 +14,22 @@ export type ZoneKind = (typeof ZONE_KINDS)[number];
 /** What is built in stages, and so can report progress (`ck_site_twin_zone_progress`). */
 export const PROGRESS_KINDS: readonly ZoneKind[] = ['building', 'road', 'substation', 'quay'];
 
+/**
+ * Kinds that exist only because a machine does, and the machines that back each: a test
+ * on the tenant's class (its category, or its slug where the category does not say).
+ * A batching plant needs concrete plant, a generator room a generator. Everything else —
+ * gate, offices, roads, yards, the workshop — is the site's own infrastructure.
+ */
+export const EQUIPMENT_BACKED: Partial<Record<ZoneKind, { needs: string; test: RegExp }>> = {
+  generator_room: { needs: 'a generator', test: /power|generat|genset/i },
+  compressor_house: { needs: 'a compressor', test: /pneumatic|compress/i },
+  quarry: { needs: 'an excavator or rock breaker', test: /excavat|earthmov|breaker/i },
+  batching_plant: { needs: 'concrete plant', test: /concrete|batching|mixer/i },
+  quay_crane_berth: { needs: 'a crane', test: /crane|lifting/i },
+};
+
 /** A site's layout header: its extent in metres and the layout's optimistic-lock version.
- * Migration `1762100000000-SiteTwin` has the rules. */
+ * Migration `1763300000000-SiteTwin` has the rules. */
 @Entity('site_twin')
 export class SiteTwin {
   @PrimaryColumn({ name: 'tenant_id', type: 'text' })

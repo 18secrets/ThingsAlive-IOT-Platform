@@ -17,14 +17,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * The editor will not send those, but the next client of this table might not be the
  * editor.
  */
-export class SiteTwin1762100000000 implements MigrationInterface {
-  name = 'SiteTwin1762100000000';
+export class SiteTwin1763300000000 implements MigrationInterface {
+  name = 'SiteTwin1763300000000';
 
   public async up(q: QueryRunner): Promise<void> {
-    // `id` is already unique, so this cannot fail on existing rows. It exists so the twin
-    // can reference (tenant_id, id): a single-column FK would let a row in one account
-    // point at another account's site, and RLS would hide that rather than refuse it.
-    await q.query(`ALTER TABLE "plant" ADD CONSTRAINT "uq_plant_tenant_id" UNIQUE ("tenant_id", "id")`);
+    // The twin references the site by (tenant_id, id), through `uq_plant_tenant_id`
+    // (GeofenceZones): a single-column FK would let a row in one account point at
+    // another account's site, and RLS would hide that rather than refuse it.
 
     // --------------------------------------------------------------------- the site
     // One row per site that has ever been laid out. `version` is the layout's optimistic
@@ -53,6 +52,12 @@ export class SiteTwin1762100000000 implements MigrationInterface {
     // a yard) or a structure drawn in 3-D inside that rectangle (an office, a batching
     // plant, a building going up). Both live here because both are "a named part of the
     // site", and a machine is engaged at either.
+    //
+    // Some kinds exist only because of a machine: a generator room houses a generator, a
+    // quarry is worked by excavators. Those are refused on save when no such machine is
+    // assigned to the site, and not drawn once none is — a twin shown to an inspector
+    // must not show plant the site does not have. That rule reads the tenant's class
+    // categories, so it lives in the service (`EQUIPMENT_BACKED`), not here.
     //
     // `key` is the zone's stable name within the site. A save replaces every row, so the
     // uuid changes each time; routes and the API refer to the key instead.
@@ -83,7 +88,8 @@ export class SiteTwin1762100000000 implements MigrationInterface {
         CONSTRAINT "ck_site_twin_zone_kind" CHECK ("kind" IN (
           'work_area', 'material_yard', 'parking', 'restricted',
           'head_office', 'site_office', 'batching_plant', 'maintenance_workshop', 'gate', 'road',
-          'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth')),
+          'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth',
+          'generator_room', 'compressor_house', 'quarry')),
         CONSTRAINT "ck_site_twin_zone_size" CHECK ("width_m" >= 1 AND "depth_m" >= 1),
         -- Progress is what the site reported, so it says when: a percentage with no date
         -- is a claim nobody can check. Only what is built in stages carries one.
@@ -223,6 +229,5 @@ export class SiteTwin1762100000000 implements MigrationInterface {
     await q.query(`DROP FUNCTION IF EXISTS "site_twin_extent_holds"()`);
     await q.query(`DROP FUNCTION IF EXISTS "site_twin_routes_resolve"()`);
     await q.query(`DROP FUNCTION IF EXISTS "site_twin_fits"()`);
-    await q.query(`ALTER TABLE "plant" DROP CONSTRAINT IF EXISTS "uq_plant_tenant_id"`);
   }
 }

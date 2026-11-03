@@ -23,6 +23,7 @@ export const ZONE_COLOUR: Record<SiteZoneKind, string> = {
   head_office: '#bfdbfe', site_office: '#a5f3fc', batching_plant: '#e7e5e4', maintenance_workshop: '#e2e8f0',
   gate: '#cbd5e1', road: '#a8a29e', building: '#e7e5e4', substation: '#d4d4d8', quay: '#bae6fd',
   container_yard: '#e2e8f0', quay_crane_berth: '#bae6fd',
+  generator_room: '#e5e7eb', compressor_house: '#e5e7eb', quarry: '#d6a77a',
 };
 
 export interface SceneMachine {
@@ -38,6 +39,7 @@ export interface SceneMachine {
   path: [number, number][];
   /** Label of the zone it is engaged at. */
   engagedLabel: string | null;
+  breakdown: boolean;
 }
 
 export interface SceneFocus { x: number; z: number; widthM: number; depthM: number }
@@ -269,13 +271,15 @@ function along(path: [number, number][], d: number): { x: number; z: number; dx:
 const Machine: React.FC<{
   m: SceneMachine; modelUrl: string | null; radius: number; showLabel: boolean; selected: boolean;
   editing: boolean; onSelect: (key: string) => void; onGrab: (t: DragTarget) => void;
-}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab }) => {
+  /** 0, 1 or 2: how many steps up its label sits, so neighbours' labels do not stack. */
+  lift: number;
+}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift }) => {
   const outer = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const travelled = useRef(0);
   // Motion follows the machine's own data: it travels its route, or slews in place,
   // only while duty-cycle classifies it as working. Never while the layout is edited.
-  const working = !editing && m.placed && m.activity === 'productive';
+  const working = !editing && m.placed && m.activity === 'productive' && !m.breakdown;
   const travels = working && m.path.length > 1;
   const home = (-m.headingDeg * Math.PI) / 180;
 
@@ -313,7 +317,7 @@ const Machine: React.FC<{
       {(showLabel || selected) && (
         // Inline styles, not utility classes: the label must read the same wherever the
         // scene is mounted, and two short lines never wrap into a third.
-        <Html position={[0, 7, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+        <Html position={[0, 7 + (selected ? 0 : lift * 4), 0]} center zIndexRange={selected ? [30, 25] : [20, 0]} style={{ pointerEvents: 'none' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', whiteSpace: 'nowrap', fontFamily: 'Inter, system-ui, sans-serif' }}>
             <div style={{
               background: selected ? '#0284c7' : 'rgba(255,255,255,0.96)', color: selected ? '#fff' : '#0f172a',
@@ -323,9 +327,13 @@ const Machine: React.FC<{
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: STATUS_COLOUR[m.status], display: 'inline-block' }} />
                 {m.name}
               </div>
-              <div style={{ fontSize: 10, opacity: 0.75 }}>
-                {ACTIVITY_LABEL[m.activity]}{m.engagedLabel ? ` · ${m.engagedLabel}` : ''}
-              </div>
+              {/* At the overview a site of thirty machines is thirty names; what each is
+                  doing and where shows for the one selected, and in the zone strip. */}
+              {selected && (
+                <div style={{ fontSize: 10, opacity: 0.85 }}>
+                  {m.breakdown ? 'Breakdown' : ACTIVITY_LABEL[m.activity]}{m.engagedLabel ? ` · ${m.engagedLabel}` : ''}
+                </div>
+              )}
             </div>
             <span style={{ width: 2, height: 10, background: selected ? '#0284c7' : '#64748b' }} />
           </div>
@@ -441,7 +449,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       {!editing && machines.filter((m) => m.placed && m.path.length > 1).map((m) => (
         <RoutePath key={`route-${m.key}`} path={m.path} active={m.activity === 'productive'} />
       ))}
-      {machines.map((m) => {
+      {machines.map((m, i) => {
         const model = m.classSlug ? classModels[m.classSlug] : null;
         const b = model?.bounds;
         const radius = b ? Math.max(Math.hypot(b.max[0] - b.min[0], b.max[2] - b.min[2]) / 2 + 0.8, 2.5) : 3.6;
@@ -449,7 +457,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
           <Machine
             key={m.key} m={m} modelUrl={model?.modelUrl ?? null} radius={radius}
             showLabel={showLabels} selected={selectedKey === m.key}
-            editing={editing} onSelect={onSelect} onGrab={grab}
+            editing={editing} onSelect={onSelect} onGrab={grab} lift={i % 3}
           />
         );
       })}

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   ApiError, SITE_AREA_KINDS, SITE_PROGRESS_KINDS, SITE_STRUCTURE_KINDS, SiteTwin, SiteTwinActivity, SiteTwinStatus,
-  SiteTwinZone, SiteZoneKind, apiGetSiteTwin, apiMyPermissions, apiSaveSiteTwinLayout,
+  SiteTwinZone, SiteZoneKind, apiGetSiteTwin, apiGetSiteTwinProposal, apiMyPermissions, apiSaveSiteTwinLayout,
 } from '../../lib/api';
 import type { DragTarget, SceneFocus, SceneMachine } from '../visual/SiteTwinScene';
 
@@ -23,12 +23,14 @@ const ZONE_COLOUR: Record<SiteZoneKind, string> = {
   head_office: '#bfdbfe', site_office: '#a5f3fc', batching_plant: '#e7e5e4', maintenance_workshop: '#e2e8f0',
   gate: '#cbd5e1', road: '#a8a29e', building: '#e7e5e4', substation: '#d4d4d8', quay: '#bae6fd',
   container_yard: '#e2e8f0', quay_crane_berth: '#bae6fd',
+  generator_room: '#e5e7eb', compressor_house: '#e5e7eb', quarry: '#d6a77a',
 };
 const ZONE_NAME: Record<SiteZoneKind, string> = {
   work_area: 'Work area', material_yard: 'Material yard', parking: 'Parking', restricted: 'Restricted',
   head_office: 'Head office', site_office: 'Site office', batching_plant: 'Batching plant',
   maintenance_workshop: 'Maintenance workshop', gate: 'Gate', road: 'Road', building: 'Building',
   substation: 'Substation', quay: 'Quay / jetty', container_yard: 'Container yard', quay_crane_berth: 'Quay crane berth',
+  generator_room: 'Generator room', compressor_house: 'Compressor house', quarry: 'Quarry',
 };
 const ACTIVITY_NAME: Record<SiteTwinActivity, string> = {
   productive: 'Working', idle: 'Idling', 'running-unclassified': 'Engine on', off: 'Engine off', unknown: 'No activity data',
@@ -123,6 +125,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         activity: m.activity,
         path: stops.length ? [[x, z] as [number, number], ...stops.map((zn) => [zn.x, zn.z] as [number, number])] : [],
         engagedLabel: m.engagedAt ? byKey.get(m.engagedAt)?.label ?? null : null,
+        breakdown: m.breakdown,
       };
     });
   }, [twin, draft, extent.depthM, zones]);
@@ -158,7 +161,10 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
   const startEdit = () => {
     if (!twin) return;
     const positions = new Map<string, Pos>();
-    for (const m of twin.machines) if (m.placement) positions.set(mkey(m), { ...m.placement, route: [...m.placement.route] });
+    // A route stop the twin no longer draws (its structure lost its machine) would be
+    // refused on save; drop it here rather than there.
+    const keys = new Set(twin.zones.map((z) => z.key));
+    for (const m of twin.machines) if (m.placement) positions.set(mkey(m), { ...m.placement, route: m.placement.route.filter((k) => keys.has(k)) });
     setDraft({ extent: { ...twin.extent }, zones: twin.zones.map((z) => ({ ...z })), positions });
     setSaveError(undefined);
     setAutoRotate(false);
@@ -222,6 +228,23 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     const positions = new Map([...d.positions].map(([k, p]) => [k, { ...p, route: p.route.filter((r) => r !== gone) }]));
     return { ...d, zones: d.zones.filter((_, j) => j !== i), positions };
   });
+  // Start the draft from the site's own machines: the composer puts each at its work
+  // front, adds only the structures an assigned machine needs, and sends anything that
+  // needs a person to the maintenance and breakdown bay.
+  const [composing, setComposing] = useState(false);
+  const compose = async () => {
+    setComposing(true); setSaveError(undefined);
+    try {
+      const p = await apiGetSiteTwinProposal(plantId);
+      const positions = new Map<string, Pos>(p.placements.map((pl) => [`${pl.sourceSystem}/${pl.externalId}`, { x: pl.x, z: pl.z, headingDeg: pl.headingDeg, route: pl.route ?? [] }]));
+      setDraft({ extent: p.extent, zones: p.zones.map((z) => ({ ...z })), positions });
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : t('siteTwin.composeFailed', { defaultValue: 'A layout could not be composed.' }));
+    } finally {
+      setComposing(false);
+    }
+  };
+
   const newKey = (zs: SiteTwinZone[]) => {
     let n = zs.length + 1;
     while (zs.some((z) => z.key === `zone-${n}`)) n += 1;
@@ -241,6 +264,17 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     );
   }
   if (!twin) return <div className="h-[520px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+
+  // Nothing is assigned here: there is no site to draw, and a yard of offices would be
+  // a picture of plant this site does not have.
+  if (!twin.machines.length && !twin.zones.length) {
+    return (
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-5 text-sm text-slate-500 flex items-center gap-2">
+        <Box className="w-4 h-4 text-slate-400" />
+        {t('siteTwin.noMachines', { defaultValue: 'No machines are assigned to this site yet, so its digital twin has nothing to show. Assign equipment to the site and it appears here.' })}
+      </div>
+    );
+  }
 
   const sel = selected ? twin.machines.find((m) => mkey(m) === selected) ?? null : null;
   const selPlaced = sel ? (draft ? draft.positions.has(mkey(sel)) : !!sel.placement) : false;
@@ -414,8 +448,8 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
                 {sel.openAlerts > 0 && <span className="text-slate-500 font-normal">· {t('siteTwin.openAlerts', { defaultValue: '{{n}} open alerts', n: sel.openAlerts })}</span>}
               </div>
               <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <span className="w-2 h-2 rounded-full" style={{ background: ACTIVITY_COLOUR[sel.activity] }} />
-                {activityLabel(sel.activity)}
+                <span className="w-2 h-2 rounded-full" style={{ background: sel.breakdown ? '#e11d48' : ACTIVITY_COLOUR[sel.activity] }} />
+                {sel.breakdown ? t('siteTwin.breakdown', { defaultValue: 'Breakdown' }) : activityLabel(sel.activity)}
                 {sel.engagedAt && <span>· {t('siteTwin.engagedAt', { defaultValue: 'at {{zone}}', zone: zones.find((z) => z.key === sel.engagedAt)?.label ?? sel.engagedAt })}</span>}
               </div>
               {draft && selPlaced && (() => {
@@ -472,6 +506,15 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         {/* ------------------------------------------------------- layout editor */}
         {draft && (
           <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[560px]'}`}>
+            <button
+              disabled={composing} onClick={() => void compose()}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold disabled:opacity-60"
+            >
+              {composing ? t('siteTwin.composing', { defaultValue: 'Composing…' }) : t('siteTwin.compose', { defaultValue: 'Auto-arrange from equipment' })}
+            </button>
+            <p className="text-slate-500 -mt-1">
+              {t('siteTwin.composeHint', { defaultValue: 'Lays the site out from the machines assigned to it: only the structures they need, and anything needing attention in the breakdown bay. Replaces this draft; nothing is saved until you save.' })}
+            </p>
             <div>
               <div className="font-semibold text-slate-800 dark:text-slate-100 mb-1.5">{t('siteTwin.siteSize', { defaultValue: 'Site size (metres)' })}</div>
               <div className="grid grid-cols-2 gap-2">

@@ -312,6 +312,66 @@ const QuayCrane: React.FC<{ w: number; d: number }> = ({ w, d }) => {
   );
 };
 
+/** The generator room: a block room the machine stands beside, with louvres and an
+ * exhaust stack, and a cable trench out towards the site — there is no grid here. */
+const GeneratorRoom: React.FC<{ w: number; d: number }> = ({ w, d }) => (
+  <group>
+    <B p={[-w * 0.22, 2, -d * 0.1]} s={[w * 0.45, 4, d * 0.6]} c="#e5e7eb" />
+    <B p={[-w * 0.22, 4.1, -d * 0.1]} s={[w * 0.48, 0.25, d * 0.64]} c="#475569" />
+    {[0, 1, 2].map((i) => (
+      <B key={i} p={[-w * 0.22 - w * 0.12 + i * w * 0.12, 2.2, d * 0.2 + 0.02]} s={[w * 0.08, 1.4, 0.06]} c="#64748b" cast={false} />
+    ))}
+    <Cyl p={[-w * 0.38, 5.5, -d * 0.25]} r={0.35} h={3} c="#1f2937" />
+    <B p={[0, 0.08, d * 0.42]} s={[w * 0.95, 0.06, 0.6]} c="#78716c" cast={false} />
+    <B p={[w * 0.2, 0.5, -d * 0.3]} s={[2, 1, 1.2]} c="#dc2626" />
+  </group>
+);
+
+/** The compressor house: an open shed on posts, so the compressor inside is visible. */
+const CompressorHouse: React.FC<{ w: number; d: number }> = ({ w, d }) => {
+  const h = 4.2;
+  return (
+    <group>
+      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], i) => (
+        <B key={i} p={[(a * w * 0.42), h / 2, (b * d * 0.4)]} s={[0.3, h, 0.3]} c="#475569" />
+      ))}
+      <mesh position={[0, h + 0.3, 0]} rotation={[0, 0, 0.08]} castShadow>
+        <boxGeometry args={[w * 0.92, 0.15, d * 0.88]} />
+        <meshStandardMaterial color="#0f766e" />
+      </mesh>
+      <B p={[0, h / 2, -d * 0.4]} s={[w * 0.84, h, 0.2]} c="#cbd5e1" />
+    </group>
+  );
+};
+
+/** A quarry: a pit cut in benches, boulder piles at the face and a heap of broken
+ * stone. The machines breaking it are the excavators placed here, not drawn by this. */
+const Quarry: React.FC<{ w: number; d: number; seed: number }> = ({ w, d, seed }) => {
+  const boulders = useMemo(() => Array.from({ length: 14 }, (_, i) => {
+    const a = ((seed >> (i % 20)) % 100) / 100;
+    const b = ((seed * (i + 3)) % 97) / 97;
+    return { x: -w * 0.4 + a * w * 0.8, z: -d * 0.45 + b * d * 0.25, r: 0.6 + ((i * 7 + seed) % 5) * 0.25 };
+  }), [w, d, seed]);
+  return (
+    <group>
+      {/* Benches stepping up from the pit floor to the back wall. */}
+      {[0, 1, 2].map((i) => (
+        <B key={i} p={[0, 1 + i * 2, -d * 0.3 - i * d * 0.06]} s={[w * (0.95 - i * 0.08), 2 + i * 2, d * 0.25 - i * d * 0.04]} c={['#b08968', '#9c6644', '#7f5539'][i]} />
+      ))}
+      {boulders.map((bd, i) => (
+        <mesh key={i} position={[bd.x, bd.r, bd.z + d * 0.25]} castShadow>
+          <dodecahedronGeometry args={[bd.r, 0]} />
+          <meshStandardMaterial color={i % 3 ? '#78716c' : '#a8a29e'} flatShading />
+        </mesh>
+      ))}
+      <mesh position={[w * 0.3, 1.2, d * 0.28]} castShadow>
+        <coneGeometry args={[4, 2.6, 7]} />
+        <meshStandardMaterial color="#a8a29e" flatShading />
+      </mesh>
+    </group>
+  );
+};
+
 export const AREA_KINDS: ReadonlySet<Kind> = new Set(['work_area', 'material_yard', 'parking', 'restricted']);
 
 /** The structure for a zone, or null for a flat area. Positioned by the caller. */
@@ -331,6 +391,9 @@ export const Structure: React.FC<{ zone: SiteTwinZone }> = ({ zone }) => {
     case 'quay': return <Quay w={w} d={d} progress={progress} />;
     case 'container_yard': return <ContainerYard w={w} d={d} seed={seed} />;
     case 'quay_crane_berth': return <QuayCrane w={w} d={d} />;
+    case 'generator_room': return <GeneratorRoom w={w} d={d} />;
+    case 'compressor_house': return <CompressorHouse w={w} d={d} />;
+    case 'quarry': return <Quarry w={w} d={d} seed={seed} />;
     default: return null;
   }
 };

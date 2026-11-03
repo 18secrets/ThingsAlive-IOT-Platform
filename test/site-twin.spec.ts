@@ -6,9 +6,10 @@ import { RequestScope } from '../src/auth/types/request-scope';
 import { createApp } from '../src/main';
 import { PageService, twinStatus } from '../src/page/page.service';
 import { LayoutInput, normaliseHeading, SiteTwinService } from '../src/site-twin/site-twin.service';
+import { composeLayout, frontOf } from '../src/site-twin/compose';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
-const MIGRATION = 'SiteTwin1762100000000';
+const MIGRATION = 'SiteTwin1763300000000';
 const SECRET = 'test-secret-site-twin';
 const ISSUER = 'things-alive-site-twin-test';
 const NOW = new Date('2026-10-14T12:00:00.000Z');
@@ -114,7 +115,7 @@ describeDb('site twin: layout and live view', () => {
   const layout = (over: Partial<LayoutInput> = {}): LayoutInput => ({
     expectedVersion: 0,
     extent: { widthM: 100, depthM: 60 },
-    zones: [{ key: 'batching', label: 'Batching plant', kind: 'batching_plant', x: -30, z: 0, widthM: 30, depthM: 20 }],
+    zones: [{ key: 'batching', label: 'Batching yard', kind: 'work_area', x: -30, z: 0, widthM: 30, depthM: 20 }],
     placements: [{ sourceSystem: SRC, externalId: 'DG-LIVE', x: -30, z: 0, headingDeg: 90 }],
     ...over,
   });
@@ -138,7 +139,7 @@ describeDb('site twin: layout and live view', () => {
       await twins.save(acme, plantId, layout());
       const view = await pages.siteTwin(acme, plantId, NOW);
       expect(view).toMatchObject({ saved: true, version: 1, extent: { widthM: 100, depthM: 60 } });
-      expect(view.zones).toEqual([expect.objectContaining({ key: 'batching', label: 'Batching plant', kind: 'batching_plant' })]);
+      expect(view.zones).toEqual([expect.objectContaining({ key: 'batching', label: 'Batching yard', kind: 'work_area' })]);
       expect(view.machines.find((m) => m.externalId === 'DG-LIVE')!.placement).toEqual({ x: -30, z: 0, headingDeg: 90, route: [] });
       expect(view.summary.placed).toBe(1);
     });
@@ -267,6 +268,64 @@ describeDb('site twin: layout and live view', () => {
     });
   });
 
+  describe('only plant the site has', () => {
+    const room = { key: 'gen-room', label: 'Generator room', kind: 'generator_room' as const, x: 30, z: 15, widthM: 16, depthM: 10 };
+
+    it('refuses a generator room on a site with no generator assigned', async () => {
+      const v = (await twins.read(acme, plantId)).version;
+      await expect(twins.save(acme, plantId, layout({ expectedVersion: v, zones: [room], placements: [] })))
+        .rejects.toThrow(/needs a generator assigned to this site/);
+    });
+
+    it('accepts it once one is, and stops drawing it when the generator leaves', async () => {
+      await owner.query(
+        `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, equipment_class_slug, plant_id, tier, readiness, updated_by)
+           VALUES ('acme', $1, 'GEN-1', 'Genset', 'prime-diesel-generator', $2, 'standard', '{}'::jsonb, 'u')`, [SRC, plantId],
+      );
+      const v = (await twins.read(acme, plantId)).version;
+      await twins.save(acme, plantId, layout({ expectedVersion: v, zones: [room], placements: [] }));
+      expect((await pages.siteTwin(acme, plantId, NOW)).zones.map((z) => z.key)).toEqual(['gen-room']);
+
+      await owner.query(`UPDATE equipment_profile SET plant_id = $1 WHERE external_id = 'GEN-1'`, [otherPlantId]);
+      const view = await pages.siteTwin(acme, plantId, NOW);
+      expect(view.zones).toEqual([]);
+      expect(view.hiddenZones).toEqual(['gen-room']);
+      await owner.query(`DELETE FROM equipment_profile WHERE external_id = 'GEN-1'`);
+    });
+
+    it('sends a machine with an open breakdown to the breakdown bay in the proposal', async () => {
+      await owner.query(
+        `INSERT INTO breakdown_event (tenant_id, source_system, external_id, started_at, threshold_minutes, detected_from)
+           VALUES ('acme', $1, 'BARE', $2, 30, '{"by":"test"}'::jsonb)`, [SRC, new Date(NOW.getTime() - 7_200_000)],
+      );
+      const view = await pages.siteTwin(acme, plantId, NOW);
+      expect(view.machines.find((m) => m.externalId === 'BARE')!.breakdown).toBe(true);
+      const proposal = await pages.siteTwinProposal(acme, plantId, NOW);
+      const bay = proposal.zones.find((z) => z.key === 'workshop')!;
+      const bare = proposal.placements.find((p) => p.externalId === 'BARE')!;
+      expect(Math.abs(bare.x - bay.x) <= bay.widthM / 2 && Math.abs(bare.z - bay.z) <= bay.depthM / 2).toBe(true);
+      // DG-SILENT has no recent data: the bay too. DG-LIVE, ready, goes elsewhere.
+      expect(proposal.placements.map((p) => p.externalId).sort()).toEqual(['BARE', 'DG-LIVE', 'DG-SILENT']);
+      // The proposal saves as it stands: everything in it is backed and fits.
+      await expect(twins.save(acme, plantId, proposal)).resolves.toBeDefined();
+      // Breakdowns are kept, never deleted: close it, and the machine is no longer broken down.
+      await owner.query(
+        `UPDATE breakdown_event SET ended_at = started_at + interval '60 minutes', duration_minutes = 60 WHERE external_id = 'BARE'`,
+      );
+      expect((await pages.siteTwin(acme, plantId, NOW)).machines.find((m) => m.externalId === 'BARE')!.breakdown).toBe(false);
+    });
+
+    it('puts the layout back the way the refusal tests below expect it', async () => {
+      await twins.save(acme, plantId, layout({
+        expectedVersion: (await twins.read(acme, plantId)).version,
+        placements: [
+          { sourceSystem: SRC, externalId: 'DG-LIVE', x: 10, z: 10, headingDeg: 0 },
+          { sourceSystem: SRC, externalId: 'BARE', x: -40, z: -20, headingDeg: 0 },
+        ],
+      }));
+    });
+  });
+
   describe('the database refuses a picture that is not true', () => {
     it('refuses a zone that runs past the edge of the site', async () => {
       const v = (await twins.read(acme, plantId)).version;
@@ -296,7 +355,7 @@ describeDb('site twin: layout and live view', () => {
 
     it('refuses a zone kind outside the legend, and a heading of 360', async () => {
       await expect(owner.query(
-        `INSERT INTO site_twin_zone (tenant_id, plant_id, key, label, kind, x, z, width_m, depth_m) VALUES ('acme', $1, 'pit', 'Pit', 'quarry', 0, 0, 5, 5)`,
+        `INSERT INTO site_twin_zone (tenant_id, plant_id, key, label, kind, x, z, width_m, depth_m) VALUES ('acme', $1, 'pit', 'Pit', 'helipad', 0, 0, 5, 5)`,
         [plantId],
       )).rejects.toThrow(/ck_site_twin_zone_kind/);
       await expect(owner.query(
@@ -347,8 +406,43 @@ describeDb('site twin: layout and live view', () => {
         .set('Authorization', admin).send({ ...layout(), expectedVersion: body.version });
       expect(stale.status).toBe(409);
       const bad = await request(app.getHttpServer()).put(`/api/v1/sites/${plantId}/twin/layout`)
-        .set('Authorization', admin).send({ ...layout(), expectedVersion: ok.body.version, zones: [{ key: 'x', label: 'x', kind: 'quarry', x: 0, z: 0, widthM: 5, depthM: 5 }] });
+        .set('Authorization', admin).send({ ...layout(), expectedVersion: ok.body.version, zones: [{ key: 'x', label: 'x', kind: 'helipad', x: 0, z: 0, widthM: 5, depthM: 5 }] });
       expect(bad.status).toBe(400);
+    });
+  });
+
+  describe('composing a layout from the assigned machines', () => {
+    const m = (externalId: string, category: string | null, classSlug: string | null = null, attention = false) =>
+      ({ sourceSystem: SRC, externalId, category, classSlug, attention });
+    const kinds = (l: LayoutInput) => l.zones.map((z) => z.kind);
+
+    it('reads the work front from the category, and from the slug where there is none', () => {
+      expect(frontOf({ category: 'Power Generation', classSlug: null })).toBe('power');
+      expect(frontOf({ category: null, classSlug: 'screw-air-compressor' })).toBe('pneumatic');
+      expect(frontOf({ category: 'Excavators & Earthmoving', classSlug: 'hydraulic-excavator' })).toBe('earthmoving');
+    });
+
+    it('gives excavators a road front and a quarry, and no plant they do not need', () => {
+      const l = composeLayout(['E1', 'E2', 'E3', 'E4', 'E5', 'E6'].map((id) => m(id, 'Excavators & Earthmoving')), 0);
+      expect(kinds(l)).toEqual(expect.arrayContaining(['road', 'quarry', 'gate', 'maintenance_workshop']));
+      for (const k of ['generator_room', 'compressor_house', 'batching_plant', 'building']) expect(kinds(l)).not.toContain(k);
+      // The road in sections: one laid, one started, one not yet.
+      expect(l.zones.filter((z) => /^road-/.test(z.key)).map((z) => z.progressPct)).toEqual([100, 45, 0]);
+      const onRoad = l.placements.filter((p) => p.route?.length);
+      expect(onRoad.length).toBeGreaterThan(0);
+      expect(onRoad[0].route).toEqual(['road-b', 'road-c']);
+    });
+
+    it('adds a generator room and a compressor house only for a generator and a compressor', () => {
+      const l = composeLayout([m('G', 'Power Generation'), m('C', 'Pneumatic Systems')], 0);
+      expect(kinds(l)).toEqual(expect.arrayContaining(['generator_room', 'compressor_house']));
+      expect(kinds(l)).not.toContain('quarry');
+    });
+
+    it('puts a machine that needs attention in the breakdown bay, not at its work front', () => {
+      const l = composeLayout([m('E1', 'Excavators & Earthmoving', null, true)], 0);
+      const bay = l.zones.find((z) => z.key === 'workshop')!;
+      expect(l.placements).toEqual([expect.objectContaining({ externalId: 'E1', x: bay.x, z: bay.z })]);
     });
   });
 

@@ -39,4 +39,11 @@ export class PageController {
   siteTwin(@CurrentScope() scope: RequestScope, @Param('plantId', ParseUUIDPipe) plantId: string) {
     return this.pages.siteTwin(scope, plantId);
   }
+
+  @Get('sites/:plantId/twin/proposal')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "A first layout composed from the machines assigned to the site and their categories; not saved" })
+  siteTwinProposal(@CurrentScope() scope: RequestScope, @Param('plantId', ParseUUIDPipe) plantId: string) {
+    return this.pages.siteTwinProposal(scope, plantId);
+  }
 }

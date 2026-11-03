@@ -99,7 +99,11 @@ export interface SiteTwinView {
     activity: DutyState;
     /** The key of the zone it stands in, or null when unplaced or outside every zone. */
     engagedAt: string | null;
+    /** A breakdown has started and not ended (`breakdown_event`). */
+    breakdown: boolean;
   }[];
+  /** Saved structures not drawn because no machine assigned here backs them any more. */
+  hiddenZones: string[];
   summary: { total: number; placed: number } & Record<TwinMachineStatus, number>;
 }
 
@@ -659,6 +663,7 @@ export class PageService {
         status: twinStatus(readiness, openAlerts),
         activity: activity.get(k) ?? 'unknown',
         engagedAt: placement ? zoneAt(layout.zones, placement.x, placement.z)?.key ?? null : null,
+        breakdown: layout.brokenDown.has(k),
       };
     });
     const summary = { total: rows.length, placed: 0, alert: 0, live: 0, no_data: 0, blocked: 0, not_configured: 0 };
@@ -667,8 +672,19 @@ export class PageService {
     return {
       site: { plantId: layout.plant.id, code: layout.plant.code, name: layout.plant.name, address: layout.plant.address },
       saved: layout.saved, version: layout.version, extent: layout.extent, zones: layout.zones,
-      classModels: Object.fromEntries(models), machines: rows, summary,
+      classModels: Object.fromEntries(models), machines: rows, summary, hiddenZones: layout.hiddenZones,
     };
+  }
+
+  /** A first layout from the site's own machines (`composeLayout`), for the editor to
+   * start from. Not saved. A machine the twin shows as alerting, silent or missing a
+   * sensor goes to the maintenance and breakdown bay, as an open breakdown does. */
+  async siteTwinProposal(scope: RequestScope, plantId: string, at: Date = new Date()) {
+    const view = await this.siteTwin(scope, plantId, at);
+    const attention = new Set(view.machines
+      .filter((m) => m.status === 'alert' || m.status === 'no_data' || m.status === 'blocked')
+      .map((m) => machineKey(m.sourceSystem, m.externalId)));
+    return this.twins.propose(scope, plantId, attention);
   }
 
   /**

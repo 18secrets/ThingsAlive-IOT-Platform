@@ -1,10 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, In, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { Plant } from '../equipment/entities/plant.entity';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { withTenantSession } from '../scope/tenant-session';
-import { PROGRESS_KINDS, SiteTwin, SiteTwinPlacement, SiteTwinZone, ZoneKind } from './site-twin.entity';
+import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
+import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
+import { composeLayout } from './compose';
+import { EQUIPMENT_BACKED, PROGRESS_KINDS, SiteTwin, SiteTwinPlacement, SiteTwinZone, ZoneKind } from './site-twin.entity';
 
 /** What a site that has never been laid out is drawn as. A yard, not a guess at the
  * real site: `saved: false` says so. */
@@ -41,6 +44,12 @@ export interface SiteLayout {
   extent: { widthM: number; depthM: number };
   zones: ZoneView[];
   placements: Map<string, { x: number; z: number; headingDeg: number; route: string[] }>;
+  /** Each machine's class category, by machine key — what equipment-backed kinds read. */
+  categories: Map<string, string | null>;
+  /** Machines with a breakdown that has not ended. */
+  brokenDown: Set<string>;
+  /** Saved structures not drawn because no machine assigned here backs them any more. */
+  hiddenZones: string[];
 }
 
 const key = (sourceSystem: string, externalId: string) => `${sourceSystem}/${externalId}`;
@@ -76,6 +85,17 @@ export class SiteTwinService {
       assertVersion(twin, input.expectedVersion);
 
       const here = new Set(machines.map((e) => key(e.sourceSystem, e.externalId)));
+      // No plant the site does not have: an equipment-backed structure needs a machine of
+      // its kind assigned here. Checked against every machine at the site, not just the
+      // ones this caller sees — whether a generator exists does not depend on who asks.
+      const categories = await this.categoriesOf(m, scope, (await m.getRepository(EquipmentProfile)
+        .find({ where: { tenantId: scope.tenantId, plantId } })));
+      for (const z of input.zones) {
+        const backed = EQUIPMENT_BACKED[z.kind];
+        if (backed && !backs(backed.test, categories)) {
+          throw new BadRequestException(`"${z.label}" is a ${z.kind.replace(/_/g, ' ')}, which needs ${backed.needs} assigned to this site; none is.`);
+        }
+      }
       const seen = new Set<string>();
       for (const p of input.placements) {
         const k = key(p.sourceSystem, p.externalId);
@@ -121,6 +141,20 @@ export class SiteTwinService {
       }
       return this.readIn(m, scope, plantId);
     }));
+  }
+
+  /** A first layout from the machines assigned to the site (`composeLayout`), not saved.
+   * `attention` adds machines the caller knows need a person; open breakdowns are read
+   * here. */
+  async propose(scope: RequestScope, plantId: string, attention: Set<string> = new Set()): Promise<LayoutInput> {
+    const layout = await this.read(scope, plantId);
+    return composeLayout(layout.machines.map((e) => {
+      const k = key(e.sourceSystem, e.externalId);
+      return {
+        sourceSystem: e.sourceSystem, externalId: e.externalId, classSlug: e.equipmentClassSlug,
+        category: layout.categories.get(k) ?? null, attention: attention.has(k) || layout.brokenDown.has(k),
+      };
+    }), layout.version);
   }
 
   /** One structure's progress, as reported by the site. Not idempotent for the same
@@ -174,8 +208,26 @@ export class SiteTwinService {
     return { plant, machines };
   }
 
+  private async categoriesOf(m: EntityManager, scope: RequestScope, machines: EquipmentProfile[]): Promise<Map<string, string | null>> {
+    const slugs = [...new Set(machines.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))];
+    const classes = slugs.length
+      ? await m.getRepository(ClientEquipmentClass).find({ where: { tenantId: scope.tenantId, slug: In(slugs) } })
+      : [];
+    const bySlug = new Map(classes.map((c) => [c.slug, c.category]));
+    // The slug rides along so a class with no category still says what it is.
+    return new Map(machines.map((e) => [key(e.sourceSystem, e.externalId),
+      e.equipmentClassSlug ? `${bySlug.get(e.equipmentClassSlug) ?? ''} ${e.equipmentClassSlug}`.trim() : null]));
+  }
+
   private async readIn(m: EntityManager, scope: RequestScope, plantId: string): Promise<SiteLayout> {
     const { plant, machines } = await this.siteAndMachines(m, scope, plantId);
+    const categories = await this.categoriesOf(m, scope, machines);
+    const open = machines.length
+      ? await m.getRepository(BreakdownEvent).find({
+        where: { tenantId: scope.tenantId, externalId: In(machines.map((e) => e.externalId)), endedAt: IsNull() },
+      })
+      : [];
+    const brokenDown = new Set(open.map((b) => key(b.sourceSystem, b.externalId)));
     const twin = await m.getRepository(SiteTwin).findOne({ where: { tenantId: scope.tenantId, plantId } });
     const zones = twin
       ? await m.getRepository(SiteTwinZone).find({ where: { tenantId: scope.tenantId, plantId }, order: { sortOrder: 'ASC' } })
@@ -189,12 +241,20 @@ export class SiteTwinService {
     const placements = new Map(rows
       .filter((r) => here.has(key(r.sourceSystem, r.externalId)))
       .map((r) => [key(r.sourceSystem, r.externalId), { x: r.x, z: r.z, headingDeg: r.headingDeg, route: r.route }]));
+    // A structure whose machine has left the site is not drawn: the generator room goes
+    // with the generator. The row stays until the layout is next saved, so a machine
+    // moved away and straight back does not take the room with it.
+    const shown = zones.filter((z) => {
+      const backed = EQUIPMENT_BACKED[z.kind];
+      return !backed || backs(backed.test, categories);
+    });
+    const hiddenZones = zones.filter((z) => !shown.includes(z)).map((z) => z.key);
     return {
-      plant, machines,
+      plant, machines, categories, brokenDown, hiddenZones,
       saved: !!twin && twin.version > 0,
       version: twin?.version ?? 0,
       extent: twin ? { widthM: twin.widthM, depthM: twin.depthM } : { ...DEFAULT_EXTENT },
-      zones: zones.map((z) => ({
+      zones: shown.map((z) => ({
         id: z.id, key: z.key, label: z.label, kind: z.kind, x: z.x, z: z.z, widthM: z.widthM, depthM: z.depthM,
         floors: z.floors, progressPct: z.progressPct,
         progressReportedAt: z.progressReportedAt?.toISOString() ?? null, progressReportedBy: z.progressReportedBy,
@@ -202,6 +262,10 @@ export class SiteTwinService {
       placements,
     };
   }
+}
+
+function backs(test: RegExp, categories: Map<string, string | null>): boolean {
+  return [...categories.values()].some((c) => !!c && test.test(c));
 }
 
 function assertVersion(twin: SiteTwin, expected: number): void {
