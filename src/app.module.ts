@@ -27,6 +27,7 @@ import { IncidentModule } from './incident/incident.module';
 import { ShieldModule } from './shield/shield.module';
 import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
 import { PageModule } from './page/page.module';
+import { SiteTwinModule } from './site-twin/site-twin.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
@@ -114,6 +115,7 @@ export class AppModule {
               SignalBindingModule,
               KpiModule,
       PageModule,
+      SiteTwinModule,
       IncidentModule,
       ShieldModule,
       OnboardingStatusModule,
