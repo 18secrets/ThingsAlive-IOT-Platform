@@ -143,7 +143,8 @@ export const FuelForecastAccuracyPage: React.FC = () => {
     accuracy: (m) => m.accuracy,
     checkpoint: (m) => m.checkpoints[checkpoint],
   }), [machines, sort, checkpoint]);
-  const { pageItems, ...pager } = usePagination(sorted, 20);
+  // 10 rows to start, as every list does since 2 Nov (TablePagination's PAGE_SIZES).
+  const { pageItems, ...pager } = usePagination(sorted);
 
   const shownFrom = range?.from ?? data?.from ?? '';
   const shownTo = range?.to ?? data?.to ?? '';

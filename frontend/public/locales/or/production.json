@@ -61,7 +61,9 @@
     "unit_mismatch": "ଇନ୍ଧନ ଏକକ ମାନକ ସଂଖ୍ୟା ସହ ମେଳ ଖାଉନାହିଁ",
     "stale": "ରିଡିଂ ପୁରୁଣା",
     "undefined_result": "ମାପିବା ପାଇଁ କୌଣସି ଉପଲବ୍ଧ ସମୟ ନାହିଁ",
-    "not_available": "ଉପଲବ୍ଧ ନାହିଁ"
+    "not_available": "ଉପଲବ୍ଧ ନାହିଁ",
+    "performance_not_set": "ମେସିନ୍ ପ୍ରକାରରେ ଚାଲୁଥିବା ସିଗନାଲ୍ ଦର୍ଶାଯାଇନାହିଁ",
+    "quality_not_set": "ଘଣ୍ଟା ପ୍ରତି ନାମମାତ୍ର ଇନ୍ଧନ ସେଟ୍ ହୋଇନାହିଁ"
   },
   "source": {
     "equipment": "ଏହି ମେସିନ୍",
@@ -98,10 +100,12 @@
     "nominalSetBy": "ମାନକ {{source}} ଦ୍ୱାରା ସ୍ଥିର",
     "breakdownsInWindow": "ଏହି ଅବଧିର ବ୍ରେକଡାଉନ୍",
     "noneRecorded": "କିଛି ରେକର୍ଡ ହୋଇନାହିଁ।",
-    "ongoing": "ଚାଲିଛି"
+    "ongoing": "ଚାଲିଛି",
+    "waitingOn": "OEE ପାଇଁ ପ୍ରଥମେ {{factors}} ଦରକାର"
   },
   "detail": {
-    "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ"
+    "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ",
+    "lastDays": "ଗତ {{count}} ଦିନ"
   },
   "shifts": {
     "title": "ସିଫ୍ଟ ଇତିହାସ",

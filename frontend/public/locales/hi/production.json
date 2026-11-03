@@ -61,7 +61,9 @@
     "unit_mismatch": "ईंधन की इकाइयाँ मानक आंकड़े से मेल नहीं खातीं",
     "stale": "रीडिंग पुरानी हैं",
     "undefined_result": "मापने के लिए कोई उपलब्ध समय नहीं",
-    "not_available": "उपलब्ध नहीं"
+    "not_available": "उपलब्ध नहीं",
+    "performance_not_set": "मशीन के प्रकार में चलने के सिग्नल तय नहीं हैं",
+    "quality_not_set": "प्रति घंटा नाममात्र ईंधन तय नहीं है"
   },
   "source": {
     "equipment": "यह मशीन",
@@ -98,10 +100,12 @@
     "nominalSetBy": "मानक {{source}} द्वारा तय",
     "breakdownsInWindow": "इस अवधि के ब्रेकडाउन",
     "noneRecorded": "कोई दर्ज नहीं।",
-    "ongoing": "जारी"
+    "ongoing": "जारी",
+    "waitingOn": "OEE के लिए पहले {{factors}} चाहिए"
   },
   "detail": {
-    "availabilityNotAvailable": "उपलब्धता की जानकारी उपलब्ध नहीं"
+    "availabilityNotAvailable": "उपलब्धता की जानकारी उपलब्ध नहीं",
+    "lastDays": "पिछले {{count}} दिन"
   },
   "shifts": {
     "title": "शिफ्ट इतिहास",
