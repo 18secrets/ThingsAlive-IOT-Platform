@@ -2333,6 +2333,9 @@ export interface SiteTwin {
   summary: { total: number; placed: number } & Record<SiteTwinStatus, number>;
   /** Saved structures not drawn: no machine assigned here backs them any more. */
   hiddenZones: string[];
+  /** The demo tenant: every machine at a work front is animated and the twin says it is
+   *  a simulation. Always false for a real account. */
+  simulated: boolean;
 }
 
 export interface SiteTwinLayoutInput {
@@ -2344,6 +2347,19 @@ export interface SiteTwinLayoutInput {
 
 export function apiGetSiteTwin(plantId: string): Promise<SiteTwin> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin`);
+}
+
+/** Every laid-out site of the account, for the port overview (`GET /sites/twins`). */
+export interface PortTwin {
+  sites: (SiteTwin & { workforce: number | null })[];
+  /** Sites with machines but no layout yet: listed, not drawn. */
+  notLaidOut: { plantId: string; code: string; name: string; machines: number }[];
+  simulated: boolean;
+  summary: { sites: number; machines: number; live: number; alert: number; workforce: number | null };
+}
+
+export function apiGetPortTwin(): Promise<PortTwin> {
+  return authFetch('/sites/twins');
 }
 
 /** A first layout composed from the machines assigned to the site and their

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import type { SiteTwin, SiteTwinActivity, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
 import { AREA_KINDS, Structure } from './SiteStructures';
+import SiteLife from './SiteLife';
 
 /**
  * The site's digital twin, drawn. Loaded lazily (SiteTwinCard), so three.js is fetched
@@ -61,12 +62,14 @@ export interface SiteTwinSceneProps {
   /** Bumped by the toolbar to zoom: +1 in, -1 out, 0 reset. */
   zoomCommand: { n: number; dir: -1 | 0 | 1 };
   autoRotate: boolean;
+  /** Demo tenant: animate every machine at a work front, whatever its data says. */
+  simulated?: boolean;
 }
 
 // Seen from the south and a little east, about 40° above the ground: the long side of a
 // site runs across the screen, three faces of every structure show, the ground reads.
-const AZIMUTH = 0.3;
-const POLAR = 0.88;
+const AZIMUTH = 0.12;
+const POLAR = 0.86;
 const FOV = 35;
 
 /** A zone's name painted on the ground, as a canvas texture — a road marking, not a
@@ -93,9 +96,10 @@ function useGroundLabel(text: string) {
   return label;
 }
 
-const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
+export const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
   const { texture, aspect } = useGroundLabel(text.toUpperCase());
-  const width = Math.min(maxWidth, aspect * 4);
+  // About 5 m tall letters, so a zone name reads at the overview, shrunk to fit its zone.
+  const width = Math.min(maxWidth, aspect * 5);
   return (
     <mesh position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
       <planeGeometry args={[width, width / aspect]} />
@@ -104,7 +108,7 @@ const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: numb
   );
 };
 
-const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
+export const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
   const area = AREA_KINDS.has(zone.kind);
   return (
     <group>
@@ -137,7 +141,7 @@ const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGr
 };
 
 /** The site slab, its perimeter fence and a 10 m grid, so distance reads at a glance. */
-const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
+export const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
   const fence = 1.8;
   const posts = useMemo(() => {
     const out: [number, number][] = [];
@@ -155,21 +159,56 @@ const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () =>
     return g;
   }, [widthM, depthM]);
   useEffect(() => () => grid.dispose(), [grid]);
+  // Trees outside the fence, a stable scatter: the site sits in a landscape, not a void.
+  const trees = useMemo(() => {
+    const out: { x: number; z: number; h: number; tone: number }[] = [];
+    let seed = Math.round(widthM * 7 + depthM * 13);
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ring = Math.max(widthM, depthM) * 0.45;
+    for (let i = 0; i < 90; i += 1) {
+      const side = i % 4;
+      const along = rnd() - 0.5;
+      const out_ = 8 + rnd() * ring;
+      const x = side < 2 ? along * (widthM + 2 * ring) : (side === 2 ? -1 : 1) * (widthM / 2 + out_);
+      const z = side < 2 ? (side === 0 ? -1 : 1) * (depthM / 2 + out_) : along * (depthM + 2 * ring);
+      out.push({ x, z, h: 5 + rnd() * 6, tone: rnd() });
+    }
+    return out;
+  }, [widthM, depthM]);
   return (
     <group>
-      {/* The land around the site, so the slab has an edge to sit on. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
-        <planeGeometry args={[widthM * 4, depthM * 4]} />
-        <meshStandardMaterial color="#e7e5df" />
+      {/* Grass beyond the site, wide enough to reach the haze at the horizon. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]} receiveShadow>
+        <planeGeometry args={[widthM * 12, depthM * 12]} />
+        <meshStandardMaterial color="#9cb380" />
       </mesh>
+      {/* A worn verge round the fence, where trucks have turned. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
+        <planeGeometry args={[widthM + 16, depthM + 16]} />
+        <meshStandardMaterial color="#c9b48f" />
+      </mesh>
+      {/* The site floor: graded murram, the dusty laterite of an Indian site. */}
       <mesh position={[0, 0, 0]} receiveShadow onClick={(e) => { if (e.delta < 5) onEmptyClick(); }}>
-        <boxGeometry args={[widthM, 0.04, depthM]} />
-        <meshStandardMaterial color="#f8fafc" />
+        <boxGeometry args={[widthM, 0.06, depthM]} />
+        <meshStandardMaterial color="#dcc7a1" roughness={1} />
       </mesh>
-      <lineSegments position={[0, 0.03, 0]} geometry={grid}>
-        <lineBasicMaterial color="#e2e8f0" />
+      <lineSegments position={[0, 0.04, 0]} geometry={grid}>
+        <lineBasicMaterial color="#cdb48a" transparent opacity={0.6} />
       </lineSegments>
-      {/* A blue band along the north edge, as site hoarding: it tells which way is up. */}
+      {trees.map((t, i) => (
+        <group key={i} position={[t.x, 0, t.z]}>
+          <mesh position={[0, t.h * 0.2, 0]} castShadow>
+            <cylinderGeometry args={[0.25, 0.35, t.h * 0.4, 6]} />
+            <meshStandardMaterial color="#6b4f35" />
+          </mesh>
+          <mesh position={[0, t.h * 0.62, 0]} castShadow>
+            <coneGeometry args={[t.h * 0.28, t.h * 0.75, 7]} />
+            <meshStandardMaterial color={t.tone > 0.5 ? '#3f7d3a' : '#4d8f45'} flatShading />
+          </mesh>
+        </group>
+      ))}
+      {/* Site hoarding: blue along the north edge, which tells which way is up, and
+          green-and-white mesh round the rest. */}
       <mesh position={[0, fence / 2, -depthM / 2]} castShadow>
         <boxGeometry args={[widthM, fence, 0.25]} />
         <meshStandardMaterial color="#1d4ed8" />
@@ -177,17 +216,17 @@ const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () =>
       {[[-1, 0], [1, 0]].map(([sx]) => (
         <mesh key={sx} position={[(sx * widthM) / 2, fence / 2, 0]}>
           <boxGeometry args={[0.15, fence, depthM]} />
-          <meshStandardMaterial color="#cbd5e1" transparent opacity={0.55} />
+          <meshStandardMaterial color="#15803d" transparent opacity={0.45} />
         </mesh>
       ))}
       <mesh position={[0, fence / 2, depthM / 2]}>
         <boxGeometry args={[widthM, fence, 0.15]} />
-        <meshStandardMaterial color="#cbd5e1" transparent opacity={0.55} />
+        <meshStandardMaterial color="#15803d" transparent opacity={0.3} />
       </mesh>
       {posts.map(([x, z], i) => (
         <mesh key={i} position={[x, fence / 2 + 0.1, z]}>
           <boxGeometry args={[0.3, fence + 0.2, 0.3]} />
-          <meshStandardMaterial color="#64748b" />
+          <meshStandardMaterial color="#e5e7eb" />
         </mesh>
       ))}
     </group>
@@ -250,11 +289,11 @@ export const ACTIVITY_LABEL: Record<SiteTwinActivity, string> = {
 
 /** Where along a back-and-forth trip over `path` the machine is after `d` metres, and
  * which way it faces. */
-function along(path: [number, number][], d: number): { x: number; z: number; dx: number; dz: number } {
+function along(path: [number, number][], d: number): { x: number; z: number; dx: number; dz: number; back: boolean; leg: number } {
   const legs: number[] = [];
   for (let i = 1; i < path.length; i += 1) legs.push(Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
   const one = legs.reduce((a, b) => a + b, 0);
-  if (one < 0.01) return { x: path[0][0], z: path[0][1], dx: 1, dz: 0 };
+  if (one < 0.01) return { x: path[0][0], z: path[0][1], dx: 1, dz: 0, back: false, leg: 0 };
   let t = d % (2 * one);
   const back = t > one;
   if (back) t = 2 * one - t;
@@ -263,41 +302,166 @@ function along(path: [number, number][], d: number): { x: number; z: number; dx:
       const f = legs[i] ? Math.min(1, t / legs[i]) : 0;
       const [ax, az] = path[i]; const [bx, bz] = path[i + 1];
       const dx = (bx - ax) * (back ? -1 : 1); const dz = (bz - az) * (back ? -1 : 1);
-      return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, dx, dz };
+      return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, dx, dz, back, leg: i };
     }
     t -= legs[i];
   }
-  return { x: path[0][0], z: path[0][1], dx: 1, dz: 0 };
+  return { x: path[0][0], z: path[0][1], dx: 1, dz: 0, back: false, leg: 0 };
 }
 
-const Machine: React.FC<{
+/** How a working machine of this class moves, from its slug: a generator or compressor
+ * stands and exhausts, a piling rig works its mast, everything else slews and shuffles
+ * as an excavator, a crane or a pump at work does. Travel is the route's, for any class. */
+type Motion = 'exhaust' | 'drill' | 'haul' | 'slew';
+const motionOf = (slug: string | null): Motion =>
+  /generat|genset|compress/i.test(slug ?? '') ? 'exhaust'
+    : /tipper|dumper|truck|transport|haul|transit/i.test(slug ?? '') ? 'haul'
+      : /pil(e|ing)|drill|vibro|rig/i.test(slug ?? '') ? 'drill' : 'slew';
+
+/** A mobile crane's lift: a steel beam on a cable from the boom tip, rising and lowering
+ * as the crane slews it across. Demo only — nothing reports a hook. */
+const CraneLift: React.FC<{ seed: number }> = ({ seed }) => {
+  const cable = useRef<THREE.Mesh>(null);
+  const load = useRef<THREE.Group>(null);
+  const tipX = 7.5; const tipY = 11;
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime * 0.3 + seed * 0.01;
+    const drop = 3 + 6 * (Math.sin(t) + 1) / 2;
+    if (cable.current) { cable.current.scale.y = drop; cable.current.position.set(tipX, tipY - drop / 2, 0); }
+    if (load.current) { load.current.position.set(tipX, tipY - drop - 0.3, 0); load.current.rotation.y = 0.6 * Math.sin(t * 0.7); }
+  });
+  return (
+    <group>
+      <mesh ref={cable}>
+        <cylinderGeometry args={[0.05, 0.05, 1, 4]} />
+        <meshBasicMaterial color="#111827" />
+      </mesh>
+      <group ref={load}>
+        <mesh castShadow>
+          <boxGeometry args={[5, 0.5, 0.5]} />
+          <meshStandardMaterial color="#b45309" />
+        </mesh>
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.3, 0.5, 0.3]} />
+          <meshStandardMaterial color="#facc15" />
+        </mesh>
+      </group>
+    </group>
+  );
+};
+
+/** A tipper's load: a heap of broken stone in the bed. */
+const Load: React.FC<{ visible: React.MutableRefObject<boolean> }> = ({ visible }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(() => { if (ref.current) ref.current.visible = visible.current; });
+  return (
+    <mesh ref={ref} position={[-1.4, 3.1, 0]} castShadow>
+      <coneGeometry args={[1.5, 1.3, 7]} />
+      <meshStandardMaterial color="#8d7b68" flatShading />
+    </mesh>
+  );
+};
+
+/** A stable phase per machine, so a fleet on one route is spread along it. */
+const phaseOf = (key: string) => {
+  let h = 7;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) % 100_003;
+  return h;
+};
+
+/** Exhaust from a running engine: three puffs rising and thinning, on a loop. */
+const Exhaust: React.FC<{ height: number; seed: number }> = ({ height, seed }) => {
+  const puffs = useRef<THREE.Mesh[]>([]);
+  useFrame(({ clock }) => {
+    puffs.current.forEach((p, i) => {
+      if (!p) return;
+      const t = ((clock.elapsedTime * 0.5 + i / 3 + seed * 0.013) % 1);
+      p.position.set(0.4 * Math.sin(t * 5 + i), height + t * 5, 0.3 * t);
+      p.scale.setScalar(0.4 + t * 1.4);
+      (p.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t);
+    });
+  });
+  return (
+    <group>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} ref={(m) => { if (m) puffs.current[i] = m; }}>
+          <sphereGeometry args={[0.6, 10, 10]} />
+          <meshBasicMaterial color="#94a3b8" transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+export const Machine: React.FC<{
   m: SceneMachine; modelUrl: string | null; radius: number; showLabel: boolean; selected: boolean;
   editing: boolean; onSelect: (key: string) => void; onGrab: (t: DragTarget) => void;
   /** 0, 1 or 2: how many steps up its label sits, so neighbours' labels do not stack. */
   lift: number;
-}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift }) => {
+  simulated: boolean;
+}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift, simulated }) => {
   const { t } = useTranslation('equipment');
   const outer = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
-  const travelled = useRef(0);
+  const [hovered, setHovered] = React.useState(false);
+  const phase = phaseOf(m.key);
+  const isCrane = /crane/i.test(m.classSlug ?? '');
+  const motion = motionOf(m.classSlug);
+  // Start somewhere along the route, not all at its first stop.
+  const travelled = useRef(phase % 400);
   // Motion follows the machine's own data: it travels its route, or slews in place,
   // only while duty-cycle classifies it as working. Never while the layout is edited.
-  const working = !editing && m.placed && m.activity === 'productive' && !m.breakdown;
+  // It moves while its data is live and nothing says it is stopped: working, or engine on
+  // with no load signal to say how hard. Idle, off, silent, alerting or broken down stand.
+  // In the demo every machine at a work front works; one in the breakdown bay does not.
+  const inBay = /breakdown|maintenance/i.test(m.engagedLabel ?? '');
+  const working = !editing && m.placed && !m.breakdown && (simulated
+    ? !inBay
+    : m.activity === 'productive' || (m.status === 'live' && m.activity !== 'idle' && m.activity !== 'off'));
+  // Loaded from the first stop (the quarry) on the way out, empty on the way back.
+  const loaded = useRef(false);
   const travels = working && m.path.length > 1;
   const home = (-m.headingDeg * Math.PI) / 180;
 
   useFrame(({ clock }, dt) => {
     if (!outer.current || !body.current) return;
+    const t = clock.elapsedTime + phase * 0.01;
     if (travels) {
       travelled.current += dt * SPEED;
       const p = along(m.path, travelled.current);
+      loaded.current = motion === 'haul' && !p.back && p.leg >= 1;
       outer.current.position.set(p.x, 0, p.z);
       body.current.rotation.y = Math.atan2(-p.dz, p.dx);
-    } else {
-      travelled.current = 0;
+      body.current.position.y = 0;
+      return;
+    }
+    loaded.current = false;
+    if (!working) {
       outer.current.position.set(m.x, 0, m.z);
-      // An excavator or crane at work slews; nothing else here moves.
-      body.current.rotation.y = home + (working ? 0.35 * Math.sin(clock.elapsedTime * 0.9) : 0);
+      body.current.rotation.y = home;
+      body.current.position.y = 0;
+      return;
+    }
+    if (isCrane) {
+      // A crane stands and slews its load across slowly, a wide arc, pausing at each end.
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home + 1.1 * Math.tanh(2 * Math.sin(t * 0.18));
+      body.current.position.y = 0;
+    } else if (motion === 'slew') {
+      // Dig, swing to dump, swing back, and creep along the face now and then.
+      const shuffle = 1.6 * Math.sin(t * 0.12);
+      outer.current.position.set(m.x + shuffle * Math.cos(home), 0, m.z - shuffle * Math.sin(home));
+      body.current.rotation.y = home + 0.6 * Math.sin(t * 0.8) * Math.max(0, Math.sin(t * 0.25) + 0.4);
+      body.current.position.y = 0;
+    } else if (motion === 'drill') {
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home;
+      body.current.position.y = 0.12 * Math.abs(Math.sin(t * 3));
+    } else {
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home;
+      // A running engine shudders, a little.
+      body.current.position.y = 0.02 * Math.sin(t * 40);
     }
   });
 
@@ -309,15 +473,18 @@ const Machine: React.FC<{
         rotation={[0, home, 0]}
         onClick={(e: ThreeEvent<MouseEvent>) => { if (e.delta < 5) { e.stopPropagation(); onSelect(m.key); } }}
         onPointerDown={editing ? (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); onSelect(m.key); onGrab({ kind: 'machine', key: m.key }); } : undefined}
-        onPointerOver={() => { document.body.style.cursor = editing ? 'grab' : 'pointer'; }}
-        onPointerOut={() => { document.body.style.cursor = ''; }}
+        onPointerOver={() => { setHovered(true); document.body.style.cursor = editing ? 'grab' : 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = ''; }}
       >
         {modelUrl
           ? <Suspense fallback={<StandIn colour={STATUS_COLOUR[m.status]} />}><ClassModel url={modelUrl} /></Suspense>
           : <StandIn colour={STATUS_COLOUR[m.status]} />}
+        {motion === 'haul' && <Load visible={loaded} />}
+        {simulated && working && isCrane && <CraneLift seed={phase} />}
       </group>
       <StatusRing status={m.status} radius={radius} selected={selected} placed={m.placed} />
-      {(showLabel || selected) && (
+      {working && motion === 'exhaust' && <Exhaust height={3.2} seed={phase} />}
+      {(showLabel || selected || hovered) && (
         // Inline styles, not utility classes: the label must read the same wherever the
         // scene is mounted, and two short lines never wrap into a third.
         <Html position={[0, 7 + (selected ? 0 : lift * 4), 0]} center zIndexRange={selected ? [30, 25] : [20, 0]} style={{ pointerEvents: 'none' }}>
@@ -328,7 +495,7 @@ const Machine: React.FC<{
             }}>
               <div style={{ fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: STATUS_COLOUR[m.status], display: 'inline-block' }} />
-                {m.name}
+                {m.name.length > 28 ? `${m.name.slice(0, 26)}…` : m.name}
               </div>
               {/* At the overview a site of thirty machines is thirty names; what each is
                   doing and where shows for the one selected, and in the zone strip. */}
@@ -350,7 +517,7 @@ const Machine: React.FC<{
 
 /** A route, dashed on the ground: where this machine shuttles when it works. Drawn as
  * illustrative, because nothing here knows the real track. */
-const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
+export const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
   const line = useMemo(() => {
     const g = new THREE.BufferGeometry().setFromPoints(path.map(([x, z]) => new THREE.Vector3(x, 0.45, z)));
     const l = new THREE.Line(g, new THREE.LineDashedMaterial({ color: active ? '#0284c7' : '#94a3b8', dashSize: 2, gapSize: 1.5 }));
@@ -388,6 +555,7 @@ const GroundDrag: React.FC<{ target: React.MutableRefObject<DragTarget | null>; 
 const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
   const { extent, zones, machines, classModels, showLabels, selectedKey, onSelect, editing, onDrag, focus, zoomCommand, autoRotate } = props;
   const { t } = useTranslation('equipment');
+  const simulated = !!props.simulated;
   const controls = useRef<CameraControls>(null);
   const drag = useRef<DragTarget | null>(null);
   const span = Math.max(extent.widthM, extent.depthM);
@@ -408,7 +576,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
     const aspect = size.width / Math.max(1, size.height);
     // The depth is foreshortened by the tilt; the width is not.
     const fit = Math.max(f.widthM / aspect, f.depthM * Math.cos(POLAR) + 12 * Math.sin(POLAR));
-    const dist = (fit / (2 * half)) * 1.3;
+    const dist = (fit / (2 * half)) * 1.22;
     const p = new THREE.Vector3(Math.sin(POLAR) * Math.sin(AZIMUTH), Math.cos(POLAR), Math.sin(POLAR) * Math.cos(AZIMUTH))
       .multiplyScalar(dist).add(new THREE.Vector3(f.x, 0, f.z));
     void c.setLookAt(p.x, p.y, p.z, f.x, 0, f.z, animate);
@@ -433,8 +601,10 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
 
   return (
     <>
-      <color attach="background" args={['#eef2f7']} />
-      <hemisphereLight args={['#ffffff', '#cbd5e1', 0.7]} />
+      {/* Sky, and haze toward the horizon so the grass fades out instead of ending. */}
+      <color attach="background" args={['#cfe3f3']} />
+      <fog attach="fog" args={['#cfe3f3', span * 1.6, span * 4.5]} />
+      <hemisphereLight args={['#f8fbff', '#a3b18a', 0.85]} />
       <directionalLight
         position={[span * 0.4, span * 0.8, span * 0.3]}
         intensity={1.6}
@@ -449,11 +619,15 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       />
       <SiteGround widthM={extent.widthM} depthM={extent.depthM} onEmptyClick={() => onSelect(null)} />
       {zones.map((z, i) => <Zone key={z.id ?? i} zone={z} index={i} editing={editing} onGrab={grab} />)}
+      {/* People and work, demo only: nothing tracks a worker or a crane hook. */}
+      {simulated && !editing && <SiteLife zones={zones} extent={extent} />}
       {machines.some((m) => !m.placed) && (
         <GroundLabel text={t('siteTwin.notPlacedRow', { defaultValue: 'Not yet placed' })} x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
       )}
-      {!editing && machines.filter((m) => m.placed && m.path.length > 1).map((m) => (
-        <RoutePath key={`route-${m.key}`} path={m.path} active={m.activity === 'productive'} />
+      {/* One line per distinct route: a fleet of ten on one route is one road, not ten. */}
+      {!editing && [...new Map(machines.filter((m) => m.placed && m.path.length > 1)
+        .map((m) => [m.path.slice(1).map((p) => p.join(',')).join(';'), m])).values()].map((m) => (
+          <RoutePath key={`route-${m.key}`} path={m.path} active={simulated || m.activity === 'productive'} />
       ))}
       {machines.map((m, i) => {
         const model = m.classSlug ? classModels[m.classSlug] : null;
@@ -463,7 +637,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
           <Machine
             key={m.key} m={m} modelUrl={model?.modelUrl ?? null} radius={radius}
             showLabel={showLabels} selected={selectedKey === m.key}
-            editing={editing} onSelect={onSelect} onGrab={grab} lift={i % 3}
+            editing={editing} onSelect={onSelect} onGrab={grab} lift={i % 3} simulated={simulated}
           />
         );
       })}

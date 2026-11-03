@@ -33,7 +33,7 @@ import { RecFrameService } from '../src/rec-frame/rec-frame.service';
 import { PredictionService } from '../src/prediction/services/prediction.service';
 import { BaselineService } from '../src/prediction/services/baseline.service';
 import { withTenantId } from '../src/scope/tenant-session';
-import { ensureSiteTwinDemo, tickSiteTwinDemo } from './site-twin-demo';
+import { ensureSiteTwinDemo, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
 
 /**
  * Parse an interval string like '30s', '1m', '2h', '7200s' into milliseconds.
@@ -512,7 +512,6 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
   console.log(`[SeedStream] 🔮 Prediction/Forecast Pass: ${forecastSummary.outcome.toUpperCase()} (${forecastSummary.forecast} generated, ${forecastSummary.skipped} skipped)`);
 
   // 3. AI Recommendations for EX-03
-  // The same reader the forecast pass uses: a forecast band breach counts as a fault (5d8f95f).
   const recEngine = new RecEngineService(ds, reader);
   const recFrame = new RecFrameService(ds, recEngine);
   try {

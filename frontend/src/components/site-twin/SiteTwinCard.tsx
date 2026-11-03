@@ -39,7 +39,8 @@ const ACTIVITY_COLOUR: Record<SiteTwinActivity, string> = {
   productive: '#16a34a', idle: '#f59e0b', 'running-unclassified': '#0ea5e9', off: '#64748b', unknown: '#94a3b8',
 };
 const STATUS_ORDER: SiteTwinStatus[] = ['live', 'alert', 'no_data', 'blocked', 'not_configured'];
-const REFRESH_MS = 60_000;
+// The fleet reports about every 20 s; the twin follows it.
+const REFRESH_MS = 20_000;
 const LANE_SPACING = 9;
 
 type Pos = { x: number; z: number; headingDeg: number; route: string[] };
@@ -69,7 +70,9 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
+  // Labels on by default only where they fit: sixty names over sixty machines is a wall
+  // of text. Hovering or selecting a machine always shows its own.
+  const [showLabels, setShowLabels] = useState<boolean | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
   const [focusIndex, setFocusIndex] = useState<number>(-1);
   const [zoom, setZoom] = useState<{ n: number; dir: -1 | 0 | 1 }>({ n: 0, dir: 0 });
@@ -130,12 +133,36 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     });
   }, [twin, draft, extent.depthM, zones]);
 
+  // Demo only: a site with no haul fleet of its own gets three simulated tippers running
+  // between its fronts, so the picture shows work being carried. Never on a real
+  // account, never saved, and labelled as what they are.
+  const shown: SceneMachine[] = useMemo(() => {
+    if (!twin?.simulated || draft) return machines;
+    if (machines.some((m) => /tipper|dumper|truck|transport|haul|transit/i.test(m.classSlug ?? ''))) return machines;
+    const pick = (...keys: string[]) => keys.map((k) => zones.find((z) => z.key === k)).find(Boolean);
+    const from = pick('quarry', 'excavation', 'road-b');
+    const to = pick('batching-plant', 'building', 'road-c', 'access-road');
+    const gate = pick('gate');
+    if (!from || !to || !gate) return machines;
+    const path: [number, number][] = [[gate.x, gate.z], [from.x, from.z], [to.x, to.z]];
+    return [...machines, ...[0, 1, 2].map((i) => ({
+      key: `demo-tipper-${i}`, name: t('siteTwin.demoTipper', { defaultValue: 'Demo tipper {{n}} (simulated)', n: i + 1 }),
+      classSlug: 'rock-tipper-truck', status: 'live' as SiteTwinStatus, placed: true,
+      x: gate.x, z: gate.z, headingDeg: 0, activity: 'productive' as SiteTwinActivity,
+      path, engagedLabel: null, breakdown: false,
+    }))];
+  }, [machines, twin?.simulated, draft, zones, t]);
+
+  const [focusMachine, setFocusMachine] = useState<string | null>(null);
   const focus: SceneFocus = useMemo(() => {
+    const fm = focusMachine ? machines.find((m) => m.key === focusMachine) : null;
+    if (fm) return { x: fm.x, z: fm.z, widthM: 50, depthM: 36 };
     const z = zones[focusIndex];
     if (z) return { x: z.x, z: z.z, widthM: z.widthM * 1.3, depthM: z.depthM * 1.3 };
     const lane = machines.some((m) => !m.placed) ? 28 : 0;
     return { x: 0, z: lane / 2, widthM: extent.widthM, depthM: extent.depthM + lane };
-  }, [zones, focusIndex, extent, machines]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zones, focusIndex, extent, focusMachine, machines.length]);
 
   const onDrag = useCallback((target: DragTarget, x: number, z: number) => {
     setDraft((d) => {
@@ -264,6 +291,8 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     );
   }
   if (!twin) return <div className="h-[520px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+  // Names off unless asked for: a machine's own shows on hover and when selected.
+  const labelsOn = showLabels ?? false;
 
   // Nothing is assigned here: there is no site to draw, and a yard of offices would be
   // a picture of plant this site does not have.
@@ -294,6 +323,11 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+          {twin.simulated && (
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 font-semibold" title={t('siteTwin.simulatedHint', { defaultValue: 'Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform.' })}>
+              {t('siteTwin.simulated', { defaultValue: 'Demo · simulated movement' })}
+            </span>
+          )}
           <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-200">
             {t('siteTwin.onSite', { defaultValue: '{{n}} machines on site', n: twin.summary.total })}
           </span>
@@ -313,24 +347,41 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- zone tabs */}
-      {/* The tabs scroll; the buttons stay put beside them. Inside the scroll, a site with
-          a dozen zones pushed Save out of sight while its layout was being edited. */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
-        {[{ label: t('siteTwin.overview', { defaultValue: 'Overview' }), i: -1 }, ...zones.map((z, i) => ({ label: z.label, i }))].map((tab) => (
-          <button
-            key={tab.i}
-            onClick={() => setFocusIndex(tab.i)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
-              focusIndex === tab.i ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
+      {/* ------------------------------------------------- place and equipment */}
+      {/* Two pickers rather than a row of tabs: a big site has twenty places and sixty
+          machines, and a picker holds them all without running off the card. */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          {t('siteTwin.place', { defaultValue: 'Place' })}
+          <select
+            value={focusMachine ? '' : String(focusIndex)}
+            onChange={(e) => { setFocusMachine(null); setSelected(null); setFocusIndex(Number(e.target.value)); }}
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[260px]"
           >
-            {tab.label}
-          </button>
-        ))}
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
+            <option value="-1">{t('siteTwin.overview', { defaultValue: 'Whole site' })}</option>
+            {zones.map((z, i) => <option key={z.key} value={String(i)}>{z.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          {t('siteTwin.equipment', { defaultValue: 'Equipment' })}
+          <select
+            value={focusMachine ?? ''}
+            onChange={(e) => {
+              const k = e.target.value || null;
+              setFocusMachine(k); setSelected(k);
+              if (!k) setFocusIndex(-1);
+            }}
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[300px]"
+          >
+            <option value="">{t('siteTwin.allEquipment', { defaultValue: 'All equipment' })}</option>
+            {[...twin.machines].sort((x, y) => (x.name ?? x.externalId).localeCompare(y.name ?? y.externalId)).map((m) => (
+              <option key={mkey(m)} value={mkey(m)}>
+                {(m.name ?? m.externalId).slice(0, 48)} · {statusLabel(m.status)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="ml-auto flex items-center gap-2 pl-3">
           {canEdit && !draft && (
             <button onClick={startEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 flex items-center gap-1.5 whitespace-nowrap">
               <Move className="w-3.5 h-3.5" /> {t('siteTwin.edit', { defaultValue: 'Edit layout' })}
@@ -395,12 +446,15 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
       <div className={`relative flex ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
         {/* ------------------------------------------------------------- canvas */}
-        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[560px]'}`}>
+        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[640px]'}`}>
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
             <SiteTwinScene
-              extent={extent} zones={zones} machines={machines} classModels={twin.classModels}
-              showLabels={showLabels} selectedKey={selected} onSelect={setSelected}
+              extent={extent} zones={zones} machines={shown}
+              // The demo tippers use the stand-in model the frontend ships, not a class copy.
+              classModels={twin.simulated ? { 'rock-tipper-truck': { modelUrl: '/models/classes/rock-tipper-truck.glb', bounds: null }, ...twin.classModels } : twin.classModels}
+              showLabels={labelsOn} selectedKey={selected} onSelect={setSelected}
               editing={!!draft} onDrag={onDrag} focus={focus} zoomCommand={zoom} autoRotate={autoRotate}
+              simulated={twin.simulated}
             />
           </Suspense>
 
@@ -408,7 +462,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             <button className={btn} title={t('siteTwin.zoomIn', { defaultValue: 'Zoom in' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: 1 }))}><Plus className="w-4 h-4" /></button>
             <button className={btn} title={t('siteTwin.zoomOut', { defaultValue: 'Zoom out' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: -1 }))}><Minus className="w-4 h-4" /></button>
             <button className={btn} title={t('siteTwin.resetView', { defaultValue: 'Reset view' })} onClick={() => { setFocusIndex(-1); setZoom((z) => ({ n: z.n + 1, dir: 0 })); }}><RotateCcw className="w-4 h-4" /></button>
-            <button className={btn} title={t('siteTwin.labels', { defaultValue: 'Show or hide labels' })} onClick={() => setShowLabels((v) => !v)}>{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
+            <button className={btn} title={t('siteTwin.labels', { defaultValue: 'Show or hide labels' })} onClick={() => setShowLabels(!labelsOn)}>{labelsOn ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
             {!draft && (
               <button className={btn} title={t('siteTwin.tour', { defaultValue: 'Rotate slowly' })} onClick={() => setAutoRotate((v) => !v)}>{autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
             )}
@@ -431,7 +485,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             )}
             {!draft && twin.machines.some((m) => m.placement && m.placement.route.length) && (
               <div className="text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-                {t('siteTwin.routeNote', { defaultValue: 'Dashed line: illustrative route, travelled only while the machine’s own data says it is working. Not GPS.' })}
+                {t('siteTwin.routeNote', { defaultValue: 'Dashed line: illustrative route, travelled while the machine’s data is live and nothing says it is stopped. Not GPS.' })}
               </div>
             )}
             {draft && <div className="text-sky-700 dark:text-sky-300 pt-1">{t('siteTwin.dragHint', { defaultValue: 'Drag a machine or a zone to move it.' })}</div>}
@@ -509,7 +563,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
         {/* ------------------------------------------------------- layout editor */}
         {draft && (
-          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[560px]'}`}>
+          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[640px]'}`}>
             <button
               disabled={composing} onClick={() => void compose()}
               className="w-full px-3 py-2 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold disabled:opacity-60"

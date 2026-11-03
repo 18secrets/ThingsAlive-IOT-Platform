@@ -7,6 +7,7 @@ import { createApp } from '../src/main';
 import { PageService, twinStatus } from '../src/page/page.service';
 import { LayoutInput, normaliseHeading, SiteTwinService } from '../src/site-twin/site-twin.service';
 import { composeLayout, frontOf } from '../src/site-twin/compose';
+import { ensureSiteTwinDemo, onboardTwinDemoMachines, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 const MIGRATION = 'SiteTwin1763300000000';
@@ -124,6 +125,8 @@ describeDb('site twin: layout and live view', () => {
     it('is a default yard with every machine unplaced and its status from the site page reads', async () => {
       const view = await pages.siteTwin(acme, plantId, NOW);
       expect(view).toMatchObject({ saved: false, version: 0, extent: { widthM: 200, depthM: 120 }, zones: [] });
+      // Only the seed demo account's twin is a simulation; a real account's never is.
+      expect(view.simulated).toBe(false);
       const status = Object.fromEntries(view.machines.map((m) => [m.externalId, m.status]));
       // The machine at another site is not drawn here.
       expect(status).toEqual({ BARE: 'not_configured', 'DG-LIVE': 'live', 'DG-SILENT': 'no_data' });
@@ -439,11 +442,108 @@ describeDb('site twin: layout and live view', () => {
       expect(kinds(l)).not.toContain('quarry');
     });
 
+    it('sends tippers between the fronts the site has, and gives piling rigs their own area', () => {
+      const l = composeLayout([
+        m('E1', 'Excavators & Earthmoving'), m('E2', 'Excavators & Earthmoving'), m('E3', 'Excavators & Earthmoving'),
+        m('E4', 'Excavators & Earthmoving'), m('B1', 'Concrete Equipment'), m('T1', 'Material Transport'),
+        m('T2', 'Material Transport'), m('P1', 'Foundation & Drilling'),
+      ], 0);
+      expect(l.placements.find((p) => p.externalId === 'T1')!.route).toEqual(['quarry', 'batching-plant']);
+      expect(kinds(l)).toContain('batching_plant');
+      expect(l.zones.find((z) => z.key === 'piling')).toBeDefined();
+      expect(kinds(l)).not.toContain('building');
+    });
+
+    it('sizes a zone to its machines: eleven generators get eleven spots, none shared, all inside', () => {
+      const l = composeLayout(Array.from({ length: 11 }, (_, i) => m(`G${i}`, 'Power Generation')), 0);
+      const room = l.zones.find((z) => z.key === 'generator-room')!;
+      const spots = l.placements.map((p) => `${p.x},${p.z}`);
+      expect(new Set(spots).size).toBe(11);
+      for (const p of l.placements) {
+        expect(Math.abs(p.x - room.x)).toBeLessThanOrEqual(room.widthM / 2);
+        expect(Math.abs(p.z - room.z)).toBeLessThanOrEqual(room.depthM / 2);
+      }
+      // Nothing composed falls outside the site, so the database will accept it.
+      for (const z of l.zones) {
+        expect(Math.abs(z.x) + z.widthM / 2).toBeLessThanOrEqual(l.extent.widthM / 2);
+        expect(Math.abs(z.z) + z.depthM / 2).toBeLessThanOrEqual(l.extent.depthM / 2);
+      }
+    });
+
     it('puts a machine that needs attention in the breakdown bay, not at its work front', () => {
       const l = composeLayout([m('E1', 'Excavators & Earthmoving', null, true)], 0);
       const bay = l.zones.find((z) => z.key === 'workshop')!;
       expect(l.placements).toEqual([expect.objectContaining({ externalId: 'E1', x: bay.x, z: bay.z })]);
     });
+  });
+
+  it('the demo stream lays out only sites with machines, and never one already laid out', async () => {
+    const [{ id: empty }] = await owner.query(`INSERT INTO plant (tenant_id, code, name) VALUES ('acme', 'empty', 'Empty') RETURNING id`);
+    const before = (await twins.read(acme, plantId)).version;
+    await ensureSiteTwinDemo(owner, 'acme');
+    await tickSiteTwinDemo(owner, 'acme', NOW, { writeLoad: false });
+    expect((await twins.read(acme, plantId)).version).toBe(before);
+    const depot = await twins.read(acme, otherPlantId);
+    expect(depot.saved).toBe(true);
+    expect([...depot.placements.keys()]).toEqual([`${SRC}/ELSEWHERE`]);
+    expect((await twins.read(acme, empty)).saved).toBe(false);
+
+    // A machine assigned to the demo-made site: re-composed, the new one placed.
+    await owner.query(
+      `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, equipment_class_slug, plant_id, tier, readiness, updated_by)
+         VALUES ('acme', $1, 'GEN-9', 'Genset', 'prime-diesel-generator', $2, 'standard', '{}'::jsonb, 'u')`, [SRC, otherPlantId],
+    );
+    await ensureSiteTwinDemo(owner, 'acme');
+    const again = await twins.read(acme, otherPlantId);
+    expect([...again.placements.keys()].sort()).toEqual([`${SRC}/ELSEWHERE`, `${SRC}/GEN-9`]);
+    expect(again.zones.map((z) => z.key)).toContain('generator-room');
+    // Nothing changed since: left alone.
+    await ensureSiteTwinDemo(owner, 'acme');
+    expect((await twins.read(acme, otherPlantId)).version).toBe(again.version);
+    await owner.query(`DELETE FROM equipment_profile WHERE external_id = 'GEN-9'`);
+  });
+
+  it('sets up the named test machines: a class where none, every required role bound, readings that make them live', async () => {
+    await owner.query(
+      `INSERT INTO equipment_class_profile (slug, version, name, status, expected_signals) VALUES ('demo-excavator', 1, 'demo', 'published', $1::jsonb)`,
+      [JSON.stringify([{ signal: 'engine_running_status', unit: 'x', required: true }, { signal: 'engine_load', unit: 'x', required: true }])],
+    );
+    for (const role of ['engine_running_status', 'engine_load']) {
+      await owner.query(
+        `INSERT INTO equipment_class_sensor_requirement (class_slug, class_version, measurement_role, canonical_unit, min_count, stale_after_seconds)
+           VALUES ('demo-excavator', 1, $1, 'x', 1, 3600)`, [role],
+      );
+    }
+    await owner.query(
+      `INSERT INTO client_equipment_class (tenant_id, slug, name, template_slug, template_version) VALUES ('acme', 'demo-excavator', 'Demo', 'demo-excavator', 1)`,
+    );
+    const [{ id: yard }] = await owner.query(`INSERT INTO plant (tenant_id, code, name) VALUES ('acme', 'test-yard', 'Test yard') RETURNING id`);
+    await owner.query(
+      `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, plant_id, tier, readiness, updated_by)
+         VALUES ('acme', $1, 'TEST-DIPPY-NOLIB-01', 'No library', $2, 'standard', '{}'::jsonb, 'u')`, [SRC, yard],
+    );
+    await onboardTwinDemoMachines(owner, 'acme', NOW);
+    await onboardTwinDemoMachines(owner, 'acme', NOW); // twice: no second binding
+    const [machine] = await owner.query(`SELECT equipment_class_slug FROM equipment_profile WHERE external_id = 'TEST-DIPPY-NOLIB-01'`);
+    expect(machine.equipment_class_slug).toBe('demo-excavator');
+    const bound = await owner.query(`SELECT measurement_role FROM signal_binding_version WHERE external_id = 'TEST-DIPPY-NOLIB-01' ORDER BY 1`);
+    expect(bound.map((b: { measurement_role: string }) => b.measurement_role)).toEqual(['engine_load', 'engine_running_status']);
+    const view = await pages.siteTwin(acme, yard, NOW);
+    expect(view.machines[0]).toMatchObject({ externalId: 'TEST-DIPPY-NOLIB-01', status: 'live', activity: 'productive' });
+  });
+
+  it('the port overview draws every laid-out site in scope, lists the rest, and has no workforce on a real account', async () => {
+    const port = await pages.portTwin(acme, NOW);
+    expect(port.simulated).toBe(false);
+    expect(port.summary.workforce).toBeNull();
+    const codes = port.sites.map((s) => s.site.code);
+    expect(codes).toContain('yard');
+    for (const s of port.sites) expect(s.saved).toBe(true);
+    expect(port.summary.machines).toBe(port.sites.reduce((a, s) => a + s.summary.total, 0));
+    // Scope narrows it like every other site read.
+    const narrow = await pages.portTwin({ ...acme, plantIds: [plantId] }, NOW);
+    expect(narrow.sites.map((s) => s.site.plantId)).toEqual([plantId]);
+    expect((await pages.portTwin(globex, NOW)).sites).toEqual([]);
   });
 
   it('draws an open alert as an alert, whatever the readiness', () => {
