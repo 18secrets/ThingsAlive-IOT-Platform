@@ -36,6 +36,7 @@ import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
+import { DEMO_WORKFORCE, SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
 import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
@@ -104,6 +105,9 @@ export interface SiteTwinView {
   }[];
   /** Saved structures not drawn because no machine assigned here backs them any more. */
   hiddenZones: string[];
+  /** The demo tenant: the page animates every machine at a work front and labels the
+   * twin a simulation. False for every real account. */
+  simulated: boolean;
   summary: { total: number; placed: number } & Record<TwinMachineStatus, number>;
 }
 
@@ -673,6 +677,49 @@ export class PageService {
       site: { plantId: layout.plant.id, code: layout.plant.code, name: layout.plant.name, address: layout.plant.address },
       saved: layout.saved, version: layout.version, extent: layout.extent, zones: layout.zones,
       classModels: Object.fromEntries(models), machines: rows, summary, hiddenZones: layout.hiddenZones,
+      simulated: SIMULATED_TENANTS.has(scope.tenantId),
+    };
+  }
+
+  /**
+   * Every laid-out site of the account in one call, for the port overview: each site's
+   * own twin, as its page shows it. A site with machines and no layout yet is listed, not
+   * drawn — the overview does not invent one. Sites are read one after another: a port is
+   * a handful of sites, and each read already batches across its machines.
+   *
+   * On the demo account a workforce figure is shared across the sites by machine count;
+   * it is simulated, labelled so, and null everywhere else.
+   */
+  async portTwin(scope: RequestScope, at: Date = new Date()) {
+    const plants = await withTenantSession(this.ds, scope, (m) => m.getRepository(Plant).find({
+      where: { tenantId: scope.tenantId, status: 'active' }, order: { code: 'ASC' },
+    }));
+    const visible = plants.filter((p) => scope.plantIds === undefined || scope.plantIds.includes(p.id));
+    const sites: (SiteTwinView & { workforce: number | null })[] = [];
+    const notLaidOut: { plantId: string; code: string; name: string; machines: number }[] = [];
+    for (const p of visible) {
+      const view = await this.siteTwin(scope, p.id, at);
+      if (!view.machines.length) continue;
+      if (!view.saved) { notLaidOut.push({ plantId: p.id, code: p.code, name: p.name, machines: view.machines.length }); continue; }
+      sites.push({ ...view, workforce: null });
+    }
+    const simulated = SIMULATED_TENANTS.has(scope.tenantId);
+    const machines = sites.reduce((a, s) => a + s.summary.total, 0);
+    if (simulated && machines) {
+      let left = DEMO_WORKFORCE;
+      sites.forEach((s, i) => {
+        s.workforce = i === sites.length - 1 ? left : Math.round((DEMO_WORKFORCE * s.summary.total) / machines);
+        left -= s.workforce;
+      });
+    }
+    return {
+      sites, notLaidOut, simulated,
+      summary: {
+        sites: sites.length, machines,
+        live: sites.reduce((a, s) => a + s.summary.live, 0),
+        alert: sites.reduce((a, s) => a + s.summary.alert, 0),
+        workforce: simulated && machines ? DEMO_WORKFORCE : null,
+      },
     };
   }
 

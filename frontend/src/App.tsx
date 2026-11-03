@@ -32,6 +32,7 @@ import { AdminPage } from './pages/AdminPage';
 import { firstAllowedAdminSubTab, canOpenPath } from './lib/pageAccess';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { SitePagePage } from './pages/SitePagePage';
+import { PortOverviewPage } from './pages/PortOverviewPage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
@@ -1224,6 +1225,7 @@ function AppData() {
               }
             />
             <Route path="equipment/:sourceSystem/:externalId/page" element={<EquipmentPagePage />} />
+            <Route path="sites/port" element={<PortOverviewPage />} />
             <Route path="sites/:plantId/page" element={<SitePagePage />} />
             <Route
               path=":subTab"

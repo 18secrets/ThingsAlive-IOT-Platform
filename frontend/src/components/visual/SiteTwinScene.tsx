@@ -4,6 +4,7 @@ import { CameraControls, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { SiteTwin, SiteTwinActivity, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
 import { AREA_KINDS, Structure } from './SiteStructures';
+import SiteLife from './SiteLife';
 
 /**
  * The site's digital twin, drawn. Loaded lazily (SiteTwinCard), so three.js is fetched
@@ -60,6 +61,8 @@ export interface SiteTwinSceneProps {
   /** Bumped by the toolbar to zoom: +1 in, -1 out, 0 reset. */
   zoomCommand: { n: number; dir: -1 | 0 | 1 };
   autoRotate: boolean;
+  /** Demo tenant: animate every machine at a work front, whatever its data says. */
+  simulated?: boolean;
 }
 
 // Seen from the south and a little east, about 40° above the ground: the long side of a
@@ -92,7 +95,7 @@ function useGroundLabel(text: string) {
   return label;
 }
 
-const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
+export const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
   const { texture, aspect } = useGroundLabel(text.toUpperCase());
   // About 5 m tall letters, so a zone name reads at the overview, shrunk to fit its zone.
   const width = Math.min(maxWidth, aspect * 5);
@@ -104,7 +107,7 @@ const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: numb
   );
 };
 
-const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
+export const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGrab: (t: DragTarget) => void }> = ({ zone, index, editing, onGrab }) => {
   const area = AREA_KINDS.has(zone.kind);
   return (
     <group>
@@ -137,7 +140,7 @@ const Zone: React.FC<{ zone: SiteTwinZone; index: number; editing: boolean; onGr
 };
 
 /** The site slab, its perimeter fence and a 10 m grid, so distance reads at a glance. */
-const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
+export const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () => void }> = ({ widthM, depthM, onEmptyClick }) => {
   const fence = 1.8;
   const posts = useMemo(() => {
     const out: [number, number][] = [];
@@ -284,11 +287,11 @@ export const ACTIVITY_LABEL: Record<SiteTwinActivity, string> = {
 
 /** Where along a back-and-forth trip over `path` the machine is after `d` metres, and
  * which way it faces. */
-function along(path: [number, number][], d: number): { x: number; z: number; dx: number; dz: number } {
+function along(path: [number, number][], d: number): { x: number; z: number; dx: number; dz: number; back: boolean; leg: number } {
   const legs: number[] = [];
   for (let i = 1; i < path.length; i += 1) legs.push(Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
   const one = legs.reduce((a, b) => a + b, 0);
-  if (one < 0.01) return { x: path[0][0], z: path[0][1], dx: 1, dz: 0 };
+  if (one < 0.01) return { x: path[0][0], z: path[0][1], dx: 1, dz: 0, back: false, leg: 0 };
   let t = d % (2 * one);
   const back = t > one;
   if (back) t = 2 * one - t;
@@ -297,19 +300,65 @@ function along(path: [number, number][], d: number): { x: number; z: number; dx:
       const f = legs[i] ? Math.min(1, t / legs[i]) : 0;
       const [ax, az] = path[i]; const [bx, bz] = path[i + 1];
       const dx = (bx - ax) * (back ? -1 : 1); const dz = (bz - az) * (back ? -1 : 1);
-      return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, dx, dz };
+      return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, dx, dz, back, leg: i };
     }
     t -= legs[i];
   }
-  return { x: path[0][0], z: path[0][1], dx: 1, dz: 0 };
+  return { x: path[0][0], z: path[0][1], dx: 1, dz: 0, back: false, leg: 0 };
 }
 
 /** How a working machine of this class moves, from its slug: a generator or compressor
  * stands and exhausts, a piling rig works its mast, everything else slews and shuffles
  * as an excavator, a crane or a pump at work does. Travel is the route's, for any class. */
-type Motion = 'exhaust' | 'drill' | 'slew';
+type Motion = 'exhaust' | 'drill' | 'haul' | 'slew';
 const motionOf = (slug: string | null): Motion =>
-  /generat|genset|compress/i.test(slug ?? '') ? 'exhaust' : /pil(e|ing)|drill|vibro|rig/i.test(slug ?? '') ? 'drill' : 'slew';
+  /generat|genset|compress/i.test(slug ?? '') ? 'exhaust'
+    : /tipper|dumper|truck|transport|haul|transit/i.test(slug ?? '') ? 'haul'
+      : /pil(e|ing)|drill|vibro|rig/i.test(slug ?? '') ? 'drill' : 'slew';
+
+/** A mobile crane's lift: a steel beam on a cable from the boom tip, rising and lowering
+ * as the crane slews it across. Demo only — nothing reports a hook. */
+const CraneLift: React.FC<{ seed: number }> = ({ seed }) => {
+  const cable = useRef<THREE.Mesh>(null);
+  const load = useRef<THREE.Group>(null);
+  const tipX = 7.5; const tipY = 11;
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime * 0.3 + seed * 0.01;
+    const drop = 3 + 6 * (Math.sin(t) + 1) / 2;
+    if (cable.current) { cable.current.scale.y = drop; cable.current.position.set(tipX, tipY - drop / 2, 0); }
+    if (load.current) { load.current.position.set(tipX, tipY - drop - 0.3, 0); load.current.rotation.y = 0.6 * Math.sin(t * 0.7); }
+  });
+  return (
+    <group>
+      <mesh ref={cable}>
+        <cylinderGeometry args={[0.05, 0.05, 1, 4]} />
+        <meshBasicMaterial color="#111827" />
+      </mesh>
+      <group ref={load}>
+        <mesh castShadow>
+          <boxGeometry args={[5, 0.5, 0.5]} />
+          <meshStandardMaterial color="#b45309" />
+        </mesh>
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[0.3, 0.5, 0.3]} />
+          <meshStandardMaterial color="#facc15" />
+        </mesh>
+      </group>
+    </group>
+  );
+};
+
+/** A tipper's load: a heap of broken stone in the bed. */
+const Load: React.FC<{ visible: React.MutableRefObject<boolean> }> = ({ visible }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(() => { if (ref.current) ref.current.visible = visible.current; });
+  return (
+    <mesh ref={ref} position={[-1.4, 3.1, 0]} castShadow>
+      <coneGeometry args={[1.5, 1.3, 7]} />
+      <meshStandardMaterial color="#8d7b68" flatShading />
+    </mesh>
+  );
+};
 
 /** A stable phase per machine, so a fleet on one route is spread along it. */
 const phaseOf = (key: string) => {
@@ -342,15 +391,18 @@ const Exhaust: React.FC<{ height: number; seed: number }> = ({ height, seed }) =
   );
 };
 
-const Machine: React.FC<{
+export const Machine: React.FC<{
   m: SceneMachine; modelUrl: string | null; radius: number; showLabel: boolean; selected: boolean;
   editing: boolean; onSelect: (key: string) => void; onGrab: (t: DragTarget) => void;
   /** 0, 1 or 2: how many steps up its label sits, so neighbours' labels do not stack. */
   lift: number;
-}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift }) => {
+  simulated: boolean;
+}> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift, simulated }) => {
   const outer = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
+  const [hovered, setHovered] = React.useState(false);
   const phase = phaseOf(m.key);
+  const isCrane = /crane/i.test(m.classSlug ?? '');
   const motion = motionOf(m.classSlug);
   // Start somewhere along the route, not all at its first stop.
   const travelled = useRef(phase % 400);
@@ -358,8 +410,13 @@ const Machine: React.FC<{
   // only while duty-cycle classifies it as working. Never while the layout is edited.
   // It moves while its data is live and nothing says it is stopped: working, or engine on
   // with no load signal to say how hard. Idle, off, silent, alerting or broken down stand.
-  const working = !editing && m.placed && !m.breakdown
-    && (m.activity === 'productive' || (m.status === 'live' && m.activity !== 'idle' && m.activity !== 'off'));
+  // In the demo every machine at a work front works; one in the breakdown bay does not.
+  const inBay = /breakdown|maintenance/i.test(m.engagedLabel ?? '');
+  const working = !editing && m.placed && !m.breakdown && (simulated
+    ? !inBay
+    : m.activity === 'productive' || (m.status === 'live' && m.activity !== 'idle' && m.activity !== 'off'));
+  // Loaded from the first stop (the quarry) on the way out, empty on the way back.
+  const loaded = useRef(false);
   const travels = working && m.path.length > 1;
   const home = (-m.headingDeg * Math.PI) / 180;
 
@@ -369,18 +426,25 @@ const Machine: React.FC<{
     if (travels) {
       travelled.current += dt * SPEED;
       const p = along(m.path, travelled.current);
+      loaded.current = motion === 'haul' && !p.back && p.leg >= 1;
       outer.current.position.set(p.x, 0, p.z);
       body.current.rotation.y = Math.atan2(-p.dz, p.dx);
       body.current.position.y = 0;
       return;
     }
+    loaded.current = false;
     if (!working) {
       outer.current.position.set(m.x, 0, m.z);
       body.current.rotation.y = home;
       body.current.position.y = 0;
       return;
     }
-    if (motion === 'slew') {
+    if (isCrane) {
+      // A crane stands and slews its load across slowly, a wide arc, pausing at each end.
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home + 1.1 * Math.tanh(2 * Math.sin(t * 0.18));
+      body.current.position.y = 0;
+    } else if (motion === 'slew') {
       // Dig, swing to dump, swing back, and creep along the face now and then.
       const shuffle = 1.6 * Math.sin(t * 0.12);
       outer.current.position.set(m.x + shuffle * Math.cos(home), 0, m.z - shuffle * Math.sin(home));
@@ -406,16 +470,18 @@ const Machine: React.FC<{
         rotation={[0, home, 0]}
         onClick={(e: ThreeEvent<MouseEvent>) => { if (e.delta < 5) { e.stopPropagation(); onSelect(m.key); } }}
         onPointerDown={editing ? (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); onSelect(m.key); onGrab({ kind: 'machine', key: m.key }); } : undefined}
-        onPointerOver={() => { document.body.style.cursor = editing ? 'grab' : 'pointer'; }}
-        onPointerOut={() => { document.body.style.cursor = ''; }}
+        onPointerOver={() => { setHovered(true); document.body.style.cursor = editing ? 'grab' : 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = ''; }}
       >
         {modelUrl
           ? <Suspense fallback={<StandIn colour={STATUS_COLOUR[m.status]} />}><ClassModel url={modelUrl} /></Suspense>
           : <StandIn colour={STATUS_COLOUR[m.status]} />}
+        {motion === 'haul' && <Load visible={loaded} />}
+        {simulated && working && isCrane && <CraneLift seed={phase} />}
       </group>
       <StatusRing status={m.status} radius={radius} selected={selected} placed={m.placed} />
       {working && motion === 'exhaust' && <Exhaust height={3.2} seed={phase} />}
-      {(showLabel || selected) && (
+      {(showLabel || selected || hovered) && (
         // Inline styles, not utility classes: the label must read the same wherever the
         // scene is mounted, and two short lines never wrap into a third.
         <Html position={[0, 7 + (selected ? 0 : lift * 4), 0]} center zIndexRange={selected ? [30, 25] : [20, 0]} style={{ pointerEvents: 'none' }}>
@@ -426,7 +492,7 @@ const Machine: React.FC<{
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: STATUS_COLOUR[m.status], display: 'inline-block' }} />
-                {m.name}
+                {m.name.length > 28 ? `${m.name.slice(0, 26)}…` : m.name}
               </div>
               {/* At the overview a site of thirty machines is thirty names; what each is
                   doing and where shows for the one selected, and in the zone strip. */}
@@ -446,7 +512,7 @@ const Machine: React.FC<{
 
 /** A route, dashed on the ground: where this machine shuttles when it works. Drawn as
  * illustrative, because nothing here knows the real track. */
-const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
+export const RoutePath: React.FC<{ path: [number, number][]; active: boolean }> = ({ path, active }) => {
   const line = useMemo(() => {
     const g = new THREE.BufferGeometry().setFromPoints(path.map(([x, z]) => new THREE.Vector3(x, 0.45, z)));
     const l = new THREE.Line(g, new THREE.LineDashedMaterial({ color: active ? '#0284c7' : '#94a3b8', dashSize: 2, gapSize: 1.5 }));
@@ -483,6 +549,7 @@ const GroundDrag: React.FC<{ target: React.MutableRefObject<DragTarget | null>; 
 
 const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
   const { extent, zones, machines, classModels, showLabels, selectedKey, onSelect, editing, onDrag, focus, zoomCommand, autoRotate } = props;
+  const simulated = !!props.simulated;
   const controls = useRef<CameraControls>(null);
   const drag = useRef<DragTarget | null>(null);
   const span = Math.max(extent.widthM, extent.depthM);
@@ -546,11 +613,15 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
       />
       <SiteGround widthM={extent.widthM} depthM={extent.depthM} onEmptyClick={() => onSelect(null)} />
       {zones.map((z, i) => <Zone key={z.id ?? i} zone={z} index={i} editing={editing} onGrab={grab} />)}
+      {/* People and work, demo only: nothing tracks a worker or a crane hook. */}
+      {simulated && !editing && <SiteLife zones={zones} extent={extent} />}
       {machines.some((m) => !m.placed) && (
         <GroundLabel text="Not yet placed" x={0} z={extent.depthM / 2 + 5} maxWidth={span * 0.3} y={0.05} />
       )}
-      {!editing && machines.filter((m) => m.placed && m.path.length > 1).map((m) => (
-        <RoutePath key={`route-${m.key}`} path={m.path} active={m.activity === 'productive'} />
+      {/* One line per distinct route: a fleet of ten on one route is one road, not ten. */}
+      {!editing && [...new Map(machines.filter((m) => m.placed && m.path.length > 1)
+        .map((m) => [m.path.slice(1).map((p) => p.join(',')).join(';'), m])).values()].map((m) => (
+          <RoutePath key={`route-${m.key}`} path={m.path} active={simulated || m.activity === 'productive'} />
       ))}
       {machines.map((m, i) => {
         const model = m.classSlug ? classModels[m.classSlug] : null;
@@ -560,7 +631,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
           <Machine
             key={m.key} m={m} modelUrl={model?.modelUrl ?? null} radius={radius}
             showLabel={showLabels} selected={selectedKey === m.key}
-            editing={editing} onSelect={onSelect} onGrab={grab} lift={i % 3}
+            editing={editing} onSelect={onSelect} onGrab={grab} lift={i % 3} simulated={simulated}
           />
         );
       })}

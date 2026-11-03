@@ -33,6 +33,13 @@ export class PageController {
     return this.pages.sitePage(scope, plantId);
   }
 
+  @Get('sites/twins')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "Every laid-out site's twin in one call, for the port overview; sites not yet laid out are listed" })
+  portTwin(@CurrentScope() scope: RequestScope) {
+    return this.pages.portTwin(scope);
+  }
+
   @Get('sites/:plantId/twin')
   @Requires('catalog.read')
   @ApiOperation({ summary: "One site's digital twin: layout, every machine with its live status, one model per class" })

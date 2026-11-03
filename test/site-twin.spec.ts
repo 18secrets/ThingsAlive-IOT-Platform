@@ -7,7 +7,7 @@ import { createApp } from '../src/main';
 import { PageService, twinStatus } from '../src/page/page.service';
 import { LayoutInput, normaliseHeading, SiteTwinService } from '../src/site-twin/site-twin.service';
 import { composeLayout, frontOf } from '../src/site-twin/compose';
-import { ensureSiteTwinDemo, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
+import { ensureSiteTwinDemo, onboardTwinDemoMachines, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 const MIGRATION = 'SiteTwin1763300000000';
@@ -125,6 +125,8 @@ describeDb('site twin: layout and live view', () => {
     it('is a default yard with every machine unplaced and its status from the site page reads', async () => {
       const view = await pages.siteTwin(acme, plantId, NOW);
       expect(view).toMatchObject({ saved: false, version: 0, extent: { widthM: 200, depthM: 120 }, zones: [] });
+      // Only the seed demo account's twin is a simulation; a real account's never is.
+      expect(view.simulated).toBe(false);
       const status = Object.fromEntries(view.machines.map((m) => [m.externalId, m.status]));
       // The machine at another site is not drawn here.
       expect(status).toEqual({ BARE: 'not_configured', 'DG-LIVE': 'live', 'DG-SILENT': 'no_data' });
@@ -499,6 +501,49 @@ describeDb('site twin: layout and live view', () => {
     await ensureSiteTwinDemo(owner, 'acme');
     expect((await twins.read(acme, otherPlantId)).version).toBe(again.version);
     await owner.query(`DELETE FROM equipment_profile WHERE external_id = 'GEN-9'`);
+  });
+
+  it('sets up the named test machines: a class where none, every required role bound, readings that make them live', async () => {
+    await owner.query(
+      `INSERT INTO equipment_class_profile (slug, version, name, status, expected_signals) VALUES ('demo-excavator', 1, 'demo', 'published', $1::jsonb)`,
+      [JSON.stringify([{ signal: 'engine_running_status', unit: 'x', required: true }, { signal: 'engine_load', unit: 'x', required: true }])],
+    );
+    for (const role of ['engine_running_status', 'engine_load']) {
+      await owner.query(
+        `INSERT INTO equipment_class_sensor_requirement (class_slug, class_version, measurement_role, canonical_unit, min_count, stale_after_seconds)
+           VALUES ('demo-excavator', 1, $1, 'x', 1, 3600)`, [role],
+      );
+    }
+    await owner.query(
+      `INSERT INTO client_equipment_class (tenant_id, slug, name, template_slug, template_version) VALUES ('acme', 'demo-excavator', 'Demo', 'demo-excavator', 1)`,
+    );
+    const [{ id: yard }] = await owner.query(`INSERT INTO plant (tenant_id, code, name) VALUES ('acme', 'test-yard', 'Test yard') RETURNING id`);
+    await owner.query(
+      `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, plant_id, tier, readiness, updated_by)
+         VALUES ('acme', $1, 'TEST-DIPPY-NOLIB-01', 'No library', $2, 'standard', '{}'::jsonb, 'u')`, [SRC, yard],
+    );
+    await onboardTwinDemoMachines(owner, 'acme', NOW);
+    await onboardTwinDemoMachines(owner, 'acme', NOW); // twice: no second binding
+    const [machine] = await owner.query(`SELECT equipment_class_slug FROM equipment_profile WHERE external_id = 'TEST-DIPPY-NOLIB-01'`);
+    expect(machine.equipment_class_slug).toBe('demo-excavator');
+    const bound = await owner.query(`SELECT measurement_role FROM signal_binding_version WHERE external_id = 'TEST-DIPPY-NOLIB-01' ORDER BY 1`);
+    expect(bound.map((b: { measurement_role: string }) => b.measurement_role)).toEqual(['engine_load', 'engine_running_status']);
+    const view = await pages.siteTwin(acme, yard, NOW);
+    expect(view.machines[0]).toMatchObject({ externalId: 'TEST-DIPPY-NOLIB-01', status: 'live', activity: 'productive' });
+  });
+
+  it('the port overview draws every laid-out site in scope, lists the rest, and has no workforce on a real account', async () => {
+    const port = await pages.portTwin(acme, NOW);
+    expect(port.simulated).toBe(false);
+    expect(port.summary.workforce).toBeNull();
+    const codes = port.sites.map((s) => s.site.code);
+    expect(codes).toContain('yard');
+    for (const s of port.sites) expect(s.saved).toBe(true);
+    expect(port.summary.machines).toBe(port.sites.reduce((a, s) => a + s.summary.total, 0));
+    // Scope narrows it like every other site read.
+    const narrow = await pages.portTwin({ ...acme, plantIds: [plantId] }, NOW);
+    expect(narrow.sites.map((s) => s.site.plantId)).toEqual([plantId]);
+    expect((await pages.portTwin(globex, NOW)).sites).toEqual([]);
   });
 
   it('draws an open alert as an alert, whatever the readiness', () => {

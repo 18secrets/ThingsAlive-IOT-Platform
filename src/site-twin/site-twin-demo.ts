@@ -24,6 +24,15 @@ import { LayoutInput, SiteTwinService } from './site-twin.service';
 
 const DEMO_USER = 'demo-stream';
 
+/** The seed demo tenant (seed-demo's DEMO_TENANT). Its twin is drawn as a simulation —
+ * every machine at a work front moves and tippers haul — and says so on screen. No real
+ * customer's twin is: theirs moves only on their own live data. */
+export const SIMULATED_TENANTS: ReadonlySet<string> = new Set(['demo-construction']);
+
+/** The demo port's workforce, as described for the demo (Tapas, 2026-11-03): about twenty
+ * thousand across its sites. Simulated and labelled so; a real account has no figure. */
+export const DEMO_WORKFORCE = 20_000;
+
 /** Progress per tick, in percentage points, for what the composer builds in stages. The
  * road is laid section by section: B until it is done, then C. */
 const PROGRESS_ORDER: { keys: string[]; step: number }[] = [
@@ -77,6 +86,82 @@ function sameShape(current: Awaited<ReturnType<SiteTwinService['read']>>, propos
   return now === next;
 }
 
+/**
+ * Machines the demo sets up as well as streams, by external id. Asked for by name (Tapas,
+ * 2026-11-03): two test machines on plant 0483 that showed "Not set up" on the twin — one
+ * with a class and no bindings, one with no class. Named rather than "every unbound
+ * machine", because some demo machines are unbound on purpose (EX-06 is "partly unbound"
+ * so its page shows what that looks like).
+ */
+export const TWIN_DEMO_ONBOARD = ['TEST-DIPPY-LIB-01', 'TEST-DIPPY-NOLIB-01'];
+const ONBOARD_CLASS = 'demo-excavator';
+
+/** A plausible reading for a role on a working excavator, with a little noise. */
+function workingValue(role: string, minute: number, i: number): number {
+  const n = ((minute * 7 + i * 13) % 10) / 10 - 0.5;
+  switch (role) {
+    case 'engine_running_status': return 1;
+    case 'engine_load': return 62 + 8 * n;
+    case 'engine_coolant_temperature': return 84 + 3 * n;
+    case 'engine_oil_pressure': return 390 + 12 * n;
+    case 'hydraulic_oil_temperature': return 61 + 2 * n;
+    case 'fuel_level': return 58 + 4 * n;
+    default: return 50 + 5 * n;
+  }
+}
+
+/**
+ * Set up the named machines and keep them reporting: a class where they have none, a
+ * primary binding for every signal their class requires, each on a demo device
+ * `TWIN-DEMO-<id>`, and a reading per signal on every call. Idempotent: a machine that
+ * already has a class keeps it, a role that is already bound is not bound again.
+ */
+export async function onboardTwinDemoMachines(ds: DataSource, tenantId: string, now: Date): Promise<void> {
+  const machines: { source_system: string; external_id: string; equipment_class_slug: string | null; class_version: number | null }[] =
+    await ds.query(
+      `SELECT source_system, external_id, equipment_class_slug, class_version FROM equipment_profile
+        WHERE tenant_id = $1 AND external_id = ANY($2::text[])`, [tenantId, TWIN_DEMO_ONBOARD],
+    );
+  const minute = Math.floor(now.getTime() / 60_000);
+  for (const [i, m] of machines.entries()) {
+    const [cls] = await ds.query(
+      `SELECT template_slug, template_version FROM client_equipment_class WHERE tenant_id = $1 AND slug = $2`,
+      [tenantId, m.equipment_class_slug ?? ONBOARD_CLASS],
+    );
+    if (!cls?.template_slug) continue;
+    if (!m.equipment_class_slug) {
+      await ds.query(
+        `UPDATE equipment_profile SET equipment_class_slug = $4, class_version = $5, updated_by = $6, updated_at = now()
+          WHERE tenant_id = $1 AND source_system = $2 AND external_id = $3 AND equipment_class_slug IS NULL`,
+        [tenantId, m.source_system, m.external_id, ONBOARD_CLASS, cls.template_version, DEMO_USER],
+      );
+    }
+    const version = m.class_version ?? cls.template_version;
+    const roles: { measurement_role: string; canonical_unit: string }[] = await ds.query(
+      `SELECT measurement_role, canonical_unit FROM equipment_class_sensor_requirement WHERE class_slug = $1 AND class_version = $2`,
+      [cls.template_slug, version],
+    );
+    const imei = `TWIN-DEMO-${m.external_id}`;
+    for (const r of roles) {
+      await ds.query(
+        `INSERT INTO signal_binding_version (tenant_id, source_system, external_id, signal_key, measurement_role, component_id,
+           origin, imei, channel, canonical_unit, valid_from, is_primary, status, discovered_by, approved_by, approved_at)
+         SELECT $1, $2, $3, $4, $4, '', 'physical', $5, $4, $6, $7::timestamptz - interval '1 day', true, 'active', 'manual', $8, $7
+          WHERE NOT EXISTS (
+            SELECT 1 FROM signal_binding_version b
+             WHERE b.tenant_id = $1 AND b.source_system = $2 AND b.external_id = $3 AND b.measurement_role = $4
+               AND b.status = 'active' AND b.is_primary)`,
+        [tenantId, m.source_system, m.external_id, r.measurement_role, imei, r.canonical_unit, now, DEMO_USER],
+      );
+      await ds.query(
+        `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $6, 'live') ON CONFLICT DO NOTHING`,
+        [tenantId, imei, r.measurement_role, workingValue(r.measurement_role, minute, i), r.canonical_unit, now],
+      );
+    }
+  }
+}
+
 /** One tick of site life: progress on what is being built and, with `writeLoad`, engine
  * load for the reporting machines. `seed-demo`'s top-up already writes engine load, so it
  * passes false; a second writer would put two values on one machine's minute. */
@@ -111,7 +196,7 @@ async function writeEngineLoad(ds: DataSource, tenantId: string, now: Date): Pro
     const load = working ? 55 + ((minute * 7 + i * 13) % 20) : 8 + ((minute + i) % 6);
     await ds.query(
       `INSERT INTO telemetry_reading (tenant_id, imei, signal, value, unit, source_timestamp, received_at, source)
-       VALUES ($1, $2, $3, $4, '%', $5, $5, 'live')`,
+       VALUES ($1, $2, $3, $4, '%', $5, $5, 'live') ON CONFLICT DO NOTHING`,
       [tenantId, b.imei, b.signal_key, load, now],
     );
   }
