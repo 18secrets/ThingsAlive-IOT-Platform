@@ -6,6 +6,7 @@ import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { ApiError, SitePage, apiGetSitePage } from '../lib/api';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
+import { SiteTwinCard } from '../components/site-twin/SiteTwinCard';
 
 export const SitePagePage: React.FC = () => {
   const { plantId } = useParams<{ plantId: string }>();
@@ -60,6 +61,8 @@ export const SitePagePage: React.FC = () => {
           {page.layout.fallback ? ` · ${t('common.fallbackLayout')}` : ''}
         </p>
       </div>
+
+      <SiteTwinCard plantId={page.site.plantId} />
 
       {page.widgets.length === 0 && (
         <p className="text-sm text-slate-400">{t('sitePage.noWidgets')}</p>

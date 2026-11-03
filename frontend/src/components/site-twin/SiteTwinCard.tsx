@@ -1,0 +1,616 @@
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import {
+  AlertTriangle, Box, Eye, EyeOff, Maximize2, Minimize2, Minus, Move, Pause, Play, Plus, RotateCcw, RotateCw,
+  Save, Trash2, X,
+} from 'lucide-react';
+import {
+  ApiError, SITE_AREA_KINDS, SITE_PROGRESS_KINDS, SITE_STRUCTURE_KINDS, SiteTwin, SiteTwinActivity, SiteTwinStatus,
+  SiteTwinZone, SiteZoneKind, apiGetSiteTwin, apiGetSiteTwinProposal, apiMyPermissions, apiSaveSiteTwinLayout,
+} from '../../lib/api';
+import type { DragTarget, SceneFocus, SceneMachine } from '../visual/SiteTwinScene';
+
+// Lazy, as on the machine page: three.js is fetched only when the twin is on screen.
+const SiteTwinScene = lazy(() => import('../visual/SiteTwinScene'));
+
+// Kept here as well as in the scene so the legend renders before three.js has loaded.
+const STATUS_COLOUR: Record<SiteTwinStatus, string> = {
+  alert: '#e11d48', live: '#16a34a', no_data: '#f59e0b', blocked: '#7c3aed', not_configured: '#94a3b8',
+};
+const ZONE_COLOUR: Record<SiteZoneKind, string> = {
+  work_area: '#86efac', material_yard: '#fcd34d', parking: '#c4b5fd', restricted: '#fca5a5',
+  head_office: '#bfdbfe', site_office: '#a5f3fc', batching_plant: '#e7e5e4', maintenance_workshop: '#e2e8f0',
+  gate: '#cbd5e1', road: '#a8a29e', building: '#e7e5e4', substation: '#d4d4d8', quay: '#bae6fd',
+  container_yard: '#e2e8f0', quay_crane_berth: '#bae6fd',
+  generator_room: '#e5e7eb', compressor_house: '#e5e7eb', quarry: '#d6a77a',
+};
+const ZONE_NAME: Record<SiteZoneKind, string> = {
+  work_area: 'Work area', material_yard: 'Material yard', parking: 'Parking', restricted: 'Restricted',
+  head_office: 'Head office', site_office: 'Site office', batching_plant: 'Batching plant',
+  maintenance_workshop: 'Maintenance workshop', gate: 'Gate', road: 'Road', building: 'Building',
+  substation: 'Substation', quay: 'Quay / jetty', container_yard: 'Container yard', quay_crane_berth: 'Quay crane berth',
+  generator_room: 'Generator room', compressor_house: 'Compressor house', quarry: 'Quarry',
+};
+const ACTIVITY_NAME: Record<SiteTwinActivity, string> = {
+  productive: 'Working', idle: 'Idling', 'running-unclassified': 'Engine on', off: 'Engine off', unknown: 'No activity data',
+};
+const ACTIVITY_COLOUR: Record<SiteTwinActivity, string> = {
+  productive: '#16a34a', idle: '#f59e0b', 'running-unclassified': '#0ea5e9', off: '#64748b', unknown: '#94a3b8',
+};
+const STATUS_ORDER: SiteTwinStatus[] = ['live', 'alert', 'no_data', 'blocked', 'not_configured'];
+const REFRESH_MS = 60_000;
+const LANE_SPACING = 9;
+
+type Pos = { x: number; z: number; headingDeg: number; route: string[] };
+interface Draft { extent: SiteTwin['extent']; zones: SiteTwinZone[]; positions: Map<string, Pos> }
+
+const mkey = (m: { sourceSystem: string; externalId: string }) => `${m.sourceSystem}/${m.externalId}`;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * The site's digital twin: every machine on the site, where it stands, in its class's
+ * 3-D model, coloured by what the platform actually knows about it.
+ *
+ * Status comes from the API and is never derived here — the same readiness and alert
+ * count as the site page's machine list. Someone with `equipment.write` can lay the
+ * site out: drag machines, draw zones, set its size. A save names the version it was
+ * drawn on, so two people editing at once are told rather than overwritten.
+ */
+export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
+  const { t } = useTranslation('equipment');
+  const navigate = useNavigate();
+  const frame = useRef<HTMLDivElement>(null);
+  const [twin, setTwin] = useState<SiteTwin | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [canEdit, setCanEdit] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | undefined>(undefined);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showLabels, setShowLabels] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [focusIndex, setFocusIndex] = useState<number>(-1);
+  const [zoom, setZoom] = useState<{ n: number; dir: -1 | 0 | 1 }>({ n: 0, dir: 0 });
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const statusLabel = (s: SiteTwinStatus) => t(`siteTwin.status.${s}`, {
+    defaultValue: { alert: 'Alert', live: 'Live', no_data: 'No recent data', blocked: 'Sensor missing', not_configured: 'Not set up' }[s],
+  });
+  const zoneLabel = (k: SiteZoneKind) => t(`siteTwin.zone.${k}`, { defaultValue: ZONE_NAME[k] });
+  const activityLabel = (a: SiteTwinActivity) => t(`siteTwin.activity.${a}`, { defaultValue: ACTIVITY_NAME[a] });
+
+  const load = useCallback(() => apiGetSiteTwin(plantId)
+    .then((r) => { setTwin(r); setError(undefined); return r; })
+    .catch((err) => { setError(err instanceof ApiError ? err.message : t('siteTwin.loadFailed', { defaultValue: 'The digital twin could not be loaded.' })); return null; }),
+  [plantId, t]);
+
+  useEffect(() => {
+    void load();
+    apiMyPermissions().then((p) => setCanEdit(!!p.capabilities['equipment.write'])).catch(() => setCanEdit(false));
+  }, [load]);
+
+  // Status is live; the layout is not. Refresh only while nobody is mid-edit.
+  useEffect(() => {
+    if (draft) return;
+    const id = window.setInterval(() => { void load(); }, REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [draft, load]);
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === frame.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const extent = draft?.extent ?? twin?.extent ?? { widthM: 200, depthM: 120 };
+  const zones = draft?.zones ?? twin?.zones ?? [];
+
+  const machines: SceneMachine[] = useMemo(() => {
+    if (!twin) return [];
+    const placedAt = (m: SiteTwin['machines'][number]): Pos | null =>
+      draft ? draft.positions.get(mkey(m)) ?? null : m.placement;
+    const unplaced = twin.machines.filter((m) => !placedAt(m));
+    const byKey = new Map(zones.map((z) => [z.key, z]));
+    return twin.machines.map((m) => {
+      const p = placedAt(m);
+      const lane = unplaced.indexOf(m);
+      const x = p ? p.x : (lane - (unplaced.length - 1) / 2) * LANE_SPACING;
+      const z = p ? p.z : extent.depthM / 2 + 14;
+      const stops = (p?.route ?? []).map((k) => byKey.get(k)).filter((zn): zn is SiteTwinZone => !!zn);
+      return {
+        key: mkey(m), name: m.name ?? m.externalId, classSlug: m.classSlug, status: m.status,
+        placed: !!p, x, z, headingDeg: p?.headingDeg ?? 0,
+        activity: m.activity,
+        path: stops.length ? [[x, z] as [number, number], ...stops.map((zn) => [zn.x, zn.z] as [number, number])] : [],
+        engagedLabel: m.engagedAt ? byKey.get(m.engagedAt)?.label ?? null : null,
+        breakdown: m.breakdown,
+      };
+    });
+  }, [twin, draft, extent.depthM, zones]);
+
+  const focus: SceneFocus = useMemo(() => {
+    const z = zones[focusIndex];
+    if (z) return { x: z.x, z: z.z, widthM: z.widthM * 1.3, depthM: z.depthM * 1.3 };
+    const lane = machines.some((m) => !m.placed) ? 28 : 0;
+    return { x: 0, z: lane / 2, widthM: extent.widthM, depthM: extent.depthM + lane };
+  }, [zones, focusIndex, extent, machines]);
+
+  const onDrag = useCallback((target: DragTarget, x: number, z: number) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const hw = d.extent.widthM / 2; const hd = d.extent.depthM / 2;
+      if (target.kind === 'machine') {
+        const positions = new Map(d.positions);
+        const prev = positions.get(target.key);
+        positions.set(target.key, { x: round1(clamp(x, -hw + 2, hw - 2)), z: round1(clamp(z, -hd + 2, hd - 2)), headingDeg: prev?.headingDeg ?? 0, route: prev?.route ?? [] });
+        return { ...d, positions };
+      }
+      const zones2 = d.zones.slice();
+      const zn = zones2[target.index];
+      zones2[target.index] = {
+        ...zn,
+        x: round1(clamp(x, -hw + zn.widthM / 2, hw - zn.widthM / 2)),
+        z: round1(clamp(z, -hd + zn.depthM / 2, hd - zn.depthM / 2)),
+      };
+      return { ...d, zones: zones2 };
+    });
+  }, []);
+
+  const startEdit = () => {
+    if (!twin) return;
+    const positions = new Map<string, Pos>();
+    // A route stop the twin no longer draws (its structure lost its machine) would be
+    // refused on save; drop it here rather than there.
+    const keys = new Set(twin.zones.map((z) => z.key));
+    for (const m of twin.machines) if (m.placement) positions.set(mkey(m), { ...m.placement, route: m.placement.route.filter((k) => keys.has(k)) });
+    setDraft({ extent: { ...twin.extent }, zones: twin.zones.map((z) => ({ ...z })), positions });
+    setSaveError(undefined);
+    setAutoRotate(false);
+  };
+
+  const save = async () => {
+    if (!twin || !draft) return;
+    setSaving(true); setSaveError(undefined);
+    try {
+      const fresh = await apiSaveSiteTwinLayout(plantId, {
+        expectedVersion: twin.version,
+        extent: draft.extent,
+        zones: draft.zones.map((z) => ({
+          key: z.key, label: z.label, kind: z.kind, x: z.x, z: z.z, widthM: z.widthM, depthM: z.depthM,
+          floors: z.kind === 'building' ? z.floors ?? null : null,
+          progressPct: SITE_PROGRESS_KINDS.includes(z.kind) ? z.progressPct ?? null : null,
+        })),
+        placements: twin.machines.flatMap((m) => {
+          const p = draft.positions.get(mkey(m));
+          return p ? [{ sourceSystem: m.sourceSystem, externalId: m.externalId, ...p }] : [];
+        }),
+      });
+      setTwin(fresh); setDraft(null);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : t('siteTwin.saveFailed', { defaultValue: 'The layout could not be saved.' }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setZone = (i: number, patch: Partial<SiteTwinZone>) =>
+    setDraft((d) => (d ? { ...d, zones: d.zones.map((z, j) => (j === i ? { ...z, ...patch } : z)) } : d));
+  const turn = (key: string, by: number) => setDraft((d) => {
+    const p = d?.positions.get(key);
+    if (!d || !p) return d;
+    const positions = new Map(d.positions);
+    positions.set(key, { ...p, headingDeg: (((p.headingDeg + by) % 360) + 360) % 360 });
+    return { ...d, positions };
+  });
+  const unplace = (key: string) => setDraft((d) => {
+    if (!d) return d;
+    const positions = new Map(d.positions); positions.delete(key);
+    return { ...d, positions };
+  });
+  const placeAtCentre = (key: string) => setDraft((d) => {
+    if (!d) return d;
+    const positions = new Map(d.positions); positions.set(key, { x: 0, z: 0, headingDeg: 0, route: [] });
+    return { ...d, positions };
+  });
+
+  const setRoute = (key: string, route: string[]) => setDraft((d) => {
+    const p = d?.positions.get(key);
+    if (!d || !p) return d;
+    const positions = new Map(d.positions); positions.set(key, { ...p, route });
+    return { ...d, positions };
+  });
+  // Deleting a zone takes it out of every route too, or the save would be refused.
+  const removeZone = (i: number) => setDraft((d) => {
+    if (!d) return d;
+    const gone = d.zones[i].key;
+    const positions = new Map([...d.positions].map(([k, p]) => [k, { ...p, route: p.route.filter((r) => r !== gone) }]));
+    return { ...d, zones: d.zones.filter((_, j) => j !== i), positions };
+  });
+  // Start the draft from the site's own machines: the composer puts each at its work
+  // front, adds only the structures an assigned machine needs, and sends anything that
+  // needs a person to the maintenance and breakdown bay.
+  const [composing, setComposing] = useState(false);
+  const compose = async () => {
+    setComposing(true); setSaveError(undefined);
+    try {
+      const p = await apiGetSiteTwinProposal(plantId);
+      const positions = new Map<string, Pos>(p.placements.map((pl) => [`${pl.sourceSystem}/${pl.externalId}`, { x: pl.x, z: pl.z, headingDeg: pl.headingDeg, route: pl.route ?? [] }]));
+      setDraft({ extent: p.extent, zones: p.zones.map((z) => ({ ...z })), positions });
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : t('siteTwin.composeFailed', { defaultValue: 'A layout could not be composed.' }));
+    } finally {
+      setComposing(false);
+    }
+  };
+
+  const newKey = (zs: SiteTwinZone[]) => {
+    let n = zs.length + 1;
+    while (zs.some((z) => z.key === `zone-${n}`)) n += 1;
+    return `zone-${n}`;
+  };
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void frame.current?.requestFullscreen();
+  };
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
+        <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+      </div>
+    );
+  }
+  if (!twin) return <div className="h-[520px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+
+  // Nothing is assigned here: there is no site to draw, and a yard of offices would be
+  // a picture of plant this site does not have.
+  if (!twin.machines.length && !twin.zones.length) {
+    return (
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-5 text-sm text-slate-500 flex items-center gap-2">
+        <Box className="w-4 h-4 text-slate-400" />
+        {t('siteTwin.noMachines', { defaultValue: 'No machines are assigned to this site yet, so its digital twin has nothing to show. Assign equipment to the site and it appears here.' })}
+      </div>
+    );
+  }
+
+  const sel = selected ? twin.machines.find((m) => mkey(m) === selected) ?? null : null;
+  const selPlaced = sel ? (draft ? draft.positions.has(mkey(sel)) : !!sel.placement) : false;
+  const btn = 'p-2 rounded-lg bg-white/95 dark:bg-slate-800/95 shadow border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700';
+
+  return (
+    <div ref={frame} className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden ${fullscreen ? 'flex flex-col h-screen' : ''}`}>
+      {/* ---------------------------------------------------------------- header */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-9 h-9 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0"><Box className="w-5 h-5" /></span>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('siteTwin.title', { defaultValue: 'Site digital twin' })}</div>
+            <div className="text-xs text-slate-500 truncate">
+              {twin.site.name} · {twin.site.code}{twin.site.address ? ` · ${twin.site.address}` : ''} · {extent.widthM} × {extent.depthM} m
+            </div>
+          </div>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-200">
+            {t('siteTwin.onSite', { defaultValue: '{{n}} machines on site', n: twin.summary.total })}
+          </span>
+          {(['productive', 'idle'] as SiteTwinActivity[]).map((a) => {
+            const n = twin.machines.filter((m) => m.activity === a).length;
+            return n ? (
+              <span key={a} className="px-2.5 py-1 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
+                <span className="w-2 h-2 rounded-sm" style={{ background: ACTIVITY_COLOUR[a] }} /> {n} {activityLabel(a)}
+              </span>
+            ) : null;
+          })}
+          {STATUS_ORDER.filter((s) => twin.summary[s] > 0).map((s) => (
+            <span key={s} className="px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
+              <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOUR[s] }} /> {twin.summary[s]} {statusLabel(s)}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- zone tabs */}
+      <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto border-b border-slate-100 dark:border-slate-800">
+        {[{ label: t('siteTwin.overview', { defaultValue: 'Overview' }), i: -1 }, ...zones.map((z, i) => ({ label: z.label, i }))].map((tab) => (
+          <button
+            key={tab.i}
+            onClick={() => setFocusIndex(tab.i)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
+              focusIndex === tab.i ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-2 pl-3">
+          {canEdit && !draft && (
+            <button onClick={startEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 flex items-center gap-1.5 whitespace-nowrap">
+              <Move className="w-3.5 h-3.5" /> {t('siteTwin.edit', { defaultValue: 'Edit layout' })}
+            </button>
+          )}
+          {draft && (
+            <>
+              <button onClick={() => { setDraft(null); setSaveError(undefined); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5">
+                <X className="w-3.5 h-3.5" /> {t('common.cancel', { defaultValue: 'Cancel' })}
+              </button>
+              <button disabled={saving} onClick={() => void save()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" /> {saving ? t('siteTwin.saving', { defaultValue: 'Saving…' }) : t('siteTwin.save', { defaultValue: 'Save layout' })}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {focusIndex >= 0 && zones[focusIndex] && !draft && (() => {
+        const z = zones[focusIndex];
+        const here = twin.machines.filter((m) => m.engagedAt === z.key);
+        return (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-xs bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800">
+            <span className="font-semibold text-slate-800 dark:text-slate-100">{z.label}</span>
+            <span className="text-slate-500">{zoneLabel(z.kind)} · {z.widthM} × {z.depthM} m{z.floors ? ` · ${z.floors} floors` : ''}</span>
+            {SITE_PROGRESS_KINDS.includes(z.kind) && (
+              z.progressPct !== null && z.progressPct !== undefined ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-28 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <span className="block h-full bg-emerald-500" style={{ width: `${z.progressPct}%` }} />
+                  </span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">{z.progressPct.toFixed(1)}%</span>
+                  {z.progressReportedAt && (
+                    <span className="text-slate-500">
+                      {t('siteTwin.reportedOn', { defaultValue: 'reported {{when}}', when: new Date(z.progressReportedAt).toLocaleString() })}
+                    </span>
+                  )}
+                </span>
+              ) : <span className="text-amber-700 dark:text-amber-300">{t('siteTwin.progressNotReported', { defaultValue: 'Progress not reported' })}</span>
+            )}
+            <span className="text-slate-600 dark:text-slate-300">
+              {here.length
+                ? `${t('siteTwin.engagedHere', { defaultValue: 'Engaged here' })}: ${here.map((m) => `${m.name ?? m.externalId} (${activityLabel(m.activity)})`).join(', ')}`
+                : t('siteTwin.noneEngaged', { defaultValue: 'No machine engaged here' })}
+            </span>
+          </div>
+        );
+      })()}
+
+      {saveError && (
+        <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 px-4 py-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveError}
+        </div>
+      )}
+      {!twin.saved && !draft && (
+        <div className="text-xs text-amber-800 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-4 py-2">
+          {canEdit
+            ? t('siteTwin.notLaidOutEditor', { defaultValue: 'This site has not been laid out yet. Choose "Edit layout" to set its size, draw its zones and place each machine.' })
+            : t('siteTwin.notLaidOut', { defaultValue: 'This site has not been laid out yet. The machines are shown in a row until an administrator places them.' })}
+        </div>
+      )}
+
+      <div className={`relative flex ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
+        {/* ------------------------------------------------------------- canvas */}
+        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[560px]'}`}>
+          <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
+            <SiteTwinScene
+              extent={extent} zones={zones} machines={machines} classModels={twin.classModels}
+              showLabels={showLabels} selectedKey={selected} onSelect={setSelected}
+              editing={!!draft} onDrag={onDrag} focus={focus} zoomCommand={zoom} autoRotate={autoRotate}
+            />
+          </Suspense>
+
+          <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+            <button className={btn} title={t('siteTwin.zoomIn', { defaultValue: 'Zoom in' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: 1 }))}><Plus className="w-4 h-4" /></button>
+            <button className={btn} title={t('siteTwin.zoomOut', { defaultValue: 'Zoom out' })} onClick={() => setZoom((z) => ({ n: z.n + 1, dir: -1 }))}><Minus className="w-4 h-4" /></button>
+            <button className={btn} title={t('siteTwin.resetView', { defaultValue: 'Reset view' })} onClick={() => { setFocusIndex(-1); setZoom((z) => ({ n: z.n + 1, dir: 0 })); }}><RotateCcw className="w-4 h-4" /></button>
+            <button className={btn} title={t('siteTwin.labels', { defaultValue: 'Show or hide labels' })} onClick={() => setShowLabels((v) => !v)}>{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
+            {!draft && (
+              <button className={btn} title={t('siteTwin.tour', { defaultValue: 'Rotate slowly' })} onClick={() => setAutoRotate((v) => !v)}>{autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}</button>
+            )}
+            <button className={btn} title={t('siteTwin.fullscreen', { defaultValue: 'Full screen' })} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</button>
+          </div>
+
+          {/* --------------------------------------------------------- legend */}
+          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-[11px] text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {STATUS_ORDER.map((s) => (
+                <span key={s} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_COLOUR[s] }} /> {statusLabel(s)}</span>
+              ))}
+            </div>
+            {zones.length > 0 && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                {[...new Set(zones.map((z) => z.kind))].map((k) => (
+                  <span key={k} className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm" style={{ background: ZONE_COLOUR[k] }} /> {zoneLabel(k)}</span>
+                ))}
+              </div>
+            )}
+            {!draft && twin.machines.some((m) => m.placement && m.placement.route.length) && (
+              <div className="text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+                {t('siteTwin.routeNote', { defaultValue: 'Dashed line: illustrative route, travelled only while the machine’s own data says it is working. Not GPS.' })}
+              </div>
+            )}
+            {draft && <div className="text-sky-700 dark:text-sky-300 pt-1">{t('siteTwin.dragHint', { defaultValue: 'Drag a machine or a zone to move it.' })}</div>}
+          </div>
+
+          {/* --------------------------------------------------- selected machine */}
+          {sel && (
+            <div className="absolute top-3 left-3 w-64 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-3 text-xs space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">{sel.name ?? sel.externalId}</div>
+                  <div className="text-slate-500 truncate">{sel.externalId}{sel.classSlug ? ` · ${sel.classSlug}` : ''}</div>
+                </div>
+                <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="flex items-center gap-1.5 font-semibold" style={{ color: STATUS_COLOUR[sel.status] }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOUR[sel.status] }} /> {statusLabel(sel.status)}
+                {sel.openAlerts > 0 && <span className="text-slate-500 font-normal">· {t('siteTwin.openAlerts', { defaultValue: '{{n}} open alerts', n: sel.openAlerts })}</span>}
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span className="w-2 h-2 rounded-full" style={{ background: sel.breakdown ? '#e11d48' : ACTIVITY_COLOUR[sel.activity] }} />
+                {sel.breakdown ? t('siteTwin.breakdown', { defaultValue: 'Breakdown' }) : activityLabel(sel.activity)}
+                {sel.engagedAt && <span>· {t('siteTwin.engagedAt', { defaultValue: 'at {{zone}}', zone: zones.find((z) => z.key === sel.engagedAt)?.label ?? sel.engagedAt })}</span>}
+              </div>
+              {draft && selPlaced && (() => {
+                const route = draft.positions.get(mkey(sel))!.route;
+                return (
+                  <div className="space-y-1">
+                    <div className="text-slate-500">{t('siteTwin.route', { defaultValue: 'Route while working (illustrative)' })}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {route.map((k, i) => (
+                        <span key={`${k}-${i}`} className="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 flex items-center gap-1">
+                          {i + 1}. {zones.find((z) => z.key === k)?.label ?? k}
+                          <button onClick={() => setRoute(mkey(sel), route.filter((_, j) => j !== i))}><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                    {route.length < 8 && zones.length > 0 && (
+                      <select
+                        value="" onChange={(e) => { if (e.target.value) setRoute(mkey(sel), [...route, e.target.value]); }}
+                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        <option value="">{t('siteTwin.addStop', { defaultValue: '+ Add a stop' })}</option>
+                        {zones.map((z) => <option key={z.key} value={z.key}>{z.label}</option>)}
+                      </select>
+                    )}
+                  </div>
+                );
+              })()}
+              {draft ? (
+                selPlaced ? (
+                  <div className="flex items-center gap-1.5">
+                    <button className={btn} title={t('siteTwin.turnLeft', { defaultValue: 'Turn 15° left' })} onClick={() => turn(mkey(sel), -15)}><RotateCcw className="w-3.5 h-3.5" /></button>
+                    <button className={btn} title={t('siteTwin.turnRight', { defaultValue: 'Turn 15° right' })} onClick={() => turn(mkey(sel), 15)}><RotateCw className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => unplace(mkey(sel))} className="ml-auto px-2 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold">
+                      {t('siteTwin.unplace', { defaultValue: 'Take off site' })}
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => placeAtCentre(mkey(sel))} className="w-full px-2 py-1.5 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700">
+                    {t('siteTwin.place', { defaultValue: 'Place on site' })}
+                  </button>
+                )
+              ) : (
+                <button
+                  onClick={() => navigate(`/admin/equipment/${encodeURIComponent(sel.sourceSystem)}/${encodeURIComponent(sel.externalId)}/page`)}
+                  className="w-full px-2 py-1.5 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold"
+                >
+                  {t('siteTwin.openMachine', { defaultValue: 'Open machine page' })}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ------------------------------------------------------- layout editor */}
+        {draft && (
+          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[560px]'}`}>
+            <button
+              disabled={composing} onClick={() => void compose()}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold disabled:opacity-60"
+            >
+              {composing ? t('siteTwin.composing', { defaultValue: 'Composing…' }) : t('siteTwin.compose', { defaultValue: 'Auto-arrange from equipment' })}
+            </button>
+            <p className="text-slate-500 -mt-1">
+              {t('siteTwin.composeHint', { defaultValue: 'Lays the site out from the machines assigned to it: only the structures they need, and anything needing attention in the breakdown bay. Replaces this draft; nothing is saved until you save.' })}
+            </p>
+            <div>
+              <div className="font-semibold text-slate-800 dark:text-slate-100 mb-1.5">{t('siteTwin.siteSize', { defaultValue: 'Site size (metres)' })}</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(['widthM', 'depthM'] as const).map((k) => (
+                  <label key={k} className="space-y-0.5">
+                    <span className="text-slate-500">{k === 'widthM' ? t('siteTwin.width', { defaultValue: 'Width (E–W)' }) : t('siteTwin.depth', { defaultValue: 'Depth (N–S)' })}</span>
+                    <input
+                      type="number" min={10} max={5000} value={draft.extent[k]}
+                      onChange={(e) => setDraft((d) => (d ? { ...d, extent: { ...d.extent, [k]: Number(e.target.value) } } : d))}
+                      className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-800 dark:text-slate-100">{t('siteTwin.zones', { defaultValue: 'Zones' })}</span>
+              <button
+                onClick={() => setDraft((d) => (d ? {
+                  ...d,
+                  zones: [...d.zones, {
+                    key: newKey(d.zones), label: t('siteTwin.newZone', { defaultValue: 'New zone' }), kind: 'work_area' as SiteZoneKind, x: 0, z: 0,
+                    widthM: Math.min(30, d.extent.widthM), depthM: Math.min(20, d.extent.depthM),
+                  }],
+                } : d))}
+                className="px-2 py-1 rounded-lg bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 font-semibold flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> {t('siteTwin.addZone', { defaultValue: 'Add zone' })}
+              </button>
+            </div>
+            {draft.zones.length === 0 && <p className="text-slate-400">{t('siteTwin.noZones', { defaultValue: 'No zones yet.' })}</p>}
+            {draft.zones.map((z, i) => (
+              <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1.5" style={{ borderLeft: `4px solid ${ZONE_COLOUR[z.kind]}` }}>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={z.label} maxLength={60} onChange={(e) => setZone(i, { label: e.target.value })}
+                    className="flex-1 min-w-0 px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold"
+                  />
+                  <button onClick={() => removeZone(i)} className="text-slate-400 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                <select
+                  value={z.kind} onChange={(e) => setZone(i, { kind: e.target.value as SiteZoneKind })}
+                  className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <optgroup label={t('siteTwin.structures', { defaultValue: 'Structures (3-D)' })}>
+                    {SITE_STRUCTURE_KINDS.map((k) => <option key={k} value={k}>{zoneLabel(k)}</option>)}
+                  </optgroup>
+                  <optgroup label={t('siteTwin.areas', { defaultValue: 'Areas (on the ground)' })}>
+                    {SITE_AREA_KINDS.map((k) => <option key={k} value={k}>{zoneLabel(k)}</option>)}
+                  </optgroup>
+                </select>
+                {(z.kind === 'building' || SITE_PROGRESS_KINDS.includes(z.kind)) && (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {z.kind === 'building' && (
+                      <label className="space-y-0.5">
+                        <span className="text-slate-500">{t('siteTwin.floors', { defaultValue: 'Floors planned' })}</span>
+                        <input
+                          type="number" min={1} max={80} value={z.floors ?? ''} onChange={(e) => setZone(i, { floors: e.target.value ? Number(e.target.value) : null })}
+                          className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </label>
+                    )}
+                    <label className="space-y-0.5">
+                      <span className="text-slate-500">{t('siteTwin.progress', { defaultValue: 'Progress %' })}</span>
+                      <input
+                        type="number" min={0} max={100} value={z.progressPct ?? ''} placeholder={t('siteTwin.notReported', { defaultValue: 'not reported' })}
+                        onChange={(e) => setZone(i, { progressPct: e.target.value === '' ? null : Number(e.target.value) })}
+                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </label>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['widthM', 'depthM'] as const).map((k) => (
+                    <label key={k} className="space-y-0.5">
+                      <span className="text-slate-500">{k === 'widthM' ? t('siteTwin.width', { defaultValue: 'Width (E–W)' }) : t('siteTwin.depth', { defaultValue: 'Depth (N–S)' })}</span>
+                      <input
+                        type="number" min={1} value={z[k]} onChange={(e) => setZone(i, { [k]: Number(e.target.value) })}
+                        className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-slate-500">
+              {t('siteTwin.placedCount', {
+                defaultValue: '{{placed}} of {{total}} machines placed. Select one in the "Not yet placed" row and choose "Place on site", then drag it into position.',
+                placed: draft.positions.size, total: twin.machines.length,
+              })}
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+};

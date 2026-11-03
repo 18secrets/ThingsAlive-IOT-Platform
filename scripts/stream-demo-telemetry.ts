@@ -33,6 +33,7 @@ import { RecFrameService } from '../src/rec-frame/rec-frame.service';
 import { PredictionService } from '../src/prediction/services/prediction.service';
 import { BaselineService } from '../src/prediction/services/baseline.service';
 import { withTenantId } from '../src/scope/tenant-session';
+import { ensureSiteTwinDemo, tickSiteTwinDemo } from './site-twin-demo';
 
 /**
  * Parse an interval string like '30s', '1m', '2h', '7200s' into milliseconds.
@@ -522,6 +523,17 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
   }
 }
 
+/** The site twins never stop the telemetry stream: a twin failure is logged and the
+ * tick carries on. */
+async function siteTwinTick(ds: DataSource, now: Date, ensure: boolean) {
+  try {
+    if (ensure) await ensureSiteTwinDemo(ds, DEMO_TENANT);
+    await tickSiteTwinDemo(ds, DEMO_TENANT, now);
+  } catch (err) {
+    console.warn('[SiteTwin] Demo tick skipped:', (err as Error)?.message || err);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const once = args.includes('--once');
@@ -571,6 +583,9 @@ async function main() {
     const firstTick = await emitSimultaneousTick(ds, initialNow, includeQuiet);
     console.log(`[SeedStream] ⚡ Initial simultaneous emission: ${firstTick.count} readings across [${firstTick.machines.join(', ')}]`);
 
+    // 2b. The site twins: lay out any demo site nobody has, then one tick of site life.
+    await siteTwinTick(ds, initialNow, true);
+
     // 3. Initial forecast and recommendation pass (background, non-blocking)
     runForecastAndRecommendations(ds, initialNow, true).catch((err) => {
       console.warn('[SeedStream] Background forecast notice:', err?.message || err);
@@ -606,6 +621,7 @@ async function main() {
       try {
         const { count, machines } = await emitSimultaneousTick(ds, tickNow, includeQuiet);
         console.log(`[SeedStream] ⚡ [${tickNow.toISOString()}] Simultaneous emission: ${count} readings (${machines.join(', ')}). Link health updated.`);
+        await siteTwinTick(ds, tickNow, false);
 
         // Score predictions across active equipment every 60s (every 2 ticks) in background without blocking telemetry emission
         if (tickCount % 2 === 0) {

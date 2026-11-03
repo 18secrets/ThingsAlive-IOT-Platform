@@ -2273,6 +2273,92 @@ export function apiGetSitePage(plantId: string): Promise<SitePage> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/page`);
 }
 
+// ---------------------------------------------------------------------- site twin
+
+/** Flat areas, drawn as coloured ground. */
+export const SITE_AREA_KINDS = ['work_area', 'material_yard', 'parking', 'restricted'] as const;
+/** Structures, drawn in 3-D inside their rectangle. */
+export const SITE_STRUCTURE_KINDS = [
+  'head_office', 'site_office', 'batching_plant', 'maintenance_workshop', 'gate', 'road',
+  'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth',
+  'generator_room', 'compressor_house', 'quarry',
+] as const;
+/** The legend a zone is drawn from. The API refuses any other kind. */
+export const SITE_ZONE_KINDS = [...SITE_AREA_KINDS, ...SITE_STRUCTURE_KINDS] as const;
+export type SiteZoneKind = (typeof SITE_ZONE_KINDS)[number];
+/** What is built in stages and can report progress. */
+export const SITE_PROGRESS_KINDS: readonly SiteZoneKind[] = ['building', 'road', 'substation', 'quay'];
+
+/** What a machine is doing now, from its own engine, utilization and load signals. */
+export type SiteTwinActivity = 'productive' | 'idle' | 'running-unclassified' | 'off' | 'unknown';
+
+/** `alert` outranks everything; the rest is the machine's worst signal readiness. There
+ *  is no "running": nothing behind this knows the engine is on. */
+export type SiteTwinStatus = 'alert' | 'live' | 'no_data' | 'blocked' | 'not_configured';
+
+/** Metres, origin at the site's centre, x east, z south. A zone is centred at (x, z).
+ *  `key` is its stable name within the site; routes refer to it. */
+export interface SiteTwinZone {
+  id?: string; key: string; label: string; kind: SiteZoneKind; x: number; z: number; widthM: number; depthM: number;
+  floors?: number | null;
+  /** As reported by the site, with the date it was reported. Null: nothing reported. */
+  progressPct?: number | null;
+  progressReportedAt?: string | null;
+  progressReportedBy?: string | null;
+}
+
+export interface SiteTwinMachine {
+  sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
+  placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
+  readiness: string; openAlerts: number; status: SiteTwinStatus;
+  activity: SiteTwinActivity;
+  /** Key of the zone it stands in. */
+  engagedAt: string | null;
+  /** A breakdown has started and not ended. */
+  breakdown: boolean;
+}
+
+/** A site's digital twin (`GET /sites/:plantId/twin`, `catalog.read`). */
+export interface SiteTwin {
+  site: { plantId: string; code: string; name: string; address: string | null };
+  /** False until a layout is saved: the extent is a default and nobody is placed. */
+  saved: boolean;
+  /** Send back as `expectedVersion`; a stale one is a 409. */
+  version: number;
+  extent: { widthM: number; depthM: number };
+  zones: SiteTwinZone[];
+  /** Per class on the site; null where the class has no confirmed model. */
+  classModels: Record<string, { modelUrl: string; bounds: ModelBounds | null } | null>;
+  machines: SiteTwinMachine[];
+  summary: { total: number; placed: number } & Record<SiteTwinStatus, number>;
+  /** Saved structures not drawn: no machine assigned here backs them any more. */
+  hiddenZones: string[];
+}
+
+export interface SiteTwinLayoutInput {
+  expectedVersion: number;
+  extent: { widthM: number; depthM: number };
+  zones: Pick<SiteTwinZone, 'key' | 'label' | 'kind' | 'x' | 'z' | 'widthM' | 'depthM' | 'floors' | 'progressPct'>[];
+  placements: { sourceSystem: string; externalId: string; x: number; z: number; headingDeg: number; route: string[] }[];
+}
+
+export function apiGetSiteTwin(plantId: string): Promise<SiteTwin> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin`);
+}
+
+/** A first layout composed from the machines assigned to the site and their
+ *  categories (`GET /sites/:plantId/twin/proposal`). Not saved: the editor starts
+ *  from it. Equipment-backed structures (generator room, quarry, batching plant…)
+ *  appear only when such a machine is assigned. */
+export function apiGetSiteTwinProposal(plantId: string): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`);
+}
+
+/** Replaces the whole layout (`equipment.write`) and answers with the fresh twin. */
+export function apiSaveSiteTwinLayout(plantId: string, layout: SiteTwinLayoutInput): Promise<SiteTwin> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/layout`, { method: 'PUT', body: JSON.stringify(layout) });
+}
+
 // --------------------------------------------------------------------- utilization
 
 /**
