@@ -1,6 +1,6 @@
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
-import { SiteTwinService } from './site-twin.service';
+import { LayoutInput, SiteTwinService } from './site-twin.service';
 
 /**
  * The demo sites' digital twins, for the demo streams: `seed-demo --top-up --follow`
@@ -33,9 +33,14 @@ const PROGRESS_ORDER: { keys: string[]; step: number }[] = [
 
 const scopeFor = (tenantId: string): RequestScope => ({ tenantId, userId: DEMO_USER, roles: ['super admin'], isPlatformRole: false });
 
-/** Lay out every demo site nobody has laid out yet, from the machines assigned to it
+/** Lay out every demo site that has machines, from those machines
  * (`SiteTwinService.propose`). A site with no machines is left empty: there is nothing
- * on it to draw. Safe to call on every tick. */
+ * on it to draw.
+ *
+ * A layout this script made is re-composed when the site's equipment changes — a machine
+ * assigned, moved away, or into or out of the breakdown bay — keeping the progress
+ * already reported on each structure. A layout anybody else saved is never touched.
+ * Safe to call on every tick. */
 export async function ensureSiteTwinDemo(ds: DataSource, tenantId: string): Promise<void> {
   const twins = new SiteTwinService(ds);
   const scope = scopeFor(tenantId);
@@ -44,11 +49,32 @@ export async function ensureSiteTwinDemo(ds: DataSource, tenantId: string): Prom
   );
   for (const plant of plants) {
     const current = await twins.read(scope, plant.id);
-    if (current.saved || !current.machines.length) continue;
+    if (!current.machines.length) continue;
+    if (current.saved && current.updatedBy !== DEMO_USER) continue;
     const layout = await twins.propose(scope, plant.id);
+    if (current.saved && sameShape(current, layout)) continue;
+    // Progress is the site's report, not the composer's: carry it across.
+    const reported = new Map(current.zones.map((z) => [z.key, z.progressPct]));
+    layout.zones = layout.zones.map((z) => (reported.has(z.key) && reported.get(z.key) !== null
+      ? { ...z, progressPct: reported.get(z.key)! } : z));
     await twins.save(scope, plant.id, layout);
-    console.log(`[SiteTwin] Laid out ${plant.code} from its ${current.machines.length} machines: ${layout.zones.length} zones.`);
+    console.log(`[SiteTwin] ${current.saved ? 'Re-composed' : 'Laid out'} ${plant.code} from its ${current.machines.length} machines: ${layout.zones.length} zones.`);
+    // A first day on a demo site is not day one of the project: the building has risen
+    // a little. Reported, like any other progress, once.
+    if (!current.saved && layout.zones.some((z) => z.key === 'building')) {
+      await twins.reportProgress(scope, plant.id, 'building', 25);
+    }
   }
+}
+
+/** Whether a saved layout already has the zones and machine spots a proposal would. */
+function sameShape(current: Awaited<ReturnType<SiteTwinService['read']>>, proposal: LayoutInput): boolean {
+  const zones = (keys: string[]) => [...keys].sort().join(',');
+  if (zones([...current.zones.map((z) => z.key), ...current.hiddenZones]) !== zones(proposal.zones.map((z) => z.key))) return false;
+  const spot = (k: string, p: { x: number; z: number }) => `${k}@${p.x},${p.z}`;
+  const now = [...current.placements].map(([k, p]) => spot(k, p)).sort().join(';');
+  const next = proposal.placements.map((p) => spot(`${p.sourceSystem}/${p.externalId}`, p)).sort().join(';');
+  return now === next;
 }
 
 /** One tick of site life: progress on what is being built and, with `writeLoad`, engine

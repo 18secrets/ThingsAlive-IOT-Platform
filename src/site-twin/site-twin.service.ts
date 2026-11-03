@@ -41,6 +41,8 @@ export interface SiteLayout {
   machines: EquipmentProfile[];
   saved: boolean;
   version: number;
+  /** Who saved the layout last; null when never saved. */
+  updatedBy: string | null;
   extent: { widthM: number; depthM: number };
   zones: ZoneView[];
   placements: Map<string, { x: number; z: number; headingDeg: number; route: string[] }>;
@@ -253,6 +255,7 @@ export class SiteTwinService {
       plant, machines, categories, brokenDown, hiddenZones,
       saved: !!twin && twin.version > 0,
       version: twin?.version ?? 0,
+      updatedBy: twin?.updatedBy ?? null,
       extent: twin ? { widthM: twin.widthM, depthM: twin.depthM } : { ...DEFAULT_EXTENT },
       zones: shown.map((z) => ({
         id: z.id, key: z.key, label: z.label, kind: z.kind, x: z.x, z: z.z, widthM: z.widthM, depthM: z.depthM,

@@ -268,6 +268,44 @@ function along(path: [number, number][], d: number): { x: number; z: number; dx:
   return { x: path[0][0], z: path[0][1], dx: 1, dz: 0 };
 }
 
+/** How a working machine of this class moves, from its slug: a generator or compressor
+ * stands and exhausts, a piling rig works its mast, everything else slews and shuffles
+ * as an excavator, a crane or a pump at work does. Travel is the route's, for any class. */
+type Motion = 'exhaust' | 'drill' | 'slew';
+const motionOf = (slug: string | null): Motion =>
+  /generat|genset|compress/i.test(slug ?? '') ? 'exhaust' : /pil(e|ing)|drill|vibro|rig/i.test(slug ?? '') ? 'drill' : 'slew';
+
+/** A stable phase per machine, so a fleet on one route is spread along it. */
+const phaseOf = (key: string) => {
+  let h = 7;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) % 100_003;
+  return h;
+};
+
+/** Exhaust from a running engine: three puffs rising and thinning, on a loop. */
+const Exhaust: React.FC<{ height: number; seed: number }> = ({ height, seed }) => {
+  const puffs = useRef<THREE.Mesh[]>([]);
+  useFrame(({ clock }) => {
+    puffs.current.forEach((p, i) => {
+      if (!p) return;
+      const t = ((clock.elapsedTime * 0.5 + i / 3 + seed * 0.013) % 1);
+      p.position.set(0.4 * Math.sin(t * 5 + i), height + t * 5, 0.3 * t);
+      p.scale.setScalar(0.4 + t * 1.4);
+      (p.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t);
+    });
+  });
+  return (
+    <group>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} ref={(m) => { if (m) puffs.current[i] = m; }}>
+          <sphereGeometry args={[0.6, 10, 10]} />
+          <meshBasicMaterial color="#94a3b8" transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
 const Machine: React.FC<{
   m: SceneMachine; modelUrl: string | null; radius: number; showLabel: boolean; selected: boolean;
   editing: boolean; onSelect: (key: string) => void; onGrab: (t: DragTarget) => void;
@@ -276,7 +314,10 @@ const Machine: React.FC<{
 }> = ({ m, modelUrl, radius, showLabel, selected, editing, onSelect, onGrab, lift }) => {
   const outer = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
-  const travelled = useRef(0);
+  const phase = phaseOf(m.key);
+  const motion = motionOf(m.classSlug);
+  // Start somewhere along the route, not all at its first stop.
+  const travelled = useRef(phase % 400);
   // Motion follows the machine's own data: it travels its route, or slews in place,
   // only while duty-cycle classifies it as working. Never while the layout is edited.
   const working = !editing && m.placed && m.activity === 'productive' && !m.breakdown;
@@ -285,16 +326,36 @@ const Machine: React.FC<{
 
   useFrame(({ clock }, dt) => {
     if (!outer.current || !body.current) return;
+    const t = clock.elapsedTime + phase * 0.01;
     if (travels) {
       travelled.current += dt * SPEED;
       const p = along(m.path, travelled.current);
       outer.current.position.set(p.x, 0, p.z);
       body.current.rotation.y = Math.atan2(-p.dz, p.dx);
-    } else {
-      travelled.current = 0;
+      body.current.position.y = 0;
+      return;
+    }
+    if (!working) {
       outer.current.position.set(m.x, 0, m.z);
-      // An excavator or crane at work slews; nothing else here moves.
-      body.current.rotation.y = home + (working ? 0.35 * Math.sin(clock.elapsedTime * 0.9) : 0);
+      body.current.rotation.y = home;
+      body.current.position.y = 0;
+      return;
+    }
+    if (motion === 'slew') {
+      // Dig, swing to dump, swing back, and creep along the face now and then.
+      const shuffle = 1.6 * Math.sin(t * 0.12);
+      outer.current.position.set(m.x + shuffle * Math.cos(home), 0, m.z - shuffle * Math.sin(home));
+      body.current.rotation.y = home + 0.6 * Math.sin(t * 0.8) * Math.max(0, Math.sin(t * 0.25) + 0.4);
+      body.current.position.y = 0;
+    } else if (motion === 'drill') {
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home;
+      body.current.position.y = 0.12 * Math.abs(Math.sin(t * 3));
+    } else {
+      outer.current.position.set(m.x, 0, m.z);
+      body.current.rotation.y = home;
+      // A running engine shudders, a little.
+      body.current.position.y = 0.02 * Math.sin(t * 40);
     }
   });
 
@@ -314,6 +375,7 @@ const Machine: React.FC<{
           : <StandIn colour={STATUS_COLOUR[m.status]} />}
       </group>
       <StatusRing status={m.status} radius={radius} selected={selected} placed={m.placed} />
+      {working && motion === 'exhaust' && <Exhaust height={3.2} seed={phase} />}
       {(showLabel || selected) && (
         // Inline styles, not utility classes: the label must read the same wherever the
         // scene is mounted, and two short lines never wrap into a third.
