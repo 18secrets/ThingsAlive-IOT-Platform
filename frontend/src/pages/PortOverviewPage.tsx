@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Anchor, Eye, EyeOff, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { ApiError, PortTwin, apiGetPortTwin } from '../lib/api';
+import { SiteTwinCard } from '../components/site-twin/SiteTwinCard';
 
 // three.js only when the overview is open.
 const PortOverviewScene = lazy(() => import('../components/visual/PortOverviewScene'));
@@ -24,6 +25,10 @@ export const PortOverviewPage: React.FC = () => {
   const [labels, setLabels] = useState(false);
   const [reset, setReset] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  // One site at a time by default — the busiest — so a port of many sites is shown
+  // site by site; "All sites" draws them together.
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const ALL = 'all';
 
   usePageHeader({
     title: t('portTwin.title', { defaultValue: 'Port overview' }),
@@ -55,6 +60,7 @@ export const PortOverviewPage: React.FC = () => {
   }
   if (!port) return <div className="h-[640px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
 
+  const current = siteId ?? [...port.sites].sort((a, b) => b.summary.total - a.summary.total)[0]?.site.plantId ?? ALL;
   const btn = 'p-2 rounded-lg bg-white/95 dark:bg-slate-800/95 shadow border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50';
   const stat = (label: string, value: React.ReactNode, tone = 'text-slate-900 dark:text-slate-100') => (
     <div className="px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 min-w-[120px]">
@@ -87,21 +93,36 @@ export const PortOverviewPage: React.FC = () => {
         </div>
       </div>
 
-      {/* One chip per site: its name, machines and live count, and the way into it. */}
-      <div className="flex gap-2 px-3 py-2 overflow-x-auto border-b border-slate-100 dark:border-slate-800">
-        {port.sites.map((s) => (
-          <button
-            key={s.site.plantId} onClick={() => navigate(`/admin/sites/${s.site.plantId}/page`)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs whitespace-nowrap hover:bg-slate-50 dark:hover:bg-slate-800"
+      {/* The site picker: one site at a time, or the whole port. */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-slate-100 dark:border-slate-800">
+        <label className="flex items-center gap-2 text-xs text-slate-500">
+          {t('portTwin.site', { defaultValue: 'Site' })}
+          <select
+            value={current} onChange={(e) => setSiteId(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-800 dark:text-slate-100 min-w-[280px]"
           >
-            <span className="font-semibold text-slate-800 dark:text-slate-100">{s.site.code}</span>
-            <span className="text-slate-500"> · {s.summary.total} {t('portTwin.machinesShort', { defaultValue: 'machines' })} · </span>
-            <span className="text-emerald-600">{s.summary.live} {t('portTwin.liveShort', { defaultValue: 'live' })}</span>
-            {s.workforce !== null && <span className="text-slate-500"> · {s.workforce.toLocaleString()} {t('portTwin.workersShort', { defaultValue: 'workers' })}</span>}
+            {port.sites.map((s) => (
+              <option key={s.site.plantId} value={s.site.plantId}>
+                {s.site.code} · {s.site.name} — {s.summary.total} {t('portTwin.machinesShort', { defaultValue: 'machines' })}
+                {s.workforce !== null ? `, ${s.workforce.toLocaleString()} ${t('portTwin.workersShort', { defaultValue: 'workers' })}` : ''}
+              </option>
+            ))}
+            <option value={ALL}>{t('portTwin.allSites', { defaultValue: 'All sites — the whole port' })}</option>
+          </select>
+        </label>
+        {current !== ALL && (
+          <button onClick={() => navigate(`/admin/sites/${current}/page`)} className="text-xs font-semibold text-sky-700 dark:text-sky-300 hover:underline">
+            {t('portTwin.openSite', { defaultValue: 'Open site page →' })}
           </button>
-        ))}
+        )}
       </div>
 
+      {current !== ALL ? (
+        <div className="p-3">
+          {/* The site's own twin, with its place and equipment pickers. */}
+          <SiteTwinCard key={current} plantId={current} />
+        </div>
+      ) : (
       <div className={`relative ${fullscreen ? 'flex-1 min-h-0' : 'h-[720px]'}`}>
         {port.sites.length ? (
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
@@ -129,6 +150,7 @@ export const PortOverviewPage: React.FC = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

@@ -153,12 +153,16 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     }))];
   }, [machines, twin?.simulated, draft, zones, t]);
 
+  const [focusMachine, setFocusMachine] = useState<string | null>(null);
   const focus: SceneFocus = useMemo(() => {
+    const fm = focusMachine ? machines.find((m) => m.key === focusMachine) : null;
+    if (fm) return { x: fm.x, z: fm.z, widthM: 50, depthM: 36 };
     const z = zones[focusIndex];
     if (z) return { x: z.x, z: z.z, widthM: z.widthM * 1.3, depthM: z.depthM * 1.3 };
     const lane = machines.some((m) => !m.placed) ? 28 : 0;
     return { x: 0, z: lane / 2, widthM: extent.widthM, depthM: extent.depthM + lane };
-  }, [zones, focusIndex, extent, machines]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zones, focusIndex, extent, focusMachine, machines.length]);
 
   const onDrag = useCallback((target: DragTarget, x: number, z: number) => {
     setDraft((d) => {
@@ -287,7 +291,8 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     );
   }
   if (!twin) return <div className="h-[520px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
-  const labelsOn = showLabels ?? twin.machines.length <= 12;
+  // Names off unless asked for: a machine's own shows on hover and when selected.
+  const labelsOn = showLabels ?? false;
 
   // Nothing is assigned here: there is no site to draw, and a yard of offices would be
   // a picture of plant this site does not have.
@@ -342,19 +347,40 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- zone tabs */}
-      <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto border-b border-slate-100 dark:border-slate-800">
-        {[{ label: t('siteTwin.overview', { defaultValue: 'Overview' }), i: -1 }, ...zones.map((z, i) => ({ label: z.label, i }))].map((tab) => (
-          <button
-            key={tab.i}
-            onClick={() => setFocusIndex(tab.i)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
-              focusIndex === tab.i ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
+      {/* ------------------------------------------------- place and equipment */}
+      {/* Two pickers rather than a row of tabs: a big site has twenty places and sixty
+          machines, and a picker holds them all without running off the card. */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          {t('siteTwin.place', { defaultValue: 'Place' })}
+          <select
+            value={focusMachine ? '' : String(focusIndex)}
+            onChange={(e) => { setFocusMachine(null); setSelected(null); setFocusIndex(Number(e.target.value)); }}
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[260px]"
           >
-            {tab.label}
-          </button>
-        ))}
+            <option value="-1">{t('siteTwin.overview', { defaultValue: 'Whole site' })}</option>
+            {zones.map((z, i) => <option key={z.key} value={String(i)}>{z.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          {t('siteTwin.equipment', { defaultValue: 'Equipment' })}
+          <select
+            value={focusMachine ?? ''}
+            onChange={(e) => {
+              const k = e.target.value || null;
+              setFocusMachine(k); setSelected(k);
+              if (!k) setFocusIndex(-1);
+            }}
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[300px]"
+          >
+            <option value="">{t('siteTwin.allEquipment', { defaultValue: 'All equipment' })}</option>
+            {[...twin.machines].sort((x, y) => (x.name ?? x.externalId).localeCompare(y.name ?? y.externalId)).map((m) => (
+              <option key={mkey(m)} value={mkey(m)}>
+                {(m.name ?? m.externalId).slice(0, 48)} · {statusLabel(m.status)}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="ml-auto flex items-center gap-2 pl-3">
           {canEdit && !draft && (
             <button onClick={startEdit} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 flex items-center gap-1.5 whitespace-nowrap">
