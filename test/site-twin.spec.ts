@@ -7,6 +7,7 @@ import { createApp } from '../src/main';
 import { PageService, twinStatus } from '../src/page/page.service';
 import { LayoutInput, normaliseHeading, SiteTwinService } from '../src/site-twin/site-twin.service';
 import { composeLayout, frontOf } from '../src/site-twin/compose';
+import { ensureSiteTwinDemo, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
 const MIGRATION = 'SiteTwin1763300000000';
@@ -444,6 +445,18 @@ describeDb('site twin: layout and live view', () => {
       const bay = l.zones.find((z) => z.key === 'workshop')!;
       expect(l.placements).toEqual([expect.objectContaining({ externalId: 'E1', x: bay.x, z: bay.z })]);
     });
+  });
+
+  it('the demo stream lays out only sites with machines, and never one already laid out', async () => {
+    const [{ id: empty }] = await owner.query(`INSERT INTO plant (tenant_id, code, name) VALUES ('acme', 'empty', 'Empty') RETURNING id`);
+    const before = (await twins.read(acme, plantId)).version;
+    await ensureSiteTwinDemo(owner, 'acme');
+    await tickSiteTwinDemo(owner, 'acme', NOW, { writeLoad: false });
+    expect((await twins.read(acme, plantId)).version).toBe(before);
+    const depot = await twins.read(acme, otherPlantId);
+    expect(depot.saved).toBe(true);
+    expect([...depot.placements.keys()]).toEqual([`${SRC}/ELSEWHERE`]);
+    expect((await twins.read(acme, empty)).saved).toBe(false);
   });
 
   it('draws an open alert as an alert, whatever the readiness', () => {

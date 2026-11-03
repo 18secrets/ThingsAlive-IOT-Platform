@@ -33,7 +33,7 @@ import { RecFrameService } from '../src/rec-frame/rec-frame.service';
 import { PredictionService } from '../src/prediction/services/prediction.service';
 import { BaselineService } from '../src/prediction/services/baseline.service';
 import { withTenantId } from '../src/scope/tenant-session';
-import { ensureSiteTwinDemo, tickSiteTwinDemo } from './site-twin-demo';
+import { ensureSiteTwinDemo, tickSiteTwinDemo } from '../src/site-twin/site-twin-demo';
 
 /**
  * Parse an interval string like '30s', '1m', '2h', '7200s' into milliseconds.
