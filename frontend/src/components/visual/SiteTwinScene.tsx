@@ -64,8 +64,8 @@ export interface SiteTwinSceneProps {
 
 // Seen from the south and a little east, about 40° above the ground: the long side of a
 // site runs across the screen, three faces of every structure show, the ground reads.
-const AZIMUTH = 0.3;
-const POLAR = 0.88;
+const AZIMUTH = 0.12;
+const POLAR = 0.86;
 const FOV = 35;
 
 /** A zone's name painted on the ground, as a canvas texture — a road marking, not a
@@ -94,7 +94,8 @@ function useGroundLabel(text: string) {
 
 const GroundLabel: React.FC<{ text: string; x: number; z: number; maxWidth: number; y?: number }> = ({ text, x, z, maxWidth, y = 0.32 }) => {
   const { texture, aspect } = useGroundLabel(text.toUpperCase());
-  const width = Math.min(maxWidth, aspect * 4);
+  // About 5 m tall letters, so a zone name reads at the overview, shrunk to fit its zone.
+  const width = Math.min(maxWidth, aspect * 5);
   return (
     <mesh position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
       <planeGeometry args={[width, width / aspect]} />
@@ -154,21 +155,56 @@ const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () =>
     return g;
   }, [widthM, depthM]);
   useEffect(() => () => grid.dispose(), [grid]);
+  // Trees outside the fence, a stable scatter: the site sits in a landscape, not a void.
+  const trees = useMemo(() => {
+    const out: { x: number; z: number; h: number; tone: number }[] = [];
+    let seed = Math.round(widthM * 7 + depthM * 13);
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ring = Math.max(widthM, depthM) * 0.45;
+    for (let i = 0; i < 90; i += 1) {
+      const side = i % 4;
+      const along = rnd() - 0.5;
+      const out_ = 8 + rnd() * ring;
+      const x = side < 2 ? along * (widthM + 2 * ring) : (side === 2 ? -1 : 1) * (widthM / 2 + out_);
+      const z = side < 2 ? (side === 0 ? -1 : 1) * (depthM / 2 + out_) : along * (depthM + 2 * ring);
+      out.push({ x, z, h: 5 + rnd() * 6, tone: rnd() });
+    }
+    return out;
+  }, [widthM, depthM]);
   return (
     <group>
-      {/* The land around the site, so the slab has an edge to sit on. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
-        <planeGeometry args={[widthM * 4, depthM * 4]} />
-        <meshStandardMaterial color="#e7e5df" />
+      {/* Grass beyond the site, wide enough to reach the haze at the horizon. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]} receiveShadow>
+        <planeGeometry args={[widthM * 12, depthM * 12]} />
+        <meshStandardMaterial color="#9cb380" />
       </mesh>
+      {/* A worn verge round the fence, where trucks have turned. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
+        <planeGeometry args={[widthM + 16, depthM + 16]} />
+        <meshStandardMaterial color="#c9b48f" />
+      </mesh>
+      {/* The site floor: graded murram, the dusty laterite of an Indian site. */}
       <mesh position={[0, 0, 0]} receiveShadow onClick={(e) => { if (e.delta < 5) onEmptyClick(); }}>
-        <boxGeometry args={[widthM, 0.04, depthM]} />
-        <meshStandardMaterial color="#f8fafc" />
+        <boxGeometry args={[widthM, 0.06, depthM]} />
+        <meshStandardMaterial color="#dcc7a1" roughness={1} />
       </mesh>
-      <lineSegments position={[0, 0.03, 0]} geometry={grid}>
-        <lineBasicMaterial color="#e2e8f0" />
+      <lineSegments position={[0, 0.04, 0]} geometry={grid}>
+        <lineBasicMaterial color="#cdb48a" transparent opacity={0.6} />
       </lineSegments>
-      {/* A blue band along the north edge, as site hoarding: it tells which way is up. */}
+      {trees.map((t, i) => (
+        <group key={i} position={[t.x, 0, t.z]}>
+          <mesh position={[0, t.h * 0.2, 0]} castShadow>
+            <cylinderGeometry args={[0.25, 0.35, t.h * 0.4, 6]} />
+            <meshStandardMaterial color="#6b4f35" />
+          </mesh>
+          <mesh position={[0, t.h * 0.62, 0]} castShadow>
+            <coneGeometry args={[t.h * 0.28, t.h * 0.75, 7]} />
+            <meshStandardMaterial color={t.tone > 0.5 ? '#3f7d3a' : '#4d8f45'} flatShading />
+          </mesh>
+        </group>
+      ))}
+      {/* Site hoarding: blue along the north edge, which tells which way is up, and
+          green-and-white mesh round the rest. */}
       <mesh position={[0, fence / 2, -depthM / 2]} castShadow>
         <boxGeometry args={[widthM, fence, 0.25]} />
         <meshStandardMaterial color="#1d4ed8" />
@@ -176,17 +212,17 @@ const SiteGround: React.FC<{ widthM: number; depthM: number; onEmptyClick: () =>
       {[[-1, 0], [1, 0]].map(([sx]) => (
         <mesh key={sx} position={[(sx * widthM) / 2, fence / 2, 0]}>
           <boxGeometry args={[0.15, fence, depthM]} />
-          <meshStandardMaterial color="#cbd5e1" transparent opacity={0.55} />
+          <meshStandardMaterial color="#15803d" transparent opacity={0.45} />
         </mesh>
       ))}
       <mesh position={[0, fence / 2, depthM / 2]}>
         <boxGeometry args={[widthM, fence, 0.15]} />
-        <meshStandardMaterial color="#cbd5e1" transparent opacity={0.55} />
+        <meshStandardMaterial color="#15803d" transparent opacity={0.3} />
       </mesh>
       {posts.map(([x, z], i) => (
         <mesh key={i} position={[x, fence / 2 + 0.1, z]}>
           <boxGeometry args={[0.3, fence + 0.2, 0.3]} />
-          <meshStandardMaterial color="#64748b" />
+          <meshStandardMaterial color="#e5e7eb" />
         </mesh>
       ))}
     </group>
@@ -320,7 +356,10 @@ const Machine: React.FC<{
   const travelled = useRef(phase % 400);
   // Motion follows the machine's own data: it travels its route, or slews in place,
   // only while duty-cycle classifies it as working. Never while the layout is edited.
-  const working = !editing && m.placed && m.activity === 'productive' && !m.breakdown;
+  // It moves while its data is live and nothing says it is stopped: working, or engine on
+  // with no load signal to say how hard. Idle, off, silent, alerting or broken down stand.
+  const working = !editing && m.placed && !m.breakdown
+    && (m.activity === 'productive' || (m.status === 'live' && m.activity !== 'idle' && m.activity !== 'off'));
   const travels = working && m.path.length > 1;
   const home = (-m.headingDeg * Math.PI) / 180;
 
@@ -464,7 +503,7 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
     const aspect = size.width / Math.max(1, size.height);
     // The depth is foreshortened by the tilt; the width is not.
     const fit = Math.max(f.widthM / aspect, f.depthM * Math.cos(POLAR) + 12 * Math.sin(POLAR));
-    const dist = (fit / (2 * half)) * 1.3;
+    const dist = (fit / (2 * half)) * 1.22;
     const p = new THREE.Vector3(Math.sin(POLAR) * Math.sin(AZIMUTH), Math.cos(POLAR), Math.sin(POLAR) * Math.cos(AZIMUTH))
       .multiplyScalar(dist).add(new THREE.Vector3(f.x, 0, f.z));
     void c.setLookAt(p.x, p.y, p.z, f.x, 0, f.z, animate);
@@ -489,8 +528,10 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
 
   return (
     <>
-      <color attach="background" args={['#eef2f7']} />
-      <hemisphereLight args={['#ffffff', '#cbd5e1', 0.7]} />
+      {/* Sky, and haze toward the horizon so the grass fades out instead of ending. */}
+      <color attach="background" args={['#cfe3f3']} />
+      <fog attach="fog" args={['#cfe3f3', span * 1.6, span * 4.5]} />
+      <hemisphereLight args={['#f8fbff', '#a3b18a', 0.85]} />
       <directionalLight
         position={[span * 0.4, span * 0.8, span * 0.3]}
         intensity={1.6}

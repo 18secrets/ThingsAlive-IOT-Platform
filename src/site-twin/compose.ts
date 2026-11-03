@@ -28,8 +28,10 @@ export function frontOf(m: Pick<ComposeMachine, 'classSlug' | 'category'>): Fron
 
 /** Metres between machines in a zone: a 20 t excavator's swing, with room to walk. */
 const GAP = 12;
-/** The site's width. Its depth follows from what has to fit. */
-const WIDTH = 280;
+/** The site's width bounds. Within them it follows what is on it: a four-machine yard
+ * drawn 280 m wide is a speck in a field. Its depth follows from what has to fit. */
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 320;
 const MARGIN = 10;
 const BAND = 22;
 
@@ -140,6 +142,12 @@ export function composeLayout(machines: ComposeMachine[], expectedVersion: numbe
   }
   lots.push({ zone: { key: 'workshop', label: 'Maintenance & breakdown bay', kind: 'maintenance_workshop', ...sized(36, 22, bay.length) }, machines: bay, heading: 90 });
 
+  // Wide enough for the lots in a little under two parts width to one part depth, the
+  // proportion a screen shows best, and never narrower than the widest lot.
+  const area = lots.reduce((a, l) => a + (l.zone.widthM + 8) * (l.zone.depthM + 8), 0);
+  const widest = Math.max(...lots.map((l) => l.zone.widthM)) + 2 * MARGIN;
+  const WIDTH = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, widest, Math.ceil(Math.sqrt(area * 1.8) / 10) * 10));
+
   // Pack the lots in rows, left to right, between the road bands.
   const usable = WIDTH - 2 * MARGIN;
   const placed: { lot: Lot; x: number; y: number }[] = [];
@@ -152,7 +160,7 @@ export function composeLayout(machines: ComposeMachine[], expectedVersion: numbe
     rowDepth = Math.max(rowDepth, lot.zone.depthM);
   }
   const middle = y + rowDepth;
-  const depth = Math.max(120, round(middle + 2 * BAND + 2 * MARGIN));
+  const depth = Math.max(90, round(middle + 2 * BAND + 2 * MARGIN));
   // Centred between the bands, so a short site has its slack on both sides, not one.
   const top = round(-middle / 2);
 
