@@ -512,7 +512,7 @@ export async function runForecastAndRecommendations(ds: DataSource, now: Date, f
   console.log(`[SeedStream] 🔮 Prediction/Forecast Pass: ${forecastSummary.outcome.toUpperCase()} (${forecastSummary.forecast} generated, ${forecastSummary.skipped} skipped)`);
 
   // 3. AI Recommendations for EX-03
-  const recEngine = new RecEngineService(ds);
+  const recEngine = new RecEngineService(ds, reader);
   const recFrame = new RecFrameService(ds, recEngine);
   try {
     const ev = await recEngine.evaluate(adminScope, { sourceSystem: DEMO_SOURCE, externalId: 'EX-03' });

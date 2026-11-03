@@ -440,6 +440,34 @@ describeDb('site twin: layout and live view', () => {
       expect(kinds(l)).not.toContain('quarry');
     });
 
+    it('sends tippers between the fronts the site has, and gives piling rigs their own area', () => {
+      const l = composeLayout([
+        m('E1', 'Excavators & Earthmoving'), m('E2', 'Excavators & Earthmoving'), m('E3', 'Excavators & Earthmoving'),
+        m('E4', 'Excavators & Earthmoving'), m('B1', 'Concrete Equipment'), m('T1', 'Material Transport'),
+        m('T2', 'Material Transport'), m('P1', 'Foundation & Drilling'),
+      ], 0);
+      expect(l.placements.find((p) => p.externalId === 'T1')!.route).toEqual(['quarry', 'batching-plant']);
+      expect(kinds(l)).toContain('batching_plant');
+      expect(l.zones.find((z) => z.key === 'piling')).toBeDefined();
+      expect(kinds(l)).not.toContain('building');
+    });
+
+    it('sizes a zone to its machines: eleven generators get eleven spots, none shared, all inside', () => {
+      const l = composeLayout(Array.from({ length: 11 }, (_, i) => m(`G${i}`, 'Power Generation')), 0);
+      const room = l.zones.find((z) => z.key === 'generator-room')!;
+      const spots = l.placements.map((p) => `${p.x},${p.z}`);
+      expect(new Set(spots).size).toBe(11);
+      for (const p of l.placements) {
+        expect(Math.abs(p.x - room.x)).toBeLessThanOrEqual(room.widthM / 2);
+        expect(Math.abs(p.z - room.z)).toBeLessThanOrEqual(room.depthM / 2);
+      }
+      // Nothing composed falls outside the site, so the database will accept it.
+      for (const z of l.zones) {
+        expect(Math.abs(z.x) + z.widthM / 2).toBeLessThanOrEqual(l.extent.widthM / 2);
+        expect(Math.abs(z.z) + z.depthM / 2).toBeLessThanOrEqual(l.extent.depthM / 2);
+      }
+    });
+
     it('puts a machine that needs attention in the breakdown bay, not at its work front', () => {
       const l = composeLayout([m('E1', 'Excavators & Earthmoving', null, true)], 0);
       const bay = l.zones.find((z) => z.key === 'workshop')!;
@@ -457,6 +485,20 @@ describeDb('site twin: layout and live view', () => {
     expect(depot.saved).toBe(true);
     expect([...depot.placements.keys()]).toEqual([`${SRC}/ELSEWHERE`]);
     expect((await twins.read(acme, empty)).saved).toBe(false);
+
+    // A machine assigned to the demo-made site: re-composed, the new one placed.
+    await owner.query(
+      `INSERT INTO equipment_profile (tenant_id, source_system, external_id, name, equipment_class_slug, plant_id, tier, readiness, updated_by)
+         VALUES ('acme', $1, 'GEN-9', 'Genset', 'prime-diesel-generator', $2, 'standard', '{}'::jsonb, 'u')`, [SRC, otherPlantId],
+    );
+    await ensureSiteTwinDemo(owner, 'acme');
+    const again = await twins.read(acme, otherPlantId);
+    expect([...again.placements.keys()].sort()).toEqual([`${SRC}/ELSEWHERE`, `${SRC}/GEN-9`]);
+    expect(again.zones.map((z) => z.key)).toContain('generator-room');
+    // Nothing changed since: left alone.
+    await ensureSiteTwinDemo(owner, 'acme');
+    expect((await twins.read(acme, otherPlantId)).version).toBe(again.version);
+    await owner.query(`DELETE FROM equipment_profile WHERE external_id = 'GEN-9'`);
   });
 
   it('draws an open alert as an alert, whatever the readiness', () => {
