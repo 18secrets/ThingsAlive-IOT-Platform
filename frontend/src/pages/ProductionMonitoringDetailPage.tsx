@@ -9,9 +9,12 @@ import { MachineLinks } from '../components/common/MachineLinks';
 import { Chip } from '../components/common/Chip';
 import {
   ApiError, EquipmentAvailability, EquipmentOee, EquipmentProfile, OeeFactor,
-  OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentOee,
+  OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentKpi, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
+
+/** The fuel rate KPI the machine page and Signal Bindings show (fuel test report FU-4). */
+const FUEL_RATE_KPI = 'avg_fuel_consumption';
 
 const DAYS = 7;
 
@@ -53,6 +56,9 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
   const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
   const [oee, setOee] = useState<EquipmentOee | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  // The fuel rate for this same window, from the same KPI the machine page and Signal
+  // Bindings read (FU-4): one computation, so the three screens cannot show three numbers.
+  const [fuelRate, setFuelRate] = useState<{ value: number; unit: string } | null>(null);
   // The rows the count above was made from, in the same response — a separate fetch
   // could land late or fail and leave "7 breakdowns" beside "none recorded".
   const breakdowns = oee?.breakdowns ?? [];
@@ -72,6 +78,17 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadOee')); });
     return () => { live = false; };
   }, [sourceSystem, externalId, oeeWindow]);
+
+  useEffect(() => {
+    let live = true;
+    setFuelRate(null);
+    if (!oee) return () => { live = false; };
+    // A class without the KPI, or a window it cannot answer, simply shows no line.
+    apiGetEquipmentKpi(sourceSystem, externalId, FUEL_RATE_KPI, { from: oee.from, to: oee.to })
+      .then((k) => { if (live && k.readiness === 'ready' && typeof k.value === 'number') setFuelRate({ value: k.value, unit: k.unit }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [sourceSystem, externalId, oee]);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
@@ -139,6 +156,11 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               {oee.quality.nominalFuel != null && oee.quality.actualFuel != null && (
                 <p className="text-xs text-slate-400">
                   {t('oee.burnedVsNominal', { actual: oee.quality.actualFuel.toFixed(1), unit: oee.quality.unit, nominal: oee.quality.nominalFuel.toFixed(1) })}
+                </p>
+              )}
+              {fuelRate && (
+                <p className="text-xs text-slate-500 dark:text-slate-300">
+                  {t('oee.fuelRateWhileRunning', { rate: fuelRate.value.toFixed(1), unit: fuelRate.unit })}
                 </p>
               )}
               {oee.quality.wasteLitres != null && oee.quality.wasteLitres > 0 && (

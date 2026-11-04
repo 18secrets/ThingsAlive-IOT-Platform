@@ -1,4 +1,5 @@
 import { insideBoundary, pairPositions, Position, SiteBoundary } from './geofence';
+import { fuelBurnedAndCovered } from '../../utilization/services/oee';
 import { insideZone, ZoneShape } from '../../geofence/geometry';
 import {
   alertExcludedRanges, baselineAvg, BaselineReason, baselineSd, BaselineValue, deltaRatio, ExcludedRange,
@@ -67,6 +68,29 @@ function toExec(result: BaselineValue): ExecValue {
  */
 export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object.freeze({
   avg: reduceUnary('avg', (vs) => vs.reduce((a, b) => a + b, 0) / vs.length),
+  // Time-weighted over the operating periods, by OEE's own integration (FU-4). No schedule,
+  // or no engine state seen, is said rather than averaged over the whole window: that
+  // would be `avg` again under another name.
+  avg_while_operating: {
+    run: ([series], _s, _d, ctx) => {
+      const gate = ctx.operating;
+      if (!gate || !gate.scheduled) return { ok: false, reason: 'no_shift_schedule' };
+      if (gate.observed === false) return { ok: false, reason: 'insufficient_coverage' };
+      const from = ctx.windowFrom.getTime();
+      const to = ctx.windowTo.getTime();
+      const periods = gate.periods
+        .map((p) => ({ start: Math.max(p.start.getTime(), from), end: Math.min(p.end.getTime(), to) }))
+        .filter((p) => p.end > p.start);
+      if (!periods.length) return { ok: false, reason: 'not_operating' };
+      const rows = series.filter((r) => r.at.getTime() <= to);
+      if (!rows.length) return NO_READINGS;
+      const { litres, coveredMinutes } = fuelBurnedAndCovered(
+        rows.map((r) => ({ at: r.at.getTime(), value: r.value })), periods,
+      );
+      if (coveredMinutes <= 0) return { ok: false, reason: 'not_operating' };
+      return { ok: true, value: litres / (coveredMinutes / 60) };
+    },
+  },
   min: reduceUnary('min', (vs) => Math.min(...vs)),
   max: reduceUnary('max', (vs) => Math.max(...vs)),
   first: {
