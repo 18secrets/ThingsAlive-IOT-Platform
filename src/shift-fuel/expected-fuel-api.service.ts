@@ -8,7 +8,7 @@ import { EquipmentRef } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
 import { windowsEndingBetween } from '../shift/services/shift-window';
-import { ClassFuelFigures, ExpectedFuel, expectedShiftFuel } from './expected-fuel';
+import { ClassFuelFigures, ExpectedFuel, ExpectedFuelBlocker, expectedShiftFuel } from './expected-fuel';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -37,6 +37,21 @@ export interface MachineExpectedFuel {
  * D50's history forecast is unchanged and sits beside it, scored; this one is what a machine
  * has before it has a history.
  */
+/**
+ * One library class version's fuel figures, as D55 reads them, and what they still lack.
+ * `blockedBy` is D55's own answer for a shift of any length, without the schedule's part:
+ * the class page and a machine's Fuel per shift panel cannot disagree on what is missing.
+ */
+export interface ClassFuelFiguresView {
+  classSlug: string;
+  classVersion: number;
+  className: string;
+  figures: Omit<ClassFuelFigures, 'classSlug' | 'classVersion' | 'className'>;
+  /** Where the working rate comes from; null until the figures give a full answer. */
+  workingRateFrom: 'bsfc' | 'nominal' | null;
+  blockedBy: Exclude<ExpectedFuelBlocker, 'no_class' | 'no_shift_schedule'>[];
+}
+
 @Injectable()
 export class ExpectedFuelApiService {
   constructor(private readonly ds: DataSource) {}
@@ -87,6 +102,24 @@ export class ExpectedFuelApiService {
       };
     });
   }
+}
+
+/**
+ * Library content, read as the authoring routes read it: no account's session, since a
+ * class version is the same for every account granted it.
+ */
+export async function classFuelFiguresView(ds: DataSource, slug: string, version: number): Promise<ClassFuelFiguresView> {
+  const klass = await ds.getRepository(EquipmentClassProfile).findOne({ where: { slug, version } });
+  if (!klass) throw new NotFoundException('No such class version.');
+  const f = figuresOf(klass, await readFuelFigures(ds.manager, slug, version));
+  // Any shift length answers the class's part; the schedule is the machine's, not the class's.
+  const probe = expectedShiftFuel(f, 12);
+  const { classSlug, classVersion, className, ...figures } = f;
+  return {
+    classSlug, classVersion, className, figures,
+    workingRateFrom: probe.workingRateFrom,
+    blockedBy: probe.blockedBy.filter((b): b is ClassFuelFiguresView['blockedBy'][number] => b !== 'no_class' && b !== 'no_shift_schedule'),
+  };
 }
 
 function figuresOf(c: EquipmentClassProfile, f: ClassFuelFigureValues): ClassFuelFigures {
