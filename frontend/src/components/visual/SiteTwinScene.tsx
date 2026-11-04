@@ -425,9 +425,12 @@ export const Machine: React.FC<{
   // with no load signal to say how hard. Idle, off, silent, alerting or broken down stand.
   // In the demo every machine at a work front works; one in the breakdown bay does not.
   const inBay = /breakdown|maintenance/i.test(m.engagedLabel ?? '');
+  // On a real account only data moves a machine: working, or engine on (no load signal to
+  // say how hard). "unknown" is no activity data at all; it moved too, so a customer saw a
+  // machine travel its route on nothing but a live status. It stands now.
   const working = !editing && m.placed && !m.breakdown && (simulated
     ? !inBay
-    : m.activity === 'productive' || (m.status === 'live' && m.activity !== 'idle' && m.activity !== 'off'));
+    : m.activity === 'productive' || (m.status === 'live' && m.activity === 'running-unclassified'));
   // Loaded from the first stop (the quarry) on the way out, empty on the way back.
   const loaded = useRef(false);
   const travels = working && m.path.length > 1;
@@ -617,7 +620,10 @@ const SiteTwinScene: React.FC<SiteTwinSceneProps> = (props) => {
     <>
       {/* Sky, and haze toward the horizon so the grass fades out instead of ending. */}
       <color attach="background" args={['#cfe3f3']} />
-      <fog attach="fog" args={['#cfe3f3', span * 1.6, span * 4.5]} />
+      {/* On a screen taller than wide the camera stands back to fit the site's width, so
+          the haze starts as much further out; at the plain distances a phone saw the whole
+          site through it, pale. */}
+      <fog attach="fog" args={['#cfe3f3', (span * 1.6) / Math.min(1, size.width / Math.max(1, size.height)), (span * 4.5) / Math.min(1, size.width / Math.max(1, size.height))]} />
       <hemisphereLight args={['#eef4fb', '#b5a98f', 0.75]} />
       {/* A cool fill from the north-west, so the shaded sides keep their detail. */}
       <directionalLight position={[-span * 0.5, span * 0.4, -span * 0.4]} intensity={0.35} color="#dbeafe" />
