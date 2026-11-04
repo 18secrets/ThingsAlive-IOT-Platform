@@ -17,7 +17,7 @@
     "pageOf": "पृष्ठ {{page}} / {{total}}",
     "details": "विवरण",
     "createWorkOrder": "कार्य आदेश बनाएँ",
-    "viewEquipmentPage": "उपकरण पेज देखें"
+    "viewEquipmentPage": "मशीन पेज देखें"
   },
   "kpi": {
     "inScope": "दायरे में मशीनें",

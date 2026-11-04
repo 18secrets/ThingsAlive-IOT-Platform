@@ -17,7 +17,7 @@
     "pageOf": "பக்கம் {{page}} / {{total}}",
     "details": "விவரங்கள்",
     "createWorkOrder": "பணி ஆணையை உருவாக்கு",
-    "viewEquipmentPage": "உபகரணப் பக்கத்தைப் பார்"
+    "viewEquipmentPage": "இயந்திரப் பக்கத்தைப் பார்"
   },
   "kpi": {
     "inScope": "வரம்பிலுள்ள இயந்திரங்கள்",

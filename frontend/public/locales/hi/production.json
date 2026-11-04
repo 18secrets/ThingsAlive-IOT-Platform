@@ -17,7 +17,7 @@
     "pageOf": "पृष्ठ {{page}} / {{total}}",
     "details": "विवरण",
     "createWorkOrder": "कार्य आदेश बनाएँ",
-    "viewEquipmentPage": "उपकरण पेज देखें",
+    "viewEquipmentPage": "मशीन पेज देखें",
     "notAvailable": "उपलब्ध नहीं",
     "oeeNotAvailable": "OEE उपलब्ध नहीं",
     "uptimeTitle": "चालू घंटे",
