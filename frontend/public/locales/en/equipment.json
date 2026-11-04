@@ -614,5 +614,9 @@
     "openSite": "Open site page →",
     "empty": "No site has been laid out yet. Open a site and use \"Auto-arrange from equipment\".",
     "notLaidOut": "Not drawn yet (no layout):"
+  },
+  "twin": {
+    "title": "Digital twin",
+    "loadFailed": "The 3-D model could not be loaded."
   }
 }

@@ -102,7 +102,12 @@
     "noneRecorded": "କିଛି ରେକର୍ଡ ହୋଇନାହିଁ।",
     "ongoing": "ଚାଲିଛି",
     "waitingOn": "OEE ପାଇଁ ପ୍ରଥମେ {{factors}} ଦରକାର",
-    "nominalOverride": "ନିଜ ସଂଖ୍ୟା ବ୍ୟବହାର କରିବାକୁ, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ ଘଣ୍ଟା ପ୍ରତି ମାନକ ଇନ୍ଧନ ସେଟ୍ କରନ୍ତୁ।"
+    "nominalOverride": "ନିଜ ସଂଖ୍ୟା ବ୍ୟବହାର କରିବାକୁ, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ ଘଣ୍ଟା ପ୍ରତି ମାନକ ଇନ୍ଧନ ସେଟ୍ କରନ୍ତୁ।",
+    "fuelRateWhileRunning": "ଚାଲିବା ସମୟରେ ହାରାହାରି ଇନ୍ଧନ ହାର: {{rate}} {{unit}} (ଏହି ଅବଧି ପାଇଁ ମେସିନ୍ ପୃଷ୍ଠାର ସମାନ ସଂଖ୍ୟା)",
+    "nominalFromLibrary": "ମାନକ {{rate}} {{unit}}, ଲାଇବ୍ରେରୀ ଶ୍ରେଣୀ {{className}} (ସଂସ୍କରଣ {{version}}) ରୁ",
+    "nominalCitation": "ଉତ୍ସ: {{citation}}",
+    "nominalNoCitation": "ଲାଇବ୍ରେରୀରେ ଏହି ସଂଖ୍ୟା ପାଇଁ କୌଣସି ଡାଟାସିଟ୍ ରେକର୍ଡ ହୋଇନାହିଁ।",
+    "nominalFromParameter": "ମାନକ {{rate}} {{unit}}, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ {{source}} ଦ୍ୱାରା ସ୍ଥିର"
   },
   "detail": {
     "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ",
