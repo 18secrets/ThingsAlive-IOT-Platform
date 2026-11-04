@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { writeFuelFigures } from '../src/catalog/services/class-fuel-figures';
 import { EquipmentProfile } from '../src/equipment/equipment-profile.entity';
 import { EquipmentShift } from '../src/shift/entities/equipment-shift.entity';
 import { ShiftService } from '../src/shift/services/shift.service';
@@ -119,10 +120,11 @@ describeDb('shift templates in the library, applied to a machine (FU-3)', () => 
   });
 
   it('end to end: a machine created and given the template has expected litres for its first shift, with no history', async () => {
-    await owner.getRepository(EquipmentClassProfile).save({
+    const klass = await owner.getRepository(EquipmentClassProfile).save({
       slug: 'hydraulic-excavator', version: 2, name: 'Hydraulic Excavator', status: 'published', publishedAt: new Date(),
-      expectedSignals: [], nominalFuelPerHour: 15, nominalFuelUnit: 'L/h', idleFuelPerHour: 2.1, workingShare: 0.7,
+      expectedSignals: [], nominalFuelPerHour: 15, nominalFuelUnit: 'L/h',
     });
+    await writeFuelFigures(owner.manager, klass.id, { idleFuelPerHour: 2.1, workingShare: 0.7 });
     await machine();
     const expected = new ExpectedFuelApiService(ds);
     const at = new Date('2026-11-02T09:00:00+05:30');

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
+import { readFuelFigures } from '../../catalog/services/class-fuel-figures';
 import { SIGNALS } from '../../common/signals';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
@@ -359,6 +360,8 @@ export class OeeService {
         ? { value: r.value, unit: r.unit, source: SCOPE_NAME[r.source.scope] }
         : null;
     };
+    // Not on the entity (class-fuel-figures.ts says why): read beside it.
+    const citation = oem ? (await readFuelFigures(m, oem.slug, oem.version)).nominalFuelSource : null;
     const nominalParam = pick('nominal_fuel_per_hour');
     const thresholdParam = pick('idle_breakdown_threshold_minutes');
     const nominal: { value: number; unit: string; source: ParameterSource; origin: NominalOrigin } | null = nominalParam
@@ -371,7 +374,7 @@ export class OeeService {
             value: oem.nominalFuelPerHour, unit: oem.nominalFuelUnit!, source: 'oem',
             origin: {
               kind: 'library', classSlug: oem.slug, classVersion: oem.version, className: oem.name,
-              citation: oem.nominalFuelSource ?? null,
+              citation,
             },
           }
         : null;

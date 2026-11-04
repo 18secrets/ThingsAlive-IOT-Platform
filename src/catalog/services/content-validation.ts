@@ -98,28 +98,30 @@ export function oemFigureProblems(f: OemFigures, declaredSignals: string[]): str
       problems.push(`${column} "${signal}" is not a signal this class declares.`);
     }
   }
-  // The same refusals `1763400000000-ClassFuelFigures` enforces.
-  if (f.nominalFuelSource?.trim() && f.nominalFuelPerHour === null) {
+  // The same refusals `1763400000000-ClassFuelFigures` enforces. Unset is null or absent:
+  // the entity never reads these columns (class-fuel-figures.ts), so a class loaded for
+  // publish carries them as undefined, and the database already holds the stored values.
+  if (f.nominalFuelSource?.trim() && f.nominalFuelPerHour == null) {
     problems.push('nominal_fuel_source is set with no nominal_fuel_per_hour; a source of nothing traces nothing.');
   }
   for (const [column, value] of [
     ['rated_power_kw', f.ratedPowerKw], ['bsfc_g_per_kwh', f.bsfcGPerKwh], ['idle_fuel_per_hour', f.idleFuelPerHour],
   ] as const) {
-    if (value !== null && !(value > 0)) problems.push(`${column} must be above 0, not ${value}.`);
+    if (value != null && !(value > 0)) problems.push(`${column} must be above 0, not ${value}.`);
   }
-  if (f.workingLoadPct !== null && !(f.workingLoadPct > 0 && f.workingLoadPct <= 100)) {
+  if (f.workingLoadPct != null && !(f.workingLoadPct > 0 && f.workingLoadPct <= 100)) {
     problems.push(`working_load_pct must be above 0 and at most 100, not ${f.workingLoadPct}.`);
   }
-  if (f.workingShare !== null && !(f.workingShare > 0 && f.workingShare <= 1)) {
+  if (f.workingShare != null && !(f.workingShare > 0 && f.workingShare <= 1)) {
     problems.push(`working_share must be above 0 and at most 1 (a share of the shift), not ${f.workingShare}.`);
   }
-  if (f.bsfcGPerKwh !== null && (f.ratedPowerKw === null || f.workingLoadPct === null)) {
+  if (f.bsfcGPerKwh != null && (f.ratedPowerKw == null || f.workingLoadPct == null)) {
     problems.push('bsfc_g_per_kwh needs rated_power_kw and working_load_pct beside it; on its own it computes no litres.');
   }
-  if (f.bsfcGPerKwh !== null && !f.bsfcSource?.trim()) {
+  if (f.bsfcGPerKwh != null && !f.bsfcSource?.trim()) {
     problems.push('bsfc_g_per_kwh has no bsfc_source; name the datasheet the figure was read from.');
   }
-  if (f.bsfcGPerKwh === null && f.bsfcSource?.trim()) {
+  if (f.bsfcGPerKwh == null && f.bsfcSource?.trim()) {
     problems.push(`bsfc_source "${f.bsfcSource}" is set with no bsfc_g_per_kwh.`);
   }
   return problems;

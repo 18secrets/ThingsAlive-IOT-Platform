@@ -95,6 +95,8 @@ export const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+import { readFuelFigures } from '../../catalog/services/class-fuel-figures';
+
 const noOemFigures = (): OemFigures => ({
   nominalFuelPerHour: null, nominalFuelUnit: null,
   idleBreakdownThresholdMinutes: DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES,
@@ -168,7 +170,8 @@ export async function loadCurrentClass(
     content: {
       name: current.name, description: current.description, category: current.category,
       serviceIntervalHours: current.serviceIntervalHours,
-      oem: oemFiguresOf(current),
+      // The fuel figures are not on the entity (class-fuel-figures.ts): read beside it.
+      oem: { ...oemFiguresOf(current), ...(await readFuelFigures(m, slug, current.version)) },
       expectedSignals: current.expectedSignals, failureModes, recommendations,
       defaultThresholds: (current.defaultThresholds ?? {}) as Record<string, ThresholdEntry>,
       sensorRequirements: reqs.map((r) => ({

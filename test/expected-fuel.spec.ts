@@ -2,11 +2,26 @@ import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { readFuelFigures, writeFuelFigures } from '../src/catalog/services/class-fuel-figures';
 import { EquipmentProfile } from '../src/equipment/equipment-profile.entity';
 import { EquipmentShift } from '../src/shift/entities/equipment-shift.entity';
 import { ClassFuelFigures, DIESEL_DENSITY_G_PER_L, expectedShiftFuel } from '../src/shift-fuel/expected-fuel';
 import { ExpectedFuelApiService } from '../src/shift-fuel/expected-fuel-api.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+
+
+/** The fuel figures are written through `class-fuel-figures.ts`, as the import and authoring do. */
+const FUEL_KEYS = ['nominalFuelSource', 'ratedPowerKw', 'workingLoadPct', 'bsfcGPerKwh', 'bsfcSource', 'idleFuelPerHour', 'workingShare'] as const;
+async function saveClass(o: DataSource, row: Record<string, unknown>): Promise<EquipmentClassProfile> {
+  const fuel = Object.fromEntries(FUEL_KEYS.filter((k) => k in row).map((k) => [k, row[k]]));
+  const rest = Object.fromEntries(Object.entries(row).filter(([k]) => !(FUEL_KEYS as readonly string[]).includes(k)));
+  // One transaction, as the import's: a refused figure leaves no class row behind.
+  return o.transaction(async (m) => {
+    const saved = await m.getRepository(EquipmentClassProfile).save(rest as Partial<EquipmentClassProfile>);
+    if (Object.keys(fuel).length) await writeFuelFigures(m, saved.id, fuel);
+    return saved;
+  });
+}
 
 /**
  * Fuel test report, 3 Nov 2026 — TC-FP-07 / TC-FP-09 (FU-3): "Instant prediction for a new
@@ -97,7 +112,7 @@ describeDb('a brand-new machine gets its first shift\'s litres before any histor
       "telemetry_reading", "legacy_shift_metric", "shift_fuel_forecast" CASCADE`);
   });
 
-  const klass = (figures: Partial<EquipmentClassProfile>) => owner.getRepository(EquipmentClassProfile).save({
+  const klass = (figures: Record<string, unknown>) => saveClass(owner, {
     slug: CLASS, version: 2, name: 'Hydraulic Excavator', status: 'published', publishedAt: NOW,
     expectedSignals: [{ signal: 'fuel_level', unit: '%', required: true }], ...figures,
   });

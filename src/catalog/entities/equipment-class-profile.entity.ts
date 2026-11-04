@@ -120,26 +120,29 @@ export class EquipmentClassProfile {
    * The fuel figures a cold-start prediction is made of, and where the nominal came from
    * (`1763400000000-ClassFuelFigures`, fuel test report FU-3/FU-5). Unset until the library
    * team authors them from a datasheet; a class without one is blocked on it by name.
+   *
+   * Never selected, inserted or updated by the entity: read and written only through
+   * `services/class-fuel-figures.ts`, which says why.
    */
-  @Column({ name: 'nominal_fuel_source', type: 'text', nullable: true })
+  @Column({ name: 'nominal_fuel_source', type: 'text', nullable: true, select: false, insert: false, update: false })
   nominalFuelSource: string | null;
 
-  @Column({ name: 'rated_power_kw', type: 'double precision', nullable: true })
+  @Column({ name: 'rated_power_kw', type: 'double precision', nullable: true, select: false, insert: false, update: false })
   ratedPowerKw: number | null;
 
-  @Column({ name: 'working_load_pct', type: 'double precision', nullable: true })
+  @Column({ name: 'working_load_pct', type: 'double precision', nullable: true, select: false, insert: false, update: false })
   workingLoadPct: number | null;
 
-  @Column({ name: 'bsfc_g_per_kwh', type: 'double precision', nullable: true })
+  @Column({ name: 'bsfc_g_per_kwh', type: 'double precision', nullable: true, select: false, insert: false, update: false })
   bsfcGPerKwh: number | null;
 
-  @Column({ name: 'bsfc_source', type: 'text', nullable: true })
+  @Column({ name: 'bsfc_source', type: 'text', nullable: true, select: false, insert: false, update: false })
   bsfcSource: string | null;
 
-  @Column({ name: 'idle_fuel_per_hour', type: 'double precision', nullable: true })
+  @Column({ name: 'idle_fuel_per_hour', type: 'double precision', nullable: true, select: false, insert: false, update: false })
   idleFuelPerHour: number | null;
 
-  @Column({ name: 'working_share', type: 'double precision', nullable: true })
+  @Column({ name: 'working_share', type: 'double precision', nullable: true, select: false, insert: false, update: false })
   workingShare: number | null;
 
   @Column({ type: 'text', default: 'draft' })

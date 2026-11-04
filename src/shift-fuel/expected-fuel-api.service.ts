@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { EquipmentClassProfile } from '../catalog/entities/equipment-class-profile.entity';
+import { ClassFuelFigureValues, readFuelFigures } from '../catalog/services/class-fuel-figures';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { EquipmentRef } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
@@ -57,7 +58,7 @@ export class ExpectedFuelApiService {
             where: { slug: profile.equipmentClassSlug, version: profile.classVersion },
           })
         : null;
-      const figures = klass ? figuresOf(klass) : null;
+      const figures = klass ? figuresOf(klass, await readFuelFigures(m, klass.slug, klass.version)) : null;
 
       const shifts = await m.getRepository(EquipmentShift).find({
         where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId, status: 'active' },
@@ -88,11 +89,9 @@ export class ExpectedFuelApiService {
   }
 }
 
-function figuresOf(c: EquipmentClassProfile): ClassFuelFigures {
+function figuresOf(c: EquipmentClassProfile, f: ClassFuelFigureValues): ClassFuelFigures {
   return {
     classSlug: c.slug, classVersion: c.version, className: c.name,
-    nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit, nominalFuelSource: c.nominalFuelSource,
-    ratedPowerKw: c.ratedPowerKw, workingLoadPct: c.workingLoadPct, bsfcGPerKwh: c.bsfcGPerKwh, bsfcSource: c.bsfcSource,
-    idleFuelPerHour: c.idleFuelPerHour, workingShare: c.workingShare,
+    nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit, ...f,
   };
 }

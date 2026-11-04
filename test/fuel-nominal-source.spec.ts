@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { EquipmentClassProfile } from '../src/catalog/entities/equipment-class-profile.entity';
+import { readFuelFigures, writeFuelFigures } from '../src/catalog/services/class-fuel-figures';
 import { OemFigures, oemFigureProblems } from '../src/catalog/services/content-validation';
 import { oemFiguresFromRow } from '../src/catalog-import/services/class-content';
 import { EquipmentProfile } from '../src/equipment/equipment-profile.entity';
@@ -16,6 +17,20 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const MIGRATION = 'ClassFuelFigures1763400000000';
+
+
+/** The fuel figures are written through `class-fuel-figures.ts`, as the import and authoring do. */
+const FUEL_KEYS = ['nominalFuelSource', 'ratedPowerKw', 'workingLoadPct', 'bsfcGPerKwh', 'bsfcSource', 'idleFuelPerHour', 'workingShare'] as const;
+async function saveClass(o: DataSource, row: Record<string, unknown>): Promise<EquipmentClassProfile> {
+  const fuel = Object.fromEntries(FUEL_KEYS.filter((k) => k in row).map((k) => [k, row[k]]));
+  const rest = Object.fromEntries(Object.entries(row).filter(([k]) => !(FUEL_KEYS as readonly string[]).includes(k)));
+  // One transaction, as the import's: a refused figure leaves no class row behind.
+  return o.transaction(async (m) => {
+    const saved = await m.getRepository(EquipmentClassProfile).save(rest as Partial<EquipmentClassProfile>);
+    if (Object.keys(fuel).length) await writeFuelFigures(m, saved.id, fuel);
+    return saved;
+  });
+}
 
 /**
  * Fuel test report, 3 Nov 2026 — FU-5 / TC-FP-05: "Nominal 14.97 L/h is an untraceable
@@ -84,7 +99,7 @@ describeDb('the nominal says where it came from (FU-5)', () => {
 
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
-  const klass = (extra: Partial<EquipmentClassProfile> = {}) => owner.getRepository(EquipmentClassProfile).save({
+  const klass = (extra: Record<string, unknown> = {}) => saveClass(owner, {
     slug: CLASS, version: 1, name: 'Shutter Converter', status: 'published', publishedAt: new Date(MONDAY),
     expectedSignals: ['engine_running_status', 'engine_load', 'fuel_level', 'fuel_consumption']
       .map((signal) => ({ signal, unit: 'x', required: true })),
@@ -203,8 +218,9 @@ describeDb('the nominal says where it came from (FU-5)', () => {
       ratedPowerKw: 121, workingLoadPct: 60, bsfcGPerKwh: 215, bsfcSource: 'Cat C7.1 performance data',
       idleFuelPerHour: 2.1, workingShare: 0.7, nominalFuelSource: 'Cat 320 spec sheet',
     });
-    expect(await owner.getRepository(EquipmentClassProfile).findOneByOrFail({ slug: CLASS, version: 1 })).toMatchObject({
-      ratedPowerKw: 121, workingLoadPct: 60, bsfcGPerKwh: 215, idleFuelPerHour: 2.1, workingShare: 0.7,
+    expect(await readFuelFigures(owner.manager, CLASS, 1)).toEqual({
+      nominalFuelSource: 'Cat 320 spec sheet', ratedPowerKw: 121, workingLoadPct: 60, bsfcGPerKwh: 215,
+      bsfcSource: 'Cat C7.1 performance data', idleFuelPerHour: 2.1, workingShare: 0.7,
     });
   });
 
