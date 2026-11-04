@@ -2549,6 +2549,11 @@ export interface OeeFactor {
   reason?: string;
 }
 
+/** A library figure names the class version the machine is on and its datasheet, or says it has none. */
+export type NominalOrigin =
+  | { kind: "library"; classSlug: string; classVersion: number; className: string; citation: string | null }
+  | { kind: "parameter"; scope: OeeParameterSource };
+
 export interface EquipmentOee {
   window: OeeWindow;
   from: string;
@@ -2562,6 +2567,8 @@ export interface EquipmentOee {
   quality: OeeFactor & {
     nominalFuel: number | null; actualFuel: number | null; unit: string | null;
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
+    /** The nominal rate and exactly where it came from (fuel test report FU-5). */
+    nominalFuelPerHour: number | null; nominalRateUnit: string | null; nominalOrigin: NominalOrigin | null;
   };
   oee: OeeFactor;
   /** The rows Performance counted. On one machine's OEE only, not on a site's machines. */
@@ -2738,6 +2745,42 @@ export interface ShiftRun {
   alertsFired: number;
   durationMs: number | null;
   ranAt: string;
+}
+
+/**
+ * Fuel per shift on the machine page (fuel test report TC-FP-11): D50's forecast from the
+ * machine's own shift history, and the cold-start expectation from its class figures and
+ * schedule (`/expected-fuel`), which is what a machine with no history has.
+ */
+export interface ShiftFuelRowView {
+  sdate: string; shift: 1 | 2; startsAt: string; endsAt: string;
+  predictedL: number | null; inputsThrough: string | null; issuedAt: string | null;
+  fuelL: number | null; workHrs: number | null; syncedAt: string | null;
+}
+export interface MachineShiftFuelView {
+  method: string; asOf: string; days: number; shifts: ShiftFuelRowView[];
+  nowcast: { sdate: string; shift: 1 | 2; asOf: string; soFarL: number; predictedL: number } | null;
+}
+export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 7): Promise<MachineShiftFuelView> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
+}
+
+export type ExpectedFuelBlocker =
+  | "no_class" | "no_shift_schedule" | "working_rate_not_set" | "nominal_unit_not_litres"
+  | "working_share_not_set" | "idle_fuel_per_hour_not_set";
+export interface ExpectedShiftFuel {
+  shiftName: string | null; startsAt: string | null; endsAt: string | null;
+  method: string; predictedL: number | null; workingL: number | null; idleL: number | null;
+  blockedBy: ExpectedFuelBlocker[]; workingRateFrom: "bsfc" | "nominal" | null;
+  inputs: { name: string; value: number; unit: string; source: string }[];
+}
+export interface MachineExpectedFuel {
+  asOf: string;
+  equipmentClass: { slug: string; version: number; name: string } | null;
+  shifts: ExpectedShiftFuel[];
+}
+export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Promise<MachineExpectedFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
 }
 
 export function apiListShifts(sourceSystem: string, externalId: string): Promise<EquipmentShift[]> {

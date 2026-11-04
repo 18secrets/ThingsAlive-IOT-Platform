@@ -144,7 +144,29 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               {oee.quality.wasteLitres != null && oee.quality.wasteLitres > 0 && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">{t('oee.overNominal', { litres: oee.quality.wasteLitres.toFixed(1) })}</p>
               )}
-              {oee.quality.parameterSource && (
+              {/* The rate and where it came from, so "OEM figure" can be checked (FU-5). */}
+              {oee.quality.nominalOrigin?.kind === 'library' && oee.quality.nominalFuelPerHour != null ? (
+                <>
+                  <p className="text-xs text-slate-400">
+                    {t('oee.nominalFromLibrary', {
+                      rate: oee.quality.nominalFuelPerHour, unit: oee.quality.nominalRateUnit ?? '',
+                      className: oee.quality.nominalOrigin.className, version: oee.quality.nominalOrigin.classVersion,
+                    })}
+                  </p>
+                  <p className={`text-xs ${oee.quality.nominalOrigin.citation ? 'text-slate-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {oee.quality.nominalOrigin.citation
+                      ? t('oee.nominalCitation', { citation: oee.quality.nominalOrigin.citation })
+                      : t('oee.nominalNoCitation')}
+                  </p>
+                </>
+              ) : oee.quality.nominalOrigin?.kind === 'parameter' && oee.quality.nominalFuelPerHour != null ? (
+                <p className="text-xs text-slate-400">
+                  {t('oee.nominalFromParameter', {
+                    rate: oee.quality.nominalFuelPerHour, unit: oee.quality.nominalRateUnit ?? '',
+                    source: t(`source.${oee.quality.nominalOrigin.scope}`),
+                  })}
+                </p>
+              ) : oee.quality.parameterSource && (
                 <p className="text-xs text-slate-400">{t('oee.nominalSetBy', { source: t(`source.${oee.quality.parameterSource}`) })}</p>
               )}
             </FactorTile>

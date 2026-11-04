@@ -45,6 +45,8 @@ export interface OeeResult {
   quality: FactorState & {
     nominalFuel: number | null; actualFuel: number | null; unit: string | null;
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: ParameterSource | null;
+    /** The nominal rate itself, and where it came from (fuel test report FU-5). */
+    nominalFuelPerHour: number | null; nominalRateUnit: string | null; nominalOrigin: NominalOrigin | null;
   };
   oee: FactorState;
 }
@@ -82,6 +84,20 @@ export function windowBounds(window: OeeWindow, at: Date, now: Date): { from: Da
   // A partial window reports what it covers and does not extrapolate (§5).
   return { from: new Date(from), to: new Date(to), daysCovered: Math.ceil((to - from) / DAY) };
 }
+
+/**
+ * Where a nominal came from, precisely enough to go and check it (fuel test report FU-5).
+ *
+ * The tester saw "OEM figure" beside a number and could find it nowhere: not in Cost
+ * Administration, which reads only the account's own parameters, and not on the machine.
+ * A library figure names the class and the version the machine is on — the version is
+ * what was granted, and a later one may say something else — and the datasheet, when the
+ * library recorded one. A parameter names its scope. `citation: null` is said, not hidden:
+ * a library nominal with no datasheet behind it is a finding, not a source.
+ */
+export type NominalOrigin =
+  | { kind: 'library'; classSlug: string; classVersion: number; className: string; citation: string | null }
+  | { kind: 'parameter'; scope: ParameterSource };
 
 const SCOPE_NAME: Record<string, ParameterSource> = {
   equipment: 'equipment', equipment_class: 'class', site: 'site', client: 'client',
@@ -207,9 +223,16 @@ export class OeeService {
       breakdownMinutes: 0, breakdownCount: 0, openBreakdown: false,
       thresholdMinutes: config.threshold.value, parameterSource: config.threshold.source,
     };
+    // The rate and its origin travel with every Quality, ready or not: "nominal not set"
+    // and "nominal 15 L/h from the library, Quality blocked on no readings" are different
+    // things to fix, and the page can only tell them apart if both are said.
+    const nominalOf = {
+      nominalFuelPerHour: config.nominal?.value ?? null, nominalRateUnit: config.nominal?.unit ?? null,
+      nominalOrigin: config.nominal?.origin ?? null,
+    };
     const emptyQuality = {
       nominalFuel: null, actualFuel: null, unit: config.nominal?.unit ?? null, wasteFraction: null, wasteLitres: null,
-      parameterSource: config.nominal?.source ?? null,
+      parameterSource: config.nominal?.source ?? null, ...nominalOf,
     };
     const refuse = (readiness: Readiness, reason: string): FactorState => ({ value: null, readiness, reason });
 
@@ -307,7 +330,7 @@ export class OeeService {
           const q = qualityOf(config.nominal.value, productiveMinutes, actual);
           quality = {
             ...q, actualFuel: Math.round(actual * 1000) / 1000, unit: config.nominal.unit.replace(/\/h$/, ''),
-            parameterSource: config.nominal.source,
+            parameterSource: config.nominal.source, ...nominalOf,
           };
         }
       }
@@ -338,10 +361,19 @@ export class OeeService {
     };
     const nominalParam = pick('nominal_fuel_per_hour');
     const thresholdParam = pick('idle_breakdown_threshold_minutes');
-    const nominal = nominalParam
-      ? { value: nominalParam.value, unit: nominalParam.unit ?? 'L/h', source: nominalParam.source }
+    const nominal: { value: number; unit: string; source: ParameterSource; origin: NominalOrigin } | null = nominalParam
+      ? {
+          value: nominalParam.value, unit: nominalParam.unit ?? 'L/h', source: nominalParam.source,
+          origin: { kind: 'parameter', scope: nominalParam.source },
+        }
       : oem?.nominalFuelPerHour != null
-        ? { value: oem.nominalFuelPerHour, unit: oem.nominalFuelUnit!, source: 'oem' as ParameterSource }
+        ? {
+            value: oem.nominalFuelPerHour, unit: oem.nominalFuelUnit!, source: 'oem',
+            origin: {
+              kind: 'library', classSlug: oem.slug, classVersion: oem.version, className: oem.name,
+              citation: oem.nominalFuelSource ?? null,
+            },
+          }
         : null;
     const threshold = thresholdParam
       ? { value: thresholdParam.value, source: thresholdParam.source }

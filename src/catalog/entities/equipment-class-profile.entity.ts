@@ -116,6 +116,32 @@ export class EquipmentClassProfile {
   @Column({ name: 'availability_signal', type: 'text', nullable: true })
   availabilitySignal: string | null;
 
+  /**
+   * The fuel figures a cold-start prediction is made of, and where the nominal came from
+   * (`1763400000000-ClassFuelFigures`, fuel test report FU-3/FU-5). Unset until the library
+   * team authors them from a datasheet; a class without one is blocked on it by name.
+   */
+  @Column({ name: 'nominal_fuel_source', type: 'text', nullable: true })
+  nominalFuelSource: string | null;
+
+  @Column({ name: 'rated_power_kw', type: 'double precision', nullable: true })
+  ratedPowerKw: number | null;
+
+  @Column({ name: 'working_load_pct', type: 'double precision', nullable: true })
+  workingLoadPct: number | null;
+
+  @Column({ name: 'bsfc_g_per_kwh', type: 'double precision', nullable: true })
+  bsfcGPerKwh: number | null;
+
+  @Column({ name: 'bsfc_source', type: 'text', nullable: true })
+  bsfcSource: string | null;
+
+  @Column({ name: 'idle_fuel_per_hour', type: 'double precision', nullable: true })
+  idleFuelPerHour: number | null;
+
+  @Column({ name: 'working_share', type: 'double precision', nullable: true })
+  workingShare: number | null;
+
   @Column({ type: 'text', default: 'draft' })
   @Index('ix_equipment_class_profile_status')
   status: CatalogStatus;

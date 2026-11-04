@@ -99,12 +99,19 @@ const noOemFigures = (): OemFigures => ({
   nominalFuelPerHour: null, nominalFuelUnit: null,
   idleBreakdownThresholdMinutes: DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES,
   runningSignal: null, runningIdleBound: null, availabilitySignal: null,
+  nominalFuelSource: null, ratedPowerKw: null, workingLoadPct: null, bsfcGPerKwh: null, bsfcSource: null,
+  idleFuelPerHour: null, workingShare: null,
 });
 
 export const oemFiguresOf = (c: EquipmentClassProfile): OemFigures => ({
   nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit,
   idleBreakdownThresholdMinutes: c.idleBreakdownThresholdMinutes,
   runningSignal: c.runningSignal, runningIdleBound: c.runningIdleBound, availabilitySignal: c.availabilitySignal,
+  // `?? null`: a class built in memory by a caller that predates these columns compares
+  // equal to one that states them as unset, so an unchanged re-import stays unchanged.
+  nominalFuelSource: c.nominalFuelSource ?? null, ratedPowerKw: c.ratedPowerKw ?? null,
+  workingLoadPct: c.workingLoadPct ?? null, bsfcGPerKwh: c.bsfcGPerKwh ?? null, bsfcSource: c.bsfcSource ?? null,
+  idleFuelPerHour: c.idleFuelPerHour ?? null, workingShare: c.workingShare ?? null,
 });
 
 /** The OEM figures an `equipment_class` row states. A blank threshold is the stated
@@ -118,6 +125,13 @@ export function oemFiguresFromRow(payload: Record<string, unknown>): OemFigures 
     runningSignal: strOrNull(payload.running_signal),
     runningIdleBound: num(payload.running_idle_bound) ?? null,
     availabilitySignal: strOrNull(payload.availability_signal),
+    nominalFuelSource: strOrNull(payload.nominal_fuel_source),
+    ratedPowerKw: num(payload.rated_power_kw) ?? null,
+    workingLoadPct: num(payload.working_load_pct) ?? null,
+    bsfcGPerKwh: num(payload.bsfc_g_per_kwh) ?? null,
+    bsfcSource: strOrNull(payload.bsfc_source),
+    idleFuelPerHour: num(payload.idle_fuel_per_hour) ?? null,
+    workingShare: num(payload.working_share) ?? null,
   };
 }
 

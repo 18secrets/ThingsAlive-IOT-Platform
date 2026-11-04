@@ -106,6 +106,16 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'running_signal', requiredCell: false, since: 'v5' },
       { name: 'running_idle_bound', requiredCell: false, since: 'v5' },
       { name: 'availability_signal', requiredCell: false, since: 'v5' },
+      // Cold-start fuel figures (fuel test report FU-3/FU-5), blank in the example for the
+      // nominal's reason. Optional v5 columns rather than a v6: nothing earlier changes
+      // meaning, and a workbook without them loads exactly as before.
+      { name: 'nominal_fuel_source', requiredCell: false, since: 'v5' },
+      { name: 'rated_power_kw', requiredCell: false, since: 'v5' },
+      { name: 'working_load_pct', requiredCell: false, since: 'v5' },
+      { name: 'bsfc_g_per_kwh', requiredCell: false, since: 'v5' },
+      { name: 'bsfc_source', requiredCell: false, since: 'v5' },
+      { name: 'idle_fuel_per_hour', requiredCell: false, since: 'v5' },
+      { name: 'working_share', requiredCell: false, since: 'v5' },
     ],
     example: {
       slug: 'diesel-generator', name: 'Diesel Generator', description: 'Backup power genset',
