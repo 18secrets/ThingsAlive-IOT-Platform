@@ -45,7 +45,8 @@ async function main() {
             WHERE cs."tenant_id" = $1 AND cs."status" <> 'retired'
               AND NOT EXISTS (SELECT 1 FROM "scenario_definition" d
                                WHERE d."equipment_class_slug" = cs."client_equipment_class_slug" AND d."status" = 'published')
-              AND NOT EXISTS (SELECT 1 FROM "scenario_definition" d WHERE d."slug" = cs."slug")
+              AND NOT EXISTS (SELECT 1 FROM "scenario_definition" d
+                               WHERE d."slug" IN (cs."slug", cs."client_equipment_class_slug" || '-' || cs."slug"))
             ORDER BY cs."client_equipment_class_slug", cs."slug"`,
           [tenant],
         );
@@ -60,7 +61,12 @@ async function main() {
         if (!apply) console.log('Dry run: nothing written. Add --apply to write.');
         return;
       }
+      // Library slugs are global. An account may name its copy "fuel-burn"; in the library
+      // that would claim the name for one class, so it is published under the class's
+      // prefix, as the rest are. (Run on Development on 4 Nov before this was here: the
+      // five bare hydraulic-excavator slugs were retired and republished prefixed.)
       for (const c of ok) {
+        if (!c.slug.startsWith(`${c.cls}-`)) c.slug = `${c.cls}-${c.slug}`;
         await m.query(
           `INSERT INTO "scenario_definition"
              ("slug", "version", "equipment_class_slug", "name", "description", "severity", "tier",
