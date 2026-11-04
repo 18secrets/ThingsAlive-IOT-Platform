@@ -19,6 +19,7 @@ import {
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 import { sortRows, useSort } from '../lib/useSort';
+import { appLocale } from '../lib/dateLocale';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
@@ -323,7 +324,7 @@ export const AlertsPage: React.FC = () => {
                 <span className="font-medium">{e.ruleName}</span>,
                 machineName(e),
                 e.summary,
-                new Date(e.firedAt).toLocaleString(),
+                new Date(e.firedAt).toLocaleString(appLocale()),
                 <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
               ]}
             />
@@ -338,7 +339,7 @@ export const AlertsPage: React.FC = () => {
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString(appLocale())}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {eventActions(e)}
                   </div>

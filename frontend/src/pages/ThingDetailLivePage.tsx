@@ -2,7 +2,7 @@ import React from 'react';
 import { severityTone, statusTone } from '../components/common/statusTone';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Activity, Bell, ClipboardList, Fuel, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
+import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
@@ -10,13 +10,14 @@ import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
 import {
-  AlertEvent, EffectiveParameter, EquipmentAvailability, EquipmentOee, EquipmentProfile, FleetLinkRow, MachineShiftFuel, Plant,
-  Prediction, ShieldSummary, ShiftFuelRow, WorkOrder,
+  AlertEvent, EffectiveParameter, EquipmentAvailability, EquipmentOee, EquipmentProfile, FleetLinkRow, Plant,
+  Prediction, ShieldSummary, WorkOrder,
   apiGetDeviceHealthFleet, apiGetEffectiveParameters, apiGetEquipmentAvailability, apiGetEquipmentOee, apiGetLatestPredictions,
-  apiGetMachineShiftFuel,
   apiGetShieldSummary, apiListAlerts, apiListEquipment, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
 import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { appLocale } from '../lib/dateLocale';
 
 const DAY = 86_400_000;
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
@@ -48,8 +49,6 @@ export const ThingDetailLivePage: React.FC = () => {
   const alerts = useSlot<AlertEvent[]>(() => apiListAlerts({ state: ['open', 'acknowledged'], equipment: externalId }), key);
   const orders = useSlot<WorkOrder[]>(() => apiListWorkOrders({ status: ['created', 'in-progress'], equipment: externalId }), key);
   const shield = useSlot<ShieldSummary>(() => apiGetShieldSummary(), key);
-  // The last three days: yesterday's shifts to score against, today's and the next to come.
-  const fuel = useSlot<MachineShiftFuel>(() => apiGetMachineShiftFuel(sourceSystem, externalId, 3), key);
   // Parameters resolve per machine by its register id, which only the profile carries.
   // While the profile loads this stays pending — rejecting flashed "not available for
   // your role", which is what any rejection renders as, before the real answer arrived.
@@ -133,7 +132,7 @@ export const ThingDetailLivePage: React.FC = () => {
             action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
             render={(d) => d.map((o) => (
               <PanelRow key={o.id} title={o.title}
-                detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}`}
+                detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}`}
                 right={<Chip tone={statusTone(o.status)}>{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}</Chip>} />
             ))} />
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
@@ -161,7 +160,7 @@ export const ThingDetailLivePage: React.FC = () => {
               </div>
             )}
           </div>
-          <FuelPerShift slot={fuel} />
+          <FuelPerShiftPanel sourceSystem={sourceSystem} externalId={externalId} />
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><Wrench className="w-4 h-4" />{t('thingLive.costParams')}</p>
@@ -185,79 +184,6 @@ export const ThingDetailLivePage: React.FC = () => {
 
 const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-xs text-slate-400">{children}</p>;
 
-const litres = (l: number) => l.toFixed(1);
-/** "2026-11-03" read as that calendar day, not as UTC midnight shifted into the reader's zone. */
-const shiftDate = (sdate: string) => {
-  const [y, m, d] = sdate.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-};
-/** The accuracy page's score for one shift (D53): 100 − the miss as a share of what burned, never below 0. */
-const shiftAccuracy = (forecast: number, actual: number) => Math.max(0, 100 - Math.round((100 * Math.abs(forecast - actual)) / actual));
-
-/**
- * Fuel per shift (D50, D52): the forecast where people look at the machine, not only on the
- * accuracy page (fuel test report TC-FP-11). The shift under way shows its in-shift
- * re-forecast; each recent shift its forecast, and once the existing platform has totalled
- * it, what burned and how close the forecast came. A forecast learned from no history is
- * said to be one rather than shown as a bare "0 L" (TC-FP-09).
- */
-const FuelPerShift: React.FC<{ slot: Slot<MachineShiftFuel> }> = ({ slot }) => {
-  const { t } = useTranslation('dashboard');
-  const now = Date.now();
-  const rows = slot.state === 'ok' ? [...slot.data.shifts].reverse().slice(0, 4) : [];
-  const nowcast = slot.state === 'ok' ? slot.data.nowcast : null;
-  const any = nowcast != null || rows.some((r) => r.predictedL != null || r.fuelL != null);
-
-  const label = (r: { sdate: string; shift: 1 | 2 }) => t('thingLive.fuel.shiftLabel', { n: r.shift, date: shiftDate(r.sdate) });
-  const detail = (r: ShiftFuelRow) => {
-    const forecast = r.predictedL == null ? t('thingLive.fuel.noForecast')
-      : r.inputsThrough == null && r.predictedL === 0 ? t('thingLive.fuel.noHistory')
-        : t('thingLive.fuel.forecast', { litres: litres(r.predictedL) });
-    const ended = Date.parse(r.endsAt) <= now;
-    const actual = r.fuelL != null
-      ? t('thingLive.fuel.actual', { litres: litres(r.fuelL), hours: (r.workHrs ?? 0).toFixed(1) })
-      : ended ? t('thingLive.fuel.notTotalled') : null;
-    return actual ? `${forecast} · ${actual}` : forecast;
-  };
-  const right = (r: ShiftFuelRow) => {
-    if (Date.parse(r.startsAt) > now) return <Chip tone="slate">{t('thingLive.fuel.next')}</Chip>;
-    if (Date.parse(r.endsAt) > now) return <Chip tone="sky">{t('thingLive.fuel.running')}</Chip>;
-    if (r.predictedL == null || r.fuelL == null || r.fuelL <= 0) return undefined;
-    const a = shiftAccuracy(r.predictedL, r.fuelL);
-    return <Chip tone={a >= 85 ? 'emerald' : a >= 70 ? 'amber' : 'rose'}>{t('thingLive.fuel.accuracy', { pct: a })}</Chip>;
-  };
-  // A counter last read well before the snapshot means the feed went quiet: say when it last spoke.
-  const stale = nowcast != null && Date.parse(nowcast.asOf) - Date.parse(nowcast.counterAt) > 30 * 60_000;
-
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100"><Fuel className="w-4 h-4" />{t('thingLive.fuel.title')}</p>
-      {slot.state === 'loading' ? <Muted>{t('common.loading')}</Muted>
-        : slot.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted>
-          : !any ? <Muted>{t('thingLive.fuel.none')}</Muted> : (
-            <>
-              {nowcast && (
-                <div className="rounded-lg border border-sky-100 dark:border-sky-900 bg-sky-50/60 dark:bg-sky-950/30 p-3 text-xs space-y-0.5">
-                  <p className="text-slate-500 dark:text-slate-400">{t('thingLive.fuel.nowTitle', { shift: label(nowcast) })}</p>
-                  <p className="text-lg font-bold font-mono text-slate-800 dark:text-slate-100">{litres(nowcast.predictedL)} L</p>
-                  <p className="text-slate-600 dark:text-slate-300">
-                    {t('thingLive.fuel.nowDetail', { soFar: litres(nowcast.soFarL), rest: litres(Math.max(0, nowcast.predictedL - nowcast.soFarL)) })}
-                  </p>
-                  <p className="text-slate-500">
-                    {t('thingLive.fuel.asOf', { time: shortWhen(nowcast.asOf) })}
-                    {stale ? ` · ${t('thingLive.fuel.stale', { time: shortWhen(nowcast.counterAt) })}` : ''}
-                  </p>
-                </div>
-              )}
-              <PanelRows>
-                {rows.map((r) => <PanelRow key={`${r.sdate}-${r.shift}`} title={label(r)} detail={detail(r)} right={right(r)} />)}
-              </PanelRows>
-              <p className="text-xs text-slate-500">{t('thingLive.fuel.method')}</p>
-            </>
-          )}
-    </div>
-  );
-};
 
 function Panel<T>({ title, icon, slot, empty, render, action }: {
   title: string; icon: React.ReactNode; slot: Slot<T[]>; empty: string; render: (d: T[]) => React.ReactNode; action?: React.ReactNode;

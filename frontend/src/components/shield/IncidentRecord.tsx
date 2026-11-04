@@ -4,6 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { FleetThing } from '../../data/fleetMockData';
 import { IncidentCategory, IncidentSeverity, IncidentStatus, ShieldIncident } from '../../data/shieldMockData';
+import { appLocale } from '../../lib/dateLocale';
 
 const SEVERITY_STYLE: Record<IncidentSeverity, string> = {
   Critical: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900',
@@ -53,7 +54,7 @@ export const IncidentCard: React.FC<{ incident: ShieldIncident; onEdit: () => vo
           </button>
         </div>
         <span className="text-xs text-slate-400" title={t('mock.historyNote')}>
-          {new Date(incident.createdAt).toLocaleDateString()}
+          {new Date(incident.createdAt).toLocaleDateString(appLocale())}
         </span>
       </div>
     </div>

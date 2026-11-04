@@ -12,6 +12,7 @@ import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { sortRows, useSort } from '../../lib/useSort';
+import { appLocale } from '../../lib/dateLocale';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -226,8 +227,8 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
               {/* The end's date too when the window crosses midnight (test report COS-4). */}
-              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
-                ? new Date(w.windowEnd).toLocaleTimeString() : new Date(w.windowEnd).toLocaleString()}
+              {new Date(w.windowStart).toLocaleString(appLocale())} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString(appLocale()) : new Date(w.windowEnd).toLocaleString(appLocale())}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>

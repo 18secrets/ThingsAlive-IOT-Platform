@@ -14,6 +14,7 @@ import { Modal } from '../common/Modal';
 import { AssignDeviceModal } from './AssignDeviceModal';
 import { RegisterDevicesModal } from './RegisterDevicesModal';
 import { sortRows, useSort } from '../../lib/useSort';
+import { appLocale } from '../../lib/dateLocale';
 
 // Labels are state.<value> in the devices namespace.
 const STATE_VALUES: PooledDevice['state'][] = ['in-stock', 'assigned', 'retired'];
@@ -293,7 +294,7 @@ const DeviceHistory: React.FC<{ imei: string; clientName: (tenantId: string | nu
         <li key={ev.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-xs space-y-0.5">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-slate-700 dark:text-slate-200">{t(actionKey(ev.action), { defaultValue: ev.action })}</span>
-            <span className="text-slate-400">{new Date(ev.at).toLocaleString()}</span>
+            <span className="text-slate-400">{new Date(ev.at).toLocaleString(appLocale())}</span>
           </div>
           <p className="text-slate-500 dark:text-slate-400">
             {ev.fromState ? `${t(`state.${ev.fromState}`, { defaultValue: ev.fromState })} → ` : ''}{t(`state.${ev.toState}`, { defaultValue: ev.toState })}

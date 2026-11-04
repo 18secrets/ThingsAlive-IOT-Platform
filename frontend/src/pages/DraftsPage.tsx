@@ -14,6 +14,7 @@ import { TablePagination, usePagination } from '../components/common/TablePagina
 import { ListTable } from '../components/common/ListTable';
 import { RecordCards } from '../components/common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
+import { appLocale } from '../lib/dateLocale';
 
 const STATUSES: ProposalStatus[] = ['draft_ready', 'materialised', 'rejected', 'gate_refused', 'compile_refused', 'expired', 'proposed', 'compiled', 'approved'];
 
@@ -74,7 +75,7 @@ export const DraftsPage: React.FC = () => {
                     {d.unvalidated && <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{t('unvalidatedShort')}</div>}</>,
     <span className="font-mono text-xs">{machineOf(d)}</span>,
     <><Chip tone={STATUS_TONE[d.status]}>{t(`status.${d.expired ? 'expired' : d.status}`)}</Chip></>,
-    <span className="text-slate-500">{new Date(d.provenance.proposedAt).toLocaleString()}</span>,
+    <span className="text-slate-500">{new Date(d.provenance.proposedAt).toLocaleString(appLocale())}</span>,
   ];
 
   const open = (id: string | null) => setParams(id ? { id } : {});
@@ -224,7 +225,7 @@ const DraftDetail: React.FC<{ id: string; onChanged: () => void }> = ({ id, onCh
             <div className="mt-2 border border-slate-200 dark:border-slate-800 rounded-lg p-2 space-y-1 max-h-48 overflow-y-auto">
               <p className="text-slate-500">{t('detail.firedOn', { machine: run.externalId, total: run.firesDetail.total ?? run.fires, kept: run.firesDetail.kept ?? 0 })}</p>
               {(run.firesDetail.windows ?? []).map((w, i) => (
-                <p key={i}><span className="font-mono text-slate-500">{new Date(w.window.start).toLocaleString()} · {w.window.shift}</span> — {w.summary}</p>
+                <p key={i}><span className="font-mono text-slate-500">{new Date(w.window.start).toLocaleString(appLocale())} · {w.window.shift}</span> — {w.summary}</p>
               ))}
             </div>
           )}
@@ -233,11 +234,11 @@ const DraftDetail: React.FC<{ id: string; onChanged: () => void }> = ({ id, onCh
 
       <Block title={t('detail.provenance')}>
         <p className="text-slate-500">
-          {t('detail.proposedAt', { at: new Date(p.provenance.proposedAt).toLocaleString(), emitter: `${p.provenance.emitterKind}@${p.provenance.emitterVersion}` })}
-          {' · '}{t('detail.expiresAt', { at: new Date(p.expiresAt).toLocaleString() })}
+          {t('detail.proposedAt', { at: new Date(p.provenance.proposedAt).toLocaleString(appLocale()), emitter: `${p.provenance.emitterKind}@${p.provenance.emitterVersion}` })}
+          {' · '}{t('detail.expiresAt', { at: new Date(p.expiresAt).toLocaleString(appLocale()) })}
         </p>
-        {p.approval && <p className="text-emerald-600 dark:text-emerald-400">{t('detail.approvedAt', { at: new Date(p.approval.at).toLocaleString() })}</p>}
-        {p.rejection && <p className="text-slate-500">{t('detail.rejectedAt', { at: new Date(p.rejection.at).toLocaleString() })}{p.rejection.reason ? ` — ${p.rejection.reason}` : ''}</p>}
+        {p.approval && <p className="text-emerald-600 dark:text-emerald-400">{t('detail.approvedAt', { at: new Date(p.approval.at).toLocaleString(appLocale()) })}</p>}
+        {p.rejection && <p className="text-slate-500">{t('detail.rejectedAt', { at: new Date(p.rejection.at).toLocaleString(appLocale()) })}{p.rejection.reason ? ` — ${p.rejection.reason}` : ''}</p>}
       </Block>
 
       <div className="flex items-center justify-end gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800">

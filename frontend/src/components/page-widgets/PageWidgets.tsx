@@ -13,6 +13,7 @@ import { Chip } from '../common/Chip';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
 import { severityTone } from '../common/statusTone';
+import { appLocale } from '../../lib/dateLocale';
 
 /** Every widget a composed page (machine or site) can render, shared because the
  *  shape — `PageWidget[]` with a `readiness`/`reason` a widget can't fill — is the
@@ -60,6 +61,27 @@ const kpiTitle = (widget: PageWidget, formulaKey?: string): string => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
+/**
+ * The window a KPI value covers, said on its card: the card and the KPI explorer read the
+ * same machine over different windows, and with no window on the card the two looked like
+ * a contradiction (test report MIN-6: 84.3 °C on the card, 62.5 °C in the explorer).
+ * "Last 24 h" / "Last 7 days" when it ends now; otherwise its dates. Exact times on hover.
+ */
+function WindowNote({ window }: { window: { from: string; to: string } | null }) {
+  const { t } = useTranslation('equipment');
+  if (!window) return null;
+  const from = Date.parse(window.from);
+  const to = Date.parse(window.to);
+  const hours = Math.round((to - from) / 3_600_000);
+  const endsNow = Math.abs(Date.now() - to) < 2 * 3_600_000;
+  const day = (ms: number) => new Date(ms).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
+  const label = !endsNow ? t('widgets.windowRange', { from: day(from), to: day(to) })
+    : hours < 48 ? t('widgets.windowLastHours', { count: hours })
+      : t('widgets.windowLastDays', { count: Math.round(hours / 24) });
+  const exact = `${new Date(from).toLocaleString(appLocale())} – ${new Date(to).toLocaleString(appLocale())}`;
+  return <p className="text-xs text-slate-500" title={exact}>{label}</p>;
+}
+
 function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (formulaKey: string) => void }) {
   const { t } = useTranslation('equipment');
   if (widget.readiness !== 'ready' || !widget.data) {
@@ -77,7 +99,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
             <div className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">
               {latest != null ? latest.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
             </div>
-            <p className="text-xs text-slate-400">{data.window.from.slice(0, 10)} – {data.window.to.slice(0, 10)}</p>
+            <WindowNote window={data.window} />
           </div>
           {points.length >= 2 && <Sparkline values={points} colorClass="text-sky-600 dark:text-sky-400" />}
         </div>
@@ -95,6 +117,7 @@ function KpiWidget({ widget, onExplore }: { widget: PageWidget; onExplore?: (for
           <div className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">
             {value != null ? value.toFixed(2) : '—'} <span className="text-sm font-normal text-slate-400">{data.unit}</span>
           </div>
+          <WindowNote window={data.window} />
           {data.target != null && <p className="text-xs text-slate-400">{t('widgets.target', { value: data.target, unit: data.unit ?? '' })}</p>}
           {(data.targetMin != null || data.targetMax != null) && (
             <p className="text-xs text-slate-400">{t('widgets.range', { min: data.targetMin ?? '—', max: data.targetMax ?? '—', unit: data.unit ?? '' })}</p>
@@ -122,7 +145,8 @@ function SignalChartWidget({ widget }: { widget: PageWidget }) {
         </div>
         {values.length >= 2 && <Sparkline values={values} colorClass="text-sky-600 dark:text-sky-400" />}
       </div>
-      <p className="text-xs text-slate-400">{t('widgets.last24h')}</p>
+      {/* Said as the KPI cards beside it say theirs. */}
+      <p className="text-xs text-slate-500">{t('widgets.windowLastHours', { count: 24 })}</p>
     </WidgetShell>
   );
 }
@@ -172,7 +196,7 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
         )}
       </div>
       <p className="text-xs text-slate-400">
-        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(), model: data.model.key })}
+        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(appLocale()), model: data.model.key })}
       </p>
     </WidgetShell>
   );
@@ -213,7 +237,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
             <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-xs text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString()}</p>
+                <p className="text-xs text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale())}</p>
               </div>
               <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
@@ -240,7 +264,7 @@ function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
               <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-xs text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}</p>
+                <p className="text-xs text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}</p>
               </div>
             </div>
           ))}
@@ -262,7 +286,7 @@ function ServiceDueWidget({ widget }: { widget: PageWidget }) {
         {data.hoursRemaining != null ? t('widgets.hoursRemaining', { hours: data.hoursRemaining.toFixed(0) }) : '—'}
       </div>
       <p className="text-xs text-slate-400">
-        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString() }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
+        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString(appLocale()) }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
       </p>
     </WidgetShell>
   );

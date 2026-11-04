@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { TablePagination, usePagination } from '../components/common/TablePagination';
+import { appLocale } from '../lib/dateLocale';
 
 interface CatalogImportPageProps {
   batches: CatalogImportBatch[];
@@ -255,7 +256,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                   <span className="truncate">{b.filename}</span>
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-[0.6875rem] text-slate-400">{new Date(b.createdAt).toLocaleString()}</span>
+                  <span className="text-[0.6875rem] text-slate-400">{new Date(b.createdAt).toLocaleString(appLocale())}</span>
                   <span className={`inline-flex items-center px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase rounded border ${STATUS_STYLE[b.status]}`}>
                     {t(`import.status.${b.status}`, { defaultValue: b.status })}
                   </span>

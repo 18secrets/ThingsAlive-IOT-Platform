@@ -8,7 +8,9 @@ import { LANGUAGES } from '../../i18n';
  * sign-in screen, so it can be chosen before signing in. The choice is remembered
  * by i18next's detector (localStorage), so it survives a reload and a sign-out.
  */
-export const LanguageSelector: React.FC<{ align?: 'left' | 'right' }> = ({ align = 'right' }) => {
+/** compactOnPhone: the globe alone below `sm`, for the header, where every icon's width
+ *  comes out of the page title's on a phone; the list it opens is unchanged. */
+export const LanguageSelector: React.FC<{ align?: 'left' | 'right'; compactOnPhone?: boolean }> = ({ align = 'right', compactOnPhone = false }) => {
   const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -33,8 +35,8 @@ export const LanguageSelector: React.FC<{ align?: 'left' | 'right' }> = ({ align
         className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
       >
         <Globe className="w-4 h-4 text-slate-500" />
-        <span className="font-medium">{current.short}</span>
-        <ChevronDown className="w-3 h-3 text-slate-400" />
+        <span className={`font-medium ${compactOnPhone ? 'hidden sm:inline' : ''}`}>{current.short}</span>
+        <ChevronDown className={`w-3 h-3 text-slate-400 ${compactOnPhone ? 'hidden sm:inline' : ''}`} />
       </button>
 
       {open && (
