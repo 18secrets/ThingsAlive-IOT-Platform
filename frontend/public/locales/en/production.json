@@ -70,7 +70,7 @@
     "class": "its class",
     "site": "its site",
     "client": "the account",
-    "oem": "the OEM figure"
+    "oem": "the OEM figure on its machine type"
   },
   "oee": {
     "title": "Overall Equipment Effectiveness",
@@ -106,7 +106,8 @@
     "breakdownsInWindow": "Breakdowns in this window",
     "noneRecorded": "None recorded.",
     "ongoing": "ongoing",
-    "waitingOn": "OEE needs {{factors}} first"
+    "waitingOn": "OEE needs {{factors}} first",
+    "nominalOverride": "To use your own figure, set nominal fuel per hour in Cost Administration."
   },
   "detail": {
     "availabilityNotAvailable": "Availability not available",

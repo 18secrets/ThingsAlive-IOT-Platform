@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  MachineExpectedFuel, MachineShiftFuelView, apiGetExpectedFuel, apiGetMachineShiftFuel,
+  MachineExpectedFuel, MachineShiftFuel, apiGetExpectedFuel, apiGetMachineShiftFuel,
 } from '../../lib/api';
 
 /**
@@ -16,14 +16,14 @@ import {
 export function FuelPerShiftPanel({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
   const { t } = useTranslation('equipment');
   const [expected, setExpected] = useState<MachineExpectedFuel | null>(null);
-  const [history, setHistory] = useState<MachineShiftFuelView | null>(null);
+  const [history, setHistory] = useState<MachineShiftFuel | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let live = true;
     setLoading(true);
     // Each on its own: a role without one of them still sees the other.
-    Promise.allSettled([apiGetExpectedFuel(sourceSystem, externalId), apiGetMachineShiftFuel(sourceSystem, externalId)])
+    Promise.allSettled([apiGetExpectedFuel(sourceSystem, externalId), apiGetMachineShiftFuel(sourceSystem, externalId, 7)])
       .then(([e, h]) => {
         if (!live) return;
         setExpected(e.status === 'fulfilled' ? e.value : null);

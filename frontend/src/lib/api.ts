@@ -2522,6 +2522,59 @@ export function apiGetShiftFuelCoverage(query: { from: string; to: string }): Pr
   return authFetch(`/shift-fuel-coverage?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`);
 }
 
+/**
+ * One shift of one machine (D50). Shifts are the existing platform's: 1 is 08:00–20:00
+ * India time on `sdate`, 2 is 20:00 to 08:00 the next morning.
+ */
+export interface ShiftFuelRow {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  /** Null when no forecast was issued for this shift. */
+  predictedL: number | null;
+  /** The newest day the forecast learned from; null = no history, and the forecast is 0. */
+  inputsThrough: string | null;
+  issuedAt: string | null;
+  /** Null until the existing platform has totalled the shift. */
+  fuelL: number | null;
+  workHrs: number | null;
+  syncedAt: string | null;
+}
+
+/** The newest in-shift re-forecast of the shift under way (D52). */
+export interface ShiftFuelNowcast {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  method: string;
+  /** The quarter hour it describes. */
+  asOf: string;
+  /** When the newest fuel-counter reading it used was taken; far behind asOf = a stale feed. */
+  counterAt: string;
+  soFarL: number;
+  /** The pre-shift forecast it took a share of: issued, or computed the same way before the morning sync. */
+  baseL: number;
+  baseSource: "issued" | "computed";
+  predictedL: number;
+}
+
+export interface MachineShiftFuel {
+  equipment: { sourceSystem: string; externalId: string };
+  method: string;
+  asOf: string;
+  days: number;
+  shifts: ShiftFuelRow[];
+  /** Null when no shift has a reading yet, or the in-shift forecast is not running. */
+  nowcast: ShiftFuelNowcast | null;
+}
+
+/** This machine's shifts over the last `days` (1–90), forecast beside actual. `prediction.read`. */
+export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 3): Promise<MachineShiftFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
+}
+
 /** Either date left out is today in India, on the server's clock. */
 export function apiGetShiftFuelAccuracy(
   query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},
@@ -2765,19 +2818,6 @@ export interface ShiftRun {
  * machine's own shift history, and the cold-start expectation from its class figures and
  * schedule (`/expected-fuel`), which is what a machine with no history has.
  */
-export interface ShiftFuelRowView {
-  sdate: string; shift: 1 | 2; startsAt: string; endsAt: string;
-  predictedL: number | null; inputsThrough: string | null; issuedAt: string | null;
-  fuelL: number | null; workHrs: number | null; syncedAt: string | null;
-}
-export interface MachineShiftFuelView {
-  method: string; asOf: string; days: number; shifts: ShiftFuelRowView[];
-  nowcast: { sdate: string; shift: 1 | 2; asOf: string; soFarL: number; predictedL: number } | null;
-}
-export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 7): Promise<MachineShiftFuelView> {
-  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
-}
-
 export type ExpectedFuelBlocker =
   | "no_class" | "no_shift_schedule" | "working_rate_not_set" | "nominal_unit_not_litres"
   | "working_share_not_set" | "idle_fuel_per_hour_not_set";

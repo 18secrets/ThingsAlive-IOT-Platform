@@ -191,6 +191,11 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               ) : oee.quality.parameterSource && (
                 <p className="text-xs text-slate-400">{t('oee.nominalSetBy', { source: t(`source.${oee.quality.parameterSource}`) })}</p>
               )}
+              {/* The OEM figure is the fallback when nobody set a nominal: say where to set one
+                  (fuel test report TC-FP-05 found it "unnamed", with Cost Admin left empty). */}
+              {oee.quality.parameterSource === 'oem' && (
+                <p className="text-xs text-slate-400">{t('oee.nominalOverride')}</p>
+              )}
             </FactorTile>
           </div>
 
