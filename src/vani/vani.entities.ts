@@ -39,6 +39,23 @@ export class VaniAccountLink {
   @Column({ type: 'boolean', default: true })
   enabled: boolean;
 
+  /** Hash of the machine picture Vani last accepted. A push happens only when it differs. */
+  @Column({ name: 'snapshot_hash', type: 'text', nullable: true })
+  snapshotHash: string | null;
+
+  @Column({ name: 'snapshot_pushed_at', type: 'timestamptz', nullable: true })
+  snapshotPushedAt: Date | null;
+
+  @Column({ name: 'snapshot_attempted_at', type: 'timestamptz', nullable: true })
+  snapshotAttemptedAt: Date | null;
+
+  @Column({ name: 'snapshot_error', type: 'text', nullable: true })
+  snapshotError: string | null;
+
+  /** The picture Vani refused (422). Not resent unchanged. */
+  @Column({ name: 'snapshot_refused_hash', type: 'text', nullable: true })
+  snapshotRefusedHash: string | null;
+
   @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
   createdAt: Date;
 

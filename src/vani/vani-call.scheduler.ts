@@ -1,10 +1,13 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { VaniCallSender } from './vani-call-sender';
+import { VaniSnapshotPusher } from './vani-snapshot';
 
 export const DEFAULT_TICK_SECONDS = 15;
 
 /**
- * Runs `VaniCallSender` on the pattern of `IncidentNotifyScheduler`, and off unless
+ * Runs `VaniCallSender`, then `VaniSnapshotPusher`, on the pattern of
+ * `IncidentNotifyScheduler`. Calls first: a customer waiting to be phoned about an alert
+ * matters more than the picture Vani reads from if they phone in. Off unless
  * VANI_CALLS_ENABLED=true, for the same reason: a job that starts itself everywhere runs
  * in tests and on laptops, and this one phones real people. Set it on the scheduler
  * service only. Two processes running it is safe (SKIP LOCKED), just pointless.
@@ -15,7 +18,7 @@ export class VaniCallScheduler implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
-  constructor(private readonly sender: VaniCallSender) {}
+  constructor(private readonly sender: VaniCallSender, private readonly snapshots: VaniSnapshotPusher) {}
 
   onModuleInit(): void {
     if (`${process.env.VANI_CALLS_ENABLED ?? ''}`.toLowerCase() !== 'true') {
@@ -39,6 +42,8 @@ export class VaniCallScheduler implements OnModuleInit, OnModuleDestroy {
     try {
       const r = await this.sender.pass(now);
       if (r.accepted || r.rejected || r.retried || r.failed) this.logger.log(`Vani calls: ${JSON.stringify(r)}.`);
+      const s = await this.snapshots.pass(now);
+      if (s.pushed || s.refused || s.failed) this.logger.log(`Vani snapshots: ${JSON.stringify(s)}.`);
     } catch (err) {
       this.logger.error(`Vani call pass failed: ${(err as Error).message}`);
     } finally {
