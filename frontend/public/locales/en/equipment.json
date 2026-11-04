@@ -198,8 +198,21 @@
     },
     "history": "Forecast from this machine's own past shifts",
     "historyNone": "No forecast from history: the existing platform has no shift totals for this machine yet.",
-    "actual": "burned {{litres}} L",
-    "inShift": "In this shift so far {{soFar}} L, heading for {{predicted}} L"
+    "shiftLabel": "Shift {{n}} · {{date}}",
+    "nowTitle": "{{shift}} · expected by its end",
+    "nowDetail": "{{soFar}} L burned so far + {{rest}} L expected in the rest of the shift",
+    "asOf": "Re-forecast {{time}}",
+    "stale": "fuel counter last read {{time}}",
+    "forecast": "Forecast {{litres}} L",
+    "noForecast": "No forecast issued",
+    "noHistory": "No history yet, so the forecast is 0 L",
+    "actualIn": "actual {{litres}} L in {{hours}} h",
+    "notTotalled": "actual not totalled yet",
+    "running": "Running",
+    "next": "Next",
+    "accuracy": "{{pct}}% accurate",
+    "method": "Forecast from this machine's own shifts over the last 28 days. Shift 1 is 08:00–20:00, shift 2 is 20:00–08:00 (India time).",
+    "unavailable": "Fuel per shift is not available for your role."
   },
   "shifts": {
     "title": "Shift schedule",
