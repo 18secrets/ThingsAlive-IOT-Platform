@@ -35,7 +35,7 @@
     "gaugeTitle": "Risk score: 0–100, rule-based",
     "noScenario": "no scenario",
     "riskTitle": "Rule-based composite risk score",
-    "risk": "{{score}} risk",
+    "risk": "{{score}}/100 risk",
     "confidenceTitle": "How much of the picture was available",
     "abnormalTitle": "Signals outside baseline",
     "na": "n/a",

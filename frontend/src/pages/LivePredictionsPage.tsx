@@ -29,7 +29,7 @@ const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 export const LivePredictionsPage: React.FC = () => {
   const { t } = useTranslation(['predictions', 'shared']);
   // Highest risk first, as on ThingsCare; a machine still loading or unscored goes last.
-  const { sort, setSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
+  const { sort, setSort, toggle: toggleSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
   const { t: ts } = useTranslation('shared');
   const [viewMode, setViewMode] = useViewMode('predictions');
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
@@ -268,10 +268,15 @@ export const LivePredictionsPage: React.FC = () => {
             <div className="py-10 text-center text-slate-400 text-sm">{t('kpis.noMatch')}</div>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              // Sortable headers, as on every other list (test report MAJ-9): the select above
+              // and these are the same sort. Risk starts highest first, the point of the page.
               columns={[
-                { label: ts('listCol.machine') }, { label: ts('listCol.severity') }, { label: ts('listCol.risk'), align: 'right' },
+                { label: ts('listCol.machine'), sortKey: 'name' }, { label: ts('listCol.severity') },
+                { label: ts('listCol.risk'), align: 'right', sortKey: 'risk' },
                 { label: ts('listCol.details') }, { label: ts('listCol.actions') },
               ]}
+              sort={sort}
+              onSort={(key) => toggleSort(key as 'risk' | 'name' | 'code', key === 'risk' ? 'desc' : 'asc')}
               rows={machinePage.pageItems}
               rowKey={(m) => `${m.sourceSystem}|${m.externalId}`}
               cells={(m) => {

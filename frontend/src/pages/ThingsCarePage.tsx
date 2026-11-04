@@ -251,7 +251,7 @@ const ThingsCareCard: React.FC<{
       <div className="flex items-center gap-3">
         <span title={t('card.gaugeTitle')}>
           {/* Points out of 100, as Live Predictions writes them: "21%" here beside "29/100" there read as two scorings (test report MAJ-7). */}
-          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} unit="" />
+          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} unit="/100" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
