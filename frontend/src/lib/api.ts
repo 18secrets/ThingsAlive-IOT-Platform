@@ -2575,6 +2575,37 @@ export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string,
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
 }
 
+/** One machine's forecast for one of its newest shifts (D50). */
+export interface FleetShiftFuelForecast {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  predictedL: number;
+  inputsThrough: string | null;
+  issuedAt: string;
+}
+
+/**
+ * The fleet's fuel ahead (`/shift-fuel-forecasts`, D50 + D52): each machine's newest two
+ * shift forecasts, the fleet total per shift, and each machine's in-shift re-forecast of
+ * the shift under way. `prediction.read`; scoped to the caller's machines.
+ */
+export interface FleetShiftFuel {
+  method: string;
+  asOf: string;
+  forecasts: FleetShiftFuelForecast[];
+  totals: { sdate: string; shift: 1 | 2; predictedL: number; machines: number }[];
+  nowcasts: (ShiftFuelNowcast & { sourceSystem: string; externalId: string; name: string | null })[];
+}
+
+export function apiGetFleetShiftFuel(): Promise<FleetShiftFuel> {
+  return authFetch("/shift-fuel-forecasts");
+}
+
 /** Either date left out is today in India, on the server's clock. */
 export function apiGetShiftFuelAccuracy(
   query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},
