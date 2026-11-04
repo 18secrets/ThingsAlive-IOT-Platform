@@ -178,6 +178,29 @@
     "5": "Fri",
     "6": "Sat"
   },
+  "fuelPerShift": {
+    "title": "Fuel per shift",
+    "expected": "Expected from the class figures",
+    "expectedHint": "Worked out from the machine's class and its shift schedule, so a new machine has it from its first shift.",
+    "litres": "{{litres}} L",
+    "split": "{{working}} L working, {{idle}} L idle",
+    "rateFromBsfc": "Working rate from rated power × load × BSFC ÷ 835 g/L",
+    "rateFromNominal": "Working rate from the class nominal",
+    "inputs": "Inputs",
+    "blocked": "Can't be worked out yet:",
+    "blocker": {
+      "no_class": "the machine has no library class",
+      "no_shift_schedule": "no shift is scheduled for this machine",
+      "working_rate_not_set": "the class has neither a nominal L/h nor rated power, load and BSFC",
+      "nominal_unit_not_litres": "the class nominal is not in L/h",
+      "working_share_not_set": "the class has no working share (the part of a shift spent working)",
+      "idle_fuel_per_hour_not_set": "the class has no idle burn (L/h)"
+    },
+    "history": "Forecast from this machine's own past shifts",
+    "historyNone": "No forecast from history: the existing platform has no shift totals for this machine yet.",
+    "actual": "burned {{litres}} L",
+    "inShift": "In this shift so far {{soFar}} L, heading for {{predicted}} L"
+  },
   "shifts": {
     "title": "Shift schedule",
     "add": "Add shift",

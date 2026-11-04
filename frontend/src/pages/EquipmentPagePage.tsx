@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
 import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
@@ -552,6 +553,7 @@ export const EquipmentPagePage: React.FC = () => {
       </div>
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+      <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
 
       <Modal isOpen={proposing} onClose={() => setProposing(false)} title={t('drafts:propose.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-xl">
