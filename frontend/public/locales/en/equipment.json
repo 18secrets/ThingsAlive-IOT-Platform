@@ -97,7 +97,6 @@
     "details": "Details",
     "target": "Target: {{value}} {{unit}}",
     "range": "Range: {{min}} – {{max}} {{unit}}",
-    "last24h": "Last 24 hours",
     "signalReadiness": "Signal readiness",
     "alerts": "Alerts",
     "noOpenAlerts": "No open alerts",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "Latest {{actual}} {{unit}} vs predicted {{predicted}} (expected {{lo}} – {{hi}})",
     "noShiftSchedule": "No band yet: this machine has no shift schedule.",
-    "forecastAt": "Forecast {{at}} · {{model}}"
+    "forecastAt": "Forecast {{at}} · {{model}}",
+    "windowLastHours_one": "Last {{count}} h",
+    "windowLastHours_other": "Last {{count}} h",
+    "windowLastDays_one": "Last {{count}} day",
+    "windowLastDays_other": "Last {{count}} days",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI explorer",

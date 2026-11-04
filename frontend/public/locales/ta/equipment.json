@@ -97,7 +97,6 @@
     "details": "விவரங்கள்",
     "target": "இலக்கு: {{value}} {{unit}}",
     "range": "வரம்பு: {{min}} – {{max}} {{unit}}",
-    "last24h": "கடந்த 24 மணிநேரம்",
     "signalReadiness": "சிக்னல் தயார்நிலை",
     "alerts": "எச்சரிக்கைகள்",
     "noOpenAlerts": "திறந்த எச்சரிக்கைகள் இல்லை",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "சமீபத்தியது {{actual}} {{unit}}, கணிப்பு {{predicted}} (எதிர்பார்ப்பு {{lo}} – {{hi}})",
     "noShiftSchedule": "இன்னும் வரம்பு இல்லை: இந்த இயந்திரத்துக்கு ஷிப்ட் அட்டவணை இல்லை.",
-    "forecastAt": "முன்கணிப்பு {{at}} · {{model}}"
+    "forecastAt": "முன்கணிப்பு {{at}} · {{model}}",
+    "windowLastHours_one": "கடைசி {{count}} ம.நே.",
+    "windowLastHours_other": "கடைசி {{count}} ம.நே.",
+    "windowLastDays_one": "கடைசி {{count}} நாள்",
+    "windowLastDays_other": "கடைசி {{count}} நாட்கள்",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI ஆய்வி",

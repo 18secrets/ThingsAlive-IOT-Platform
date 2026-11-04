@@ -97,7 +97,6 @@
     "details": "వివరాలు",
     "target": "లక్ష్యం: {{value}} {{unit}}",
     "range": "పరిధి: {{min}} – {{max}} {{unit}}",
-    "last24h": "గత 24 గంటలు",
     "signalReadiness": "సిగ్నల్ సంసిద్ధత",
     "alerts": "హెచ్చరికలు",
     "noOpenAlerts": "తెరిచిన హెచ్చరికలు లేవు",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "తాజా {{actual}} {{unit}}, అంచనా {{predicted}} (ఆశించినది {{lo}} – {{hi}})",
     "noShiftSchedule": "ఇంకా బ్యాండ్ లేదు: ఈ మెషిన్‌కు షిఫ్ట్ షెడ్యూల్ లేదు.",
-    "forecastAt": "అంచనా {{at}} · {{model}}"
+    "forecastAt": "అంచనా {{at}} · {{model}}",
+    "windowLastHours_one": "గత {{count}} గం.",
+    "windowLastHours_other": "గత {{count}} గం.",
+    "windowLastDays_one": "గత {{count}} రోజు",
+    "windowLastDays_other": "గత {{count}} రోజులు",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI ఎక్స్‌ప్లోరర్",

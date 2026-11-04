@@ -97,7 +97,6 @@
     "details": "विवरण",
     "target": "लक्ष्य: {{value}} {{unit}}",
     "range": "सीमा: {{min}} – {{max}} {{unit}}",
-    "last24h": "पिछले 24 घंटे",
     "signalReadiness": "सिग्नल तैयारी",
     "alerts": "अलर्ट",
     "noOpenAlerts": "कोई खुला अलर्ट नहीं",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "नवीनतम {{actual}} {{unit}}, अनुमान {{predicted}} (अपेक्षित {{lo}} – {{hi}})",
     "noShiftSchedule": "अभी कोई बैंड नहीं: इस मशीन का कोई शिफ़्ट शेड्यूल नहीं है।",
-    "forecastAt": "पूर्वानुमान {{at}} · {{model}}"
+    "forecastAt": "पूर्वानुमान {{at}} · {{model}}",
+    "windowLastHours_one": "पिछला {{count}} घं.",
+    "windowLastHours_other": "पिछले {{count}} घं.",
+    "windowLastDays_one": "पिछला {{count}} दिन",
+    "windowLastDays_other": "पिछले {{count}} दिन",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI एक्सप्लोरर",

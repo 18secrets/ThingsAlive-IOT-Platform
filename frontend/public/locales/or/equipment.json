@@ -97,7 +97,6 @@
     "details": "ବିବରଣୀ",
     "target": "ଲକ୍ଷ୍ୟ: {{value}} {{unit}}",
     "range": "ପରିସର: {{min}} – {{max}} {{unit}}",
-    "last24h": "ଗତ 24 ଘଣ୍ଟା",
     "signalReadiness": "ସିଗ୍ନାଲ୍ ପ୍ରସ୍ତୁତି",
     "alerts": "ସତର୍କତା",
     "noOpenAlerts": "କୌଣସି ଖୋଲା ସତର୍କତା ନାହିଁ",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "ସର୍ବଶେଷ {{actual}} {{unit}}, ଅନୁମାନ {{predicted}} (ଆଶା {{lo}} – {{hi}})",
     "noShiftSchedule": "ଏପର୍ଯ୍ୟନ୍ତ ବ୍ୟାଣ୍ଡ ନାହିଁ: ଏହି ମେସିନର କୌଣସି ସିଫ୍ଟ ସୂଚୀ ନାହିଁ।",
-    "forecastAt": "ପୂର୍ବାନୁମାନ {{at}} · {{model}}"
+    "forecastAt": "ପୂର୍ବାନୁମାନ {{at}} · {{model}}",
+    "windowLastHours_one": "ଗତ {{count}} ଘ.",
+    "windowLastHours_other": "ଗତ {{count}} ଘ.",
+    "windowLastDays_one": "ଗତ {{count}} ଦିନ",
+    "windowLastDays_other": "ଗତ {{count}} ଦିନ",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI ଏକ୍ସପ୍ଲୋରର୍",
