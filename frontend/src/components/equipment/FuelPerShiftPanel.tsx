@@ -6,12 +6,13 @@ import {
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { PanelRow, PanelRows, shortWhen } from '../common/PanelRow';
+import { appLocale } from '../../lib/dateLocale';
 
 const litres = (l: number) => l.toFixed(1);
 /** "2026-11-03" as that calendar day, not UTC midnight moved into the reader's zone. */
 const shiftDate = (sdate: string) => {
   const [y, m, d] = sdate.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return new Date(y, m - 1, d).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
 };
 /** The accuracy page's score for one shift (D53): 100 − the miss as a share of what burned, never below 0. */
 const shiftAccuracy = (forecast: number, actual: number) => Math.max(0, 100 - Math.round((100 * Math.abs(forecast - actual)) / actual));

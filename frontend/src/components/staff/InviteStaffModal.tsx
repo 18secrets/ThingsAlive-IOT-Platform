@@ -4,6 +4,7 @@ import { Input } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { appLocale } from '../../lib/dateLocale';
 
 interface InviteStaffModalProps {
   isOpen: boolean;
@@ -116,7 +117,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                 <Trans
                   t={t}
                   i18nKey="invite.tokenHelp"
-                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString() }}
+                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString(appLocale()) }}
                   components={{ 1: <code /> }}
                 />
               </p>

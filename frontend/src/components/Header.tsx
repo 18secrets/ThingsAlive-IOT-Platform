@@ -14,6 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { TextSizeSelector } from './common/TextSizeSelector';
+import { appLocale } from '../lib/dateLocale';
 
 interface HeaderProps {
   title: string;
@@ -151,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer bg-sky-50/50 dark:bg-sky-950/20"
                   >
                     <div className="font-medium text-slate-800 dark:text-slate-200">{item.summary}</div>
-                    <div className="text-[0.6875rem] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString()}</div>
+                    <div className="text-[0.6875rem] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString(appLocale())}</div>
                   </button>
                 ))}
               </div>

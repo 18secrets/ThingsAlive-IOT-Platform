@@ -19,6 +19,7 @@ import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidge
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
 import type { SceneMarker } from '../components/visual/ModelScene';
+import { appLocale } from '../lib/dateLocale';
 
 // Lazy, as in ModelAnchorEditor: three.js is fetched only when a machine has a model.
 const ModelScene = lazy(() => import('../components/visual/ModelScene'));
@@ -305,7 +306,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
             <div key={r.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  {new Date(r.performedAt).toLocaleDateString()}
+                  {new Date(r.performedAt).toLocaleDateString(appLocale())}
                   {r.meterReading != null && r.meterUnit && (
                     <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
                   )}

@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { appLocale } from '../lib/dateLocale';
 
 const DAY = 86_400_000;
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`);
@@ -131,7 +132,7 @@ export const ThingDetailLivePage: React.FC = () => {
             action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
             render={(d) => d.map((o) => (
               <PanelRow key={o.id} title={o.title}
-                detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}`}
+                detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}`}
                 right={<Chip tone={statusTone(o.status)}>{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}</Chip>} />
             ))} />
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">

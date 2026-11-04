@@ -18,6 +18,7 @@ import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 const DAYS = 7;
 
@@ -185,7 +186,7 @@ export const ProductionMonitoringPage: React.FC = () => {
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">
-            {range ? `${range[0].toLocaleDateString()} – ${range[1].toLocaleDateString()}` : t('hero.lastDays', { count: DAYS })}
+            {range ? `${range[0].toLocaleDateString(appLocale())} – ${range[1].toLocaleDateString(appLocale())}` : t('hero.lastDays', { count: DAYS })}
           </span>
           <span title={t('hero.tooltip')}>
             <Info className="w-4 h-4 text-sky-200" />

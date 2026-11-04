@@ -14,6 +14,7 @@ import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
 import { sortRows, useSort } from '../../lib/useSort';
+import { appLocale } from '../../lib/dateLocale';
 
 interface MasterEquipmentManagementProps {
   equipment: EquipmentProfile[];
@@ -291,7 +292,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                                     {plantName(historyItem.tenantId, h.fromPlantId)} → {plantName(historyItem.tenantId, h.toPlantId)}
                                     {h.reason ? `: "${h.reason}"` : ''}
                                   </span>
-                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString()}</span>
+                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale())}</span>
                                 </div>
                               ))}
                             </div>

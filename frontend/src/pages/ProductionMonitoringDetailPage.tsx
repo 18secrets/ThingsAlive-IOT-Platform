@@ -12,6 +12,7 @@ import {
   OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentKpi, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 /** The fuel rate KPI the machine page and Signal Bindings show (fuel test report FU-4). */
 const FUEL_RATE_KPI = 'avg_fuel_consumption';
@@ -123,7 +124,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               <RingGauge value={oee.oee.value != null ? oee.oee.value * 100 : null} size={72} colorClass="text-emerald-500 dark:text-emerald-400" />
               <p className="text-xs text-slate-400">
                 {oee.oee.readiness === 'ready'
-                  ? `${new Date(oee.from).toLocaleString()} – ${new Date(oee.to).toLocaleString()}`
+                  ? `${new Date(oee.from).toLocaleString(appLocale())} – ${new Date(oee.to).toLocaleString(appLocale())}`
                   : sharedReason
                     ? t(`oeeReason.${sharedReason}`, { defaultValue: sharedReason })
                     : waitingOn.length
@@ -206,7 +207,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               breakdowns.map((b) => (
                 <div key={b.id} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
                   <span className="text-slate-600 dark:text-slate-300">
-                    {new Date(b.startedAt).toLocaleString()} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString() : t('oee.ongoing')}
+                    {new Date(b.startedAt).toLocaleString(appLocale())} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString(appLocale()) : t('oee.ongoing')}
                   </span>
                   <Chip tone={b.endedAt ? 'amber' : 'rose'}>{b.durationMinutes != null ? `${b.durationMinutes} min` : t('oee.ongoing')}</Chip>
                 </div>

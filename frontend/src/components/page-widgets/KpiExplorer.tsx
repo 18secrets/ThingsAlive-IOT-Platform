@@ -7,6 +7,7 @@ import { ApiError, KpiEnvelope, KpiSeriesPoint, apiGetEquipmentKpi, apiListEquip
 import { Chip } from '../common/Chip';
 import { Sparkline } from '../dashboard/Sparkline';
 import { reasonText } from './PageWidgets';
+import { appLocale } from '../../lib/dateLocale';
 
 type Preset = 'declared' | '24h' | '7d' | '30d' | 'custom';
 
@@ -19,7 +20,7 @@ const fmt = (v: number | null) => (v == null ? '—' : v.toLocaleString(undefine
 /** An un-windowed request for a formula whose own window can't be resolved comes back
  *  with no window at all; that is "pick a range", not "Invalid Date". */
 const windowText = (w: { from: string; to: string } | null, t: TFunction) =>
-  w?.from && w.to ? `${new Date(w.from).toLocaleString()} – ${new Date(w.to).toLocaleString()}` : t('kpiExplorer.noWindow');
+  w?.from && w.to ? `${new Date(w.from).toLocaleString(appLocale())} – ${new Date(w.to).toLocaleString(appLocale())}` : t('kpiExplorer.noWindow');
 
 /**
  * One KPI for one machine over a chosen window (GET …/kpis/:formulaKey). The page's

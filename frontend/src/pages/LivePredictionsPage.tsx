@@ -16,6 +16,7 @@ import {
   ApiError, ClientScenario, EquipmentProfile, Plant, Prediction, PredictionSeverity,
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
@@ -312,7 +313,7 @@ export const LivePredictionsPage: React.FC = () => {
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {worst.clientScenarioSlug} · {t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · {t('kpis.scenariosScored', { count: (p as Prediction[]).length })}
                         </p>
-                        <p className="text-xs text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(), count: worst.windowDays })}</p>
+                        <p className="text-xs text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(appLocale()), count: worst.windowDays })}</p>
                       </>
                     )}
                     <div className="pt-1">{machineActions(m)}</div>

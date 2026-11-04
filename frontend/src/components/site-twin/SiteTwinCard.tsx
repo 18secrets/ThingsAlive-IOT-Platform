@@ -10,6 +10,7 @@ import {
   SiteTwinZone, SiteZoneKind, apiGetSiteTwin, apiGetSiteTwinProposal, apiMyPermissions, apiSaveSiteTwinLayout,
 } from '../../lib/api';
 import type { DragTarget, SceneFocus, SceneMachine } from '../visual/SiteTwinScene';
+import { appLocale } from '../../lib/dateLocale';
 
 // Lazy, as on the machine page: three.js is fetched only when the twin is on screen.
 const SiteTwinScene = lazy(() => import('../visual/SiteTwinScene'));
@@ -416,7 +417,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
                   <span className="font-semibold text-slate-700 dark:text-slate-200">{z.progressPct.toFixed(1)}%</span>
                   {z.progressReportedAt && (
                     <span className="text-slate-500">
-                      {t('siteTwin.reportedOn', { defaultValue: 'reported {{when}}', when: new Date(z.progressReportedAt).toLocaleString() })}
+                      {t('siteTwin.reportedOn', { defaultValue: 'reported {{when}}', when: new Date(z.progressReportedAt).toLocaleString(appLocale()) })}
                     </span>
                   )}
                 </span>

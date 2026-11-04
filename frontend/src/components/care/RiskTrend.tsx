@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Line, LineChart, ReferenceArea, Tooltip, XAxis, YAxis } from 'recharts';
 import { Prediction } from '../../lib/api';
+import { appLocale } from '../../lib/dateLocale';
 
 /**
  * A scenario's risk score over its recent scores, on the fixed 0–100 scale the score
@@ -40,7 +41,7 @@ export const RiskTrend: React.FC<{ history: Prediction[]; width?: number; height
         <Line dataKey="risk" stroke="#0ea5e9" strokeWidth={1.75} isAnimationActive={false}
           dot={{ r: 2, fill: '#0ea5e9', strokeWidth: 0 }} activeDot={{ r: 3.5 }} />
         <Tooltip
-          labelFormatter={(ms) => new Date(Number(ms)).toLocaleString()}
+          labelFormatter={(ms) => new Date(Number(ms)).toLocaleString(appLocale())}
           formatter={(value) => [`${value}`, t('trend.risk')]}
           contentStyle={{ fontSize: '0.75rem', borderRadius: 8, padding: '4px 8px' }}
         />

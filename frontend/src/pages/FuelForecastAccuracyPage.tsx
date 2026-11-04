@@ -9,6 +9,7 @@ import {
   ApiError, FuelAccuracyCheckpoint, FuelAccuracyLevel, MachineFuelAccuracy, ShiftFuelAccuracy, ShiftFuelCoverage, apiGetShiftFuelAccuracy,
   apiGetShiftFuelCoverage,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 /**
  * How close the shift fuel forecast (D50) and the in-shift forecast (D52) came to what was
@@ -172,7 +173,7 @@ export const FuelForecastAccuracyPage: React.FC = () => {
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('fuelAccuracy.title')}</h2>
         {data && (
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {t('fuelAccuracy.updated', { time: new Date(data.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
+            {t('fuelAccuracy.updated', { time: new Date(data.asOf).toLocaleTimeString(appLocale(), { hour: '2-digit', minute: '2-digit' }) })}
           </p>
         )}
       </div>
