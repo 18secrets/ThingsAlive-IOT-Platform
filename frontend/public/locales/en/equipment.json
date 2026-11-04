@@ -326,7 +326,11 @@
     "register": "Register Equipment",
     "codeTaken": "This code is already used by {{name}}.",
     "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library.",
-    "shiftsHint": "Shifts are set on the machine page, under \"Shift schedule\", once the machine is registered. OEE and the fuel forecast use them."
+    "shiftsHint": "Shifts are set on the machine page, under \"Shift schedule\", once the machine is registered. OEE and the fuel forecast use them.",
+    "scenarioCount_one": "{{count}} scenario",
+    "scenarioCount_other": "{{count}} scenarios",
+    "noScenarios": "no scenarios",
+    "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios."
   },
   "bindings": {
     "title": "Signal Bindings",
