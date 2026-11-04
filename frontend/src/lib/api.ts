@@ -2796,6 +2796,24 @@ export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Pr
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
 }
 
+/** A library set of shifts (`/shift-templates`, fuel test report FU-3). */
+export interface ShiftTemplate {
+  slug: string; name: string; description: string | null;
+  shifts: { name: string; startMinute: number; endMinute: number; days: Weekday[]; timeZone: string }[];
+}
+export function apiListShiftTemplates(): Promise<ShiftTemplate[]> {
+  return authFetch("/shift-templates");
+}
+/** Idempotent: shifts already there under the same name and hours come back in alreadyThere. */
+export function apiApplyShiftTemplate(
+  sourceSystem: string, externalId: string, templateSlug: string,
+): Promise<{ template: string; created: EquipmentShift[]; alreadyThere: string[] }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/from-template`, {
+    method: "POST",
+    body: JSON.stringify({ templateSlug }),
+  });
+}
+
 export function apiListShifts(sourceSystem: string, externalId: string): Promise<EquipmentShift[]> {
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts`);
 }
