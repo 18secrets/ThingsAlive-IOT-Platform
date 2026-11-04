@@ -352,7 +352,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           machines, and a picker holds them all without running off the card. */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
         <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          {t('siteTwin.place', { defaultValue: 'Place' })}
+          {t('siteTwin.placePicker', { defaultValue: 'Place' })}
           <select
             value={focusMachine ? '' : String(focusIndex)}
             onChange={(e) => { setFocusMachine(null); setSelected(null); setFocusIndex(Number(e.target.value)); }}
@@ -389,10 +389,10 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           )}
           {draft && (
             <>
-              <button onClick={() => { setDraft(null); setSaveError(undefined); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5">
+              <button onClick={() => { setDraft(null); setSaveError(undefined); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 whitespace-nowrap">
                 <X className="w-3.5 h-3.5" /> {t('common.cancel', { defaultValue: 'Cancel' })}
               </button>
-              <button disabled={saving} onClick={() => void save()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
+              <button disabled={saving} onClick={() => void save()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap">
                 <Save className="w-3.5 h-3.5" /> {saving ? t('siteTwin.saving', { defaultValue: 'Saving…' }) : t('siteTwin.save', { defaultValue: 'Save layout' })}
               </button>
             </>
@@ -470,7 +470,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           </div>
 
           {/* --------------------------------------------------------- legend */}
-          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-[11px] text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
+          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-xs text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {STATUS_ORDER.map((s) => (
                 <span key={s} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_COLOUR[s] }} /> {statusLabel(s)}</span>

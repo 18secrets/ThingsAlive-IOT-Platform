@@ -102,7 +102,12 @@
     "noneRecorded": "ఏదీ నమోదు కాలేదు.",
     "ongoing": "కొనసాగుతోంది",
     "waitingOn": "OEE కు ముందుగా {{factors}} కావాలి",
-    "nominalOverride": "మీ సొంత విలువను వాడటానికి, ఖర్చు నిర్వహణలో గంటకు నామమాత్ర ఇంధనాన్ని సెట్ చేయండి."
+    "nominalOverride": "మీ సొంత విలువను వాడటానికి, ఖర్చు నిర్వహణలో గంటకు నామమాత్ర ఇంధనాన్ని సెట్ చేయండి.",
+    "fuelRateWhileRunning": "నడుస్తున్నప్పుడు సగటు ఇంధన రేటు: {{rate}} {{unit}} (ఈ కాలానికి యంత్రం పేజీలోని అదే విలువ)",
+    "nominalFromLibrary": "నామమాత్రం {{rate}} {{unit}}, లైబ్రరీ తరగతి {{className}} (వెర్షన్ {{version}}) నుండి",
+    "nominalCitation": "మూలం: {{citation}}",
+    "nominalNoCitation": "లైబ్రరీలో ఈ విలువకు డేటాషీట్ ఏదీ నమోదు కాలేదు.",
+    "nominalFromParameter": "నామమాత్రం {{rate}} {{unit}}, ఖర్చు నిర్వహణలో {{source}} సెట్ చేసింది"
   },
   "detail": {
     "availabilityNotAvailable": "లభ్యత సమాచారం అందుబాటులో లేదు",

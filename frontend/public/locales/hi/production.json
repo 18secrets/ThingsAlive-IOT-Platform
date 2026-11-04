@@ -102,7 +102,12 @@
     "noneRecorded": "कोई दर्ज नहीं।",
     "ongoing": "जारी",
     "waitingOn": "OEE के लिए पहले {{factors}} चाहिए",
-    "nominalOverride": "अपना आंकड़ा इस्तेमाल करने के लिए, लागत प्रशासन में प्रति घंटा मानक ईंधन सेट करें।"
+    "nominalOverride": "अपना आंकड़ा इस्तेमाल करने के लिए, लागत प्रशासन में प्रति घंटा मानक ईंधन सेट करें।",
+    "fuelRateWhileRunning": "चलते समय औसत ईंधन दर: {{rate}} {{unit}} (इस अवधि के लिए मशीन पेज वाला ही आँकड़ा)",
+    "nominalFromLibrary": "मानक {{rate}} {{unit}}, लाइब्रेरी श्रेणी {{className}} (संस्करण {{version}}) से",
+    "nominalCitation": "स्रोत: {{citation}}",
+    "nominalNoCitation": "लाइब्रेरी में इस आँकड़े का कोई डेटाशीट दर्ज नहीं है।",
+    "nominalFromParameter": "मानक {{rate}} {{unit}}, लागत प्रशासन में {{source}} द्वारा तय"
   },
   "detail": {
     "availabilityNotAvailable": "उपलब्धता की जानकारी उपलब्ध नहीं",
