@@ -461,8 +461,11 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
       <div className={`relative flex flex-col sm:flex-row ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
         {/* ------------------------------------------------------------- canvas */}
-        {/* flex-1 only side by side: stacked on a phone it took the height to nothing (150 px). */}
-        <div className={`relative w-full sm:flex-1 ${fullscreen ? 'h-full' : 'h-[440px] sm:h-[640px]'}`}>
+        {/* flex-1 only side by side: stacked on a phone it took the height to nothing (150 px).
+            min-w-0 so it makes room for the layout editor: without it the canvas kept its
+            full width and pushed the editor (Add zone, the site size, every zone) off the
+            card's right edge, out of sight. */}
+        <div className={`relative w-full min-w-0 sm:flex-1 ${fullscreen ? 'h-full' : 'h-[440px] sm:h-[640px]'}`}>
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
             <SiteTwinScene
               extent={extent} zones={zones} machines={shown}
