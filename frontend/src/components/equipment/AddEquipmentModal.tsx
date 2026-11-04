@@ -314,6 +314,9 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             </div>
           )}
 
+          {/* Shifts are kept per machine on its page, not in this form; testers looked for them
+              here (fuel test report TC-FP-07), so the form says where they are. */}
+          <p className="text-xs text-slate-500">{t('equipmentForm.shiftsHint')}</p>
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"
