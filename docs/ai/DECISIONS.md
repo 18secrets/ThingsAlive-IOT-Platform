@@ -192,6 +192,11 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+Amended 2026-11-04: for the two test reports of 3 Nov (*ThingsAlive_Platform2_Test_Report_03112026*
+and *Fuel_Prediction_Test_Report*), Tapas asked again for the matching `frontend/` changes
+to ship with the backend fixes. Branch `fix/test-report-fuel-03nov` touches `frontend/` on
+purpose under that ask, and under no other.
+
 ## D42 — QREC1's thirteen questions, answered
 
 Answered by Tapas, 2026-10-19, taking every recommendation in
@@ -564,6 +569,34 @@ same shift, so nothing the live pass could not have seen before the shift starte
 - The page scores both kinds alike and says, under "How accuracy is measured", that
   forecasts before 3 Nov 2026 are back-calculated. The same page now has an equipment
   search and hides machines that did not run unless asked.
+
+## D55 — A machine with no history gets expected litres from its class's physics
+
+Decided 2026-11-04 by Tapas, from the fuel test report of 3 Nov (TC-FP-07, TC-FP-09). D50
+forecasts a shift from the same machine's last 28 days, so a new machine is forecast at 0.
+Beside it, not instead of it, `GET /equipment/:sourceSystem/:externalId/expected-fuel`
+answers from the class and the machine's schedule:
+
+  working rate = rated_power_kw × working_load_pct/100 × bsfc_g_per_kwh ÷ 835 g/L,
+                 or the class nominal L/h when no BSFC is recorded
+  litres       = working rate × shift hours × working_share + idle_fuel_per_hour × the rest
+
+Code: `src/shift-fuel/expected-fuel.ts` (the arithmetic, alone), `expected-fuel-api.service.ts`.
+
+- **Nothing is assumed (G07).** The figures live on `equipment_class_profile`
+  (`1763400000000-ClassFuelFigures`), unset until the library team loads them from a
+  datasheet through the catalog workbook (optional v5 columns). A missing one blocks the
+  answer and is named. A BSFC needs its datasheet (`bsfc_source`) and the power and load it
+  multiplies, enforced by the database.
+- **Computed on request, stored nowhere.** It reads only the library and the schedule, so it
+  is the same answer for the same inputs; D50's forecasts stay the ones that are issued
+  before a shift and scored (D53).
+- **Shift hours come from the machine's own `equipment_shift` rows.** A library template
+  (`shift_template`, `1763500000000-ShiftTemplates`) gives a machine its working day in one
+  choice on the equipment form, as copies the account then owns (G13). One is seeded: the
+  existing platform's Day 08:00–20:00 and Night 20:00–08:00 Asia/Kolkata, D50's boundaries.
+- Template v5 rather than v6 for the new class columns: `class-oem-figures.spec.ts` pins
+  v5, and every addition is optional, as v4 → v5's were.
 
 ## Open, and blocking something
 

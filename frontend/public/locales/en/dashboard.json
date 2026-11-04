@@ -177,6 +177,7 @@
   },
   "master": {
     "totalClients": "Total Clients",
+    "clientsUnreadable": "The accounts list could not be read.",
     "activeCount": "{{count}} active",
     "devicesInPool": "Devices in pool",
     "poolUnreadable": "Could not read the device pool",

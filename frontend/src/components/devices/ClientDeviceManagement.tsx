@@ -61,7 +61,10 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
 
   const handleUnclaim = async (d: MyDevice) => {
     const reason = window.prompt(t('bindings.unfitPrompt', { imei: d.imei, name: equipmentName(d.equipmentExternalId) ?? t('devices.itsMachine') }));
-    if (reason === null) return;
+    // Cancel or an empty reason stops it, as Resolve, Complete and Cancel do (test report
+    // MAJ-1): taking a device off a machine ends its readings there, and "why" is what
+    // the next person looking at the gap needs.
+    if (reason === null || !reason.trim()) return;
     setBusyImei(d.imei);
     setActionError(undefined);
     try {

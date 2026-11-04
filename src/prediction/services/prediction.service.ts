@@ -14,6 +14,7 @@ import { Prediction, PredictionSource } from '../entities/prediction.entity';
 import { loadOperatingGate, operatingAt } from '../../kpi/services/operating-gate';
 import { PredictionBaseline } from '../entities/prediction-baseline.entity';
 import { DEFAULT_WINDOW_DAYS } from './baseline.service';
+import { scenarioNumber } from './scenario-params';
 import {
   Confidence, DEFAULT_CRITICAL_SIGMA, DEFAULT_MINIMUM_SAMPLES, DEFAULT_WARNING_SIGMA,
   SignalObservation, scoreTier1,
@@ -579,10 +580,6 @@ export class PredictionService {
   private numberParam(
     row: EquipmentScenario, scenario: ClientScenario, key: string, fallback: number,
   ): number {
-    const override = row.parameterOverrides?.[key];
-    const declared = scenario.parameters?.find((p) => p.key === key)?.default;
-    const value = override ?? declared;
-    const n = typeof value === 'string' ? Number(value) : value;
-    return typeof n === 'number' && Number.isFinite(n) ? n : fallback;
+    return scenarioNumber(scenario.parameters, row.parameterOverrides, key, fallback);
   }
 }

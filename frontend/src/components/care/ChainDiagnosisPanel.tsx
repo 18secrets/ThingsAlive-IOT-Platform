@@ -26,8 +26,13 @@ const minutes = (s: number | undefined | null) => {
  * explained rather than raised as a second alarm. The what-if feeds assumed inputs
  * forward to say which stage would breach first, and how soon.
  */
-export const ChainDiagnosisPanel: React.FC<{ sourceSystem: string; externalId: string; classSlug: string | null }> = ({
-  sourceSystem, externalId, classSlug,
+export const ChainDiagnosisPanel: React.FC<{
+  sourceSystem: string; externalId: string; classSlug: string | null;
+  /** Told the diagnosis once it arrives, so the page can say beside a recommendation that
+   * the cause chains could not confirm it (test report MIN-5). */
+  onDiagnosis?: (d: MachineDiagnosis) => void;
+}> = ({
+  sourceSystem, externalId, classSlug, onDiagnosis,
 }) => {
   const { t } = useTranslation('care');
   const [diagnosis, setDiagnosis] = useState<MachineDiagnosis | null>(null);
@@ -38,7 +43,7 @@ export const ChainDiagnosisPanel: React.FC<{ sourceSystem: string; externalId: s
   useEffect(() => {
     let live = true;
     apiDiagnoseMachine(sourceSystem, externalId)
-      .then((d) => { if (live) { setDiagnosis(d); setError(undefined); } })
+      .then((d) => { if (live) { setDiagnosis(d); setError(undefined); onDiagnosis?.(d); } })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('chain.errors.diagnose')); });
     if (classSlug) apiListCausalChains(classSlug).then((c) => { if (live) setChains(c); }).catch(() => {});
     return () => { live = false; };

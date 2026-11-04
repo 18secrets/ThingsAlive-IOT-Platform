@@ -20,7 +20,15 @@ const notFound = (err: unknown) => err instanceof ApiError && err.status === 404
  * until someone asks, because the page never renders on read. Analysing again returns
  * the same evidence when nothing it read has changed, so the button is safe to press.
  */
-export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: string }> = ({ sourceSystem, externalId }) => {
+export const RecommendationPanel: React.FC<{
+  sourceSystem: string; externalId: string;
+  /**
+   * The cause chains on this page ran and none had enough readings (test report MIN-5).
+   * A recommendation can still name a cause from its own evidence; it is then said as a
+   * possible cause, not a found one, so the two panels do not contradict each other.
+   */
+  chainsUnconfirmed?: boolean;
+}> = ({ sourceSystem, externalId, chainsUnconfirmed = false }) => {
   const { t } = useTranslation('care');
   const [bundle, setBundle] = useState<RecEvidenceBundle | null>(null);
   const [frame, setFrame] = useState<RecFrame | null>(null);
@@ -82,7 +90,9 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
 
   const chip = !bundle ? null
     : bundle.status === 'ready' && bundle.outcome
-      ? <Chip tone={(bundle.outcome && bundle.outcome in OUTCOME_TONE) ? OUTCOME_TONE[bundle.outcome] : 'slate'}>{t(`rec.outcome.${bundle.outcome}`, { defaultValue: bundle.outcome })}</Chip>
+      ? bundle.outcome === 'attributed' && chainsUnconfirmed
+        ? <Chip tone="amber" title={t('rec.outcome.attributedUnconfirmedWhy')}>{t('rec.outcome.attributedUnconfirmed')}</Chip>
+        : <Chip tone={(bundle.outcome && bundle.outcome in OUTCOME_TONE) ? OUTCOME_TONE[bundle.outcome] : 'slate'}>{t(`rec.outcome.${bundle.outcome}`, { defaultValue: bundle.outcome })}</Chip>
       : <Chip tone="slate">{t(`rec.reason.${bundle.reason}`, { defaultValue: bundle.reason ?? bundle.status })}</Chip>;
 
   return (

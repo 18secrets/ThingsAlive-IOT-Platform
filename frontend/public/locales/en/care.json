@@ -35,7 +35,7 @@
     "gaugeTitle": "Risk score: 0–100, rule-based",
     "noScenario": "no scenario",
     "riskTitle": "Rule-based composite risk score",
-    "risk": "{{score}} risk",
+    "risk": "{{score}}/100 risk",
     "confidenceTitle": "How much of the picture was available",
     "abnormalTitle": "Signals outside baseline",
     "na": "n/a",
@@ -206,6 +206,8 @@
     "byModel": "Written from the evidence by {{model}}, checked before it was shown.",
     "outcome": {
       "attributed": "Likely cause found",
+      "attributedUnconfirmed": "Possible cause, not confirmed",
+      "attributedUnconfirmedWhy": "The recommendation names a cause from its own evidence, but the cause chains below had too few readings to confirm it.",
       "unattributed": "Anomaly, no known cause",
       "inconclusive": "Inconclusive",
       "nothing_detected": "Nothing detected"

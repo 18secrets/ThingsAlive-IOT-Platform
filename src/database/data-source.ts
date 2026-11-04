@@ -33,6 +33,7 @@ import { WorkflowLayout } from '../workflow/entities/workflow-layout.entity';
 import { WorkflowVersion } from '../workflow/entities/workflow-version.entity';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { EquipmentShift } from '../shift/entities/equipment-shift.entity';
+import { ShiftTemplate } from '../shift/entities/shift-template.entity';
 import { ShiftRun } from '../shift/entities/shift-run.entity';
 import { UtilizationShift } from '../utilization/entities/utilization-shift.entity';
 import { EquipmentServiceRecord } from '../service/entities/equipment-service-record.entity';
@@ -141,6 +142,7 @@ export const ENTITIES = [
   WorkOrderCounter,
   WorkOrderEvent,
   EquipmentShift,
+  ShiftTemplate,
   ShiftRun,
   UtilizationShift,
   EquipmentServiceRecord,

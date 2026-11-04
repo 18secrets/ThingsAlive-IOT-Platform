@@ -6,7 +6,8 @@ import { ListTable } from '../components/common/ListTable';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { sortRows, useSort } from '../lib/useSort';
 import {
-  ApiError, FuelAccuracyCheckpoint, FuelAccuracyLevel, MachineFuelAccuracy, ShiftFuelAccuracy, apiGetShiftFuelAccuracy,
+  ApiError, FuelAccuracyCheckpoint, FuelAccuracyLevel, MachineFuelAccuracy, ShiftFuelAccuracy, ShiftFuelCoverage, apiGetShiftFuelAccuracy,
+  apiGetShiftFuelCoverage,
 } from '../lib/api';
 
 /**
@@ -89,6 +90,9 @@ export const FuelForecastAccuracyPage: React.FC = () => {
   const [level, setLevel] = useState<FuelAccuracyLevel>('day');
   const [checkpoint, setCheckpoint] = useState<FuelAccuracyCheckpoint>('2');
   const [data, setData] = useState<ShiftFuelAccuracy | null>(null);
+  // The fuel-burning machines the table cannot score, and why (FU-6). Its own request: a
+  // failure here leaves the accuracy table as it was.
+  const [coverage, setCoverage] = useState<ShiftFuelCoverage | null>(null);
   const [fellBackFrom, setFellBackFrom] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -111,6 +115,9 @@ export const FuelForecastAccuracyPage: React.FC = () => {
       }
       if (!live()) return;
       setData(r);
+      apiGetShiftFuelCoverage({ from: r.from, to: r.to })
+        .then((c) => { if (live()) setCoverage(c); })
+        .catch(() => { if (live()) setCoverage(null); });
       setFellBackFrom(fallback);
       setError(undefined);
     } catch (err) {
@@ -211,6 +218,21 @@ export const FuelForecastAccuracyPage: React.FC = () => {
           <Info className="w-3.5 h-3.5 shrink-0" />
           <span>{t('fuelAccuracy.fellBack', { today: fellBackFrom, shown: data.from })}</span>
         </div>
+      )}
+
+      {coverage && coverage.notCovered.length > 0 && (
+        <details id="fuel-accuracy-not-covered" className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+          <summary className="cursor-pointer">
+            {t('fuelAccuracy.notCovered.summary', { count: coverage.notCovered.length, fuelled: coverage.fuelled })}
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {coverage.notCovered.map((n) => (
+              <li key={`${n.sourceSystem}|${n.externalId}`}>
+                <span className="font-medium">{n.name ?? n.externalId}</span> — {t(`fuelAccuracy.notCovered.reason.${n.reason}`)}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className={LIST_PANEL}>

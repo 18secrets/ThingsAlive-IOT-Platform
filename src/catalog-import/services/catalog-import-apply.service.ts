@@ -50,6 +50,7 @@ const classSlugOf = (row: CatalogImportRow): string | undefined => {
  * `this.ds.transaction`, so a failure anywhere (a real constraint the database
  * refuses, not just a caught exception) leaves every table exactly as it was.
  */
+import { writeFuelFigures } from '../../catalog/services/class-fuel-figures';
 @Injectable()
 export class CatalogImportApplyService {
   constructor(private readonly ds: DataSource) {}
@@ -301,6 +302,7 @@ export class CatalogImportApplyService {
       targetClass = await classRepo.save(classRepo.create({
         slug, version: 1, status: 'draft', publishedAt: null, ...classFields,
       }));
+      await writeFuelFigures(classRepo.manager, targetClass.id, proposed.oem);
       action = 'create';
     } else {
       // A published version is never mutated, and — deliberately, not just for that
@@ -320,6 +322,7 @@ export class CatalogImportApplyService {
       targetClass = await classRepo.save(classRepo.create({
         slug, version: current.version + 1, status: 'draft', publishedAt: null, ...classFields,
       }));
+      await writeFuelFigures(classRepo.manager, targetClass.id, proposed.oem);
       action = 'new_version';
     }
 

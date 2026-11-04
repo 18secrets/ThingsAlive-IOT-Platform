@@ -210,9 +210,8 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                       </div></>,
   ];
 
-  const handleCreate = async (input: EquipmentInput) => {
-    await onCreateEquipment(input);
-  };
+  // Returns the new machine, so the form can give it a shift template by its identity (FU-3).
+  const handleCreate = (input: EquipmentInput) => onCreateEquipment(input);
 
   const handleUpdate = async (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,

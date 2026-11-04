@@ -37,6 +37,14 @@ const STATUS_STYLE: Record<WorkOrderStatus, string> = {
 };
 const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
 
+/**
+ * A work order raised before 30 Oct carries the prediction's uuid in its history note
+ * (test report MIN-8). History is append-only and is not rewritten; the uuid is dropped
+ * when it is shown, as notes written since leave it out. `prediction_id` still traces it.
+ */
+const OLD_RAISE_NOTE = /^Prediction [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} scored (\w+) at (.+)$/;
+const readableNote = (note: string) => note.replace(OLD_RAISE_NOTE, 'Scored $1 on the reading at $2');
+
 export const WorkOrdersPage: React.FC = () => {
   const { t } = useTranslation(['workOrders', 'shared']);
   const [viewMode, setViewMode] = useViewMode('work-orders');
@@ -717,7 +725,7 @@ const WorkOrderHistory: React.FC<{
             {e.kind === 'unassigned' && e.fromAssignee && <> · {t('history.from', { name: personName(e.fromAssignee) })}</>}
             {e.fromStatus && e.toStatus && e.fromStatus !== e.toStatus && <> · {t(`status.${e.fromStatus}`, { defaultValue: e.fromStatus })} → {t(`status.${e.toStatus}`, { defaultValue: e.toStatus })}</>}
           </p>
-          {e.note && <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">"{e.note}"</p>}
+          {e.note && <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">"{readableNote(e.note)}"</p>}
         </li>
       ))}
     </ol>

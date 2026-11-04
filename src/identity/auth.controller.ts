@@ -10,7 +10,10 @@ import { PasswordService } from './services/password.service';
 import { PlatformCredentialService } from './services/platform-credential.service';
 
 export class SignInDto {
-  @IsEmail() email: string;
+  // Said under the field, in words a person signing in can act on (test report MIN-2):
+  // class-validator's own "email must be an email" reached the screen as "Request
+  // validation failed."
+  @IsEmail({}, { message: 'That is not a valid email address. Check it reads like name@company.com.' }) email: string;
   @IsString() @IsNotEmpty() password: string;
 }
 

@@ -11,17 +11,17 @@
   "backToClients": "क्लाइंट पर वापस जाएँ",
   "filters": {
     "button": "फ़िल्टर",
-    "selectedEquipment": "चुना गया उपकरण",
-    "allMatchingEquipment": "सभी मेल खाते उपकरण",
-    "title": "उपकरण फ़िल्टर करें",
+    "selectedEquipment": "चुनी गई मशीन",
+    "allMatchingEquipment": "सभी मेल खाती मशीनें",
+    "title": "मशीनें फ़िल्टर करें",
     "intro": "अपना दायरा चुनें, फिर लागू करें।",
-    "sitePlant": "साइट / प्लांट",
-    "allSitesPlants": "सभी साइट / प्लांट",
+    "sitePlant": "साइट",
+    "allSitesPlants": "सभी साइटें",
     "equipmentClass": "उपकरण श्रेणी",
     "allClasses": "सभी श्रेणियाँ",
     "connectionStatus": "कनेक्शन स्थिति",
     "allConnections": "सभी कनेक्शन",
-    "findEquipment": "उपकरण खोजें",
+    "findEquipment": "मशीन खोजें",
     "findPlaceholder": "नाम या मशीन कोड",
     "clear": "चयन साफ़ करें",
     "apply": "फ़िल्टर लागू करें"
@@ -64,7 +64,7 @@
     "topics": {
       "admin": {
         "title": "एडमिन कंसोल और उप-टैब",
-        "body": "उद्योग प्रकार, टेलीमेट्री सेंसर, संचार प्रोटोकॉल, उपकरण श्रेणियाँ, प्लांट और टूल मैपिंग प्रबंधित करें।"
+        "body": "उद्योग प्रकार, टेलीमेट्री सेंसर, संचार प्रोटोकॉल, उपकरण श्रेणियाँ, साइटें और टूल मैपिंग प्रबंधित करें।"
       },
       "equipment": {
         "title": "उपकरण और वर्गीकरण",

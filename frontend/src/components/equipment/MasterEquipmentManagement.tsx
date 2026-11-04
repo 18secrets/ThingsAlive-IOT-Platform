@@ -84,7 +84,11 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   }, [equipment]);
 
   const clientOptions = useMemo(
-    () => [{ label: t('equipment.allClients'), value: 'All' }, ...clients.map((c) => ({ label: c.clientName, value: c.id }))],
+    () => [{ label: t('equipment.allClients'), value: 'All' }, ...clients.map((c) => ({
+      // The account's id beside its name (FU-8): demo-construction is listed as "Apex
+      // Infrastructure & Mining Ltd.", and a tester looking for the id found nothing.
+      label: c.clientName === c.id ? c.id : `${c.clientName} (${c.id})`, value: c.id,
+    }))],
     [clients, t],
   );
 

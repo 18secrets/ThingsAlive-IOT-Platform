@@ -112,6 +112,10 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
           {t('header.timeZone', { zone: VIEWER_ZONE.short })}
         </span>
+        {/* A phone said no zone at all (03 Nov retest of MIN-12): the zone alone fits. */}
+        <span className="md:hidden text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
+          {VIEWER_ZONE.short}
+        </span>
         {/* Notification Bell */}
         <div className="relative">
           <button 
