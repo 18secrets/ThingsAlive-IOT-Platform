@@ -127,7 +127,7 @@ const Workshop: React.FC<{ w: number; d: number }> = ({ w, d }) => {
       {[-1, 1].map((sgn) => (
         <mesh key={sgn} position={[0, h + 1, (sgn * sd) / 4]} rotation={[sgn * 0.25, 0, 0]} castShadow>
           <boxGeometry args={[sw + 1, 0.2, sd / 2 + 0.6]} />
-          <meshStandardMaterial color="#b91c1c" />
+          <meshStandardMaterial color="#5b6b7f" />
         </mesh>
       ))}
       {(() => {
@@ -272,7 +272,7 @@ const Quay: React.FC<{ w: number; d: number; progress: number | null }> = ({ w, 
   );
 };
 
-const CONTAINER = ['#dc2626', '#2563eb', '#16a34a', '#f59e0b', '#0891b2', '#7c3aed', '#ea580c'];
+const CONTAINER = ['#9f4a3c', '#3f6e8f', '#5f7f5a', '#b8893f', '#4f7c86', '#7a8691'];
 const ContainerYard: React.FC<{ w: number; d: number; seed: number }> = ({ w, d, seed }) => {
   const rows = Math.max(1, Math.floor(d / 3.4)); const cols = Math.max(1, Math.floor(w / 6.8));
   return (
@@ -337,7 +337,7 @@ const CompressorHouse: React.FC<{ w: number; d: number }> = ({ w, d }) => {
       ))}
       <mesh position={[0, h + 0.3, 0]} rotation={[0, 0, 0.08]} castShadow>
         <boxGeometry args={[w * 0.92, 0.15, d * 0.88]} />
-        <meshStandardMaterial color="#0f766e" />
+        <meshStandardMaterial color="#6b7f76" />
       </mesh>
       <B p={[0, h / 2, -d * 0.4]} s={[w * 0.84, h, 0.2]} c="#cbd5e1" />
     </group>

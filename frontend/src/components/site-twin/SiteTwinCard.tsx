@@ -19,11 +19,11 @@ const STATUS_COLOUR: Record<SiteTwinStatus, string> = {
   alert: '#e11d48', live: '#16a34a', no_data: '#f59e0b', blocked: '#7c3aed', not_configured: '#94a3b8',
 };
 const ZONE_COLOUR: Record<SiteZoneKind, string> = {
-  work_area: '#86efac', material_yard: '#fcd34d', parking: '#c4b5fd', restricted: '#fca5a5',
-  head_office: '#bfdbfe', site_office: '#a5f3fc', batching_plant: '#e7e5e4', maintenance_workshop: '#e2e8f0',
-  gate: '#cbd5e1', road: '#a8a29e', building: '#e7e5e4', substation: '#d4d4d8', quay: '#bae6fd',
-  container_yard: '#e2e8f0', quay_crane_berth: '#bae6fd',
-  generator_room: '#e5e7eb', compressor_house: '#e5e7eb', quarry: '#d6a77a',
+  work_area: '#a7c4a0', material_yard: '#d9c48f', parking: '#b9bfcc', restricted: '#d9a3a3',
+  head_office: '#cdd5df', site_office: '#cdd5df', batching_plant: '#d4d0c8', maintenance_workshop: '#d4d0c8',
+  gate: '#cdd5df', road: '#a8a29e', building: '#d4d0c8', substation: '#cdd5df', quay: '#c9d6df',
+  container_yard: '#d4d0c8', quay_crane_berth: '#c9d6df',
+  generator_room: '#d4d0c8', compressor_house: '#d4d0c8', quarry: '#c9a57e',
 };
 const ZONE_NAME: Record<SiteZoneKind, string> = {
   work_area: 'Work area', material_yard: 'Material yard', parking: 'Parking', restricted: 'Restricted',

@@ -24,6 +24,9 @@ function rng(seed: number) {
 interface Hand { cx: number; cz: number; y: number; rx: number; rz: number; speed: number; phase: number; walks: boolean }
 
 const VEST_COLOURS = VEST.map((c) => new THREE.Color(c));
+const SKIN = ['#c68e6a', '#a8714f', '#8d5a3b', '#d4a07c'].map((c) => new THREE.Color(c));
+type Part = 'legL' | 'legR' | 'torso' | 'armL' | 'armR' | 'head' | 'helmet' | 'brim';
+const PARTS: Part[] = ['legL', 'legR', 'torso', 'armL', 'armR', 'head', 'helmet', 'brim'];
 const HELMETS = [new THREE.Color('#facc15'), new THREE.Color('#ffffff'), new THREE.Color('#facc15')];
 
 /**
@@ -39,8 +42,9 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
       if (z.kind === 'road' && ((z.progressPct ?? 100) >= 100 || (z.progressPct ?? 0) <= 0)) return;
       const r = rng(zi * 977 + Math.round(z.x * 13 + z.z * 7) + 11);
       const dense = ['building', 'quarry', 'work_area', 'batching_plant', 'road', 'substation', 'quay'].includes(z.kind);
-      const per = dense ? 40 : z.kind === 'gate' ? 400 : 160;
-      const n = Math.max(2, Math.min(dense ? 140 : 12, Math.round((z.widthM * z.depthM) / per)));
+      // Calm enough to read: a crew at each front, not confetti across the site.
+      const per = dense ? 70 : z.kind === 'gate' ? 400 : 260;
+      const n = Math.max(2, Math.min(dense ? 60 : 6, Math.round((z.widthM * z.depthM) / per)));
       // On a building the crew is up on the slab being cast, inside its footprint.
       const onSlab = z.kind === 'building';
       const y = onSlab ? (z.floors ?? 4) * 3.3 * ((z.progressPct ?? 0) / 100) + 0.3 : 0;
@@ -57,55 +61,116 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
     return out.slice(0, 3000);
   }, [zones]);
 
-  const body = useRef<THREE.InstancedMesh>(null);
-  const helmet = useRef<THREE.InstancedMesh>(null);
-  const tmp = useMemo(() => new THREE.Object3D(), []);
+  // One instanced mesh per body part. Each part is placed from the worker's root by its
+  // own joint (hip, shoulder), so a walker swings legs and arms and a worker at the job
+  // bends at the hips with arms working — a person, not a post.
+  const parts = useRef<Record<Part, THREE.InstancedMesh | null>>({} as Record<Part, THREE.InstancedMesh | null>);
   React.useLayoutEffect(() => {
     hands.forEach((_, i) => {
-      body.current?.setColorAt(i, VEST_COLOURS[i % VEST_COLOURS.length]);
-      helmet.current?.setColorAt(i, HELMETS[i % HELMETS.length]);
+      parts.current.torso?.setColorAt(i, VEST_COLOURS[i % VEST_COLOURS.length]);
+      parts.current.helmet?.setColorAt(i, HELMETS[i % HELMETS.length]);
+      parts.current.brim?.setColorAt(i, HELMETS[i % HELMETS.length]);
+      parts.current.head?.setColorAt(i, SKIN[i % SKIN.length]);
     });
-    if (body.current?.instanceColor) body.current.instanceColor.needsUpdate = true;
-    if (helmet.current?.instanceColor) helmet.current.instanceColor.needsUpdate = true;
+    for (const k of ['torso', 'helmet', 'brim', 'head'] as Part[]) {
+      const m = parts.current[k];
+      if (m?.instanceColor) m.instanceColor.needsUpdate = true;
+    }
   }, [hands]);
+
+  const root = useMemo(() => new THREE.Matrix4(), []);
+  const work = useMemo(() => ({ a: new THREE.Matrix4(), b: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Euler(), v: new THREE.Vector3(), one: new THREE.Vector3(1, 1, 1) }), []);
+  /** root · translate(joint) · rotate(x, z) · translate(offset), into `out`. */
+  const place = (out: THREE.Matrix4, joint: [number, number, number], rx: number, rz: number, offset: [number, number, number]) => {
+    work.e.set(rx, 0, rz);
+    work.q.setFromEuler(work.e);
+    work.a.compose(work.v.set(...joint), work.q, work.one);
+    work.b.makeTranslation(...offset);
+    out.copy(root).multiply(work.a).multiply(work.b);
+  };
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
+    const m = new THREE.Matrix4();
     hands.forEach((w, i) => {
-      let x = w.cx; let z = w.cz; let yaw = w.phase; let bend = 0;
+      let x = w.cx; let z = w.cz; let yaw = w.phase; let bend = 0; let swing = 0; let armWork = 0;
       if (w.walks) {
         const a = w.phase + (t * w.speed) / ((w.rx + w.rz) / 2);
         x = w.cx + w.rx * Math.cos(a); z = w.cz + w.rz * Math.sin(a);
-        yaw = Math.atan2(-w.rz * Math.cos(a), -w.rx * Math.sin(a)) + Math.PI / 2;
+        // The figure faces +X; turn it to face where it is walking.
+        yaw = Math.atan2(-(w.rz * Math.cos(a)), -w.rx * Math.sin(a));
+        swing = 0.55 * Math.sin(t * 6 * w.speed + w.phase);
       } else {
-        bend = 0.55 * Math.max(0, Math.sin(t * 2.2 + w.phase));
+        // At the job: bend forward and straighten, arms swinging down to the work.
+        const k = Math.max(0, Math.sin(t * 2.2 + w.phase));
+        bend = 0.7 * k; armWork = 0.6 + 0.9 * k;
       }
-      tmp.position.set(x, w.y, z);
-      tmp.rotation.set(0, yaw, 0);
-      tmp.updateMatrix();
-      // The body pivots at the hips; the helmet follows the bend.
-      const hip = new THREE.Matrix4().makeTranslation(0, 0.75, 0)
-        .multiply(new THREE.Matrix4().makeRotationZ(-bend))
-        .multiply(new THREE.Matrix4().makeTranslation(0, 0.1, 0));
-      const m = tmp.matrix.clone().multiply(hip);
-      body.current?.setMatrixAt(i, m);
-      const h = m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.85, 0));
-      helmet.current?.setMatrixAt(i, h);
+      work.e.set(0, yaw, 0); work.q.setFromEuler(work.e);
+      root.compose(work.v.set(x, w.y, z), work.q, work.one);
+      const P = parts.current;
+      // Legs from the hips, swinging opposite each other.
+      // Swing about Z: the figure faces +X, so that is forward and back.
+      place(m, [0, 0.9, 0.11], 0, swing, [0, -0.45, 0]); P.legL?.setMatrixAt(i, m);
+      place(m, [0, 0.9, -0.11], 0, -swing, [0, -0.45, 0]); P.legR?.setMatrixAt(i, m);
+      // The upper body pivots at the hips; arms, head and hat ride on it.
+      const upper = new THREE.Matrix4();
+      place(upper, [0, 0.9, 0], 0, -bend, [0, 0, 0]);
+      const onUpper = (joint: [number, number, number], rx: number, rz: number, offset: [number, number, number]) => {
+        work.e.set(rx, 0, rz); work.q.setFromEuler(work.e);
+        work.a.compose(work.v.set(...joint), work.q, work.one);
+        work.b.makeTranslation(...offset);
+        return m.copy(upper).multiply(work.a).multiply(work.b);
+      };
+      P.torso?.setMatrixAt(i, onUpper([0, 0.33, 0], 0, 0, [0, 0, 0]));
+      P.armL?.setMatrixAt(i, onUpper([0, 0.6, 0.27], 0, -swing + armWork, [0, -0.3, 0]));
+      P.armR?.setMatrixAt(i, onUpper([0, 0.6, -0.27], 0, swing + armWork, [0, -0.3, 0]));
+      P.head?.setMatrixAt(i, onUpper([0, 0.82, 0], 0, 0, [0, 0, 0]));
+      P.helmet?.setMatrixAt(i, onUpper([0, 0.93, 0], 0, 0, [0, 0, 0]));
+      P.brim?.setMatrixAt(i, onUpper([0, 0.9, 0], 0, 0, [0, 0, 0]));
     });
-    if (body.current) body.current.instanceMatrix.needsUpdate = true;
-    if (helmet.current) helmet.current.instanceMatrix.needsUpdate = true;
+    for (const k of PARTS) { const mesh = parts.current[k]; if (mesh) mesh.instanceMatrix.needsUpdate = true; }
   });
 
   if (!hands.length) return null;
+  const n = hands.length;
+  const set = (k: Part) => (mesh: THREE.InstancedMesh | null) => { parts.current[k] = mesh; };
   return (
     <group>
-      <instancedMesh ref={body} args={[undefined, undefined, hands.length]} castShadow>
-        <boxGeometry args={[0.45, 1.6, 0.3]} />
-        <meshStandardMaterial vertexColors={false} />
+      {/* Legs: work trousers to the boot. */}
+      <instancedMesh ref={set('legL')} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.17, 0.9, 0.17]} />
+        <meshStandardMaterial color="#1e3a5f" />
       </instancedMesh>
-      <instancedMesh ref={helmet} args={[undefined, undefined, hands.length]}>
-        <sphereGeometry args={[0.22, 8, 6]} />
-        <meshStandardMaterial />
+      <instancedMesh ref={set('legR')} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.17, 0.9, 0.17]} />
+        <meshStandardMaterial color="#1e3a5f" />
+      </instancedMesh>
+      {/* Torso in a hi-vis vest. */}
+      <instancedMesh ref={set('torso')} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.28, 0.66, 0.46]} />
+        <meshStandardMaterial roughness={0.6} />
+      </instancedMesh>
+      {/* Arms, sleeves in work blue, from the shoulders. */}
+      <instancedMesh ref={set('armL')} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.12, 0.62, 0.12]} />
+        <meshStandardMaterial color="#2b4c7e" />
+      </instancedMesh>
+      <instancedMesh ref={set('armR')} args={[undefined, undefined, n]} castShadow>
+        <boxGeometry args={[0.12, 0.62, 0.12]} />
+        <meshStandardMaterial color="#2b4c7e" />
+      </instancedMesh>
+      <instancedMesh ref={set('head')} args={[undefined, undefined, n]} castShadow>
+        <sphereGeometry args={[0.13, 12, 10]} />
+        <meshStandardMaterial roughness={0.8} />
+      </instancedMesh>
+      {/* Hard hat: dome and brim. */}
+      <instancedMesh ref={set('helmet')} args={[undefined, undefined, n]} castShadow>
+        <sphereGeometry args={[0.16, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial roughness={0.4} />
+      </instancedMesh>
+      <instancedMesh ref={set('brim')} args={[undefined, undefined, n]}>
+        <cylinderGeometry args={[0.2, 0.2, 0.025, 14]} />
+        <meshStandardMaterial roughness={0.4} />
       </instancedMesh>
     </group>
   );
@@ -116,7 +181,8 @@ const Workers: React.FC<{ zones: SiteTwinZone[] }> = ({ zones }) => {
  * alongside, and ship-to-shore cranes working it — a trolley running out over the ship
  * and back with a box. Scenery for the demo, outside the site and labelled with it.
  */
-const PORT_BOX = ['#dc2626', '#2563eb', '#16a34a', '#f59e0b', '#0891b2', '#7c3aed', '#ea580c', '#475569'];
+// Weathered shipping colours, not a rainbow: the eye should go to the work, not the boxes.
+const PORT_BOX = ['#9f4a3c', '#3f6e8f', '#5f7f5a', '#b8893f', '#4f7c86', '#7a8691', '#8a5a44', '#56606b'];
 export const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, depthM }) => {
   const edge = -depthM / 2;
   const quayD = 28;
@@ -197,12 +263,12 @@ export const Port: React.FC<{ widthM: number; depthM: number }> = ({ widthM, dep
             {[[-5, 0], [5, 0], [-5, 14], [5, 14]].map(([lx, lz], k) => (
               <mesh key={k} position={[lx, 14, lz]} castShadow>
                 <boxGeometry args={[1, 28, 1]} />
-                <meshStandardMaterial color="#dc2626" />
+                <meshStandardMaterial color="#c2410c" />
               </mesh>
             ))}
             <mesh position={[0, 28.5, -10]} castShadow>
               <boxGeometry args={[11, 1.4, 52]} />
-              <meshStandardMaterial color="#dc2626" />
+              <meshStandardMaterial color="#c2410c" />
             </mesh>
             <group position={[0, 27.6, 0]} ref={(g) => { if (g) trolleys.current[i] = g; }}>
               <mesh>
