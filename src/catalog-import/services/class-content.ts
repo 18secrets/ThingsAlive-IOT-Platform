@@ -95,7 +95,7 @@ export const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
-import { readFuelFigures } from '../../catalog/services/class-fuel-figures';
+import { NO_FUEL_FIGURES, readFuelFigures } from '../../catalog/services/class-fuel-figures';
 
 const noOemFigures = (): OemFigures => ({
   nominalFuelPerHour: null, nominalFuelUnit: null,
@@ -109,11 +109,9 @@ export const oemFiguresOf = (c: EquipmentClassProfile): OemFigures => ({
   nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit,
   idleBreakdownThresholdMinutes: c.idleBreakdownThresholdMinutes,
   runningSignal: c.runningSignal, runningIdleBound: c.runningIdleBound, availabilitySignal: c.availabilitySignal,
-  // `?? null`: a class built in memory by a caller that predates these columns compares
-  // equal to one that states them as unset, so an unchanged re-import stays unchanged.
-  nominalFuelSource: c.nominalFuelSource ?? null, ratedPowerKw: c.ratedPowerKw ?? null,
-  workingLoadPct: c.workingLoadPct ?? null, bsfcGPerKwh: c.bsfcGPerKwh ?? null, bsfcSource: c.bsfcSource ?? null,
-  idleFuelPerHour: c.idleFuelPerHour ?? null, workingShare: c.workingShare ?? null,
+  // Not on the entity (class-fuel-figures.ts): unset here; loadCurrentClass overlays the
+  // stored values with readFuelFigures.
+  ...NO_FUEL_FIGURES,
 });
 
 /** The OEM figures an `equipment_class` row states. A blank threshold is the stated

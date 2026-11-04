@@ -116,34 +116,10 @@ export class EquipmentClassProfile {
   @Column({ name: 'availability_signal', type: 'text', nullable: true })
   availabilitySignal: string | null;
 
-  /**
-   * The fuel figures a cold-start prediction is made of, and where the nominal came from
-   * (`1763400000000-ClassFuelFigures`, fuel test report FU-3/FU-5). Unset until the library
-   * team authors them from a datasheet; a class without one is blocked on it by name.
-   *
-   * Never selected, inserted or updated by the entity: read and written only through
-   * `services/class-fuel-figures.ts`, which says why.
-   */
-  @Column({ name: 'nominal_fuel_source', type: 'text', nullable: true, select: false, insert: false, update: false })
-  nominalFuelSource: string | null;
-
-  @Column({ name: 'rated_power_kw', type: 'double precision', nullable: true, select: false, insert: false, update: false })
-  ratedPowerKw: number | null;
-
-  @Column({ name: 'working_load_pct', type: 'double precision', nullable: true, select: false, insert: false, update: false })
-  workingLoadPct: number | null;
-
-  @Column({ name: 'bsfc_g_per_kwh', type: 'double precision', nullable: true, select: false, insert: false, update: false })
-  bsfcGPerKwh: number | null;
-
-  @Column({ name: 'bsfc_source', type: 'text', nullable: true, select: false, insert: false, update: false })
-  bsfcSource: string | null;
-
-  @Column({ name: 'idle_fuel_per_hour', type: 'double precision', nullable: true, select: false, insert: false, update: false })
-  idleFuelPerHour: number | null;
-
-  @Column({ name: 'working_share', type: 'double precision', nullable: true, select: false, insert: false, update: false })
-  workingShare: number | null;
+  // The cold-start fuel figures (`1763400000000-ClassFuelFigures`: nominal_fuel_source,
+  // rated_power_kw, working_load_pct, bsfc_g_per_kwh, bsfc_source, idle_fuel_per_hour,
+  // working_share) are columns of this table and deliberately not of this entity: they
+  // are read and written only by `services/class-fuel-figures.ts`, which says why.
 
   @Column({ type: 'text', default: 'draft' })
   @Index('ix_equipment_class_profile_status')

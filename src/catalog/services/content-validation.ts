@@ -52,13 +52,14 @@ export interface OemFigures {
   runningIdleBound: number | null;
   availabilitySignal: string | null;
   /** The cold-start fuel figures (fuel test report FU-3/FU-5), `1763400000000-ClassFuelFigures`. */
-  nominalFuelSource: string | null;
-  ratedPowerKw: number | null;
-  workingLoadPct: number | null;
-  bsfcGPerKwh: number | null;
-  bsfcSource: string | null;
-  idleFuelPerHour: number | null;
-  workingShare: number | null;
+  /** Absent on a class loaded through the entity, which does not map them. */
+  nominalFuelSource?: string | null;
+  ratedPowerKw?: number | null;
+  workingLoadPct?: number | null;
+  bsfcGPerKwh?: number | null;
+  bsfcSource?: string | null;
+  idleFuelPerHour?: number | null;
+  workingShare?: number | null;
 }
 
 /** The task's stated default — not an OEM figure, a definition of "too long idle". */
