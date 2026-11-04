@@ -17,7 +17,7 @@
     "pageOf": "ପୃଷ୍ଠା {{page}} / {{total}}",
     "details": "ବିବରଣୀ",
     "createWorkOrder": "କାର୍ଯ୍ୟ ଆଦେଶ ସୃଷ୍ଟି କରନ୍ତୁ",
-    "viewEquipmentPage": "ଉପକରଣ ପୃଷ୍ଠା ଦେଖନ୍ତୁ",
+    "viewEquipmentPage": "ମେସିନ୍ ପୃଷ୍ଠା ଦେଖନ୍ତୁ",
     "notAvailable": "ଉପଲବ୍ଧ ନାହିଁ",
     "oeeNotAvailable": "OEE ଉପଲବ୍ଧ ନାହିଁ",
     "uptimeTitle": "ଚାଲୁ ଘଣ୍ଟା",
@@ -70,7 +70,7 @@
     "class": "ଏହାର ଶ୍ରେଣୀ",
     "site": "ଏହାର ସାଇଟ୍",
     "client": "ଆକାଉଣ୍ଟ",
-    "oem": "OEM ସଂଖ୍ୟା"
+    "oem": "ଏହାର ମେସିନ୍ ପ୍ରକାରର OEM ସଂଖ୍ୟା"
   },
   "oee": {
     "title": "ସାମଗ୍ରିକ ଉପକରଣ ପ୍ରଭାବଶୀଳତା",
@@ -101,7 +101,8 @@
     "breakdownsInWindow": "ଏହି ଅବଧିର ବ୍ରେକଡାଉନ୍",
     "noneRecorded": "କିଛି ରେକର୍ଡ ହୋଇନାହିଁ।",
     "ongoing": "ଚାଲିଛି",
-    "waitingOn": "OEE ପାଇଁ ପ୍ରଥମେ {{factors}} ଦରକାର"
+    "waitingOn": "OEE ପାଇଁ ପ୍ରଥମେ {{factors}} ଦରକାର",
+    "nominalOverride": "ନିଜ ସଂଖ୍ୟା ବ୍ୟବହାର କରିବାକୁ, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ ଘଣ୍ଟା ପ୍ରତି ମାନକ ଇନ୍ଧନ ସେଟ୍ କରନ୍ତୁ।"
   },
   "detail": {
     "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ",

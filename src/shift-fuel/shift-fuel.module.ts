@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { LegacyShiftMetricsModule } from '../legacy/legacy-shift-metrics.module';
+import { ExpectedFuelApiService } from './expected-fuel-api.service';
+import { ShiftFuelCoverageService } from './shift-fuel-coverage.service';
 import { ShiftFuelAccuracyApiService } from './shift-fuel-accuracy-api.service';
 import { ShiftFuelApiService } from './shift-fuel-api.service';
 import { ShiftFuelNowcastApiService } from './shift-fuel-nowcast-api.service';
 import { ShiftFuelNowcastScheduler } from './shift-fuel-nowcast.scheduler';
 import { ShiftFuelNowcastService } from './shift-fuel-nowcast.service';
 import { ShiftFuelController } from './shift-fuel.controller';
+import { ExpectedFuelController } from './expected-fuel.controller';
 import { ShiftFuelScheduler } from './shift-fuel.scheduler';
 import { ShiftFuelService } from './shift-fuel.service';
 
@@ -18,11 +21,11 @@ import { ShiftFuelService } from './shift-fuel.service';
  */
 @Module({
   imports: [LegacyShiftMetricsModule],
-  controllers: [ShiftFuelController],
+  controllers: [ShiftFuelController, ExpectedFuelController],
   providers: [
     ShiftFuelService, ShiftFuelScheduler, ShiftFuelApiService,
     ShiftFuelNowcastService, ShiftFuelNowcastScheduler, ShiftFuelNowcastApiService,
-    ShiftFuelAccuracyApiService,
+    ShiftFuelAccuracyApiService, ExpectedFuelApiService, ShiftFuelCoverageService,
   ],
   exports: [ShiftFuelService],
 })

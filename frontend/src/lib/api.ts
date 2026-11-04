@@ -2509,6 +2509,72 @@ export interface ShiftFuelAccuracy {
   latestDataDate: string | null;
 }
 
+/**
+ * Which fuel-burning machines the shift fuel forecast covers, and why the rest are not
+ * (`/shift-fuel-coverage`, fuel test report FU-6): a machine missing from the accuracy
+ * table is listed here with its reason instead of simply being absent.
+ */
+export interface ShiftFuelCoverage {
+  from: string; to: string; asOf: string; fuelled: number; covered: number;
+  notCovered: { sourceSystem: string; externalId: string; name: string | null; reason: "mirrored_from_1_0" | "no_shift_totals" }[];
+}
+export function apiGetShiftFuelCoverage(query: { from: string; to: string }): Promise<ShiftFuelCoverage> {
+  return authFetch(`/shift-fuel-coverage?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`);
+}
+
+/**
+ * One shift of one machine (D50). Shifts are the existing platform's: 1 is 08:00–20:00
+ * India time on `sdate`, 2 is 20:00 to 08:00 the next morning.
+ */
+export interface ShiftFuelRow {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  /** Null when no forecast was issued for this shift. */
+  predictedL: number | null;
+  /** The newest day the forecast learned from; null = no history, and the forecast is 0. */
+  inputsThrough: string | null;
+  issuedAt: string | null;
+  /** Null until the existing platform has totalled the shift. */
+  fuelL: number | null;
+  workHrs: number | null;
+  syncedAt: string | null;
+}
+
+/** The newest in-shift re-forecast of the shift under way (D52). */
+export interface ShiftFuelNowcast {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  method: string;
+  /** The quarter hour it describes. */
+  asOf: string;
+  /** When the newest fuel-counter reading it used was taken; far behind asOf = a stale feed. */
+  counterAt: string;
+  soFarL: number;
+  /** The pre-shift forecast it took a share of: issued, or computed the same way before the morning sync. */
+  baseL: number;
+  baseSource: "issued" | "computed";
+  predictedL: number;
+}
+
+export interface MachineShiftFuel {
+  equipment: { sourceSystem: string; externalId: string };
+  method: string;
+  asOf: string;
+  days: number;
+  shifts: ShiftFuelRow[];
+  /** Null when no shift has a reading yet, or the in-shift forecast is not running. */
+  nowcast: ShiftFuelNowcast | null;
+}
+
+/** This machine's shifts over the last `days` (1–90), forecast beside actual. `prediction.read`. */
+export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 3): Promise<MachineShiftFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
+}
+
 /** Either date left out is today in India, on the server's clock. */
 export function apiGetShiftFuelAccuracy(
   query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},
@@ -2549,6 +2615,11 @@ export interface OeeFactor {
   reason?: string;
 }
 
+/** A library figure names the class version the machine is on and its datasheet, or says it has none. */
+export type NominalOrigin =
+  | { kind: "library"; classSlug: string; classVersion: number; className: string; citation: string | null }
+  | { kind: "parameter"; scope: OeeParameterSource };
+
 export interface EquipmentOee {
   window: OeeWindow;
   from: string;
@@ -2562,6 +2633,8 @@ export interface EquipmentOee {
   quality: OeeFactor & {
     nominalFuel: number | null; actualFuel: number | null; unit: string | null;
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
+    /** The nominal rate and exactly where it came from (fuel test report FU-5). */
+    nominalFuelPerHour: number | null; nominalRateUnit: string | null; nominalOrigin: NominalOrigin | null;
   };
   oee: OeeFactor;
   /** The rows Performance counted. On one machine's OEE only, not on a site's machines. */
@@ -2738,6 +2811,65 @@ export interface ShiftRun {
   alertsFired: number;
   durationMs: number | null;
   ranAt: string;
+}
+
+/**
+ * Fuel per shift on the machine page (fuel test report TC-FP-11): D50's forecast from the
+ * machine's own shift history, and the cold-start expectation from its class figures and
+ * schedule (`/expected-fuel`), which is what a machine with no history has.
+ */
+export type ExpectedFuelBlocker =
+  | "no_class" | "no_shift_schedule" | "working_rate_not_set" | "nominal_unit_not_litres"
+  | "working_share_not_set" | "idle_fuel_per_hour_not_set";
+export interface ExpectedShiftFuel {
+  shiftName: string | null; startsAt: string | null; endsAt: string | null;
+  method: string; predictedL: number | null; workingL: number | null; idleL: number | null;
+  blockedBy: ExpectedFuelBlocker[]; workingRateFrom: "bsfc" | "nominal" | null;
+  inputs: { name: string; value: number; unit: string; source: string }[];
+}
+export interface MachineExpectedFuel {
+  asOf: string;
+  equipmentClass: { slug: string; version: number; name: string } | null;
+  shifts: ExpectedShiftFuel[];
+}
+export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Promise<MachineExpectedFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
+}
+
+/**
+ * How a library scenario version is scored, in the numbers the scorer uses
+ * (`/catalog/authoring/scenarios/:id/rule`, fuel test report FU-1). Master Admin only.
+ */
+export interface ScenarioRule {
+  scenarioId: string; slug: string; version: number;
+  method: "influence@1" | "tier1@1";
+  requiredSignals: string[]; minimumHistoryDays: number;
+  baseline: { windowDays: number; warningSigma: number; criticalSigma: number; minimumSamples: number; sentence: string };
+  influence: null | {
+    target: string; intercept: number; terms: { signal: string; coefficient: number }[];
+    warnAbove: number; criticalAbove: number; windowHours: number; formula: string; sentence: string;
+  };
+}
+export function apiGetScenarioRule(scenarioId: string): Promise<ScenarioRule> {
+  return authFetch(`/catalog/authoring/scenarios/${encodeURIComponent(scenarioId)}/rule`);
+}
+
+/** A library set of shifts (`/shift-templates`, fuel test report FU-3). */
+export interface ShiftTemplate {
+  slug: string; name: string; description: string | null;
+  shifts: { name: string; startMinute: number; endMinute: number; days: Weekday[]; timeZone: string }[];
+}
+export function apiListShiftTemplates(): Promise<ShiftTemplate[]> {
+  return authFetch("/shift-templates");
+}
+/** Idempotent: shifts already there under the same name and hours come back in alreadyThere. */
+export function apiApplyShiftTemplate(
+  sourceSystem: string, externalId: string, templateSlug: string,
+): Promise<{ template: string; created: EquipmentShift[]; alreadyThere: string[] }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/from-template`, {
+    method: "POST",
+    body: JSON.stringify({ templateSlug }),
+  });
 }
 
 export function apiListShifts(sourceSystem: string, externalId: string): Promise<EquipmentShift[]> {

@@ -312,7 +312,9 @@ export class KpiEvaluatorService {
     for (const signal of allRequiredSignals) {
       excludedRangesBySignal.set(signal, [...workOrderRanges, ...(alertRangesBySignal.get(signal) ?? [])]);
     }
-    const operating = baselineSignals.length
+    // The baseline operators learn from operating hours only, and `avg_while_operating`
+    // averages over them (fuel test report FU-4): either needs the gate.
+    const operating = baselineSignals.length || targets.some((t) => callsOperator(t.compiledPlan, 'avg_while_operating'))
       ? await this.loadOperatingGate(m, tenantId, equipment, readFrom, readTo)
       : undefined;
 
@@ -669,6 +671,13 @@ function resolveWindow(aggWindow: string, at: Date): Window | null {
  * of `x` the display window itself does not cover) — so the batched telemetry
  * read's lower bound reaches far enough back for every operator in the plan,
  * not just the ones with no lookback of their own. */
+/** Whether a compiled plan calls `name` anywhere in it, sibling compositions aside. */
+function callsOperator(node: any, name: string): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (node.type === 'call' && node.name === name) return true;
+  return Object.values(node).some((v) => (Array.isArray(v) ? v.some((x) => callsOperator(x, name)) : callsOperator(v, name)));
+}
+
 function collectSignalLookback(node: any, acc: Map<string, number>): void {
   if (!node || typeof node !== 'object') return;
   switch (node.type) {

@@ -329,6 +329,13 @@
   },
   "scenarios": {
     "intro": "Prediction scenarios for this class. Publishing one means every account granted this class from now on gets a copy — accounts already granted keep whichever version they last adopted.",
+    "rule": {
+      "title": "How it's scored",
+      "loading": "Loading the rule…",
+      "loadFailed": "The rule could not be loaded.",
+      "fallback": "When the readings in that window cannot answer, the machine's own baseline below is used instead.",
+      "figures": "method {{method}} · baseline {{window}} days · warning {{warning}}σ · critical {{critical}}σ · at least {{samples}} samples · needs {{history}} days of history"
+    },
     "new": "New Scenario",
     "newVersionHint": "Saving creates v{{next}} as a draft. v{{current}} stays published until the new one is.",
     "editAsNewVersion": "Edit as new version",

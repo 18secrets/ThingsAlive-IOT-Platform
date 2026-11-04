@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -147,6 +148,9 @@ export const ThingsCareDetailPage: React.FC = () => {
   const goBack = useGoBack('/things-care');
   const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
+  // The cause chains ran and none had enough readings (MIN-5): the recommendation then says
+  // "possible cause", not "found".
+  const [chainsUnconfirmed, setChainsUnconfirmed] = useState(false);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [history, setHistory] = useState<Map<string, Prediction[]>>(new Map());
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -260,7 +264,10 @@ export const ThingsCareDetailPage: React.FC = () => {
 
       {sourceSystem && externalId && (
         <ErrorBoundary fallbackTitle={t('rec.title')}>
-          <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} />
+          <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} chainsUnconfirmed={chainsUnconfirmed} />
+          {/* Forward litres beside the backward-looking risk (fuel test report: "ThingsCare fuel
+              view forward-looking"): the same panel as the machine page. */}
+          <FuelPerShiftPanel sourceSystem={sourceSystem} externalId={externalId} />
         </ErrorBoundary>
       )}
       {sourceSystem && externalId && (
@@ -270,7 +277,10 @@ export const ThingsCareDetailPage: React.FC = () => {
       )}
       {sourceSystem && externalId && (
         <ErrorBoundary fallbackTitle={t('chain.title')}>
-          <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+          <ChainDiagnosisPanel
+            sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null}
+            onDiagnosis={(d) => setChainsUnconfirmed(d.chains.length > 0 && !d.chains.some((c) => c.evaluated))}
+          />
         </ErrorBoundary>
       )}
 

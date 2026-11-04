@@ -144,6 +144,8 @@ function AppData() {
   // cached locally. Everything below this is still mock data.
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [accountsError, setAccountsError] = useState<string | undefined>(undefined);
+  // Whether /accounts has answered yet: until it has, an empty list is not "no clients" (FU-8).
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   // The signed-in client's own real sites (GET /equipment/plants). Separate
   // from the mock `plants` array below on purpose: Master Admin has no
   // tenant of their own, so this stays empty for them, while their still-mock
@@ -247,6 +249,8 @@ function AppData() {
       setAccountsError(undefined);
     } catch (err) {
       setAccountsError(err instanceof ApiError ? err.message : 'Could not load accounts.');
+    } finally {
+      setAccountsLoaded(true);
     }
   };
 
@@ -1169,7 +1173,10 @@ function AppData() {
           <Route
             path="dashboard"
             element={
-              <DashboardPage clients={clients} />
+              <DashboardPage
+                clients={clients}
+                clientsState={!accountsLoaded ? 'loading' : accountsError ? 'unavailable' : 'ok'}
+              />
             }
           />
           <Route path="dashboard-live" element={<Navigate to="/dashboard" replace />} />

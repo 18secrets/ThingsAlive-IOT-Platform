@@ -70,7 +70,7 @@
     "class": "its class",
     "site": "its site",
     "client": "the account",
-    "oem": "the OEM figure"
+    "oem": "the OEM figure on its machine type"
   },
   "oee": {
     "title": "Overall Equipment Effectiveness",
@@ -97,11 +97,17 @@
     "idleThresholdSetBy": "Idle over {{minutes}} min counts, set by {{source}}",
     "burnedVsNominal": "{{actual}} {{unit}} burned vs {{nominal}} nominal",
     "overNominal": "{{litres}} L over nominal",
+    "fuelRateWhileRunning": "Average fuel rate while running: {{rate}} {{unit}} (the same figure as the machine page, for this window)",
     "nominalSetBy": "Nominal set by {{source}}",
+    "nominalFromLibrary": "Nominal {{rate}} {{unit}}, from the library class {{className}} (version {{version}})",
+    "nominalCitation": "Source: {{citation}}",
+    "nominalNoCitation": "No datasheet is recorded for this figure in the library.",
+    "nominalFromParameter": "Nominal {{rate}} {{unit}}, set by {{source}} in Cost Administration",
     "breakdownsInWindow": "Breakdowns in this window",
     "noneRecorded": "None recorded.",
     "ongoing": "ongoing",
-    "waitingOn": "OEE needs {{factors}} first"
+    "waitingOn": "OEE needs {{factors}} first",
+    "nominalOverride": "To use your own figure, set nominal fuel per hour in Cost Administration."
   },
   "detail": {
     "availabilityNotAvailable": "Availability not available",

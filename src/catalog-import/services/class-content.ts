@@ -95,16 +95,23 @@ export const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+import { NO_FUEL_FIGURES, readFuelFigures } from '../../catalog/services/class-fuel-figures';
+
 const noOemFigures = (): OemFigures => ({
   nominalFuelPerHour: null, nominalFuelUnit: null,
   idleBreakdownThresholdMinutes: DEFAULT_IDLE_BREAKDOWN_THRESHOLD_MINUTES,
   runningSignal: null, runningIdleBound: null, availabilitySignal: null,
+  nominalFuelSource: null, ratedPowerKw: null, workingLoadPct: null, bsfcGPerKwh: null, bsfcSource: null,
+  idleFuelPerHour: null, workingShare: null,
 });
 
 export const oemFiguresOf = (c: EquipmentClassProfile): OemFigures => ({
   nominalFuelPerHour: c.nominalFuelPerHour, nominalFuelUnit: c.nominalFuelUnit,
   idleBreakdownThresholdMinutes: c.idleBreakdownThresholdMinutes,
   runningSignal: c.runningSignal, runningIdleBound: c.runningIdleBound, availabilitySignal: c.availabilitySignal,
+  // Not on the entity (class-fuel-figures.ts): unset here; loadCurrentClass overlays the
+  // stored values with readFuelFigures.
+  ...NO_FUEL_FIGURES,
 });
 
 /** The OEM figures an `equipment_class` row states. A blank threshold is the stated
@@ -118,6 +125,13 @@ export function oemFiguresFromRow(payload: Record<string, unknown>): OemFigures 
     runningSignal: strOrNull(payload.running_signal),
     runningIdleBound: num(payload.running_idle_bound) ?? null,
     availabilitySignal: strOrNull(payload.availability_signal),
+    nominalFuelSource: strOrNull(payload.nominal_fuel_source),
+    ratedPowerKw: num(payload.rated_power_kw) ?? null,
+    workingLoadPct: num(payload.working_load_pct) ?? null,
+    bsfcGPerKwh: num(payload.bsfc_g_per_kwh) ?? null,
+    bsfcSource: strOrNull(payload.bsfc_source),
+    idleFuelPerHour: num(payload.idle_fuel_per_hour) ?? null,
+    workingShare: num(payload.working_share) ?? null,
   };
 }
 
@@ -154,7 +168,8 @@ export async function loadCurrentClass(
     content: {
       name: current.name, description: current.description, category: current.category,
       serviceIntervalHours: current.serviceIntervalHours,
-      oem: oemFiguresOf(current),
+      // The fuel figures are not on the entity (class-fuel-figures.ts): read beside it.
+      oem: { ...oemFiguresOf(current), ...(await readFuelFigures(m, slug, current.version)) },
       expectedSignals: current.expectedSignals, failureModes, recommendations,
       defaultThresholds: (current.defaultThresholds ?? {}) as Record<string, ThresholdEntry>,
       sensorRequirements: reqs.map((r) => ({

@@ -1,6 +1,6 @@
 {
   "hero": {
-    "subtitle": "आपके उपकरणों पर दर्ज किए गए काम",
+    "subtitle": "आपकी मशीनों पर दर्ज किए गए काम",
     "heading": "रखरखाव कार्य"
   },
   "loading": "लोड हो रहा है…",
@@ -101,7 +101,7 @@
   "form": {
     "task": "कार्य",
     "taskPlaceholder": "जैसे कूलेंट सेंसर की जाँच करें",
-    "selectEquipment": "उपकरण चुनें",
+    "selectEquipment": "मशीन चुनें",
     "priority": "प्राथमिकता",
     "dueDate": "नियत तिथि",
     "description": "विवरण",

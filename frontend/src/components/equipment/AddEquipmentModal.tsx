@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption } from '../../lib/api';
+import {
+  ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption, ShiftTemplate,
+  apiApplyShiftTemplate, apiListShiftTemplates,
+} from '../../lib/api';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (input: EquipmentInput) => Promise<void>;
+  /** Resolves to the new machine when the caller has it, so a shift template can be applied to it. */
+  onSave: (input: EquipmentInput) => Promise<EquipmentProfile | void>;
   onUpdate: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
   ) => Promise<void>;
@@ -46,6 +50,10 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   const [modelNumber, setModelNumber] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [tier, setTier] = useState<ServiceTier>('basic');
+  // The working day, from the library's shift templates (fuel test report FU-3): a machine
+  // given one here has shift hours from its first shift, so its fuel can be predicted.
+  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
+  const [shiftTemplate, setShiftTemplate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -64,6 +72,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     setModelNumber('');
     setSerialNumber('');
     setTier('basic');
+    setShiftTemplate('');
     setError(undefined);
   };
 
@@ -82,9 +91,18 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     } else {
       reset();
     }
+    setShiftTemplate('');
     setError(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, existingEquipment]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let live = true;
+    // Optional: without the library's templates the form still registers a machine.
+    apiListShiftTemplates().then((list) => { if (live) setShiftTemplates(list); }).catch(() => { if (live) setShiftTemplates([]); });
+    return () => { live = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -119,8 +137,9 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           serialNumber: serialNumber.trim() || undefined,
           tier,
         });
+        if (shiftTemplate) await apiApplyShiftTemplate(existingEquipment.sourceSystem, existingEquipment.externalId, shiftTemplate);
       } else {
-        await onSave({
+        const created = await onSave({
           code: finalCode,
           name: finalName,
           description: description.trim() || undefined,
@@ -131,6 +150,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           serialNumber: serialNumber.trim() || undefined,
           tier,
         });
+        if (shiftTemplate && created) await apiApplyShiftTemplate(created.sourceSystem, created.externalId, shiftTemplate);
       }
       reset();
       onClose();
@@ -308,12 +328,34 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             />
           </div>
 
+          {shiftTemplates.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('equipmentForm.shiftTemplate')}
+              </label>
+              <SelectPicker
+                data={shiftTemplates.map((st) => ({ label: st.name, value: st.slug }))}
+                value={shiftTemplate || null}
+                onChange={(value) => setShiftTemplate(value ?? '')}
+                placeholder={isEditing ? t('equipmentForm.shiftTemplateKeep') : t('equipmentForm.shiftTemplateNone')}
+                block
+                searchable={false}
+              />
+              <p className="text-xs text-slate-400 mt-1">{t('equipmentForm.shiftTemplateHint')}</p>
+            </div>
+          )}
+
           {error && (
             <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
 
+          {/* Shifts are kept per machine on its page, not in this form; testers looked for them
+              here (fuel test report TC-FP-07), so the form says where they are. */}
+          {/* With library shift templates the form sets shifts itself (the picker below); the
+              pointer to the machine page is for when there are none to choose from. */}
+          {shiftTemplates.length === 0 && <p className="text-xs text-slate-500">{t('equipmentForm.shiftsHint')}</p>}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"

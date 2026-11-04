@@ -33,7 +33,10 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
         message = body;
       } else if (body && typeof body === 'object') {
         const b = body as Record<string, any>;
-        message = Array.isArray(b.message) ? 'Request validation failed.' : b.message ?? message;
+        // A validation failure says what failed (test report MIN-2): one violation is the
+        // message; several lead with the first and count the rest. Every one stays in
+        // `details.violations` for a form to place beside its field.
+        message = Array.isArray(b.message) ? validationMessage(b.message) : b.message ?? message;
         if (Array.isArray(b.message)) details = { violations: b.message };
         if (b.code) code = b.code;
       }
@@ -54,6 +57,13 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
 
     res.status(status).json({ error: { code, message, details } });
   }
+}
+
+function validationMessage(violations: unknown[]): string {
+  const said = violations.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
+  if (said.length === 0) return 'Request validation failed.';
+  if (said.length === 1) return said[0];
+  return `${said[0]} (and ${said.length - 1} more problem${said.length === 2 ? '' : 's'} with this request)`;
 }
 
 function codeFor(status: number): string {

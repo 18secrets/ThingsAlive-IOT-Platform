@@ -177,6 +177,7 @@
   },
   "master": {
     "totalClients": "Total Clients",
+    "clientsUnreadable": "The accounts list could not be read.",
     "activeCount": "{{count}} active",
     "devicesInPool": "Devices in pool",
     "poolUnreadable": "Could not read the device pool",
@@ -232,7 +233,25 @@
     "shieldCell": "{{category}}: {{status}}",
     "thisWeekOee": "This week (OEE)",
     "costParams": "Cost parameters for this machine",
-    "notSet": "not set"
+    "notSet": "not set",
+    "fuel": {
+      "title": "Fuel per shift",
+      "none": "No fuel forecast for this machine. Forecasts cover machines whose shift fuel totals come from the existing platform.",
+      "shiftLabel": "Shift {{n}} · {{date}}",
+      "nowTitle": "{{shift}} · expected by its end",
+      "nowDetail": "{{soFar}} L burned so far + {{rest}} L expected in the rest of the shift",
+      "asOf": "Re-forecast {{time}}",
+      "stale": "fuel counter last read {{time}}",
+      "forecast": "Forecast {{litres}} L",
+      "noForecast": "No forecast issued",
+      "noHistory": "No history yet, so the forecast is 0 L",
+      "actual": "actual {{litres}} L in {{hours}} h",
+      "notTotalled": "actual not totalled yet",
+      "running": "Running",
+      "next": "Next",
+      "accuracy": "{{pct}}% accurate",
+      "method": "Forecast from this machine's own shifts over the last 28 days. Shift 1 is 08:00–20:00, shift 2 is 20:00–08:00 (India time)."
+    }
   },
   "thing": {
     "notFoundTitle": "Thing not found",

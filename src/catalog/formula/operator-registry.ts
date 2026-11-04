@@ -53,7 +53,16 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
     name: 'rate', argKinds: ['series'], resultKind: 'scalar',
     unitRule: ([u]) => divideByHour(u),
   },
-  fraction_within: {
+  // The average of a rate while the machine is operating (fuel test report FU-4): litres
+  // over running hours, not the mean of every reading in the window. `avg` of a fuel rate
+  // moved with how long the machine stood parked inside the window and disagreed with
+  // Production's litres ÷ hours. Operating is Availability's definition: inside a shift,
+  // engine on. Same unit as its argument.
+  avg_while_operating: {
+    name: 'avg_while_operating', argKinds: ['series'], resultKind: 'scalar',
+    unitRule: ([u]) => u,
+  },
+    fraction_within: {
     name: 'fraction_within', argKinds: ['series', 'scalar', 'scalar'], resultKind: 'scalar',
     unitRule: () => DIMENSIONLESS,
   },

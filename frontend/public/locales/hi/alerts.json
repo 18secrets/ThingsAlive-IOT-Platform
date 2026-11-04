@@ -37,7 +37,7 @@
     "chain-origin": "श्रृंखला का स्रोत"
   },
   "scope": {
-    "unknownPlant": "अज्ञात प्लांट",
+    "unknownPlant": "अज्ञात साइट",
     "equipmentClass": "उपकरण श्रेणी",
     "account": "पूरा खाता",
     "oneSite": "एक साइट",
@@ -132,7 +132,7 @@
   "assistant": {
     "heroTitle": "अपना अलार्म सामान्य भाषा में बताएँ",
     "heroBody": "ThingsAlive AI उन्नत सिमेंटिक प्रोसेसिंग से आपकी व्यावसायिक ज़रूरतों को मज़बूत, औद्योगिक स्तर के निगरानी वर्कफ़्लो में बदलता है।",
-    "selectEquipment": "उपकरण चुनें…",
+    "selectEquipment": "मशीन चुनें…",
     "createCustom": "कस्टम बनाएँ",
     "selectThingFirst": "अलर्ट बताने या बनाने से पहले एक Thing चुनें।",
     "aiPrompt": "AI प्रॉम्प्ट",
