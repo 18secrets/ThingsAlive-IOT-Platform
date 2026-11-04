@@ -99,9 +99,16 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline text-slate-400">/</span>
             </>
           )}
-          <h1 className="text-base sm:text-xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight truncate">
-            {title}
-          </h1>
+          {/* On a phone the zone sits under the title: in the icon row it took the title's
+              width (cut to "D…") and, at X-Large text, ran into the menu button. */}
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight truncate">
+              {title}
+            </h1>
+            <p className="md:hidden text-[0.6875rem] leading-tight text-slate-500 dark:text-slate-400 truncate" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
+              {VIEWER_ZONE.short}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -111,10 +118,6 @@ export const Header: React.FC<HeaderProps> = ({
             which (test report MIN-12) — the fleet is in India, a viewer may not be. */}
         <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
           {t('header.timeZone', { zone: VIEWER_ZONE.short })}
-        </span>
-        {/* A phone said no zone at all (03 Nov retest of MIN-12): the zone alone fits. */}
-        <span className="md:hidden text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
-          {VIEWER_ZONE.short}
         </span>
         {/* Notification Bell */}
         <div className="relative">
@@ -156,14 +159,15 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Theme Toggle (matching the blue circle for Sun in screenshot) */}
+        {/* Theme Toggle (matching the blue circle for Sun in screenshot). On a phone only the
+            button that switches is shown: the pair, at Large text, pushed the title out. */}
         <div className="flex items-center gap-1.5">
           <button 
             id="theme-toggle-light"
             onClick={() => isDarkMode && onToggleDarkMode()}
             className={`p-1.5 rounded-full transition-all cursor-pointer ${
               !isDarkMode 
-                ? 'bg-sky-600 text-white shadow-xs' 
+                ? 'hidden sm:inline-flex bg-sky-600 text-white shadow-xs' 
                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
             }`} 
             title={t('header.lightMode')}
@@ -175,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => !isDarkMode && onToggleDarkMode()}
             className={`p-1.5 rounded-full transition-all cursor-pointer ${
               isDarkMode 
-                ? 'bg-sky-600 text-white shadow-xs' 
+                ? 'hidden sm:inline-flex bg-sky-600 text-white shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
             }`} 
             title={t('header.darkMode')}
@@ -188,7 +192,7 @@ export const Header: React.FC<HeaderProps> = ({
           <TextSizeSelector />
         </div>
 
-        <LanguageSelector />
+        <LanguageSelector compactOnPhone />
 
         {/* User Profile / Exit matching screenshot */}
         <div className="flex items-center gap-2">
