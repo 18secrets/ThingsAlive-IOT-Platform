@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -264,6 +265,9 @@ export const ThingsCareDetailPage: React.FC = () => {
       {sourceSystem && externalId && (
         <ErrorBoundary fallbackTitle={t('rec.title')}>
           <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} chainsUnconfirmed={chainsUnconfirmed} />
+          {/* Forward litres beside the backward-looking risk (fuel test report: "ThingsCare fuel
+              view forward-looking"): the same panel as the machine page. */}
+          <FuelPerShiftPanel sourceSystem={sourceSystem} externalId={externalId} />
         </ErrorBoundary>
       )}
       {sourceSystem && externalId && (
