@@ -10,6 +10,8 @@ Do not re-derive a decision that is already written down there.
 - Users are created in 2.0. The legacy backend holds raw data only.
 - Do not create, edit or delete anything under `frontend/`. It stays.
   The UI is built by the UI team. Build the API that supports it, never the page.
+  When a task does change `frontend/` by exception, `docs/ai/FRONTEND_CHECKLIST.md`
+  applies in full: five languages, phone/tablet/desktop, dark mode, text size, alignment.
 - Do not add an npm dependency unless the task explicitly approves it by name.
 - Do not edit an existing test to make new code pass. If an existing test fails,
   stop and report it.

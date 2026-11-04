@@ -1,0 +1,116 @@
+# Frontend change checklist
+
+Every change under `frontend/` is done only when it passes all of this, whoever makes it.
+A screen that works in English, light mode, on a laptop is a third of the job: the
+console is used in five languages, on phones and in dark mode, at four text sizes.
+
+Each rule below exists because something reached `main` without it (dates are when it
+was found). Check the item; do not argue it away.
+
+## 1. Language: all five, every time
+
+Languages: `en`, `hi`, `ta`, `te`, `or`. Files: `frontend/public/locales/<lang>/<namespace>.json`.
+
+- [ ] Every new text is a key in the namespace's file, **in all five languages**, in the
+      same change. A `t('key', { defaultValue: 'English' })` with no file entry shows
+      English to every Hindi, Tamil, Telugu and Odia reader. (Site twin: 51 labels, 3 Nov.
+      Fuel accuracy page: 47, 3 Nov. Geofence map: 77, since 29 Oct.)
+- [ ] English in the file is the same words as the `defaultValue` in the code. Change one,
+      change the other.
+- [ ] No English typed straight into JSX, a `title=`, an `aria-label`, a `placeholder`, a
+      chart label, a toast, or a 3-D/canvas label. All go through `t()`.
+- [ ] One key, one meaning. Never reuse a key for a different text: with a file entry,
+      both places show the same words. (`siteTwin.place` was a picker label and a button, 3 Nov.)
+- [ ] Counts use plural keys: `name_one` and `name_other` in every language, called with
+      `{ count }`.
+- [ ] Every translation keeps the English `{{placeholders}}`, exactly. A dropped
+      `{{count}}` drops the number from the sentence.
+- [ ] A text that names another part of the screen ("under Shift schedule") quotes that
+      part's own translated label in each language, not a fresh translation of it.
+- [ ] Data is not translated: machine, site, zone and class names stay as entered.
+- [ ] Check: no key is missing in any language (script in "How to check" below).
+
+## 2. Screen sizes
+
+Check at **390 px** (phone), **768 px** (tablet) and **1440 px** (desktop).
+
+- [ ] No sideways scroll on the page at any width. A wide table scrolls inside its own box.
+- [ ] Button rows and toolbars wrap (`flex-wrap`) instead of pushing buttons off screen.
+- [ ] Grids drop columns as the screen narrows (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`).
+- [ ] Fixed widths only from `sm:` up (`w-full sm:w-64`); on a phone a picker is full width.
+- [ ] Long text truncates or wraps on purpose (`truncate`, `min-w-0`, `break-words`), never
+      overlapping its neighbour.
+- [ ] The header keeps the page title readable on a phone; extra controls hide below `sm`
+      (`hidden sm:block`) and live somewhere else too (e.g. Settings).
+- [ ] Popups (Modal) fit a phone: content scrolls inside, buttons stay reachable.
+
+## 3. Light and dark theme
+
+- [ ] Every colour has its dark pair: `bg-white dark:bg-slate-900`,
+      `border-slate-200 dark:border-slate-800`, `text-slate-800 dark:text-slate-100`, and so on.
+- [ ] Muted text is `text-slate-500` (or the darkened `slate-400` in light mode), never
+      lighter. Light grey was unreadable (team feedback, 3 Nov).
+- [ ] No hard-coded hex for text or backgrounds outside a chart or 3-D scene; chips use
+      `Chip` tones and status colours come from `statusTone` / `severityTone`.
+- [ ] Check every changed screen once in dark mode.
+
+## 4. Text size (Small / Default / Large / X-Large)
+
+The reader picks a text size; it is the root font size, so everything in `rem` follows.
+
+- [ ] Sizes in `rem` or Tailwind's scale only: `text-xs`, `text-[0.6875rem]`. **No
+      `text-[11px]`**, no `fontSize: 11` in inline styles, chart options or 3-D labels.
+- [ ] Check the screen at X-Large (125 %) on a phone: nothing overflows or overlaps.
+
+## 5. Alignment and layout: compare with the pages beside it
+
+Before building, open the nearest existing page of the same kind and match it.
+
+- [ ] **Lists** use the shared pieces, as every list page does: `LIST_PANEL` box,
+      `ViewModeToggle` (list view by default, not remembered), `SortSelect`,
+      `ListTable` / `RecordCards`, `TablePagination` with `usePagination(items)`
+      (10 per page; 10 / 20 / 50 / 100), `pinToBottom`. The switch and sort sit before the
+      page's buttons.
+- [ ] **Page top**: a heading-only banner, then one card holding the main data and links
+      (Machine summary, Production detail, ThingsCare follow this).
+- [ ] **Panels with lists** use `PanelRow` / `PanelRows`: title on one line, detail on the
+      second, chip or time on the right.
+- [ ] **Cards**: `bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800
+      rounded-xl p-4 shadow-xs`. Section labels: `text-xs font-semibold uppercase
+      tracking-wide text-slate-500`.
+- [ ] **Controls on one row are one height** (`h-8` beside rsuite `size="sm"`), and a
+      picker keeps one width whatever is selected (wrap it in a fixed-width box, `block`).
+- [ ] Gaps stay constant whatever the content; nothing shifts when a value or label changes.
+- [ ] Cards in a row keep their own height; do not stretch them to match (team decision).
+- [ ] Each value appears once on a screen; no duplicated figures or headings.
+- [ ] Filters: `EquipmentFilters` with its popup; one search, not two.
+
+## 6. States, access and data
+
+- [ ] Loading, empty, error and "not available for your role" each have their own words;
+      none shows a raw code, `undefined`, or a wrong zero while data loads.
+- [ ] A button the user cannot use is hidden (or disabled with the reason), not shown to
+      fail. Pages a role cannot open are not in its sidebar (`pageAccess`).
+- [ ] Destructive actions confirm; actions that need a reason refuse an empty one.
+- [ ] A figure says its source and unit when it could be read two ways.
+
+## How to check
+
+Run all of these before saying the change is done:
+
+1. `cd frontend && npm run build` and `npm run lint` at the root (type check + encoding).
+2. Missing keys, from `frontend/`:
+
+   ```
+   node -e 'const fs=require("fs");const f=(o,p="")=>Object.entries(o).flatMap(([k,v])=>v&&typeof v==="object"?f(v,p+k+"."):[p+k]);const b=k=>k.replace(/_(one|other)$/,"");for(const n of fs.readdirSync("public/locales/en")){const en=new Set(f(require("./public/locales/en/"+n)).map(b));for(const l of ["hi","ta","te","or"]){const o=new Set(f(require(`./public/locales/${l}/`+n)).map(b));const m=[...en].filter(k=>!o.has(k));if(m.length)console.log(l,n,m.length,m.slice(0,10).join(", "))}}'
+   ```
+
+   Nothing printed = nothing missing.
+3. Open every changed screen in a browser (Playwright, or by hand) with a throwaway user,
+   deleted afterwards:
+   - 1440 px and 390 px, light and dark;
+   - Hindi (`localStorage.i18nextLng = 'hi'`): no English left except data;
+   - X-Large text size;
+   - no page errors in the console, no sideways scroll (`main.scrollWidth <= main.clientWidth`).
+4. Put the old and new screen side by side with its neighbour page and look at the
+   alignment, not only at whether it works.
