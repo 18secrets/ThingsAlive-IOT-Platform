@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { vaniSeverity } from './vani-severity';
+import { speakableSummary } from './vani-speech';
 
 const logger = new Logger('VaniQueue');
 
@@ -63,7 +64,9 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
     // not record on the alert would be words put in Vani's mouth.
     context: {
       alert_title: alert.ruleName,
-      summary: alert.summary,
+      // Said aloud, so composed from the alert's evidence rather than the engine's
+      // screen wording (`vani-speech.ts`).
+      summary: speakableSummary(alert, link.spoken_name),
     },
     ...(link.callback_url ? { callback_url: link.callback_url } : {}),
   };
