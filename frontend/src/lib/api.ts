@@ -2509,6 +2509,19 @@ export interface ShiftFuelAccuracy {
   latestDataDate: string | null;
 }
 
+/**
+ * Which fuel-burning machines the shift fuel forecast covers, and why the rest are not
+ * (`/shift-fuel-coverage`, fuel test report FU-6): a machine missing from the accuracy
+ * table is listed here with its reason instead of simply being absent.
+ */
+export interface ShiftFuelCoverage {
+  from: string; to: string; asOf: string; fuelled: number; covered: number;
+  notCovered: { sourceSystem: string; externalId: string; name: string | null; reason: "mirrored_from_1_0" | "no_shift_totals" }[];
+}
+export function apiGetShiftFuelCoverage(query: { from: string; to: string }): Promise<ShiftFuelCoverage> {
+  return authFetch(`/shift-fuel-coverage?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`);
+}
+
 /** Either date left out is today in India, on the server's clock. */
 export function apiGetShiftFuelAccuracy(
   query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},

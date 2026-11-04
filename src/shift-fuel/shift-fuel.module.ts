@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { LegacyShiftMetricsModule } from '../legacy/legacy-shift-metrics.module';
 import { ExpectedFuelApiService } from './expected-fuel-api.service';
+import { ShiftFuelCoverageService } from './shift-fuel-coverage.service';
 import { ShiftFuelAccuracyApiService } from './shift-fuel-accuracy-api.service';
 import { ShiftFuelApiService } from './shift-fuel-api.service';
 import { ShiftFuelNowcastApiService } from './shift-fuel-nowcast-api.service';
@@ -24,7 +25,7 @@ import { ShiftFuelService } from './shift-fuel.service';
   providers: [
     ShiftFuelService, ShiftFuelScheduler, ShiftFuelApiService,
     ShiftFuelNowcastService, ShiftFuelNowcastScheduler, ShiftFuelNowcastApiService,
-    ShiftFuelAccuracyApiService, ExpectedFuelApiService,
+    ShiftFuelAccuracyApiService, ExpectedFuelApiService, ShiftFuelCoverageService,
   ],
   exports: [ShiftFuelService],
 })

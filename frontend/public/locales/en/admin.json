@@ -37,6 +37,14 @@
     "rowsDropped_other": "{{formatted}} rows"
   },
   "fuelAccuracy": {
+    "notCovered": {
+      "summary_one": "{{count}} of {{fuelled}} machines with a fuel sensor has no forecast in this range. Why:",
+      "summary_other": "{{count}} of {{fuelled}} machines with a fuel sensor have no forecast in this range. Why:",
+      "reason": {
+        "no_shift_totals": "the existing platform sent no shift totals for this equipment number, so there is no history to forecast from. Its expected litres per shift are on its machine page.",
+        "mirrored_from_1_0": "mirrored from IoT Platform 1.0, whose records are not matched to the existing platform's equipment numbers."
+      }
+    },
     "title": "Fuel forecast accuracy",
     "updated": "Updated {{time}}. Refreshes every 15 minutes.",
     "loadFailed": "Could not load fuel forecast accuracy.",

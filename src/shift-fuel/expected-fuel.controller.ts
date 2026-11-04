@@ -1,9 +1,11 @@
-import { Controller, Get, Param } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { ExpectedFuelApiService, MachineExpectedFuel } from './expected-fuel-api.service';
+import { AccuracyQueryError, parseAccuracyQuery } from './shift-fuel-accuracy';
+import { ShiftFuelCoverage, ShiftFuelCoverageService } from './shift-fuel-coverage.service';
 
 /**
  * Expected litres per shift before a machine has any history (fuel test report TC-FP-07,
@@ -13,7 +15,10 @@ import { ExpectedFuelApiService, MachineExpectedFuel } from './expected-fuel-api
 @ApiTags('Forecasts')
 @Controller()
 export class ExpectedFuelController {
-  constructor(private readonly expected: ExpectedFuelApiService) {}
+  constructor(
+    private readonly expected: ExpectedFuelApiService,
+    private readonly coverageService: ShiftFuelCoverageService,
+  ) {}
 
   @Get('equipment/:sourceSystem/:externalId/expected-fuel')
   @Requires('prediction.read')
@@ -31,5 +36,31 @@ export class ExpectedFuelController {
     @Param('externalId') externalId: string,
   ): Promise<MachineExpectedFuel> {
     return this.expected.machine(scope, { sourceSystem, externalId });
+  }
+
+  @Get('shift-fuel-coverage')
+  @Requires('prediction.read')
+  @ApiQuery({ name: 'from', required: false, description: 'First sdate, YYYY-MM-DD; default today in Asia/Kolkata' })
+  @ApiQuery({ name: 'to', required: false, description: 'Last sdate, inclusive; default today' })
+  @ApiOperation({
+    summary: 'Which fuel-burning machines the shift fuel forecast covers, and why the rest are not',
+    description: 'A machine is fuel-burning when a fuel_consumption or fuel_level signal was bound to it in the range; '
+      + 'covered when the existing platform sent at least one shift total for it in the range. notCovered lists the rest: '
+      + 'mirrored_from_1_0 (keyed by 1.0\'s row id, never matched to an equipment number) or no_shift_totals.',
+  })
+  coverage(
+    @CurrentScope() scope: RequestScope,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ): Promise<ShiftFuelCoverage> {
+    const at = new Date();
+    let query;
+    try {
+      query = parseAccuracyQuery({ from, to }, at);
+    } catch (err) {
+      if (err instanceof AccuracyQueryError) throw new BadRequestException(err.message);
+      throw err;
+    }
+    return this.coverageService.coverage(scope, query, at);
   }
 }
