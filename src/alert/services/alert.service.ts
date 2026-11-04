@@ -1,4 +1,5 @@
 import { absorbAlerts } from '../../incident/incident-absorb';
+import { queueVaniCalls } from '../../vani/vani-queue';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -340,6 +341,9 @@ export class AlertService {
       // Into incidents in this same transaction (phase 2): an alert and the incident
       // that owns it commit together or not at all.
       await absorbAlerts(m, context.tenantId, fired);
+      // And a Vani call request for any of them on a linked machine, also in this
+      // transaction, so the alert and the request to phone about it commit together.
+      await queueVaniCalls(m, context.tenantId, fired);
       return fired;
     });
   }
