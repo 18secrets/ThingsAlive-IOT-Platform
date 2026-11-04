@@ -39,6 +39,12 @@ const ACTIVITY_NAME: Record<SiteTwinActivity, string> = {
 const ACTIVITY_COLOUR: Record<SiteTwinActivity, string> = {
   productive: '#16a34a', idle: '#f59e0b', 'running-unclassified': '#0ea5e9', off: '#64748b', unknown: '#94a3b8',
 };
+/** The same five states as text: a colour class with its dark pair, never a hex on words. */
+const STATUS_TEXT: Record<SiteTwinStatus, string> = {
+  alert: 'text-rose-600 dark:text-rose-400', live: 'text-emerald-600 dark:text-emerald-400',
+  no_data: 'text-amber-600 dark:text-amber-400', blocked: 'text-violet-600 dark:text-violet-400',
+  not_configured: 'text-slate-500 dark:text-slate-400',
+};
 const STATUS_ORDER: SiteTwinStatus[] = ['live', 'alert', 'no_data', 'blocked', 'not_configured'];
 // The fleet reports about every 20 s; the twin follows it.
 const REFRESH_MS = 20_000;
@@ -284,7 +290,9 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     else void frame.current?.requestFullscreen();
   };
 
-  if (error) {
+  // Only a first load that fails replaces the card: a refresh that fails every 20 s used to
+  // swap a working twin for an error box. It keeps the last answer and says it is stale.
+  if (error && !twin) {
     return (
       <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
         <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
@@ -330,7 +338,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
             </span>
           )}
           <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-200">
-            {t('siteTwin.onSite', { defaultValue: '{{n}} machines on site', n: twin.summary.total })}
+            {t('siteTwin.onSite', { count: twin.summary.total })}
           </span>
           {(['productive', 'idle'] as SiteTwinActivity[]).map((a) => {
             const n = twin.machines.filter((m) => m.activity === a).length;
@@ -349,21 +357,27 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
       </div>
 
       {/* ------------------------------------------------- place and equipment */}
+      {error && (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span>{t('siteTwin.refreshFailed', { error })}</span>
+        </div>
+      )}
       {/* Two pickers rather than a row of tabs: a big site has twenty places and sixty
           machines, and a picker holds them all without running off the card. */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800">
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500 w-full sm:w-auto">
           {t('siteTwin.placePicker', { defaultValue: 'Place' })}
           <select
             value={focusMachine ? '' : String(focusIndex)}
             onChange={(e) => { setFocusMachine(null); setSelected(null); setFocusIndex(Number(e.target.value)); }}
-            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[260px]"
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold min-w-0 flex-1 sm:flex-none sm:max-w-[260px]"
           >
             <option value="-1">{t('siteTwin.overview', { defaultValue: 'Whole site' })}</option>
             {zones.map((z, i) => <option key={z.key} value={String(i)}>{z.label}</option>)}
           </select>
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+        <label className="flex items-center gap-1.5 text-xs text-slate-500 w-full sm:w-auto">
           {t('siteTwin.equipment', { defaultValue: 'Equipment' })}
           <select
             value={focusMachine ?? ''}
@@ -372,7 +386,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
               setFocusMachine(k); setSelected(k);
               if (!k) setFocusIndex(-1);
             }}
-            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold max-w-[300px]"
+            className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold min-w-0 flex-1 sm:flex-none sm:max-w-[300px]"
           >
             <option value="">{t('siteTwin.allEquipment', { defaultValue: 'All equipment' })}</option>
             {[...twin.machines].sort((x, y) => (x.name ?? x.externalId).localeCompare(y.name ?? y.externalId)).map((m) => (
@@ -407,7 +421,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         return (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-xs bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800">
             <span className="font-semibold text-slate-800 dark:text-slate-100">{z.label}</span>
-            <span className="text-slate-500">{zoneLabel(z.kind)} · {z.widthM} × {z.depthM} m{z.floors ? ` · ${z.floors} floors` : ''}</span>
+            <span className="text-slate-500">{zoneLabel(z.kind)} · {t('siteTwin.zoneSize', { w: z.widthM, d: z.depthM })}{z.floors ? ` · ${t('siteTwin.floorsCount', { count: z.floors })}` : ''}</span>
             {SITE_PROGRESS_KINDS.includes(z.kind) && (
               z.progressPct !== null && z.progressPct !== undefined ? (
                 <span className="flex items-center gap-2">
@@ -445,9 +459,10 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         </div>
       )}
 
-      <div className={`relative flex ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
+      <div className={`relative flex flex-col sm:flex-row ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
         {/* ------------------------------------------------------------- canvas */}
-        <div className={`relative flex-1 ${fullscreen ? 'h-full' : 'h-[640px]'}`}>
+        {/* flex-1 only side by side: stacked on a phone it took the height to nothing (150 px). */}
+        <div className={`relative w-full sm:flex-1 ${fullscreen ? 'h-full' : 'h-[440px] sm:h-[640px]'}`}>
           <Suspense fallback={<div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 animate-pulse" />}>
             <SiteTwinScene
               extent={extent} zones={zones} machines={shown}
@@ -471,14 +486,16 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
           </div>
 
           {/* --------------------------------------------------------- legend */}
-          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-xs text-slate-700 dark:text-slate-200 space-y-1 max-w-[60%]">
+          {/* On a phone the legend keeps the statuses and the route note; the zone kinds
+              are on the ground already, and the full legend covered most of the scene. */}
+          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 rounded-lg shadow px-3 py-2 text-xs text-slate-700 dark:text-slate-200 space-y-1 max-w-[calc(100%-4.5rem)] sm:max-w-[60%]">
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {STATUS_ORDER.map((s) => (
                 <span key={s} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS_COLOUR[s] }} /> {statusLabel(s)}</span>
               ))}
             </div>
             {zones.length > 0 && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+              <div className="hidden sm:flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-slate-100 dark:border-slate-800">
                 {[...new Set(zones.map((z) => z.kind))].map((k) => (
                   <span key={k} className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm" style={{ background: ZONE_COLOUR[k] }} /> {zoneLabel(k)}</span>
                 ))}
@@ -502,9 +519,9 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
                 </div>
                 <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
               </div>
-              <div className="flex items-center gap-1.5 font-semibold" style={{ color: STATUS_COLOUR[sel.status] }}>
+              <div className={`flex items-center gap-1.5 font-semibold ${STATUS_TEXT[sel.status]}`}>
                 <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOUR[sel.status] }} /> {statusLabel(sel.status)}
-                {sel.openAlerts > 0 && <span className="text-slate-500 font-normal">· {t('siteTwin.openAlerts', { defaultValue: '{{n}} open alerts', n: sel.openAlerts })}</span>}
+                {sel.openAlerts > 0 && <span className="text-slate-500 font-normal">· {t('siteTwin.openAlerts', { count: sel.openAlerts })}</span>}
               </div>
               <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                 <span className="w-2 h-2 rounded-full" style={{ background: sel.breakdown ? '#e11d48' : ACTIVITY_COLOUR[sel.activity] }} />
@@ -564,7 +581,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
 
         {/* ------------------------------------------------------- layout editor */}
         {draft && (
-          <aside className={`w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'max-h-[640px]'}`}>
+          <aside className={`w-full sm:w-72 shrink-0 border-t sm:border-t-0 sm:border-l border-slate-200 dark:border-slate-800 p-3 space-y-3 overflow-y-auto text-xs ${fullscreen ? '' : 'sm:max-h-[640px]'}`}>
             <button
               disabled={composing} onClick={() => void compose()}
               className="w-full px-3 py-2 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-semibold disabled:opacity-60"

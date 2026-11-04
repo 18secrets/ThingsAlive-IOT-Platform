@@ -93,7 +93,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-2"><Box className="w-4 h-4 text-sky-600" />{t('model.title')}</h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             v{version} · {isDraft ? t('visual.draftEditable') : t('visual.publishedReadOnly')}
             {model?.geometryVersion != null && ` · ${t('model.geometryVersion', { version: model.geometryVersion })}`}
           </p>
@@ -121,7 +121,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
             {model.state === 'upload_pending' ? t('visual.uploadPending') : t('model.noModel')}
             {model.unplacedSignals.length > 0 && ` ${t('visual.unplaced', { count: model.unplacedSignals.length })}`}
           </p>
-          {isDraft ? uploader : <p className="text-xs text-slate-400">{t('visual.draftOnly')}</p>}
+          {isDraft ? uploader : <p className="text-xs text-slate-500 dark:text-slate-400">{t('visual.draftOnly')}</p>}
         </div>
       ) : model.modelUrl ? (
         <div className="space-y-3">

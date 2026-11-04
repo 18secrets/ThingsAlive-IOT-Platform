@@ -53,7 +53,7 @@ export const PortOverviewPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
+      <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
         <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
       </div>
     );
@@ -61,10 +61,10 @@ export const PortOverviewPage: React.FC = () => {
   if (!port) return <div className="h-[640px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
 
   const current = siteId ?? [...port.sites].sort((a, b) => b.summary.total - a.summary.total)[0]?.site.plantId ?? ALL;
-  const btn = 'p-2 rounded-lg bg-white/95 dark:bg-slate-800/95 shadow border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50';
+  const btn = 'p-2 rounded-lg bg-white/95 dark:bg-slate-800/95 shadow border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700';
   const stat = (label: string, value: React.ReactNode, tone = 'text-slate-900 dark:text-slate-100') => (
     <div className="px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 min-w-[120px]">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`text-lg font-bold ${tone}`}>{value}</div>
     </div>
   );
@@ -85,8 +85,8 @@ export const PortOverviewPage: React.FC = () => {
         <div className="ml-auto flex flex-wrap gap-2">
           {stat(t('portTwin.sites', { defaultValue: 'Sites' }), port.summary.sites)}
           {stat(t('portTwin.machines', { defaultValue: 'Machines' }), port.summary.machines)}
-          {stat(t('portTwin.live', { defaultValue: 'Live' }), port.summary.live, 'text-emerald-600')}
-          {stat(t('portTwin.alerts', { defaultValue: 'Alerts' }), port.summary.alert, port.summary.alert ? 'text-rose-600' : undefined)}
+          {stat(t('portTwin.live', { defaultValue: 'Live' }), port.summary.live, 'text-emerald-600 dark:text-emerald-400')}
+          {stat(t('portTwin.alerts', { defaultValue: 'Alerts' }), port.summary.alert, port.summary.alert ? 'text-rose-600 dark:text-rose-400' : undefined)}
           {port.summary.workforce !== null && stat(
             t('portTwin.workforce', { defaultValue: 'Workforce (simulated)' }), port.summary.workforce.toLocaleString(),
           )}
