@@ -2863,6 +2863,23 @@ export interface MachineExpectedFuel {
   equipmentClass: { slug: string; version: number; name: string } | null;
   shifts: ExpectedShiftFuel[];
 }
+/** A library class version's fuel figures and what D55 still needs (`catalog.write`). */
+export interface ClassFuelFigures {
+  classSlug: string; classVersion: number; className: string;
+  figures: {
+    nominalFuelPerHour: number | null; nominalFuelUnit: string | null; nominalFuelSource: string | null;
+    ratedPowerKw: number | null; workingLoadPct: number | null; bsfcGPerKwh: number | null; bsfcSource: string | null;
+    idleFuelPerHour: number | null; workingShare: number | null;
+  };
+  /** Null until the figures give a full answer. */
+  workingRateFrom: "bsfc" | "nominal" | null;
+  /** Empty: every machine on this version with a shift schedule gets expected litres. */
+  blockedBy: Exclude<ExpectedFuelBlocker, "no_class" | "no_shift_schedule">[];
+}
+export function apiGetClassFuelFigures(slug: string, version: number): Promise<ClassFuelFigures> {
+  return authFetch(`/catalog/authoring/equipment-classes/${encodeURIComponent(slug)}/fuel-figures?version=${version}`);
+}
+
 export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Promise<MachineExpectedFuel> {
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
 }
