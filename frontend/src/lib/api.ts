@@ -2796,6 +2796,24 @@ export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Pr
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
 }
 
+/**
+ * How a library scenario version is scored, in the numbers the scorer uses
+ * (`/catalog/authoring/scenarios/:id/rule`, fuel test report FU-1). Master Admin only.
+ */
+export interface ScenarioRule {
+  scenarioId: string; slug: string; version: number;
+  method: "influence@1" | "tier1@1";
+  requiredSignals: string[]; minimumHistoryDays: number;
+  baseline: { windowDays: number; warningSigma: number; criticalSigma: number; minimumSamples: number; sentence: string };
+  influence: null | {
+    target: string; intercept: number; terms: { signal: string; coefficient: number }[];
+    warnAbove: number; criticalAbove: number; windowHours: number; formula: string; sentence: string;
+  };
+}
+export function apiGetScenarioRule(scenarioId: string): Promise<ScenarioRule> {
+  return authFetch(`/catalog/authoring/scenarios/${encodeURIComponent(scenarioId)}/rule`);
+}
+
 /** A library set of shifts (`/shift-templates`, fuel test report FU-3). */
 export interface ShiftTemplate {
   slug: string; name: string; description: string | null;

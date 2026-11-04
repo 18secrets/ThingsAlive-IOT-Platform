@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, Clock, Layers, Plus, ShieldAlert, UploadCloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Scenario, ScenarioInput } from '../../../lib/api';
+import { Scenario, ScenarioInput, ScenarioRule, apiGetScenarioRule } from '../../../lib/api';
 import { AddScenarioModal } from './AddScenarioModal';
 
 interface ClassScenariosPanelProps {
@@ -41,6 +41,48 @@ function representativePerSlug(rows: Scenario[]): Scenario[] {
       ?? versions.find((v) => v.status === 'published')
       ?? versions[0]);
 }
+
+/**
+ * How the scenario is scored, fetched when opened (fuel test report FU-1): the inputs,
+ * the window and the thresholds the scorer will apply, so the rule can be checked before
+ * it is published to every account granted the class.
+ */
+const ScenarioRuleDetails: React.FC<{ scenarioId: string }> = ({ scenarioId }) => {
+  const { t } = useTranslation('catalog');
+  const [rule, setRule] = useState<ScenarioRule | null>(null);
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    if (rule || failed) return;
+    apiGetScenarioRule(scenarioId).then(setRule).catch(() => setFailed(true));
+  };
+  return (
+    <details className="text-xs text-slate-600 dark:text-slate-300" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) load(); }}>
+      <summary className="cursor-pointer font-semibold text-slate-500 dark:text-slate-400">{t('scenarios.rule.title')}</summary>
+      {failed ? (
+        <p className="mt-1 text-rose-600 dark:text-rose-400">{t('scenarios.rule.loadFailed')}</p>
+      ) : !rule ? (
+        <p className="mt-1 text-slate-400">{t('scenarios.rule.loading')}</p>
+      ) : (
+        <div className="mt-1.5 space-y-1.5">
+          {rule.influence && (
+            <>
+              <p className="font-mono">{rule.influence.formula}</p>
+              <p>{rule.influence.sentence}</p>
+              <p className="text-slate-400">{t('scenarios.rule.fallback')}</p>
+            </>
+          )}
+          <p>{rule.baseline.sentence}</p>
+          <p className="font-mono text-slate-500 dark:text-slate-400">
+            {t('scenarios.rule.figures', {
+              method: rule.method, window: rule.baseline.windowDays, warning: rule.baseline.warningSigma,
+              critical: rule.baseline.criticalSigma, samples: rule.baseline.minimumSamples, history: rule.minimumHistoryDays,
+            })}
+          </p>
+        </div>
+      )}
+    </details>
+  );
+};
 
 export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
   equipmentClassSlug, availableSignals, scenarios, error, onCreate, onUpdate, onPublish,
@@ -133,6 +175,8 @@ export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
                 ))}
               </div>
             )}
+
+            <ScenarioRuleDetails scenarioId={sc.id} />
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
               <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[sc.status]}`}>

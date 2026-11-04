@@ -31,6 +31,7 @@ import { RecommendationService } from './services/recommendation.service';
  *
  * EquipmentProfile *is* tenant-owned, and is reached through a tenant session.
  */
+import { ScenarioRuleController } from './scenario-rule.controller';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -39,7 +40,10 @@ import { RecommendationService } from './services/recommendation.service';
     ]),
     ClientCatalogModule,
   ],
-  controllers: [CatalogController, NamedFormulaController, PublishedNamedFormulaController, ClassVisualController, ClassModelController],
+  controllers: [
+    CatalogController, NamedFormulaController, PublishedNamedFormulaController, ClassVisualController, ClassModelController,
+    ScenarioRuleController,
+  ],
   providers: [
     CatalogService, CatalogAuthoringService, EntitlementService, RecommendationService, NamedFormulaService,
     ClassVisualService,
