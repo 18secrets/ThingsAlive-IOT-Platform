@@ -525,6 +525,14 @@ export class CatalogImportValidatorService {
           );
           continue;
         }
+        if (!named.active) {
+          invalidate(
+            r,
+            `formula row ${r.rowNumber}: named formula "${slug}" is inactive, so it cannot be bound `
+              + '(named_formula_inactive).',
+          );
+          continue;
+        }
 
         const bindings = parseBindings(String(r.payload.bindings ?? ''));
         try {

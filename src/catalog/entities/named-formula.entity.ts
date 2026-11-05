@@ -93,4 +93,16 @@ export class NamedFormula {
 
   @Column({ name: 'result_unit', type: 'text', nullable: true })
   resultUnit: string | null;
+
+  /** The soft delete (TC_151): an inactive formula leaves the picker and takes no new
+   * binding; what is already bound keeps reading it. Held on every version alike — the
+   * database refuses a slug whose versions disagree. */
+  @Column({ type: 'boolean', default: true })
+  active: boolean;
+
+  @Column({ name: 'deactivated_at', type: 'timestamptz', nullable: true })
+  deactivatedAt: Date | null;
+
+  @Column({ name: 'deactivated_by', type: 'text', nullable: true })
+  deactivatedBy: string | null;
 }

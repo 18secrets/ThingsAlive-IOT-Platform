@@ -1285,6 +1285,11 @@ export interface NamedFormula {
   resultKind: "scalar" | "series" | null;
   status: "draft" | "published";
   publishedAt: string | null;
+  /** The soft delete (TC_151): an inactive formula is out of the picker and takes no new
+   *  binding; what is already bound keeps it. Every version alike. */
+  active: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
   createdBy: string | null;
   updatedAt: string;
   resultUnit: string | null;
@@ -1330,6 +1335,14 @@ export function apiEditNamedFormula(slug: string, version: number, input: NamedF
 /** Compiles and publishes. Immutable from this point on. */
 export function apiPublishNamedFormula(slug: string, version: number): Promise<NamedFormula> {
   return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${version}/publish`, {
+    method: "POST",
+  });
+}
+
+/** Inactive or active again, every version at once (`catalog.write` to deactivate,
+ *  `catalog.publish` to activate). Idempotent. Nothing is deleted. */
+export function apiSetNamedFormulaActive(slug: string, active: boolean): Promise<NamedFormula[]> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${active ? "activate" : "deactivate"}`, {
     method: "POST",
   });
 }
