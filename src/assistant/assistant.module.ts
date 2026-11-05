@@ -48,5 +48,7 @@ import { ASSISTANT_DAILY_LIMIT, AssistantService, DEFAULT_DAILY_TOKEN_LIMIT } fr
       },
     },
   ],
+  // Vani's analysis tool answers a caller through this same assistant (plan Phase 6).
+  exports: [AssistantService],
 })
 export class AssistantModule {}

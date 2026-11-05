@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { runTenantSpanning } from '../scope/tenant-session';
+import { VaniBreaker } from './vani-breaker';
 import { VaniTransport } from './vani-client';
 import { VaniCall } from './vani.entities';
 
@@ -40,7 +41,11 @@ export interface SendResult {
 export class VaniCallSender {
   private readonly logger = new Logger(VaniCallSender.name);
 
-  constructor(private readonly ds: DataSource, private readonly vani: VaniTransport) {}
+  constructor(
+    private readonly ds: DataSource,
+    private readonly vani: VaniTransport,
+    private readonly breaker: VaniBreaker = new VaniBreaker(),
+  ) {}
 
   async pass(now = new Date(), limit = 20): Promise<SendResult> {
     const result: SendResult = { accepted: 0, rejected: 0, retried: 0, failed: 0 };
@@ -48,14 +53,37 @@ export class VaniCallSender {
     // their attempts against a token nobody has set yet.
     if (!this.vani.configured) return result;
     for (let i = 0; i < limit; i++) {
-      const outcome = await this.one(now);
-      if (!outcome) break;
-      result[outcome] += 1;
+      // Asked before a row is claimed, so a request held back by an open breaker keeps
+      // all its attempts.
+      if (!this.breaker.allows(now)) break;
+      const sent = await this.one(now);
+      if (!sent) { this.breaker.release(); break; }
+      result[sent.outcome] += 1;
+      if (sent.vani === 'down') {
+        // The rest of this pass would most likely wait out the same timeout, each.
+        if (this.breaker.state(now) === 'open') this.logger.warn('Vani is failing; calls are held for a while before trying again.');
+        break;
+      }
+      if (sent.vani === 'none') this.breaker.release();
+      else this.breaker.succeeded();
     }
     return result;
   }
 
-  private one(now: Date): Promise<keyof SendResult | null> {
+  /**
+   * One request, and what it showed about Vani: `up` when Vani answered sensibly,
+   * `down` when it could not be reached or answered as if unwell, `none` when the
+   * request was settled without contacting it.
+   */
+  private async one(now: Date): Promise<{ outcome: keyof SendResult; vani: 'up' | 'down' | 'none' } | null> {
+    let vani = 'none' as 'up' | 'down' | 'none';
+    const outcome = await this.claimAndSend(now, (health) => { vani = health; });
+    if (!outcome) return null;
+    if (vani === 'down') this.breaker.failed(now);
+    return { outcome, vani };
+  }
+
+  private claimAndSend(now: Date, saw: (health: 'up' | 'down') => void): Promise<keyof SendResult | null> {
     return runTenantSpanning(this.ds, 'vani call send', async (m) => {
       const rows: { id: string }[] = await m.query(
         `SELECT "id" FROM "vani_call"
@@ -80,8 +108,10 @@ export class VaniCallSender {
       try {
         ({ status, body } = await this.vani.post('/platform/alert-call', call.request));
       } catch (err) {
+        saw('down');
         return this.retry(m, call, now, attempts, null, `Vani could not be reached: ${(err as Error).message}`);
       }
+      saw(VaniBreaker.isFailure(status) ? 'down' : 'up');
 
       if (status === 202 || (status === 200 && body.status === 'duplicate')) {
         await this.settle(m, call, now, {

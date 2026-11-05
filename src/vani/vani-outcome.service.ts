@@ -1,10 +1,8 @@
-import {
-  BadRequestException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException,
-} from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { runTenantSpanning, withTenantSession } from '../scope/tenant-session';
+import { checkVaniSecret } from './vani-secret';
 import { VANI_OUTCOMES, VaniCall, VaniCallOutcome, VaniOutcome } from './vani.entities';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,18 +21,12 @@ export class VaniOutcomeService {
   constructor(private readonly ds: DataSource) {}
 
   /**
-   * The callback has no user token behind it, so it proves itself with a shared
-   * secret instead. Unset, every callback is refused: an open endpoint that writes
-   * call history is worse than a missing one, and Vani retries once, then keeps the
+   * The callback has no user token behind it, so it proves itself with the shared
+   * secret (`vani-secret.ts`). Vani retries a refused callback once, then keeps the
    * outcome in its own records.
    */
   checkSecret(presented: string | undefined, env: NodeJS.ProcessEnv = process.env): void {
-    const expected = `${env.VANI_CALLBACK_SECRET ?? ''}`.trim();
-    if (!expected) throw new ServiceUnavailableException('Vani callbacks are not configured: VANI_CALLBACK_SECRET is unset.');
-    // Compared as digests, so the comparison takes the same time whatever the length.
-    const a = createHash('sha256').update(`${presented ?? ''}`).digest();
-    const b = createHash('sha256').update(expected).digest();
-    if (!timingSafeEqual(a, b)) throw new UnauthorizedException('Wrong or missing X-Vani-Secret.');
+    checkVaniSecret(presented, env);
   }
 
   /**

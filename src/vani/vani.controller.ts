@@ -4,6 +4,8 @@ import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { checkVaniSecret } from './vani-secret';
+import { VaniAskService } from './vani-ask.service';
 import { VaniOutcomeService } from './vani-outcome.service';
 
 /**
@@ -15,7 +17,16 @@ import { VaniOutcomeService } from './vani-outcome.service';
 @ApiTags('Vani')
 @Controller('vani')
 export class VaniController {
-  constructor(private readonly outcomes: VaniOutcomeService) {}
+  constructor(private readonly outcomes: VaniOutcomeService, private readonly analysis: VaniAskService) {}
+
+  @Post('ask')
+  @HttpCode(200)
+  @Public('Vani asks on a caller\'s behalf and holds no user token; it proves itself with X-Vani-Secret, and the answer is scoped to the caller found by phone number.')
+  @ApiOperation({ summary: 'Vani asks the platform a question for the person on the phone, and gets only the answer' })
+  async ask(@Headers('x-vani-secret') secret: string | undefined, @Body() body: unknown) {
+    checkVaniSecret(secret);
+    return this.analysis.ask(body);
+  }
 
   @Post('outcome-callback')
   @HttpCode(200)

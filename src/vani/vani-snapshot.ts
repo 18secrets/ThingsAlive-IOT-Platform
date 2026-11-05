@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { runTenantSpanning } from '../scope/tenant-session';
+import { VaniBreaker } from './vani-breaker';
 import { VaniTransport } from './vani-client';
 import { VaniAccountLink } from './vani.entities';
 
@@ -36,7 +37,11 @@ export interface SnapshotResult {
 export class VaniSnapshotPusher {
   private readonly logger = new Logger(VaniSnapshotPusher.name);
 
-  constructor(private readonly ds: DataSource, private readonly vani: VaniTransport) {}
+  constructor(
+    private readonly ds: DataSource,
+    private readonly vani: VaniTransport,
+    private readonly breaker: VaniBreaker = new VaniBreaker(),
+  ) {}
 
   async pass(now = new Date()): Promise<SnapshotResult> {
     const result: SnapshotResult = { pushed: 0, unchanged: 0, refused: 0, failed: 0 };
@@ -44,13 +49,19 @@ export class VaniSnapshotPusher {
     const tenants: { tenant_id: string }[] = await runTenantSpanning(this.ds, 'vani snapshot list', (m) =>
       m.query(`SELECT "tenant_id" FROM "vani_account_link" WHERE "enabled" ORDER BY "tenant_id"`));
     for (const { tenant_id } of tenants) {
-      const outcome = await this.one(tenant_id, now);
+      // Shared with the call sender: an outage seen by either holds both.
+      if (!this.breaker.allows(now)) break;
+      let vani = 'none' as 'up' | 'down' | 'none';
+      const outcome = await this.one(tenant_id, now, (health) => { vani = health; });
       if (outcome) result[outcome] += 1;
+      if (vani === 'down') { this.breaker.failed(now); break; }
+      if (vani === 'up') this.breaker.succeeded();
+      else this.breaker.release();
     }
     return result;
   }
 
-  private one(tenantId: string, now: Date): Promise<keyof SnapshotResult | null> {
+  private one(tenantId: string, now: Date, saw: (health: 'up' | 'down') => void): Promise<keyof SnapshotResult | null> {
     return runTenantSpanning(this.ds, 'vani snapshot push', async (m) => {
       // Locked so two schedulers do not both push the same picture. Harmless if they
       // did — Vani keeps the newest — but pointless.
@@ -77,9 +88,11 @@ export class VaniSnapshotPusher {
       try {
         ({ status, body: answer } = await this.vani.post('/platform/account-snapshot', body));
       } catch (err) {
+        saw('down');
         await repo.update(tenantId, { snapshotAttemptedAt: now, snapshotError: `Vani could not be reached: ${(err as Error).message}` });
         return 'failed';
       }
+      saw(VaniBreaker.isFailure(status) ? 'down' : 'up');
       if (status === 200) {
         await repo.update(tenantId, {
           snapshotHash: hash, snapshotPushedAt: now, snapshotAttemptedAt: now, snapshotError: null, snapshotRefusedHash: null,

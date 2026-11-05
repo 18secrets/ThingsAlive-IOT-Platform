@@ -198,3 +198,57 @@ export class VaniCallOutcome {
   @Column({ name: 'received_at', type: 'timestamptz', default: () => 'now()' })
   receivedAt: Date;
 }
+
+export type VaniTurnStatus = 'answered' | 'refused';
+
+/** One question Vani asked on a caller's behalf, and what it was told. Append-only. */
+@Entity('vani_conversation_turn')
+export class VaniConversationTurn {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ name: 'tenant_id', type: 'text' })
+  tenantId: string;
+
+  @Column({ name: 'conversation_id', type: 'text' })
+  conversationId: string;
+
+  @Column({ name: 'turn_id', type: 'text', nullable: true })
+  turnId: string | null;
+
+  @Column({ name: 'caller_phone', type: 'text' })
+  callerPhone: string;
+
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  userId: string | null;
+
+  @Column({ name: 'source_system', type: 'text', nullable: true })
+  sourceSystem: string | null;
+
+  @Column({ name: 'external_id', type: 'text', nullable: true })
+  externalId: string | null;
+
+  @Column({ name: 'alert_event_id', type: 'uuid', nullable: true })
+  alertEventId: string | null;
+
+  @Column({ type: 'text' })
+  question: string;
+
+  @Column({ type: 'text' })
+  answer: string;
+
+  @Column({ type: 'text' })
+  status: VaniTurnStatus;
+
+  @Column({ type: 'text', nullable: true })
+  reason: string | null;
+
+  @Column({ name: 'tools_used', type: 'text', array: true, default: () => `'{}'` })
+  toolsUsed: string[];
+
+  @Column({ type: 'int', default: 0 })
+  tokens: number;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt: Date;
+}

@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { AssistantModule } from '../assistant/assistant.module';
+import { IdentityModule } from '../identity/identity.module';
+import { VaniAskService } from './vani-ask.service';
+import { VaniBreaker } from './vani-breaker';
 import { VaniCallScheduler } from './vani-call.scheduler';
 import { VaniCallSender } from './vani-call-sender';
 import { VaniClient } from './vani-client';
@@ -13,19 +17,23 @@ import { VaniController } from './vani.controller';
  * account current, and receives what happened on each call.
  */
 @Module({
+  imports: [AssistantModule, IdentityModule],
   controllers: [VaniController],
   providers: [
     VaniOutcomeService,
+    VaniAskService,
     { provide: VaniClient, useFactory: () => new VaniClient() },
+    // One breaker for both: they reach the same Vani.
+    { provide: VaniBreaker, useFactory: () => new VaniBreaker() },
     {
       provide: VaniCallSender,
-      useFactory: (ds: DataSource, client: VaniClient) => new VaniCallSender(ds, client),
-      inject: [DataSource, VaniClient],
+      useFactory: (ds: DataSource, client: VaniClient, breaker: VaniBreaker) => new VaniCallSender(ds, client, breaker),
+      inject: [DataSource, VaniClient, VaniBreaker],
     },
     {
       provide: VaniSnapshotPusher,
-      useFactory: (ds: DataSource, client: VaniClient) => new VaniSnapshotPusher(ds, client),
-      inject: [DataSource, VaniClient],
+      useFactory: (ds: DataSource, client: VaniClient, breaker: VaniBreaker) => new VaniSnapshotPusher(ds, client, breaker),
+      inject: [DataSource, VaniClient, VaniBreaker],
     },
     VaniCallScheduler,
   ],

@@ -125,8 +125,15 @@ export class AssistantService {
     @Optional() @Inject(ASSISTANT_DAILY_LIMIT) private readonly dailyLimit: number = DEFAULT_DAILY_TOKEN_LIMIT,
   ) {}
 
-  async chat(scope: RequestScope, messages: ChatMessage[], now = new Date()): Promise<ChatReply> {
-    const { proposals: _none, ...reply } = await this.converse(scope, messages, 'ask', now);
+  /**
+   * `withhold` names tools this caller is not offered, on top of what their capabilities
+   * allow; the console passes none. A withheld tool the model calls anyway is refused
+   * by `AssistantTools.run`, the same as one it was never given.
+   */
+  async chat(
+    scope: RequestScope, messages: ChatMessage[], now = new Date(), opts: { withhold?: readonly string[] } = {},
+  ): Promise<ChatReply> {
+    const { proposals: _none, ...reply } = await this.converse(scope, messages, 'ask', now, opts.withhold ?? []);
     return reply;
   }
 
@@ -141,6 +148,7 @@ export class AssistantService {
 
   private async converse(
     scope: RequestScope, messages: ChatMessage[], profile: AssistantProfile, now: Date,
+    withheld: readonly string[] = [],
   ): Promise<OnboardingReply> {
     if (scope.isPlatformRole || !scope.tenantId) {
       // Every tool reads one account through its session. Staff have no account, so
@@ -164,8 +172,8 @@ export class AssistantService {
 
     const turns: AssistantTurn[] = messages.map((m) =>
       (m.role === 'user' ? { role: 'user', text: m.text } : { role: 'model', text: m.text }));
-    const offered = this.tools.available(scope, profile);
-    const ctx: RunContext = { profile, proposals: [] };
+    const offered = this.tools.available(scope, profile, withheld);
+    const ctx: RunContext = { profile, proposals: [], withheld };
     const used = new Set<string>();
     let tokens = 0;
     let reply: string | null = null;

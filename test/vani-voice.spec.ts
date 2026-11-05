@@ -247,6 +247,6 @@ describeDb('vani voice: links, calls and outcomes', () => {
       `SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'vani_%' ORDER BY 1`,
     );
     expect(back.map((r: { table_name: string }) => r.table_name))
-      .toEqual(['vani_account_link', 'vani_call', 'vani_call_outcome', 'vani_machine_link']);
+      .toEqual(['vani_account_link', 'vani_call', 'vani_call_outcome', 'vani_conversation_turn', 'vani_machine_link']);
   }, 60_000);
 });

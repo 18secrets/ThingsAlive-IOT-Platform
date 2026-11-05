@@ -95,7 +95,7 @@ older than 24 hours is never sent.
   words; a prediction-severity summary still names its scenario slug.
 - **Companion spec** `ThingsAlive_Vani_MachineLane_Spec_20261103.md` — not in the repo.
 
-## Phase 6 — proposal for Deepak, not started
+## Phase 6 — analysis tool: built on branch, off until Deepak agrees
 
 Answering a customer's questions on an inbound call from live data, rather than the
 snapshot alone. Both agents already exist: Vani runs the call, and 2.0's assistant
@@ -132,3 +132,65 @@ rests on kept in the conversation log. An unknown caller, an out-of-scope machin
 Both end the guide's "Vani speaks only from the packet" rule, so Deepak agrees first.
 LangGraph was considered and not proposed: the loop it provides exists here already,
 and it would be a new dependency needing approval by name.
+
+### Built (2026-11-04), behind `VANI_ASK_ENABLED=true`
+
+`POST /api/v1/vani/ask` (`src/vani/vani-ask.service.ts`), authenticated by `X-Vani-Secret`.
+
+Request: `{ account_id, conversation_id, caller_phone (E.164), question (≤ 500 chars),
+machine_id?, event_id? }`. Response: `{ conversation_id, status: answered | refused,
+answer, reason?, machine? }`. Vani speaks `answer` either way.
+
+1. Account → tenant through `vani_account_link`.
+2. Caller → `app_user` by phone in that tenant (with or without the `+`; a number stored
+   without its country code does not match). The scope is the one `ScopeResolver` gives a
+   signed-in user, so suspended users, unaccepted invitations and missing roles are refused
+   exactly as in the app.
+3. Machine in focus: the call's `event_id`, else Vani's `machine_id`, else a linked
+   machine named in the question (longest name; a tie is no focus), else the machine the
+   conversation was already about. Outside the caller's machines → refused.
+4. `AssistantService.chat` runs as that caller, with a phone framing (caller's name,
+   machine in focus, "one or two short sentences, no codes"). The reply is flattened to
+   one spoken line.
+5. Every turn, answered or refused, goes to `vani_conversation_turn` (migration
+   `VaniConversation1763800000000`; append-only, RLS). The last 6 answered turns of the
+   same caller's conversation are sent as history.
+
+Refusals, each a spoken sentence: `unknown_caller`, `caller_not_active`, `unknown_machine`,
+`not_your_machine`, `budget_exhausted`, `assistant_unavailable`, `incomplete`.
+
+**Gap found and handled two ways.** `EquipmentService.list` filtered by account only, so
+the assistant's `list_equipment` tool (and the console's equipment list) showed a site
+manager or operator every machine in the account.
+- Stopgap on this branch: `list_equipment` is withheld from a caller whose access is
+  limited (`UNSCOPED_TOOLS`), and refused if the model calls it anyway. `AssistantService`
+  gained an optional `withhold` list for this; the console passes none.
+- Real fix on its own branch, `fix/equipment-list-scope`, for Deepak: `EquipmentService.list`
+  honours the caller's assigned machines. Once merged, `UNSCOPED_TOOLS` empties.
+- Audited 2026-11-04, the seven tools Vani can reach (the assistant's "ask" profile):
+  `list_alerts`, `list_incidents` (built from the caller's alerts and work orders),
+  `list_work_orders`, `logger_health`, `machine_page` and `machine_geofences` (both refuse a
+  machine outside scope) all narrow to the caller's machines. Only `list_equipment` did
+  not. The onboarding-only tools were not audited; Vani never reaches them, and
+  `machine_onboarding` reads through the same `EquipmentService.list` the fix corrects.
+
+### Retries, outages and bursts (2026-11-05)
+
+- **A retried question is answered once.** `/ask` takes an optional `turn_id`. A retry
+  with the same one waits on a transaction-scoped advisory lock held by the first, then
+  gets the stored answer: one model run, one row. `uq_vani_turn_turn_id` (tenant,
+  conversation, turn id) holds it in the database too. A turn id reused for another
+  question or caller is refused `409`. Without a `turn_id`, a retry is answered again —
+  ask Deepak to send one, then make it required. `test/vani-ask-turn.spec.ts`.
+- **At most 4 questions answered at once per server** (`VANI_ASK_MAX_IN_FLIGHT`). Each
+  holds a connection for as long as its answer takes, and the pool has ten. Over the
+  limit the caller hears `busy` ("ask me again in a moment") at once; it is not recorded,
+  so the retry with the same `turn_id` is answered. Per process: two API replicas allow 8.
+- **Circuit breaker on calls and snapshots** (`src/vani/vani-breaker.ts`, one per process,
+  shared). A pass ends at the first sign Vani is down (unreachable, 5xx, 429, 401), so an
+  outage costs one timeout per pass rather than one per waiting request. Three in a row
+  open it for 2 minutes, during which nothing is claimed and no request loses an attempt;
+  then one probe decides. A 422 is Vani up. `test/vani-breaker.spec.ts`.
+- **Vani's 202 body**, as `test/vani-calls.spec.ts` models the guide, carries
+  `disposition` (`dialed`) with `status: queued`. A local mock
+  that returns `status: dialed` leaves `disposition` empty — the mock's fault, not ours.

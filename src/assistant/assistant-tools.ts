@@ -29,6 +29,12 @@ export type AssistantProfile = 'ask' | 'onboarding';
 export interface RunContext {
   profile: AssistantProfile;
   proposals: AssistantProposal[];
+  /**
+   * Tools this caller is not offered even though their capabilities allow it — a
+   * caller-specific narrowing on top of capability (Vani, plan Phase 6: `list_equipment`
+   * does not yet honour a person's assigned machines). Empty for the console.
+   */
+  withheld?: readonly string[];
 }
 
 interface AssistantTool extends ToolDeclaration {
@@ -453,8 +459,8 @@ export class AssistantTools {
   }
 
   /** The declarations this caller may use in this chat. */
-  available(scope: RequestScope, profile: AssistantProfile = 'ask'): ToolDeclaration[] {
-    return this.tools.filter((t) => t.profiles.includes(profile) && can(scope, t.capability))
+  available(scope: RequestScope, profile: AssistantProfile = 'ask', withheld: readonly string[] = []): ToolDeclaration[] {
+    return this.tools.filter((t) => t.profiles.includes(profile) && can(scope, t.capability) && !withheld.includes(t.name))
       .map(({ name, description, parameters }) => ({ name, description, parameters }));
   }
 
@@ -470,7 +476,7 @@ export class AssistantTools {
     // Checked again here, not only when offered: the model's call is input, and input
     // naming a tool it was never given is exactly what a prompt injection looks like.
     // That includes a propose_* call made from the Ask AI chat.
-    if (!tool || !tool.profiles.includes(ctx.profile) || !can(scope, tool.capability)) {
+    if (!tool || !tool.profiles.includes(ctx.profile) || !can(scope, tool.capability) || ctx.withheld?.includes(name)) {
       return { error: `No tool "${name}" is available.` };
     }
     try {
