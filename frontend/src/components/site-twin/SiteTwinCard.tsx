@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   ApiError, SITE_AREA_KINDS, SITE_PROGRESS_KINDS, SITE_STRUCTURE_KINDS, SiteTwin, SiteTwinActivity, SiteTwinStatus,
-  SiteTwinZone, SiteZoneKind, apiGetSiteTwin, apiGetSiteTwinProposal, apiMyPermissions, apiSaveSiteTwinLayout,
+  SiteTwinZone, SiteZoneKind, apiArrangeSiteTwinAround, apiGetSiteTwin, apiMyPermissions, apiSaveSiteTwinLayout,
 } from '../../lib/api';
 import type { DragTarget, SceneFocus, SceneMachine } from '../visual/SiteTwinScene';
 import { appLocale } from '../../lib/dateLocale';
@@ -56,6 +56,12 @@ interface Draft { extent: SiteTwin['extent']; zones: SiteTwinZone[]; positions: 
 const mkey = (m: { sourceSystem: string; externalId: string }) => `${m.sourceSystem}/${m.externalId}`;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/** A zone as the API takes it: the read-only report fields dropped, which the server refuses. */
+const zoneBody = (z: SiteTwinZone) => ({
+  key: z.key, label: z.label, kind: z.kind, x: z.x, z: z.z, widthM: z.widthM, depthM: z.depthM,
+  floors: z.kind === 'building' ? z.floors ?? null : null,
+  progressPct: SITE_PROGRESS_KINDS.includes(z.kind) ? z.progressPct ?? null : null,
+});
 
 /**
  * The site's digital twin: every machine on the site, where it stands, in its class's
@@ -211,11 +217,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
       const fresh = await apiSaveSiteTwinLayout(plantId, {
         expectedVersion: twin.version,
         extent: draft.extent,
-        zones: draft.zones.map((z) => ({
-          key: z.key, label: z.label, kind: z.kind, x: z.x, z: z.z, widthM: z.widthM, depthM: z.depthM,
-          floors: z.kind === 'building' ? z.floors ?? null : null,
-          progressPct: SITE_PROGRESS_KINDS.includes(z.kind) ? z.progressPct ?? null : null,
-        })),
+        zones: draft.zones.map(zoneBody),
         placements: twin.machines.flatMap((m) => {
           const p = draft.positions.get(mkey(m));
           return p ? [{ sourceSystem: m.sourceSystem, externalId: m.externalId, ...p }] : [];
@@ -262,14 +264,16 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
     const positions = new Map([...d.positions].map(([k, p]) => [k, { ...p, route: p.route.filter((r) => r !== gone) }]));
     return { ...d, zones: d.zones.filter((_, j) => j !== i), positions };
   });
-  // Start the draft from the site's own machines: the composer puts each at its work
-  // front, adds only the structures an assigned machine needs, and sends anything that
-  // needs a person to the maintenance and breakdown bay.
+  // Arrange the site's own machines around what is drawn: the composer puts each at its
+  // work front, keeps every zone in the draft, adds only the structures still missing, and
+  // sends anything that needs a person to the maintenance and breakdown bay. It used to
+  // start from nothing, and a zone drawn a moment before was gone (4 Nov).
   const [composing, setComposing] = useState(false);
   const compose = async () => {
+    if (!draft) return;
     setComposing(true); setSaveError(undefined);
     try {
-      const p = await apiGetSiteTwinProposal(plantId);
+      const p = await apiArrangeSiteTwinAround(plantId, { extent: draft.extent, zones: draft.zones.map(zoneBody) });
       const positions = new Map<string, Pos>(p.placements.map((pl) => [`${pl.sourceSystem}/${pl.externalId}`, { x: pl.x, z: pl.z, headingDeg: pl.headingDeg, route: pl.route ?? [] }]));
       setDraft({ extent: p.extent, zones: p.zones.map((z) => ({ ...z })), positions });
     } catch (err) {
@@ -592,7 +596,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
               {composing ? t('siteTwin.composing', { defaultValue: 'Composing…' }) : t('siteTwin.compose', { defaultValue: 'Auto-arrange from equipment' })}
             </button>
             <p className="text-slate-500 -mt-1">
-              {t('siteTwin.composeHint', { defaultValue: 'Lays the site out from the machines assigned to it: only the structures they need, and anything needing attention in the breakdown bay. Replaces this draft; nothing is saved until you save.' })}
+              {t('siteTwin.composeHint', { defaultValue: 'Arranges the machines assigned to this site around what is drawn: every zone here stays as it is, only the structures still missing are added, and anything needing attention goes to the breakdown bay. Machine positions are rearranged; nothing is saved until you save.' })}
             </p>
             <div>
               <div className="font-semibold text-slate-800 dark:text-slate-100 mb-1.5">{t('siteTwin.siteSize', { defaultValue: 'Site size (metres)' })}</div>

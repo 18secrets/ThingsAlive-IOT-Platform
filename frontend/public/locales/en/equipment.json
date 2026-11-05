@@ -559,7 +559,7 @@
     "openMachine": "Open machine page",
     "composing": "Composing…",
     "compose": "Auto-arrange from equipment",
-    "composeHint": "Lays the site out from the machines assigned to it: only the structures they need, and anything needing attention in the breakdown bay. Replaces this draft; nothing is saved until you save.",
+    "composeHint": "Arranges the machines assigned to this site around what is drawn: every zone here stays as it is, only the structures still missing are added, and anything needing attention goes to the breakdown bay. Machine positions are rearranged; nothing is saved until you save.",
     "siteSize": "Site size (metres)",
     "width": "Width (E–W)",
     "depth": "Depth (N–S)",

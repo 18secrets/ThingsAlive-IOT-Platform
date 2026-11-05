@@ -210,3 +210,125 @@ export function composeLayout(machines: ComposeMachine[], expectedVersion: numbe
 
   return { expectedVersion, extent: { widthM: WIDTH, depthM: depth }, zones, placements };
 }
+
+/** What the editor already has on screen: the site's size and the zones drawn on it. */
+export interface Draft { extent: { widthM: number; depthM: number }; zones: ZoneInput[] }
+
+/** Metres kept clear between a structure the composer adds and anything already drawn. */
+const CLEAR = 4;
+/** How far apart the search for a free spot steps, in metres. */
+const STEP = 4;
+/** Kinds the composer draws more than once (three road sections, three kinds of work area,
+ * three car parks): one of these in the draft cannot say which of them it is, so only its
+ * key matches it. */
+const SHARED_KINDS = new Set(['road', 'work_area', 'parking']);
+
+const overlaps = (a: ZoneInput, b: ZoneInput, gap: number) =>
+  Math.abs(a.x - b.x) < (a.widthM + b.widthM) / 2 + gap && Math.abs(a.z - b.z) < (a.depthM + b.depthM) / 2 + gap;
+const fits = (z: ZoneInput, w: number, d: number) =>
+  Math.abs(z.x) + z.widthM / 2 <= w / 2 && Math.abs(z.z) + z.depthM / 2 <= d / 2;
+const holds = (z: ZoneInput, x: number, y: number) =>
+  Math.abs(x - z.x) <= z.widthM / 2 + 1e-9 && Math.abs(y - z.z) <= z.depthM / 2 + 1e-9;
+
+/**
+ * Auto-arrange on a site that already has zones (4 Nov): `composeLayout` from nothing
+ * replaced the draft, so a zone the user had just drawn vanished the moment they asked for
+ * their machines to be arranged. Now the drawing is the starting point and the composer
+ * only adds to it.
+ *
+ * Every zone in the draft stays exactly where it is, with its size, name and progress. A
+ * structure the machines need is the draft's own when it has one: the same key, or for a
+ * kind the composer draws only once (a quarry, a generator room, the breakdown bay) the
+ * same kind, so a generator room the user drew under their own name is the one the
+ * generators go to. What the draft lacks is added at the composer's spot when that is
+ * clear, otherwise at the nearest clear spot, and the site grows deeper only when there is
+ * no clear spot at all. Nothing added overlaps what was drawn.
+ *
+ * The machines are what is being arranged: each goes to its front, in the zone that front
+ * resolved to, and a tipper's route names the zones as they are now keyed.
+ *
+ * Deterministic, like `composeLayout`: the same machines and draft give the same layout.
+ */
+export function composeAround(machines: ComposeMachine[], draft: Draft, expectedVersion: number): LayoutInput {
+  const fresh = composeLayout(machines, expectedVersion);
+  const kept = draft.zones.map((z) => ({ ...z }));
+  let W = Math.max(draft.extent.widthM, fresh.extent.widthM);
+  let D = Math.max(draft.extent.depthM, fresh.extent.depthM);
+
+  // Which composed zone each machine was put in: the smallest that holds it, as `zoneAt`.
+  const homeOf = (p: PlacementInput) => fresh.zones
+    .filter((z) => holds(z, p.x, p.z))
+    .reduce<ZoneInput | null>((a, b) => (!a || b.widthM * b.depthM < a.widthM * a.depthM ? b : a), null);
+
+  const kindCount = new Map<string, number>();
+  for (const z of fresh.zones) kindCount.set(z.kind, (kindCount.get(z.kind) ?? 0) + 1);
+  const claimed = new Set<number>();
+  const resolved = new Map<string, ZoneInput>();
+  const added: ZoneInput[] = [];
+  const keys = new Set(kept.map((z) => z.key));
+
+  for (const z of fresh.zones) {
+    let i = kept.findIndex((k, j) => !claimed.has(j) && k.key === z.key && k.kind === z.kind);
+    if (i < 0 && !SHARED_KINDS.has(z.kind) && kindCount.get(z.kind) === 1) {
+      i = kept.findIndex((k, j) => !claimed.has(j) && k.kind === z.kind);
+    }
+    if (i >= 0) { claimed.add(i); resolved.set(z.key, kept[i]); continue; }
+
+    // A drawn zone may already use the composer's key for something else.
+    let k = z.key; let n = 2;
+    while (keys.has(k)) k = `${z.key.slice(0, 36)}-${n++}`;
+    keys.add(k);
+    const zone = { ...z, key: k };
+    for (;;) {
+      const spot = clearSpot(zone, kept, added, W, D);
+      if (spot) { zone.x = spot[0]; zone.z = spot[1]; break; }
+      // No room: deeper by what this zone needs, on both sides, so the drawing stays put.
+      W = Math.max(W, zone.widthM + 2 * CLEAR);
+      D = round(D + 2 * (zone.depthM + CLEAR));
+    }
+    added.push(zone);
+    resolved.set(z.key, zone);
+  }
+
+  // Each zone's machines in rows inside it, wherever it ended up and however big it is.
+  const byZone = new Map<string, PlacementInput[]>();
+  const loose: PlacementInput[] = [];
+  for (const p of fresh.placements) {
+    const home = homeOf(p);
+    if (!home) { loose.push(p); continue; }
+    byZone.set(home.key, [...(byZone.get(home.key) ?? []), p]);
+  }
+  const placements: PlacementInput[] = [];
+  const rekey = (route: string[] | undefined) => (route ?? []).map((r) => resolved.get(r)?.key ?? r);
+  for (const [k, ps] of byZone) {
+    const zone = resolved.get(k)!;
+    // Machines on a road travel along it, not across it.
+    const area = zone.kind === 'road' ? { ...zone, depthM: Math.min(zone.depthM, 4) } : zone;
+    slots(area, ps.length).forEach(([x, z], i) => placements.push({ ...ps[i], x, z, route: rekey(ps[i].route) }));
+  }
+  // `composeLayout` puts every machine inside a zone; were one ever not, it stays as put.
+  for (const p of loose) placements.push({ ...p, route: rekey(p.route) });
+
+  return { expectedVersion, extent: { widthM: W, depthM: D }, zones: [...kept, ...added], placements };
+}
+
+/** The spot nearest `zone`'s own where it fits in the site, clear of what was drawn and
+ * not on top of what has been added. The composer's own zones are packed closer than
+ * `CLEAR` (road sections 2 m apart), so between them only an overlap counts. */
+function clearSpot(zone: ZoneInput, drawn: ZoneInput[], added: ZoneInput[], W: number, D: number): [number, number] | null {
+  const free = (x: number, z: number) => {
+    const at = { ...zone, x, z };
+    return fits(at, W, D) && !drawn.some((t) => overlaps(at, t, CLEAR)) && !added.some((t) => overlaps(at, t, 0));
+  };
+  if (free(zone.x, zone.z)) return [zone.x, zone.z];
+  const hx = (W - zone.widthM) / 2; const hz = (D - zone.depthM) / 2;
+  if (hx < 0 || hz < 0) return null;
+  let best: [number, number] | null = null; let bestD = Infinity;
+  for (let x = -hx; x <= hx + 1e-9; x += STEP) {
+    for (let z = -hz; z <= hz + 1e-9; z += STEP) {
+      const d = (x - zone.x) ** 2 + (z - zone.z) ** 2;
+      if (d < bestD && free(round(x), round(z))) { best = [round(x), round(z)]; bestD = d; }
+    }
+  }
+  return best;
+}
