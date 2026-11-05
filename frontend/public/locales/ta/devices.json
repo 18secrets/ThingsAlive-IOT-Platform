@@ -153,7 +153,7 @@
     "serialNumber": "வரிசை எண்",
     "serialNumberPlaceholder": "எ.கா. SER-4920",
     "serviceTier": "சேவை அடுக்கு",
-    "machineType": "இயந்திர வகை",
+    "machineType": "உபகரண வகை",
     "unclassified": "வகைப்படுத்தப்படவில்லை",
     "noGrantedTypes": "இந்த வாடிக்கையாளருக்கு இன்னும் எந்த இயந்திர வகையும் வழங்கப்படவில்லை. முதலில் Clients பக்கத்தில் ஒன்றை வழங்கவும்.",
     "codeTaken": "இந்தக் குறியீட்டை ஏற்கனவே {{name}} பயன்படுத்துகிறது."

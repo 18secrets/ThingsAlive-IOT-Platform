@@ -128,7 +128,10 @@
     "searchMachines": "ନାମ, କୋଡ୍ କିମ୍ବା ସାଇଟ୍ ଦ୍ୱାରା ମେସିନ୍ ଖୋଜନ୍ତୁ",
     "noMachineMatches": "ଏହି ଖୋଜ ସହ କୌଣସି ମେସିନ୍ ମେଳ ଖାଉ ନାହିଁ।",
     "hoursLeft": "{{hours}} ଘଣ୍ଟା ବାକି",
-    "hoursOverdue": "{{hours}} ଘଣ୍ଟା ବିଳମ୍ବ"
+    "hoursOverdue": "{{hours}} ଘଣ୍ଟା ବିଳମ୍ବ",
+    "noOpenWorkOrders": "କୌଣସି ଖୋଲା ୱାର୍କ ଅର୍ଡର ନାହିଁ।",
+    "yours": "ଆପଣଙ୍କର",
+    "due": "ଧାର୍ଯ୍ୟ {{when}}"
   },
   "classic": {
     "title": "ଏଣ୍ଟରପ୍ରାଇଜ୍ କମାଣ୍ଡ ସେଣ୍ଟର",

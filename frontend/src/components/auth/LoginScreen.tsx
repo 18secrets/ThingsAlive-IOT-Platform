@@ -62,7 +62,7 @@ export const LoginScreen: React.FC = () => {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain mb-2" />
+          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain mb-2 dark:invert dark:hue-rotate-180" />
           {/* <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Telematics IoT OS</span> */}
         </div>
 

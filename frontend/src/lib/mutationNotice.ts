@@ -36,6 +36,9 @@ const NOT_A_WRITE: RegExp[] = [
   // Scoring reports its own result on the page; "Saved successfully" over a run that
   // scored nothing read as success (test report OB-3).
   /^\/predictions\/[^/]+\/[^/]+\/score$/,
+  // Recomputing baselines shows the new baselines in place; a "Saved" toast on top of
+  // that, after checking a score, read as a second, unexplained success (testing sheet, 5 Nov).
+  /^\/predictions\/[^/]+\/[^/]+\/baselines\/refresh(\?|$)/,
 ];
 
 /** What a request is, for a notice: null when it is a read, or a POST that writes nothing. */

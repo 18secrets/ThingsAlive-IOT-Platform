@@ -40,7 +40,8 @@
     "tier": "Tier {{tier}}",
     "editDraftSubtitleList": "Editing the working draft — publishing it is a separate step, from the list.",
     "severityLabel": "Severity",
-    "noClassSignals": "This class has no expected signals declared yet — add some on the class itself first."
+    "noClassSignals": "This class has no expected signals declared yet — add some on the class itself first.",
+    "publishIsMasterAdmins": "Only Master Admin can publish or unretire. Your role drafts and edits."
   },
   "classes": {
     "searchPlaceholder": "Search Class Names, Slugs, or Tags...",
@@ -109,7 +110,12 @@
     "publishedAt": "Published {{date}}",
     "lastEdited": "Last edited {{date}}",
     "noInputRoles": "No input roles",
-    "noVersions": "No versions recorded."
+    "noVersions": "No versions recorded.",
+    "inactive": "Inactive",
+    "makeInactive": "Make inactive",
+    "makeActive": "Make active",
+    "inactiveHint": "An inactive formula is no longer offered for new classes or KPIs. Classes and KPIs already using it keep working. Nothing is deleted.",
+    "inactiveConfirm": "Make “{{name}}” inactive? It will no longer be offered for new classes or KPIs; those already using it keep working. You can make it active again."
   },
   "formulaModal": {
     "saveFailed": "Could not save the formula.",

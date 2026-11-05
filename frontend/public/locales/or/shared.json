@@ -159,6 +159,8 @@
     "availabilityHigh": "ସର୍ବାଧିକ ଉପଲବ୍ଧତା ପ୍ରଥମେ",
     "downtimeHigh": "ସର୍ବାଧିକ ଡାଉନଟାଇମ୍ ପ୍ରଥମେ",
     "severityHigh": "ସର୍ବାଧିକ ଗୁରୁତର ପ୍ରଥମେ",
-    "attentionFirst": "ଧ୍ୟାନ ଆବଶ୍ୟକ ଥିବା ପ୍ରଥମେ"
+    "attentionFirst": "ଧ୍ୟାନ ଆବଶ୍ୟକ ଥିବା ପ୍ରଥମେ",
+    "enabledFirst": "ପ୍ରଥମେ ସକ୍ଷମ",
+    "disabledFirst": "ପ୍ରଥମେ ଅକ୍ଷମ"
   }
 }

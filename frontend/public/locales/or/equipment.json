@@ -202,7 +202,8 @@
     "days": "ଦିନ",
     "timeZone": "ସମୟ ମଣ୍ଡଳ (IANA)",
     "timeZonePlaceholder": "ଯେପରି Asia/Kolkata",
-    "allDay": "{{from}} ରୁ 24 ଘଣ୍ଟା"
+    "allDay": "{{from}} ରୁ 24 ଘଣ୍ଟା",
+    "overnight": "ପରଦିନ ଶେଷ ହୁଏ: ରାତି ପାଳି।"
   },
   "runStatus": {
     "scored": "ସ୍କୋର୍ ହୋଇଛି",
@@ -223,7 +224,8 @@
     "unit": "ଏକକ",
     "readingUnitPair": "ମିଟର ରିଡିଂ ସହ ଏକକ ଏବଂ ଏକକ ସହ ରିଡିଂ ଆବଶ୍ୟକ।",
     "notes": "ଟିପ୍ପଣୀ",
-    "notesPlaceholder": "କ'ଣ କରାଗଲା"
+    "notesPlaceholder": "କ'ଣ କରାଗଲା",
+    "notFuture": "ସର୍ଭିସ୍ ସମ୍ପୂର୍ଣ୍ଣ ହେବା ପରେ ହିଁ ରେକର୍ଡ ହୁଏ, ତେଣୁ ତାରିଖ ଭବିଷ୍ୟତର ହୋଇପାରିବ ନାହିଁ।"
   },
   "serviceKind": {
     "scheduled": "ନିର୍ଦ୍ଧାରିତ",

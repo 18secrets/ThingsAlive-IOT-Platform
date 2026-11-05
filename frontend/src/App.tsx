@@ -63,7 +63,7 @@ import {
   apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
   apiPublishEquipmentClass, apiRetireEquipmentClass, apiUnretireEquipmentClass,
-  apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula,
+  apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula, apiSetNamedFormulaActive,
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
   apiListAuthoringCausalChains, apiDraftCausalChain, apiPublishCausalChain,
@@ -863,6 +863,11 @@ function AppData() {
     await refreshNamedFormulas();
   };
 
+  const handleSetNamedFormulaActive = async (slug: string, active: boolean) => {
+    await apiSetNamedFormulaActive(slug, active);
+    await refreshNamedFormulas();
+  };
+
   // The commercial boundary (entitlement.service.ts) — a tenant cannot grant
   // itself a class, so this exists only on the master-admin side.
   const handleGrantEntitlement = async (tenantId: string, equipmentClassSlug: string, note?: string) => {
@@ -1295,6 +1300,7 @@ function AppData() {
                   onCreateNamedFormula={handleCreateNamedFormula}
                   onUpdateNamedFormula={handleUpdateNamedFormula}
                   onPublishNamedFormula={handlePublishNamedFormula}
+                  onSetNamedFormulaActive={handleSetNamedFormulaActive}
                   onCreateIndustryType={handleCreateIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}

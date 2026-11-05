@@ -38,7 +38,8 @@ export class NamedFormulaService {
    */
   async listPublished(category?: string): Promise<NamedFormula[]> {
     const rows = await this.formulas.find({
-      where: { status: 'published', ...(category ? { category } : {}) },
+      // An inactive formula is not offered: what is already bound keeps it, nothing new takes it.
+      where: { status: 'published', active: true, ...(category ? { category } : {}) },
       order: { slug: 'ASC', version: 'DESC' },
     });
     const seen = new Set<string>();
@@ -59,6 +60,10 @@ export class NamedFormulaService {
    */
   async create(scope: RequestScope, slug: string, draft: NamedFormulaDraft): Promise<NamedFormula> {
     this.requireComplete(draft);
+    const inactive = await this.formulas.findOne({ where: { slug, active: false } });
+    if (inactive) {
+      throw new BadRequestException(`"${slug}" is inactive. Make it active before starting a new version.`);
+    }
     const existingDraft = await this.formulas.findOne({ where: { slug, status: 'draft' } });
     if (existingDraft) {
       throw new BadRequestException(
@@ -88,6 +93,26 @@ export class NamedFormulaService {
     Object.assign(row, draft);
     this.logger.log(`${scope.userId} edited named formula "${slug}" v${version}.`);
     return this.formulas.save(row);
+  }
+
+  /**
+   * Makes the formula inactive, or active again: every version at once, in one UPDATE,
+   * because the database holds a slug's versions in step at commit. Idempotent — a
+   * formula already in the asked-for state is answered as it is, nothing written — so
+   * two people pressing it together both succeed and the first one's date stands.
+   */
+  async setActive(scope: RequestScope, slug: string, active: boolean, at: Date = new Date()): Promise<NamedFormula[]> {
+    const versions = await this.allVersions(slug);
+    if (!versions.length) throw new NotFoundException(`No named formula "${slug}".`);
+    await this.formulas.createQueryBuilder()
+      .update(NamedFormula)
+      .set(active
+        ? { active: true, deactivatedAt: null, deactivatedBy: null }
+        : { active: false, deactivatedAt: at, deactivatedBy: scope.userId })
+      .where('slug = :slug AND active = :was', { slug, was: !active })
+      .execute();
+    this.logger.log(`${scope.userId} made named formula "${slug}" ${active ? 'active' : 'inactive'}.`);
+    return this.allVersions(slug);
   }
 
   /**

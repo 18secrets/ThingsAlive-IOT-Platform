@@ -14,6 +14,8 @@ import {
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
+import { useAuth } from '../../lib/AuthProvider';
+import { staffMay } from '../../lib/pageAccess';
 import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
 import { ListTable } from '../common/ListTable';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
@@ -59,6 +61,10 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
 }) => {
   const { t } = useTranslation('catalog');
   const { t: ts } = useTranslation('shared');
+  // Publishing and unretiring are Master Admin's (catalog.publish); a Catalog Author drafts,
+  // and the button says who publishes rather than answering with an error (TC_141).
+  const { authUser } = useAuth();
+  const canPublish = staffMay(authUser, 'catalog.publish');
   const [viewMode, setViewMode] = useViewMode('admin-classes');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | EquipmentClass['status']>('all');
@@ -135,7 +141,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
               {cls.status === 'draft' && (
                 <button
                   onClick={() => handlePublish(cls.slug)}
-                  disabled={busySlug === cls.slug}
+                  disabled={busySlug === cls.slug || !canPublish}
+                  title={canPublish ? undefined : t('common.publishIsMasterAdmins')}
                   className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
@@ -155,8 +162,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
               {cls.status === 'retired' && (
                 <button
                   onClick={() => handleUnretire(cls.slug)}
-                  disabled={busySlug === cls.slug}
-                  title={t('classes.unretireHint')}
+                  disabled={busySlug === cls.slug || !canPublish}
+                  title={canPublish ? t('classes.unretireHint') : t('common.publishIsMasterAdmins')}
                   className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
