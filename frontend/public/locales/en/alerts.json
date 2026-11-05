@@ -222,6 +222,10 @@
     "checkPassed_other": "Ready to publish: {{count}} rules",
     "searchNodes": "Search nodes...",
     "dragHint": "Drag a node onto the canvas, then join them left to right: signal → condition → (all of / any of) → notify.",
+    "deleteHint": "To remove a node or a connection, select it and press Delete, or use the button in its panel.",
+    "deleteNode": "Delete node",
+    "connection": "Connection",
+    "deleteConnection": "Delete connection",
     "section": {
       "data": "DATA",
       "conditions": "CONDITIONS",
