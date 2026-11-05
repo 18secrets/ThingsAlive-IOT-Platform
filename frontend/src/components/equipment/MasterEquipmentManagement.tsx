@@ -14,6 +14,8 @@ import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
 import { sortRows, useSort } from '../../lib/useSort';
+import { useAuth } from '../../lib/AuthProvider';
+import { staffMay } from '../../lib/pageAccess';
 import { appLocale } from '../../lib/dateLocale';
 
 interface MasterEquipmentManagementProps {
@@ -46,6 +48,10 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   onGetEquipmentPlacementHistory, onListPlantsForTenant,
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
+  // Registering, editing and retiring are Master Admin's (equipment.write); other staff
+  // roles read this list.
+  const { authUser } = useAuth();
+  const canWrite = staffMay(authUser, 'equipment.write');
   const [viewMode, setViewMode] = useViewMode('admin-equipment');
   const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`equipment.status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
@@ -182,13 +188,13 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                             {t(`equipment.status.${item.status}`, { defaultValue: item.status })}
                           </span></>,
       <><div className="flex items-center gap-1.5">
-                            <button
+                            {canWrite && <button
                               onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
                               title={t('equipment.edit')}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>}
                             <button
                               onClick={() => handleToggleHistory(item)}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -196,7 +202,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                             >
                               {historyKey === k ? <ChevronUp className="w-3.5 h-3.5" /> : <History className="w-3.5 h-3.5" />}
                             </button>
-                            {item.status === 'active' && (
+                            {canWrite && item.status === 'active' && (
                               <button
                                 onClick={() => handleRetire(item)}
                                 disabled={busy}
@@ -248,13 +254,13 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
 
         <div className="flex items-center gap-3 shrink-0">
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-          <button
+          {canWrite && <button
           onClick={() => { setEditingEquipment(null); setIsModalOpen(true); }}
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t('equipment.register')}</span>
-        </button>
+        </button>}
         </div>
       </div>
 

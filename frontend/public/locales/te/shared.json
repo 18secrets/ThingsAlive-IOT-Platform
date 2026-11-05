@@ -159,6 +159,8 @@
     "availabilityHigh": "అత్యధిక లభ్యత ముందు",
     "downtimeHigh": "అత్యధిక డౌన్‌టైమ్ ముందు",
     "severityHigh": "అత్యంత తీవ్రమైనవి ముందు",
-    "attentionFirst": "శ్రద్ధ అవసరమైనవి ముందు"
+    "attentionFirst": "శ్రద్ధ అవసరమైనవి ముందు",
+    "enabledFirst": "ప్రారంభించినవి ముందుగా",
+    "disabledFirst": "నిలిపినవి ముందుగా"
   }
 }

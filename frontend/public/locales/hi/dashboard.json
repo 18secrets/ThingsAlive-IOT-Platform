@@ -128,7 +128,10 @@
     "searchMachines": "नाम, कोड या साइट से मशीन खोजें",
     "noMachineMatches": "कोई मशीन इस खोज से मेल नहीं खाती।",
     "hoursLeft": "{{hours}} घंटे बाकी",
-    "hoursOverdue": "{{hours}} घंटे देर"
+    "hoursOverdue": "{{hours}} घंटे देर",
+    "noOpenWorkOrders": "कोई खुला वर्क ऑर्डर नहीं।",
+    "yours": "आपका",
+    "due": "नियत {{when}}"
   },
   "classic": {
     "title": "एंटरप्राइज़ कमांड सेंटर",

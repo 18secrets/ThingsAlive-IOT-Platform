@@ -128,7 +128,10 @@
     "searchMachines": "పేరు, కోడ్ లేదా సైట్ ద్వారా యంత్రాలను వెతకండి",
     "noMachineMatches": "ఈ శోధనకు సరిపోయే యంత్రం లేదు.",
     "hoursLeft": "{{hours}} గం. మిగిలి ఉంది",
-    "hoursOverdue": "{{hours}} గం. ఆలస్యం"
+    "hoursOverdue": "{{hours}} గం. ఆలస్యం",
+    "noOpenWorkOrders": "తెరిచి ఉన్న వర్క్ ఆర్డర్‌లు లేవు.",
+    "yours": "మీది",
+    "due": "గడువు {{when}}"
   },
   "classic": {
     "title": "ఎంటర్‌ప్రైజ్ కమాండ్ సెంటర్",

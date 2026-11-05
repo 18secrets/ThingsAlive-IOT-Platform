@@ -116,14 +116,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             isCollapsed ? 'items-center py-3' : ''
           }`}
         >
+          {/* The logo is a PNG with "Alive" in black: on a dark sidebar it vanished (TC_142).
+              Inverted and turned back half a hue, black reads white and the cyan stays cyan. */}
           {isCollapsed ? (
             <img
               src={logoStacked}
               alt="ThingsAlive"
-              className="w-[55px] h-[55px] object-contain rounded"
+              className="w-[55px] h-[55px] object-contain rounded dark:invert dark:hue-rotate-180"
             />
           ) : (
-            <img src={logoFull} alt="ThingsAlive" className="h-[55px] w-auto object-contain" />
+            <img src={logoFull} alt="ThingsAlive" className="h-[55px] w-auto object-contain dark:invert dark:hue-rotate-180" />
           )}
         </div>
 

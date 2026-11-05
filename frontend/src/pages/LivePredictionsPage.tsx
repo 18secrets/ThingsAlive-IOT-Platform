@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { severityTone } from '../components/common/statusTone';
+import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronRight, Info, Search, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
 import { sortRows, useSort } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
+import { Input } from 'rsuite';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
@@ -31,6 +32,11 @@ export const LivePredictionsPage: React.FC = () => {
   const { t } = useTranslation(['predictions', 'shared']);
   // Highest risk first, as on ThingsCare; a machine still loading or unscored goes last.
   const { sort, setSort, toggle: toggleSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
+  // The scenarios above the machines had no search and no sort, while the list below them
+  // had both (testing sheet TC_156).
+  const [scenarioQuery, setScenarioQuery] = useState('');
+  const { sort: scenarioSort, setSort: setScenarioSort, toggle: toggleScenarioSort } =
+    useSort<'severity' | 'name' | 'enabled'>({ key: 'severity', dir: 'desc' });
   const { t: ts } = useTranslation('shared');
   const [viewMode, setViewMode] = useViewMode('predictions');
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
@@ -90,7 +96,13 @@ export const LivePredictionsPage: React.FC = () => {
   // Scenarios follow the filters: those for the classes of the machines on screen. With
   // no machines registered yet there is nothing to narrow by, so all of them show.
   const visibleClasses = new Set(visible.map((e) => e.equipmentClassSlug));
-  const visibleScenarios = (scenarios ?? []).filter((s) => equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug));
+  const scenarioTerm = scenarioQuery.trim().toLowerCase();
+  const visibleScenarios = sortRows(
+    (scenarios ?? []).filter((s) => (equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug))
+      && (!scenarioTerm || s.name.toLowerCase().includes(scenarioTerm) || s.slug.toLowerCase().includes(scenarioTerm))),
+    scenarioSort,
+    { severity: (s) => SEVERITY_RANK[s.severity] ?? -1, name: (s) => s.name.toLowerCase(), enabled: (s) => (s.enabled ? 1 : 0) },
+  );
 
   // Both lists are paged, in both views.
   const { pageItems: scenarioItems, ...scenarioPager } = usePagination(visibleScenarios);
@@ -202,6 +214,25 @@ export const LivePredictionsPage: React.FC = () => {
         <p className="flex items-center gap-1.5 text-xs text-slate-400">
           <Info className="w-3.5 h-3.5" />{t('scenarios.info')}
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+            <Input size="sm" value={scenarioQuery} onChange={(v) => { setScenarioQuery(v); scenarioPager.setPage(1); }} placeholder={t('scenarios.search')} className="w-full pl-9!" />
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-sm text-slate-400 dark:text-slate-500">{t('scenarios.count', { count: visibleScenarios.length })}</span>
+            <SortSelect
+              sort={scenarioSort}
+              onChange={(next) => { setScenarioSort(next); scenarioPager.setPage(1); }}
+              options={[
+                { key: 'severity', dir: 'desc', label: ts('sort.severityHigh') },
+                { key: 'name', dir: 'asc', label: ts('sort.nameAz') },
+                { key: 'enabled', dir: 'desc', label: ts('sort.enabledFirst') },
+                { key: 'enabled', dir: 'asc', label: ts('sort.disabledFirst') },
+              ]}
+            />
+          </div>
+        </div>
         <div className={LIST_PANEL}>
           {scenarios === null ? (
             <p className="p-4 text-sm text-slate-400">{error ? '—' : t('common.loading')}</p>
@@ -210,9 +241,11 @@ export const LivePredictionsPage: React.FC = () => {
           ) : viewMode === 'list' ? (
             <ListTable bare
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.needs') },
-                { label: ts('listCol.enabled') },
+                { label: ts('listCol.name'), sortKey: 'name' }, { label: ts('listCol.details'), sortKey: 'severity' }, { label: ts('listCol.needs') },
+                { label: ts('listCol.enabled'), sortKey: 'enabled' },
               ]}
+              sort={scenarioSort}
+              onSort={(key) => { toggleScenarioSort(key as 'severity' | 'name' | 'enabled', key === 'name' ? 'asc' : 'desc'); scenarioPager.setPage(1); }}
               rows={scenarioPage.pageItems}
               rowKey={(s) => s.id}
               cells={(s) => [

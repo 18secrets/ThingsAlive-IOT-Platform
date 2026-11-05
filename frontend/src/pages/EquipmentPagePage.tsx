@@ -76,8 +76,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       if (shift.status === 'active') await apiRetireShift(sourceSystem, externalId, shift.id);
       else await apiReinstateShift(sourceSystem, externalId, shift.id);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.changeFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     } finally {
       setBusyId(null);
     }
@@ -88,8 +89,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiCreateShift(sourceSystem, externalId, input);
       setAdding(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.addFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
@@ -98,8 +100,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiUpdateShift(sourceSystem, externalId, shift.id, input);
       setEditing(null);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.saveFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
@@ -191,10 +194,18 @@ const ShiftForm: React.FC<{
   const [days, setDays] = useState<Weekday[]>(initial?.days ?? [1, 2, 3, 4, 5]);
   const [timeZone, setTimeZone] = useState(initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
 
+  // An end at or before the start runs past midnight, as the server reads it: a night
+  // shift 18:00–06:00 was refused here with its button greyed out (testing sheet, 5 Nov).
+  // Only start equal to end is no shift at all.
+  const overnight = useMemo(() => {
+    const s = clockToMinutes(start);
+    const e = clockToMinutes(end);
+    return s != null && e != null && e < s;
+  }, [start, end]);
   const valid = useMemo(() => {
     const s = clockToMinutes(start);
     const e = clockToMinutes(end);
-    return !!name.trim() && s != null && e != null && e > s && days.length > 0 && !!timeZone.trim();
+    return !!name.trim() && s != null && e != null && e !== s && days.length > 0 && !!timeZone.trim();
   }, [name, start, end, days, timeZone]);
 
   return (
@@ -203,8 +214,10 @@ const ShiftForm: React.FC<{
       onSubmit={(e) => {
         e.preventDefault();
         const startMinute = clockToMinutes(start);
-        const endMinute = clockToMinutes(end);
-        if (!valid || startMinute == null || endMinute == null) return;
+        const clockEnd = clockToMinutes(end);
+        if (!valid || startMinute == null || clockEnd == null) return;
+        // Midnight as an end is the end of the day, 1440, which the server takes; 0 it refuses.
+        const endMinute = clockEnd === 0 ? 1440 : clockEnd;
         onCreate({ name: name.trim(), startMinute, endMinute, days, timeZone: timeZone.trim() });
       }}
     >
@@ -222,6 +235,7 @@ const ShiftForm: React.FC<{
           <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
         </label>
       </div>
+      {overnight && <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">{t('shifts.overnight')}</p>}
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.days')}</span>
         <CheckPicker
@@ -281,8 +295,8 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
       await apiRecordService(sourceSystem, externalId, input);
       setRecording(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('service.recordFailed'));
+    } catch {
+      // The red toast already says why; an alert on top said it twice (testing sheet, 5 Nov).
     }
   }
 
@@ -328,7 +342,16 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
 const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: RecordServiceInput) => void }> = ({ onCancel, onRecord }) => {
   const { t } = useTranslation('equipment');
-  const [performedAt, setPerformedAt] = useState(new Date().toISOString().slice(0, 10));
+  // Today on the reader's own calendar: toISOString() is UTC, which before 05:30 in India
+  // is still yesterday.
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const [performedAt, setPerformedAt] = useState(today);
+  // A service is recorded once done, so a future date is caught here, not by a refusal
+  // and a toast after Save (testing sheet, 5 Nov).
+  const future = !!performedAt && performedAt > today;
   const [kind, setKind] = useState<ServiceKind>('scheduled');
   const [meterReading, setMeterReading] = useState('');
   const [meterUnit, setMeterUnit] = useState<RuntimeUnit | null>(null);
@@ -338,8 +361,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     const hasReading = meterReading.trim() !== '';
     if (hasReading !== !!meterUnit) return false;
     if (hasReading && (Number.isNaN(Number(meterReading)) || Number(meterReading) < 0)) return false;
-    return !!performedAt;
-  }, [meterReading, meterUnit, performedAt]);
+    return !!performedAt && !future;
+  }, [meterReading, meterUnit, performedAt, future]);
 
   return (
     <form
@@ -358,7 +381,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     >
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.datePerformed')}</span>
-        <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        <input type="date" value={performedAt} max={today} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        {future && <span className="block text-xs text-rose-600 dark:text-rose-400">{t('service.notFuture')}</span>}
       </label>
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.kind')}</span>

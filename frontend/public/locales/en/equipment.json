@@ -238,7 +238,8 @@
     "days": "Days",
     "timeZone": "Time zone (IANA)",
     "timeZonePlaceholder": "e.g. Asia/Kolkata",
-    "allDay": "24 hours from {{from}}"
+    "allDay": "24 hours from {{from}}",
+    "overnight": "Ends the next day: a night shift."
   },
   "runStatus": {
     "scored": "scored",
@@ -259,7 +260,8 @@
     "unit": "Unit",
     "readingUnitPair": "A meter reading needs its unit, and a unit needs a reading.",
     "notes": "Notes",
-    "notesPlaceholder": "What was done"
+    "notesPlaceholder": "What was done",
+    "notFuture": "A service is recorded once it is done, so the date cannot be in the future."
   },
   "serviceKind": {
     "scheduled": "Scheduled",

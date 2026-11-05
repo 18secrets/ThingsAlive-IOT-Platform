@@ -128,7 +128,10 @@
     "searchMachines": "Search machines by name, code or site",
     "noMachineMatches": "No machine matches that search.",
     "hoursLeft": "{{hours}} h left",
-    "hoursOverdue": "{{hours}} h overdue"
+    "hoursOverdue": "{{hours}} h overdue",
+    "noOpenWorkOrders": "No open work orders.",
+    "yours": "Yours",
+    "due": "due {{when}}"
   },
   "classic": {
     "title": "Enterprise Command Center",

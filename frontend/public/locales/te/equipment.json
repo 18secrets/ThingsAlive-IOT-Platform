@@ -202,7 +202,8 @@
     "days": "రోజులు",
     "timeZone": "టైమ్ జోన్ (IANA)",
     "timeZonePlaceholder": "ఉదా. Asia/Kolkata",
-    "allDay": "{{from}} నుండి 24 గంటలు"
+    "allDay": "{{from}} నుండి 24 గంటలు",
+    "overnight": "మరుసటి రోజు ముగుస్తుంది: రాత్రి షిఫ్ట్."
   },
   "runStatus": {
     "scored": "స్కోర్ చేయబడింది",
@@ -223,7 +224,8 @@
     "unit": "యూనిట్",
     "readingUnitPair": "మీటర్ రీడింగ్‌కు యూనిట్, యూనిట్‌కు రీడింగ్ అవసరం.",
     "notes": "గమనికలు",
-    "notesPlaceholder": "ఏమి చేశారు"
+    "notesPlaceholder": "ఏమి చేశారు",
+    "notFuture": "సర్వీస్ పూర్తయిన తర్వాతే నమోదు చేస్తారు, కాబట్టి తేదీ భవిష్యత్తులో ఉండకూడదు."
   },
   "serviceKind": {
     "scheduled": "షెడ్యూల్ చేసినది",

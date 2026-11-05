@@ -159,6 +159,8 @@
     "availabilityHigh": "Highest availability first",
     "downtimeHigh": "Most downtime first",
     "severityHigh": "Most severe first",
-    "attentionFirst": "Needs attention first"
+    "attentionFirst": "Needs attention first",
+    "enabledFirst": "Enabled first",
+    "disabledFirst": "Disabled first"
   }
 }

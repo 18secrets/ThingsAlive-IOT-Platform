@@ -202,7 +202,8 @@
     "days": "दिन",
     "timeZone": "समय क्षेत्र (IANA)",
     "timeZonePlaceholder": "जैसे Asia/Kolkata",
-    "allDay": "{{from}} से 24 घंटे"
+    "allDay": "{{from}} से 24 घंटे",
+    "overnight": "अगले दिन खत्म होती है: रात की शिफ्ट।"
   },
   "runStatus": {
     "scored": "स्कोर किया गया",
@@ -223,7 +224,8 @@
     "unit": "इकाई",
     "readingUnitPair": "मीटर रीडिंग के साथ इकाई और इकाई के साथ रीडिंग ज़रूरी है।",
     "notes": "टिप्पणियाँ",
-    "notesPlaceholder": "क्या किया गया"
+    "notesPlaceholder": "क्या किया गया",
+    "notFuture": "सर्विस पूरी होने के बाद दर्ज की जाती है, इसलिए तारीख भविष्य की नहीं हो सकती।"
   },
   "serviceKind": {
     "scheduled": "निर्धारित",
