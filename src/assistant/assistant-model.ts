@@ -99,6 +99,14 @@ export function geminiConfigFrom(env: Record<string, string | undefined>): Gemin
 // assistant was unavailable. Still a bound: a hung call fails inside a minute.
 const MODEL_CALL_TIMEOUT_MS = 60_000;
 const FALLBACK_HOLD_MS = 5 * 60_000;
+export const OVERLOAD_WAITS_MS: readonly number[] = [1_500, 4_000];
+
+/** Gemini saying it is busy, as opposed to refusing the request: worth asking again. */
+export function isOverloaded(err: any): boolean {
+  const msg = `${err?.message || ''} ${JSON.stringify(err || {})}`;
+  return err?.status === 503 || err?.status === 429 || err?.code === 503 || err?.code === 429
+    || /\b503\b|\b429\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded/i.test(msg);
+}
 
 /** Gemini, on Vertex AI or with an API key. */
 /**
@@ -118,7 +126,12 @@ export class GeminiModel implements AssistantModel {
   /** Until when the fallback model answers instead (see generate). */
   private fallbackUntil = 0;
 
-  constructor(config: GeminiConfig) {
+  /**
+   * `overloadWaitsMs`: how long to wait before each retry of a model that said it was
+   * overloaded. Two short waits, because the person is already waiting and a turn can
+   * make five calls; past that it is an outage, not a spike.
+   */
+  constructor(config: GeminiConfig, private readonly overloadWaitsMs: readonly number[] = OVERLOAD_WAITS_MS) {
     this.name = config.model;
     // A turn can take five calls in a row; one that hangs held the whole chat open with
     // no answer (TC_128). Long enough for a slow answer, short enough to fail.
@@ -129,6 +142,26 @@ export class GeminiModel implements AssistantModel {
         ...(config.credentials ? { googleAuthOptions: { credentials: config.credentials } } : {}),
       })
       : new GoogleGenAI({ apiKey: config.apiKey, httpOptions });
+  }
+
+  /**
+   * Calls `ask` (at once when `now`, else after the first wait), and again after each
+   * wait while it keeps answering "overloaded". Anything else, or the last overload, is
+   * thrown as it came.
+   */
+  private async whileOverloaded<T>(ask: () => Promise<T>, now: boolean): Promise<T> {
+    const waits = now ? [0, ...this.overloadWaitsMs] : [...this.overloadWaitsMs];
+    let last: unknown;
+    for (const ms of waits) {
+      if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+      try {
+        return await ask();
+      } catch (err) {
+        if (!isOverloaded(err)) throw err;
+        last = err;
+      }
+    }
+    throw last;
   }
 
   async generate(input: { system: string; turns: AssistantTurn[]; tools: ToolDeclaration[] }): Promise<ModelReply> {
@@ -198,9 +231,15 @@ export class GeminiModel implements AssistantModel {
       const deadline = err?.status === 504 || err?.code === 504 || /\b504\b|DEADLINE_EXCEEDED/.test(msg);
       if (isCapacityOrNotFound && this.name !== fallback) {
         this.fallbackUntil = Date.now() + FALLBACK_HOLD_MS;
-        res = await callModel(fallback);
+        res = await this.whileOverloaded(() => callModel(fallback), true);
       } else if (deadline) {
         res = await callModel(first);
+      } else if (isOverloaded(err)) {
+        // Already on the fallback, so there is nowhere else to go — which is how Dev runs
+        // (primary and fallback both flash-lite). Every "high demand" there went straight
+        // to "could not answer": 19 of 40 questions on 5 Nov. These spikes pass in
+        // seconds, so wait and ask the same model again.
+        res = await this.whileOverloaded(() => callModel(first), false);
       } else {
         throw err;
       }
