@@ -6,7 +6,7 @@ import { EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { withTenantSession } from '../scope/tenant-session';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
-import { composeLayout } from './compose';
+import { composeAround, composeLayout, Draft } from './compose';
 import { EQUIPMENT_BACKED, PROGRESS_KINDS, SiteTwin, SiteTwinPlacement, SiteTwinZone, ZoneKind } from './site-twin.entity';
 
 /** What a site that has never been laid out is drawn as. A yard, not a guess at the
@@ -147,16 +147,18 @@ export class SiteTwinService {
 
   /** A first layout from the machines assigned to the site (`composeLayout`), not saved.
    * `attention` adds machines the caller knows need a person; open breakdowns are read
-   * here. */
-  async propose(scope: RequestScope, plantId: string, attention: Set<string> = new Set()): Promise<LayoutInput> {
+   * here. With a `draft`, the editor's zones are kept and the machines are arranged
+   * around them (`composeAround`). */
+  async propose(scope: RequestScope, plantId: string, attention: Set<string> = new Set(), draft?: Draft): Promise<LayoutInput> {
     const layout = await this.read(scope, plantId);
-    return composeLayout(layout.machines.map((e) => {
+    const machines = layout.machines.map((e) => {
       const k = key(e.sourceSystem, e.externalId);
       return {
         sourceSystem: e.sourceSystem, externalId: e.externalId, classSlug: e.equipmentClassSlug,
         category: layout.categories.get(k) ?? null, attention: attention.has(k) || layout.brokenDown.has(k),
       };
-    }), layout.version);
+    });
+    return draft ? composeAround(machines, draft, layout.version) : composeLayout(machines, layout.version);
   }
 
   /** One structure's progress, as reported by the site. Not idempotent for the same

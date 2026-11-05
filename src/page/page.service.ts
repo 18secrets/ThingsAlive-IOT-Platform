@@ -37,6 +37,7 @@ import { bindingSegments, overlapping, SignalBindingService } from '../signal-bi
 import { WorkOrderService } from '../work/services/work-order.service';
 import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
 import { DEMO_WORKFORCE, SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
+import { Draft } from '../site-twin/compose';
 import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
@@ -725,13 +726,14 @@ export class PageService {
 
   /** A first layout from the site's own machines (`composeLayout`), for the editor to
    * start from. Not saved. A machine the twin shows as alerting, silent or missing a
-   * sensor goes to the maintenance and breakdown bay, as an open breakdown does. */
-  async siteTwinProposal(scope: RequestScope, plantId: string, at: Date = new Date()) {
+   * sensor goes to the maintenance and breakdown bay, as an open breakdown does. With the
+   * editor's `draft`, its zones stay and the machines are arranged around them. */
+  async siteTwinProposal(scope: RequestScope, plantId: string, at: Date = new Date(), draft?: Draft) {
     const view = await this.siteTwin(scope, plantId, at);
     const attention = new Set(view.machines
       .filter((m) => m.status === 'alert' || m.status === 'no_data' || m.status === 'blocked')
       .map((m) => machineKey(m.sourceSystem, m.externalId)));
-    return this.twins.propose(scope, plantId, attention);
+    return this.twins.propose(scope, plantId, attention, draft);
   }
 
   /**

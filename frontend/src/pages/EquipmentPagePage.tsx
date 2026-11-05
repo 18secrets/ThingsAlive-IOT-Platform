@@ -7,7 +7,7 @@ import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
-  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageSignalChartData, PageWidget, RecordServiceInput,
+  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageReadinessRow, PageSignalChartData, PageWidget, RecordServiceInput,
   RuntimeUnit, ServiceKind, ShiftInput, ShiftRun, TenantModel, Weekday, apiCreateShift, apiGetMachinePage,
   apiGetMyClassModel, apiGetServiceHistory, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRecordService,
   apiRetireShift, apiUpdateShift,
@@ -419,6 +419,16 @@ function latestBySignal(widgets: PageWidget[]): Map<string, string> {
   return out;
 }
 
+/** Each signal's readiness from the page's readiness list, when the layout has one. */
+function readinessBySignal(widgets: PageWidget[]): Map<string, PageReadinessRow['readiness']> {
+  const out = new Map<string, PageReadinessRow['readiness']>();
+  for (const w of widgets) {
+    if (w.widgetType !== 'readiness_list' || w.readiness !== 'ready' || !Array.isArray(w.data)) continue;
+    for (const row of w.data as PageReadinessRow[]) out.set(row.signal, row.readiness);
+  }
+  return out;
+}
+
 /** The machine's digital twin: its class's 3-D model, read only, with each marker labelled
  *  by its signal's latest value. Markers waiting for a recheck are left off — the geometry
  *  moved under them, so where they would be drawn is not known to be right. */
@@ -431,17 +441,27 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
     let live = true;
     apiGetMyClassModel(classSlug)
       .then((m) => { if (live) { setModel(m); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' })); });
+      // A role that may not read the class's model is told so, not shown the API's refusal.
+      .catch((err) => {
+        if (!live) return;
+        setError(err instanceof ApiError && err.status === 403 ? t('twin.notForRole')
+          : err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' }));
+      });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classSlug]);
 
   const markers = useMemo<SceneMarker[]>(() => {
     const values = latestBySignal(widgets);
+    const readiness = readinessBySignal(widgets);
     return (model?.anchors ?? []).filter((a) => !a.needsRecheck).map((a) => {
       const name = a.label || a.signal;
-      const value = values.get(a.signal);
-      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label: value ? `${name} · ${value}` : name, tone: 'normal' };
+      // A stale or unbound signal looked the same as a live one; it is grey and says so,
+      // and its last value is not shown as if it were current.
+      const notCurrent = readiness.has(a.signal) && readiness.get(a.signal) !== 'ready';
+      const value = notCurrent ? undefined : values.get(a.signal);
+      const label = notCurrent ? `${name} · ${t('twin.noCurrentReading')}` : value ? `${name} · ${value}` : name;
+      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label, tone: notCurrent ? 'stale' : 'normal' };
     });
   }, [model, widgets]);
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { ScrollRows } from '../common/ScrollRows';
 import { useNavigate } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import i18n from '../../i18n';
@@ -36,9 +37,14 @@ const Unfilled: React.FC<{ reason?: string }> = ({ reason }) => {
   return <p className="text-xs text-slate-400 dark:text-slate-500">{reasonText(reason, t)}</p>;
 };
 
-const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode }> = ({ title, children }) => (
+const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode; count?: number }> = ({ title, children, count }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
-    {title && <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{title}</h3>}
+    {/* The count with the title: a list that scrolls past ten rows still says how long it is. */}
+    {title && (
+      <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+        {title}{count != null && count > 0 && <span className="ml-1.5 font-normal text-slate-500">({count})</span>}
+      </h3>
+    )}
     {children}
   </div>
 );
@@ -226,23 +232,23 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
   const { t } = useTranslation('equipment');
   const rows = (widget.data as PageAlertRow[] | null) ?? [];
   return (
-    <WidgetShell title={widget.title ?? t('widgets.alerts')}>
+    <WidgetShell title={widget.title ?? t('widgets.alerts')} count={widget.readiness === 'ready' ? rows.length : undefined}>
       {widget.readiness !== 'ready' ? (
         <Unfilled reason={widget.reason} />
       ) : rows.length === 0 ? (
         <Chip icon={CheckCircle2} tone="emerald">{t('widgets.noOpenAlerts')}</Chip>
       ) : (
-        <div className="space-y-2">
+        <ScrollRows className="space-y-2">
           {rows.map((a) => (
             <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-xs text-slate-400">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale())}</p>
+                <p className="text-xs text-slate-500">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale())}</p>
               </div>
               <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
           ))}
-        </div>
+        </ScrollRows>
       )}
     </WidgetShell>
   );
@@ -252,23 +258,23 @@ function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
   const { t } = useTranslation('equipment');
   const rows = (widget.data as PageWorkOrderRow[] | null) ?? [];
   return (
-    <WidgetShell title={widget.title ?? t('widgets.workOrders')}>
+    <WidgetShell title={widget.title ?? t('widgets.workOrders')} count={widget.readiness === 'ready' ? rows.length : undefined}>
       {widget.readiness !== 'ready' ? (
         <Unfilled reason={widget.reason} />
       ) : rows.length === 0 ? (
         <p className="text-xs text-slate-400">{t('widgets.noOpenWorkOrders')}</p>
       ) : (
-        <div className="space-y-2">
+        <ScrollRows className="space-y-2">
           {rows.map((o) => (
             <div key={o.id} className="flex items-center gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-xs text-slate-400">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}</p>
+                <p className="text-xs text-slate-500">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}</p>
               </div>
             </div>
           ))}
-        </div>
+        </ScrollRows>
       )}
     </WidgetShell>
   );
@@ -347,25 +353,30 @@ function MachineListWidget({ widget }: { widget: PageWidget }) {
   }
   const rows = widget.data as PageMachineRow[];
   return (
-    <WidgetShell title={widget.title ?? t('widgets.machines')}>
-      <div className="space-y-1.5">
+    <WidgetShell title={widget.title ?? t('widgets.machines')} count={rows.length}>
+      {/* The same bordered two-line rows as Alerts and Work orders beside it: one line of
+          small text per machine read as a different kind of card. */}
+      <ScrollRows className="space-y-2">
         {rows.map((m) => (
-          <div key={`${m.sourceSystem}/${m.externalId}`} className="flex items-center justify-between gap-2 text-xs">
-            {/* A name on a site page that went nowhere (test report MIN-8). */}
-            <button
-              type="button"
-              onClick={() => navigate(`/dashboard/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
-              className="text-slate-600 dark:text-slate-300 truncate hover:text-sky-600 dark:hover:text-sky-400 hover:underline cursor-pointer text-left"
-            >
-              {m.name ?? m.externalId}
-            </button>
+          <div key={`${m.sourceSystem}/${m.externalId}`} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
+            <div className="min-w-0">
+              {/* A name on a site page that went nowhere (test report MIN-8). */}
+              <button
+                type="button"
+                onClick={() => navigate(`/dashboard/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
+                className="block max-w-full text-xs font-semibold text-slate-800 dark:text-slate-100 truncate hover:text-sky-600 dark:hover:text-sky-400 hover:underline cursor-pointer text-left"
+              >
+                {m.name ?? m.externalId}
+              </button>
+              <p className="text-xs text-slate-500 truncate">{m.sourceSystem}/{m.externalId}</p>
+            </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {m.openAlerts > 0 && <Chip icon={Bell} tone="rose">{m.openAlerts}</Chip>}
               <Chip tone={READINESS_TONE[m.readiness]}>{t(`readiness.${m.readiness}`, { defaultValue: m.readiness })}</Chip>
             </div>
           </div>
         ))}
-      </div>
+      </ScrollRows>
     </WidgetShell>
   );
 }

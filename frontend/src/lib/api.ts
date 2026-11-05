@@ -2370,6 +2370,15 @@ export function apiGetSiteTwinProposal(plantId: string): Promise<SiteTwinLayoutI
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`);
 }
 
+/** The site's machines arranged around the editor's draft (`POST /sites/:plantId/twin/proposal`):
+ *  every zone in it kept as drawn, a structure already drawn reused, only the missing ones
+ *  added clear of the drawing. Not saved. */
+export function apiArrangeSiteTwinAround(
+  plantId: string, draft: Pick<SiteTwinLayoutInput, 'extent' | 'zones'>,
+): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`, { method: 'POST', body: JSON.stringify(draft) });
+}
+
 /** Replaces the whole layout (`equipment.write`) and answers with the fresh twin. */
 export function apiSaveSiteTwinLayout(plantId: string, layout: SiteTwinLayoutInput): Promise<SiteTwin> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/layout`, { method: 'PUT', body: JSON.stringify(layout) });
