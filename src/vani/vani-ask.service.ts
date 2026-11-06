@@ -279,10 +279,13 @@ export class VaniAskService {
       });
 
       if (body.event_id) {
-        const [call]: { machine_id: string }[] = await m.query(
-          `SELECT "machine_id" FROM "vani_call" WHERE "tenant_id" = $1 AND "alert_event_id" = $2`, [tenantId, body.event_id]);
+        // By event id, so a prediction call (D57, Lane B) is found too; only an alert
+        // call has an alert to carry into the conversation.
+        const [call]: { machine_id: string; alert_event_id: string | null }[] = await m.query(
+          `SELECT "machine_id", "alert_event_id" FROM "vani_call" WHERE "tenant_id" = $1 AND "event_id" = $2`,
+          [tenantId, body.event_id]);
         const l = call && linked.find((x) => x.machine_id === call.machine_id);
-        return l ? asFocus(l, body.event_id) : 'unknown';
+        return l ? asFocus(l, call.alert_event_id) : 'unknown';
       }
       if (body.machine_id) {
         const l = linked.find((x) => x.machine_id === body.machine_id);

@@ -75,11 +75,11 @@ export class VaniDecisionService {
       // Two callbacks for the same call at the same moment: the second waits here for
       // the first to commit, then finds its row. The unique index holds it if not.
       await m.query(`SELECT pg_advisory_xact_lock(hashtext('vani_call_action'), hashtext($1))`,
-        [`${call.tenantId}/${call.alertEventId}`]);
+        [`${call.tenantId}/${call.eventId}`]);
       const [done] = await m.query(
         `SELECT "decision", "status", "reason", "acknowledged", "work_order_id"
            FROM "vani_call_action" WHERE "tenant_id" = $1 AND "alert_event_id" = $2`,
-        [call.tenantId, call.alertEventId]);
+        [call.tenantId, call.eventId]);
       if (done) return toRecord(done);
 
       const result = await this.decide(m, call, input, customer, now);
@@ -88,7 +88,8 @@ export class VaniDecisionService {
            ("tenant_id", "alert_event_id", "attempt", "decision", "status", "reason", "acted_as_user_id",
             "acknowledged", "work_order_id")
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [call.tenantId, call.alertEventId, input.attempt, input.decision, result.status, result.reason,
+        // alert_event_id holds the call's event id (`1764100000000-VaniTriggerActions`).
+        [call.tenantId, call.eventId, input.attempt, input.decision, result.status, result.reason,
           customer?.userId ?? null,
           result.acknowledged, result.workOrderId]);
       return result;
@@ -107,26 +108,27 @@ export class VaniDecisionService {
     if (!customer) return record('not_acted', 'unknown_customer');
     if (!customer.scope) return record('not_acted', customer.refusal ?? 'customer_not_active');
 
-    const alert = await m.getRepository(AlertEvent).findOne({ where: { tenantId: call.tenantId, id: call.alertEventId } });
-    if (!alert) return record('not_acted', 'alert_not_found');
+    const subject = await this.subject(m, call);
+    if (!subject) return record('not_acted', 'alert_not_found');
+    const { alert } = subject;
 
     // Inside a savepoint: a refusal part-way (the job, after the acknowledgement) must
     // leave neither, so the row below says "not acted" and is true.
     await m.query('SAVEPOINT vani_act');
     try {
       let acknowledged = false;
-      if (alert.state === 'open') {
+      if (alert?.state === 'open') {
         await this.alerts.acknowledgeIn(m, customer.scope, alert.id, now);
         acknowledged = true;
       }
       let workOrderId: string | null = null;
       if (input.decision === 'inspection_approved') {
         const order = await this.work.raiseIn(m, customer.scope, {
-          sourceSystem: alert.sourceSystem,
-          externalId: alert.externalId,
-          alertId: alert.id,
-          predictionId: alert.predictionId ?? null,
-          title: `Inspection agreed on a Vani call: ${alert.ruleName}`.slice(0, MAX_TITLE_LENGTH),
+          sourceSystem: subject.sourceSystem,
+          externalId: subject.externalId,
+          alertId: alert?.id ?? null,
+          predictionId: alert ? alert.predictionId ?? null : call.predictionId,
+          title: `Inspection agreed on a Vani call: ${subject.name}`.slice(0, MAX_TITLE_LENGTH),
           description: [
             `${customer.name} agreed to an inspection on a Vani call`
               + `${input.calledAt ? ` at ${input.calledAt}` : ''}.`,
@@ -134,7 +136,7 @@ export class VaniDecisionService {
           ].filter(Boolean).join('\n\n'),
           // "Act within the week" is what a non-critical alert asks for; a critical
           // one is the platform's night tier (D56), so its job is high priority.
-          priority: alert.severity === 'critical' ? 'high' : 'normal',
+          priority: call.severity === 'critical' ? 'high' : 'normal',
         }, now);
         workOrderId = order.id;
       }
@@ -150,6 +152,27 @@ export class VaniDecisionService {
       const status = err.getStatus();
       return record('not_acted', status === 403 ? 'not_permitted' : status === 404 ? 'not_in_scope' : 'refused');
     }
+  }
+
+  /**
+   * What the call was about: its alert, or for a prediction call (D57, Lane B) the
+   * machine and scenario it carries. A prediction call has nothing to acknowledge.
+   */
+  private async subject(m: EntityManager, call: VaniCall): Promise<{
+    alert: AlertEvent | null; sourceSystem: string; externalId: string; name: string;
+  } | null> {
+    if (call.kind === 'trigger_action') {
+      const [scenario] = await m.query(
+        `SELECT "name" FROM "client_scenario" WHERE "tenant_id" = $1 AND "slug" = $2 LIMIT 1`,
+        [call.tenantId, call.clientScenarioSlug]);
+      return {
+        alert: null, sourceSystem: call.sourceSystem!, externalId: call.externalId!,
+        // Named as the call named it (`vani-prediction-queue.ts`).
+        name: scenario?.name ?? call.clientScenarioSlug!.replace(/[-_]+/g, ' '),
+      };
+    }
+    const alert = await m.getRepository(AlertEvent).findOne({ where: { tenantId: call.tenantId, id: call.alertEventId! } });
+    return alert ? { alert, sourceSystem: alert.sourceSystem, externalId: alert.externalId, name: alert.ruleName } : null;
   }
 
   /**

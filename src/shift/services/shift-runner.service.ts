@@ -5,6 +5,7 @@ import { AlertService } from '../../alert/services/alert.service';
 import { RequestScope } from '../../auth/types/request-scope';
 import { LegacyTelemetryReader, PullResult } from '../../legacy/legacy-telemetry.reader';
 import { PredictionService } from '../../prediction/services/prediction.service';
+import { queueVaniPredictionCalls } from '../../vani/vani-prediction-queue';
 import { TelemetryService } from '../../telemetry/telemetry.service';
 import { ChainService } from '../../intelligence/services/chain.service';
 import { WindowChain } from '../../alert/services/alert-rules';
@@ -300,6 +301,13 @@ export class ShiftRunner {
         })),
         chains,
       );
+
+      // After the alerts, so a prediction an alert already covers is not called about
+      // twice (D57, Lane B). Never fatal: it logs and returns 0 on a fault.
+      await queueVaniPredictionCalls(this.ds, {
+        tenantId: window.tenantId, sourceSystem: window.sourceSystem,
+        externalId: window.externalId, localDate: window.localDate,
+      }, result.written);
 
       await this.trackGeofences(window, readings);
       await this.recordUtilization(window, readings);

@@ -61,6 +61,32 @@ and the row in one transaction.
 - Vani has not built `customer_decision` yet. The field name and the four values are
   the scope review's; confirm with Deepak before the first live call that uses it.
 
+## Lane B — calls about predictions (D57), built 2026-11-06
+
+`src/vani/vani-prediction-queue.ts`, run by the shift runner straight after the alert
+pass. A prediction earns a `trigger_action` call when it is **live, `high` or
+`critical`, and `full` confidence** (decided 2026-11-06), on a linked machine of an
+enabled account, and no open or acknowledged alert from the same scenario is on that
+machine (that alert's own call covers it). One per machine, scenario and shift-local
+day, held by `uq_vani_call_prediction_day`.
+
+- Ledger (`VaniTriggerActions1764100000000`): `vani_call.kind`, and `event_id`
+  generated as `COALESCE(alert_event_id, trigger_event_id)` — an alert call's event id is
+  still its alert id. Outcomes and actions reference the call by `event_id`; their
+  `alert_event_id` column holds the event id. Down refuses while a prediction call exists.
+- Packet: `trigger.kind = trigger_action`, title "<scenario> risk on <machine>", and a
+  context of `alert_title`, `summary`, `prediction` (one spoken sentence: severity, risk
+  out of 100, signals out of range) and `confidence` as its own field. No failure window
+  or recommended action: 2.0 records neither on a prediction.
+- Lane D works on prediction calls: an approved inspection raises the job on the
+  machine, linked to the prediction; "acknowledged" is recorded (no alert to acknowledge).
+- `GET /api/v1/vani/calls` returns `eventId`, `kind`, `predictionId` and `scenarioName`.
+- **Health-band calls are not built.** 2.0 keeps no machine health score, so there is no
+  band to cross; tell Deepak rather than invent one (decided 2026-11-06).
+- Vani's guide shows `context.prediction` as text; the spec shows an object. We send
+  text, as the guide does, plus a separate `confidence`. Not yet sent to the live
+  service: confirm with Deepak that it accepts this `trigger_action` body first.
+
 ## Running the test client locally
 
 ```bash

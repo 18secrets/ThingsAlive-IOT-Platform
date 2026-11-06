@@ -41,7 +41,8 @@ export class VaniOutcomeService {
     const ack = await runTenantSpanning(this.ds, 'vani outcome callback', async (m) => {
       // Tenant-spanning because the callback says which account, not which tenant;
       // the call row is what turns one into the other.
-      call = await m.getRepository(VaniCall).findOneBy({ alertEventId: body.event_id });
+      // By event id: an alert call's is its alert's id, a prediction call's its own.
+      call = await m.getRepository(VaniCall).findOneBy({ eventId: body.event_id });
       if (!call) throw new NotFoundException(`No Vani call was requested for event ${body.event_id}.`);
       if (call.vaniAccountId !== body.account_id || call.machineId !== body.machine_id) {
         throw new BadRequestException(`Event ${body.event_id} was not a call to ${body.account_id} about ${body.machine_id}.`);
@@ -52,7 +53,7 @@ export class VaniOutcomeService {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
          ON CONFLICT ("tenant_id", "alert_event_id", "attempt") DO NOTHING
          RETURNING "id"`,
-        [call.tenantId, call.alertEventId, body.attempt, body.call_id, body.outcome, body.summary,
+        [call.tenantId, call.eventId, body.attempt, body.call_id, body.outcome, body.summary,
           body.duration_s, body.called_at, JSON.stringify(raw)],
       );
       return { ok: true as const, duplicate: inserted.length === 0 };
@@ -81,15 +82,24 @@ export class VaniOutcomeService {
       const params: unknown[] = [scope.tenantId];
       const where = [`c."tenant_id" = $1`];
       if (filter.alertEventId) { params.push(filter.alertEventId); where.push(`c."alert_event_id" = $${params.length}`); }
-      if (filter.externalId) { params.push(filter.externalId); where.push(`a."external_id" = $${params.length}`); }
+      // An alert call's machine is on its alert; a prediction call carries its own.
+      const ext = `COALESCE(a."external_id", c."external_id")`;
+      if (filter.externalId) { params.push(filter.externalId); where.push(`${ext} = $${params.length}`); }
       if (scope.equipmentIds !== undefined && !filter.externalId) {
-        params.push([...scope.equipmentIds]); where.push(`a."external_id" = ANY($${params.length}::text[])`);
+        params.push([...scope.equipmentIds]); where.push(`${ext} = ANY($${params.length}::text[])`);
       }
       const calls: Record<string, any>[] = await m.query(
-        `SELECT c."alert_event_id", a."source_system", a."external_id", a."rule_name", c."machine_id",
+        `SELECT c."event_id", c."kind", c."alert_event_id", c."prediction_id",
+                COALESCE(a."source_system", c."source_system") AS "source_system", ${ext} AS "external_id",
+                a."rule_name", sc."name" AS "scenario_name", c."client_scenario_slug", c."machine_id",
                 c."severity", c."state", c."attempts", c."call_id", c."vani_status", c."disposition",
                 c."reason", c."retry_at", c."last_error", c."created_at", c."updated_at"
-           FROM "vani_call" c JOIN "alert_event" a ON a."id" = c."alert_event_id"
+           FROM "vani_call" c
+           LEFT JOIN "alert_event" a ON a."id" = c."alert_event_id"
+           LEFT JOIN LATERAL (
+             SELECT s."name" FROM "client_scenario" s
+              WHERE s."tenant_id" = c."tenant_id" AND s."slug" = c."client_scenario_slug" LIMIT 1
+           ) sc ON true
           WHERE ${where.join(' AND ')}
           ORDER BY c."created_at" DESC
           LIMIT 200`,
@@ -97,18 +107,23 @@ export class VaniOutcomeService {
       );
       if (!calls.length) return [];
       const outcomes = await m.getRepository(VaniCallOutcome).find({
-        where: { tenantId: scope.tenantId, alertEventId: In(calls.map((c) => c.alert_event_id)) },
+        where: { tenantId: scope.tenantId, alertEventId: In(calls.map((c) => c.event_id)) },
         order: { attempt: 'ASC' },
       });
       const actions: Record<string, any>[] = await m.query(
         `SELECT "alert_event_id", "decision", "status", "reason", "acknowledged", "work_order_id"
            FROM "vani_call_action" WHERE "tenant_id" = $1 AND "alert_event_id" = ANY($2::uuid[])`,
-        [scope.tenantId, calls.map((c) => c.alert_event_id)]);
+        [scope.tenantId, calls.map((c) => c.event_id)]);
       return calls.map((c) => ({
+        eventId: c.event_id,
+        // `alert`, or `trigger_action` for a prediction that raised no alert (D57).
+        kind: c.kind,
         alertEventId: c.alert_event_id,
+        predictionId: c.prediction_id,
         sourceSystem: c.source_system,
         externalId: c.external_id,
         alertName: c.rule_name,
+        scenarioName: c.scenario_name ?? c.client_scenario_slug,
         machineId: c.machine_id,
         severity: c.severity,
         state: c.state,
@@ -121,7 +136,7 @@ export class VaniOutcomeService {
         lastError: c.last_error,
         requestedAt: c.created_at,
         updatedAt: c.updated_at,
-        outcomes: outcomes.filter((o) => o.alertEventId === c.alert_event_id).map((o) => ({
+        outcomes: outcomes.filter((o) => o.alertEventId === c.event_id).map((o) => ({
           attempt: o.attempt, callId: o.callId, outcome: o.outcome,
           // Written by Vani for an alert history. Shown as sent.
           summary: o.summary, durationS: o.durationS, calledAt: o.calledAt, receivedAt: o.receivedAt,
@@ -130,7 +145,7 @@ export class VaniOutcomeService {
         decision: ((a) => (a ? {
           decision: a.decision, status: a.status, reason: a.reason,
           acknowledged: a.acknowledged, workOrderId: a.work_order_id,
-        } : null))(actions.find((a) => a.alert_event_id === c.alert_event_id)),
+        } : null))(actions.find((a) => a.alert_event_id === c.event_id)),
       }));
     });
   }
