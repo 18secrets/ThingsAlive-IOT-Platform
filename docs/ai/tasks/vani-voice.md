@@ -131,7 +131,7 @@ Decisions taken for this phase (2026-11-04):
   4.5 mm/s), named in plain words.
 - **Local only for now** — not seeded on Railway Development.
 
-## Configuration this needs on Railway (not yet set)
+## Configuration this needs on Railway (not yet set — set after the merge, decided 2026-11-06)
 
 Deepak's written approval (Phase 0 Answers §4) covers `VANI_PLATFORM_TOKEN`, `VANI_BASE_URL`,
 `VANI_CALLBACK_SECRET` and `VANI_CALLS_ENABLED` on **the existing API service only**. The
@@ -159,8 +159,9 @@ older than 24 hours is never sent.
 - **Railway approval names the wrong service** — see the configuration section.
 - **Migration timestamp shared with `main`** — `origin/main` has
   `1763600000000-NamedFormulaActive`, the same timestamp as this branch's `VaniVoice`.
-  TypeORM records migrations by name, so both run, but their order is not defined. Raise it
-  before merging rather than renaming a committed migration.
+  TypeORM records migrations by name, so both run, but their order is not defined. With
+  `main` merged in (2026-11-06) both ran and the full suite passed; the two touch unrelated
+  tables. Left as is rather than renaming a committed migration.
 - **Snapshot `health_score`** — 2.0 keeps no health score, so the snapshot sends none.
   The status line is the open alerts on the machine. Confirm Vani accepts a snapshot
   without `health_score`.
@@ -175,7 +176,8 @@ older than 24 hours is never sent.
 - ~~Suppressed/deferred callbacks~~ — the Machine Lane Spec §3.4 sends
   `held_for_inbound_review` and `suppressed_by_policy`; both accepted since
   `1763900000000-VaniPolicyOutcomes` (`test/vani-policy-outcomes.spec.ts`). Vani's `reason`
-  (e.g. `feature_not_enabled`) is kept in the stored payload.
+  (e.g. `feature_not_enabled`) is kept in the stored payload. Tapas confirmed on
+  2026-11-06 that the live service sends all seven.
 - ~~The alert summary Vani reads is machine-written~~ — done 2026-11-04 in
   `src/vani/vani-speech.ts`, without touching the engine's own summary: a threshold alert
   is said from its evidence ("Bearing vibration on Diesel Generator DG-01 has been above
