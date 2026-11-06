@@ -1,19 +1,21 @@
 # Vani voice integration — plan and status
 
 Source: *Vani × Things Alive IoT Platform — Integration Guide*, 3 Nov 2026 (Vani side live).
+Since 5 Nov also Deepak's *Phase 0 Answers*, *Scope Review* and the *Machine Lane Spec* v0.1
+(3 Nov), whose §3 is the contract the live service was tested against. Decisions: D56, D57.
 Branch: `feature/vani-voice`, off `origin/main` @ `2360b1b`. Merging is Deepak's.
 Plan page: https://claude.ai/artifact/LwrCLUXqT6vkgqgmY9whYq
 
 Status vocabulary follows `task-register.md`: an item is **Complete** only once merged to
 `main`. Until then, done-on-branch is **In progress**.
 
-## Status — as of 2026-11-04
+## Status — as of 2026-11-06
 
 | # | Step | State | Evidence |
 |---|---|---|---|
-| 1 | Platform token from Deepak | **Waiting** — placeholder `VANI_PLATFORM_TOKEN` | — |
-| 2 | Severity mapping for our `high` | **Waiting** — placeholder `VANI_HIGH_SEVERITY`, default `warning` | `src/vani/vani-severity.ts` |
-| 3 | Callback URL and its secret | **Waiting** — placeholder `VANI_CALLBACK_SECRET`; Deepak to confirm Vani can send it as `X-Vani-Secret` | `src/vani/vani-outcome.service.ts` |
+| 1 | Platform token from Deepak | **Waiting on handover** — it exists (Vani's own `VANI_PLATFORM_TOKEN`); Deepak hands it to the team lead out-of-band | Phase 0 Answers §1 |
+| 2 | Severity mapping for our `high` | **Decided** — `warning` (D56); `VANI_HIGH_SEVERITY` stays unset | `src/vani/vani-severity.ts` |
+| 3 | Callback URL and its secret | **Agreed** — `X-Vani-Secret`, Vani adds it before the live test. Left: we generate the secret, hand it over out-of-band, send the final URL | `src/vani/vani-outcome.service.ts` |
 | 4 | `vani_account_link` | In progress (on branch) | `1763600000000-VaniVoice.ts`, `test/vani-voice.spec.ts` |
 | 5 | `vani_machine_link` | In progress (on branch) | same |
 | 6 | `vani_call` + `vani_call_outcome` ledger | In progress (on branch) | same |
@@ -21,7 +23,7 @@ Status vocabulary follows `task-register.md`: an item is **Complete** only once 
 | 8 | Machine packet | In progress (on branch) — title + summary only, see open item | `src/vani/vani-queue.ts` |
 | 9 | Queue with the alert, send once | In progress (on branch) | `src/vani/vani-call-sender.ts`, `test/vani-calls.spec.ts` |
 | 10 | Account snapshot push | In progress (on branch) — pushed when the picture changes; status = open alerts; no `health_score` | `src/vani/vani-snapshot.ts`, `1763700000000-VaniSnapshot.ts` |
-| 11 | Outcome callback endpoint | In progress (on branch) — `POST /api/v1/vani/outcome-callback` | `src/vani/vani.controller.ts`, `test/vani-outcomes.spec.ts` |
+| 11 | Outcome callback endpoint | In progress (on branch) — `POST /api/v1/vani/outcome-callback`; seven outcomes since `1763900000000-VaniPolicyOutcomes` | `src/vani/vani.controller.ts`, `test/vani-outcomes.spec.ts` |
 | 12 | Call-history read API for the UI team | In progress (on branch) — `GET /api/v1/vani/calls?alert=&equipment=` (`prediction.read`) | same |
 | 13 | Seed USA test client `usa-test-01` | In progress (on branch) — `npm run seed:vani-test`, local databases only | `src/database/seeds/seed-vani-test.ts`, `test/seed-vani-test.spec.ts` |
 | 14 | DG-01 from the library, linked to `dg-01` | In progress (on branch) — library `diesel-generator` granted; site Grapevine, TX | same |
@@ -53,14 +55,20 @@ Decisions taken for this phase (2026-11-04):
   4.5 mm/s), named in plain words.
 - **Local only for now** — not seeded on Railway Development.
 
-## Configuration this needs on Railway (not yet set — needs a written exception)
+## Configuration this needs on Railway (not yet set)
+
+Deepak's written approval (Phase 0 Answers §4) covers `VANI_PLATFORM_TOKEN`, `VANI_BASE_URL`,
+`VANI_CALLBACK_SECRET` and `VANI_CALLS_ENABLED` on **the existing API service only**. The
+sender runs on the **scheduler**, which is where three of them are read (table below), so
+the approval does not yet cover what the code needs. Ask for it to name the scheduler too
+before setting anything. Nothing is set until the branch is merged and the token handed over.
 
 | Variable | Service | Purpose |
 |---|---|---|
 | `VANI_BASE_URL` | scheduler | `https://vani-service-production.up.railway.app` |
 | `VANI_PLATFORM_TOKEN` | scheduler | From Deepak, out-of-band. Never logged. |
 | `VANI_CALLS_ENABLED` | scheduler | `true` to run the sender. Off by default. |
-| `VANI_HIGH_SEVERITY` | api + scheduler | `warning` (default) or `critical` |
+| `VANI_HIGH_SEVERITY` | api + scheduler | Leave unset: `warning` is decided (D56) |
 | `VANI_CALLBACK_SECRET` | api | Shared with Vani; sent as `X-Vani-Secret`. Unset, every callback gets 503. |
 
 Unset, nothing is sent and queued requests wait without spending their attempts. A request
@@ -68,12 +76,15 @@ older than 24 hours is never sent.
 
 ## Open, and blocking something
 
-- **Token** — blocks every live call (step 17).
-- **`high` → `critical` or `warning`** — placeholder default `warning`. Decide and record as
-  a D-number in `DECISIONS.md`.
-- **Callback authentication** — the guide gives Vani's callback no secret or signature.
-  The endpoint refuses callbacks (503) until `VANI_CALLBACK_SECRET` is set, and then
-  requires it in `X-Vani-Secret`. Vani has to be changed to send it — ask Deepak.
+- **Token** — blocks every live call (step 17). Exists; waiting on Deepak's handover.
+- ~~`high` → `critical` or `warning`~~ — `warning`, D56.
+- ~~Callback authentication~~ — agreed 5 Nov: `X-Vani-Secret`, added on Vani's side before
+  the live test. Until both hold it the endpoint answers 503 and Vani keeps the outcome.
+- **Railway approval names the wrong service** — see the configuration section.
+- **Migration timestamp shared with `main`** — `origin/main` has
+  `1763600000000-NamedFormulaActive`, the same timestamp as this branch's `VaniVoice`.
+  TypeORM records migrations by name, so both run, but their order is not defined. Raise it
+  before merging rather than renaming a committed migration.
 - **Snapshot `health_score`** — 2.0 keeps no health score, so the snapshot sends none.
   The status line is the open alerts on the machine. Confirm Vani accepts a snapshot
   without `health_score`.
@@ -85,17 +96,23 @@ older than 24 hours is never sent.
   Prediction window, recommended action and health score are not stored on an alert as
   speakable text, and are not invented. For the §7 call, the alert rule's summary has to
   say it.
-- **Suppressed/deferred callbacks** — the guide says a callback still fires, but its
-  `outcome` enum has no value for "suppressed". Ask Deepak what Vani sends.
+- ~~Suppressed/deferred callbacks~~ — the Machine Lane Spec §3.4 sends
+  `held_for_inbound_review` and `suppressed_by_policy`; both accepted since
+  `1763900000000-VaniPolicyOutcomes` (`test/vani-policy-outcomes.spec.ts`). Vani's `reason`
+  (e.g. `feature_not_enabled`) is kept in the stored payload.
 - ~~The alert summary Vani reads is machine-written~~ — done 2026-11-04 in
   `src/vani/vani-speech.ts`, without touching the engine's own summary: a threshold alert
   is said from its evidence ("Bearing vibration on Diesel Generator DG-01 has been above
   4.5 millimeters per second on all of the last 10 readings, reaching 5.25 millimeters per
   second."). Other alert kinds keep the engine's wording with snake_case keys made into
   words; a prediction-severity summary still names its scenario slug.
-- **Companion spec** `ThingsAlive_Vani_MachineLane_Spec_20261103.md` — not in the repo.
+- **Companion spec** — found in Deepak's handoff bundle. He recommends committing the
+  bundle's `.md` copies to `docs/ai/vani/`; only PDFs have reached us so far.
 
-## Phase 6 — analysis tool: built on branch, off until Deepak agrees
+## Phase 6 — analysis tool: built on branch, approved 5 Nov (D57), live after Phase 5
+
+Deepak confirmed Vani can send the caller's E.164 number and a `conversation_id` with each
+question. Whether registered numbers are 2.0 users is settled per account at registration.
 
 Answering a customer's questions on an inbound call from live data, rather than the
 snapshot alone. Both agents already exist: Vani runs the call, and 2.0's assistant
@@ -121,7 +138,7 @@ signed-in person:
 To confirm with Deepak: does Vani pass the caller's number and a conversation id, and are
 Vani's registered numbers the same people as 2.0 users?
 
-**Decision, 2026-11-04 — Option B, pending Deepak.** Vani does not access platform data or
+**Decision, 2026-11-04 — Option B; Deepak agreed 2026-11-05.** Vani does not access platform data or
 tools. It gets one analysis tool ("ask the platform"): it sends the question, caller number,
 account, machine in focus and conversation id; 2.0 runs the analysis with the assistant's
 tools under that caller's scope (figures from the platform's own rules and calculations,

@@ -12,6 +12,10 @@ export const VANI_OUTCOMES = [
   'voicemail_not_delivered',
   'no_answer',
   'failed',
+  // Accepted but not dialed: a switched-off feature or the daily cap, or a call held
+  // for the customer's next call in (`1763900000000-VaniPolicyOutcomes`).
+  'held_for_inbound_review',
+  'suppressed_by_policy',
 ] as const;
 export type VaniOutcome = (typeof VANI_OUTCOMES)[number];
 
