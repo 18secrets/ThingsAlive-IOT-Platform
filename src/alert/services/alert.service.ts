@@ -243,40 +243,54 @@ export class AlertService {
     return this.transition(scope, id, 'resolved', note.trim(), now);
   }
 
+  /**
+   * Acknowledge inside a transaction the caller already holds, so it commits with what
+   * prompted it (Vani acting on a customer's word on a call, `vani-decision.ts`). `m`
+   * must be a tenant session for `scope`.
+   */
+  async acknowledgeIn(m: EntityManager, scope: RequestScope, id: string, now = new Date()): Promise<AlertEvent> {
+    return this.transitionWith(m, scope, id, 'acknowledged', null, now);
+  }
+
   private async transition(
     scope: RequestScope, id: string, to: 'acknowledged' | 'resolved',
     note: string | null, now: Date,
   ): Promise<AlertEvent> {
-    return withTenantSession(this.ds, scope, async (m) => {
-      const repo = m.getRepository(AlertEvent);
-      const event = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
-      if (!event) throw new NotFoundException('No such alert in this account.');
-      if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(event.externalId)) {
-        throw new NotFoundException('No such alert in this account.');
-      }
-      if (event.state === 'resolved') {
-        throw new BadRequestException('That alert is already resolved.');
-      }
+    return withTenantSession(this.ds, scope, (m) => this.transitionWith(m, scope, id, to, note, now));
+  }
 
-      if (to === 'acknowledged') {
-        // Seeing it twice is not an event. Keeping the first acknowledgement means
-        // "how long before anybody looked" stays answerable.
-        if (event.state === 'acknowledged') return event;
-        event.state = 'acknowledged';
-        event.acknowledgedBy = scope.userId;
-        event.acknowledgedAt = now;
-      } else {
-        // Resolving without acknowledging is ordinary — somebody who fixes it has
-        // plainly seen it — so the acknowledgement is filled in rather than demanded.
-        event.acknowledgedBy = event.acknowledgedBy ?? scope.userId;
-        event.acknowledgedAt = event.acknowledgedAt ?? now;
-        event.state = 'resolved';
-        event.resolvedBy = scope.userId;
-        event.resolvedAt = now;
-        event.resolutionNote = note;
-      }
-      return repo.save(event);
-    });
+  private async transitionWith(
+    m: EntityManager, scope: RequestScope, id: string, to: 'acknowledged' | 'resolved',
+    note: string | null, now: Date,
+  ): Promise<AlertEvent> {
+    const repo = m.getRepository(AlertEvent);
+    const event = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
+    if (!event) throw new NotFoundException('No such alert in this account.');
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(event.externalId)) {
+      throw new NotFoundException('No such alert in this account.');
+    }
+    if (event.state === 'resolved') {
+      throw new BadRequestException('That alert is already resolved.');
+    }
+
+    if (to === 'acknowledged') {
+      // Seeing it twice is not an event. Keeping the first acknowledgement means
+      // "how long before anybody looked" stays answerable.
+      if (event.state === 'acknowledged') return event;
+      event.state = 'acknowledged';
+      event.acknowledgedBy = scope.userId;
+      event.acknowledgedAt = now;
+    } else {
+      // Resolving without acknowledging is ordinary — somebody who fixes it has
+      // plainly seen it — so the acknowledgement is filled in rather than demanded.
+      event.acknowledgedBy = event.acknowledgedBy ?? scope.userId;
+      event.acknowledgedAt = event.acknowledgedAt ?? now;
+      event.state = 'resolved';
+      event.resolvedBy = scope.userId;
+      event.resolvedAt = now;
+      event.resolutionNote = note;
+    }
+    return repo.save(event);
   }
 
   /**

@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { AlertModule } from '../alert/alert.module';
 import { AssistantModule } from '../assistant/assistant.module';
 import { IdentityModule } from '../identity/identity.module';
+import { WorkModule } from '../work/work.module';
 import { VaniAskService } from './vani-ask.service';
 import { VaniBreaker } from './vani-breaker';
 import { VaniCallScheduler } from './vani-call.scheduler';
 import { VaniCallSender } from './vani-call-sender';
 import { VaniClient } from './vani-client';
+import { VaniDecisionService } from './vani-decision';
 import { VaniOutcomeService } from './vani-outcome.service';
 import { VaniSnapshotPusher } from './vani-snapshot';
 import { VaniController } from './vani.controller';
@@ -17,10 +20,11 @@ import { VaniController } from './vani.controller';
  * account current, and receives what happened on each call.
  */
 @Module({
-  imports: [AssistantModule, IdentityModule],
+  imports: [AssistantModule, IdentityModule, AlertModule, WorkModule],
   controllers: [VaniController],
   providers: [
     VaniOutcomeService,
+    VaniDecisionService,
     VaniAskService,
     { provide: VaniClient, useFactory: () => new VaniClient() },
     // One breaker for both: they reach the same Vani.

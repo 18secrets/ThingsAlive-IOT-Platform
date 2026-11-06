@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DataSource, In } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { runTenantSpanning, withTenantSession } from '../scope/tenant-session';
+import { VaniDecisionService } from './vani-decision';
 import { checkVaniSecret } from './vani-secret';
 import { VANI_OUTCOMES, VaniCall, VaniCallOutcome, VaniOutcome } from './vani.entities';
 
@@ -18,7 +19,7 @@ export interface OutcomeAck {
  */
 @Injectable()
 export class VaniOutcomeService {
-  constructor(private readonly ds: DataSource) {}
+  constructor(private readonly ds: DataSource, private readonly decisions: VaniDecisionService) {}
 
   /**
    * The callback has no user token behind it, so it proves itself with the shared
@@ -36,10 +37,11 @@ export class VaniOutcomeService {
    */
   async record(raw: unknown): Promise<OutcomeAck> {
     const body = parse(raw);
-    return runTenantSpanning(this.ds, 'vani outcome callback', async (m) => {
+    let call: VaniCall | null = null;
+    const ack = await runTenantSpanning(this.ds, 'vani outcome callback', async (m) => {
       // Tenant-spanning because the callback says which account, not which tenant;
       // the call row is what turns one into the other.
-      const call = await m.getRepository(VaniCall).findOneBy({ alertEventId: body.event_id });
+      call = await m.getRepository(VaniCall).findOneBy({ alertEventId: body.event_id });
       if (!call) throw new NotFoundException(`No Vani call was requested for event ${body.event_id}.`);
       if (call.vaniAccountId !== body.account_id || call.machineId !== body.machine_id) {
         throw new BadRequestException(`Event ${body.event_id} was not a call to ${body.account_id} about ${body.machine_id}.`);
@@ -53,8 +55,18 @@ export class VaniOutcomeService {
         [call.tenantId, call.alertEventId, body.attempt, body.call_id, body.outcome, body.summary,
           body.duration_s, body.called_at, JSON.stringify(raw)],
       );
-      return { ok: true, duplicate: inserted.length === 0 };
+      return { ok: true as const, duplicate: inserted.length === 0 };
     });
+    // After the outcome is safely stored, and on a repeat too: an action a fault cost
+    // the first time is taken on Vani's retry, and one already taken is not taken
+    // again (`vani-decision.ts`). A fault here answers 5xx, which is what makes Vani retry.
+    if (body.customer_decision && call) {
+      await this.decisions.act(call, {
+        attempt: body.attempt, outcome: body.outcome, decision: body.customer_decision,
+        summary: body.summary, calledAt: body.called_at,
+      });
+    }
+    return ack;
   }
 
   /** The calls made about alerts the caller can see, newest first, each with its outcomes. */
@@ -88,6 +100,10 @@ export class VaniOutcomeService {
         where: { tenantId: scope.tenantId, alertEventId: In(calls.map((c) => c.alert_event_id)) },
         order: { attempt: 'ASC' },
       });
+      const actions: Record<string, any>[] = await m.query(
+        `SELECT "alert_event_id", "decision", "status", "reason", "acknowledged", "work_order_id"
+           FROM "vani_call_action" WHERE "tenant_id" = $1 AND "alert_event_id" = ANY($2::uuid[])`,
+        [scope.tenantId, calls.map((c) => c.alert_event_id)]);
       return calls.map((c) => ({
         alertEventId: c.alert_event_id,
         sourceSystem: c.source_system,
@@ -110,6 +126,11 @@ export class VaniOutcomeService {
           // Written by Vani for an alert history. Shown as sent.
           summary: o.summary, durationS: o.durationS, calledAt: o.calledAt, receivedAt: o.receivedAt,
         })),
+        // What the customer decided on the call and what 2.0 did about it (D57), or null.
+        decision: ((a) => (a ? {
+          decision: a.decision, status: a.status, reason: a.reason,
+          acknowledged: a.acknowledged, workOrderId: a.work_order_id,
+        } : null))(actions.find((a) => a.alert_event_id === c.alert_event_id)),
       }));
     });
   }
@@ -125,6 +146,8 @@ interface OutcomeBody {
   summary: string | null;
   duration_s: number | null;
   called_at: string | null;
+  /** What the customer decided on the call (D57). Acted on separately; see `record`. */
+  customer_decision: string | null;
 }
 
 /**
@@ -160,10 +183,14 @@ function parse(raw: unknown): OutcomeBody {
   if (calledAt && Number.isNaN(new Date(calledAt).getTime())) problems.push('called_at is not a timestamp');
   const callId = text('call_id', false);
   const summary = text('summary', false);
+  // Any string is kept: an unknown decision is recorded as not acted on rather than
+  // costing the outcome it came with.
+  const decision = text('customer_decision', false);
   if (problems.length) throw new BadRequestException(problems.join('; '));
   return {
     event_id: eventId!, account_id: accountId!, machine_id: machineId!, attempt: attempt as number,
     outcome: outcome as VaniOutcome, call_id: callId, summary,
     duration_s: (duration as number | null | undefined) ?? null, called_at: calledAt,
+    customer_decision: decision,
   };
 }

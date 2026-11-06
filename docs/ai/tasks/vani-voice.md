@@ -34,6 +34,33 @@ Status vocabulary follows `task-register.md`: an item is **Complete** only once 
 Commits `cb6a297` (steps 4–9) and the steps 10–12 commit after it. Full suite on the branch
 after steps 10–12: 2597 passed, 1 skipped, 0 failed.
 
+## Lane D — acting on the customer's decision (D57), built 2026-11-06
+
+Vani's outcome callback may carry `customer_decision`. `src/vani/vani-decision.ts` acts
+on it after the outcome is stored, once per call (`vani_call_action`, migration
+`VaniCallDecision1764000000000`, append-only, RLS), with the acknowledgement, the job
+and the row in one transaction.
+
+| Decision | What 2.0 does |
+|---|---|
+| `acknowledged` | Acknowledges the alert |
+| `inspection_approved` | Acknowledges it, raises an unassigned job linked to the alert (`high` priority for a critical alert, else `normal`) |
+| `call_back_requested`, `declined` | Recorded only |
+| anything else | Recorded as `not_acted` / `unknown_decision`; the outcome is still stored |
+
+- Only on `completed_spoke_with_customer`; otherwise `not_spoken_with_customer`.
+- Done as the customer: the request's `customer_phone` (else the account link's),
+  matched to exactly one `app_user` in the tenant, with the scope `ScopeResolver` gives
+  them signed in. No match → `unknown_customer`; suspended or invited →
+  `customer_not_active`; no `action.assign` → `not_permitted`, and the acknowledgement is
+  rolled back with the job.
+- `WorkOrderService.raiseIn` and `AlertService.acknowledgeIn` were split out of
+  `raise` and `acknowledge` so all three commit together; the originals are unchanged in
+  behaviour.
+- `GET /api/v1/vani/calls` returns `decision` per call (or null).
+- Vani has not built `customer_decision` yet. The field name and the four values are
+  the scope review's; confirm with Deepak before the first live call that uses it.
+
 ## Running the test client locally
 
 ```bash
