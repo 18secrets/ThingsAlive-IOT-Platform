@@ -184,8 +184,8 @@ older than 24 hours is never sent.
   4.5 millimeters per second on all of the last 10 readings, reaching 5.25 millimeters per
   second."). Other alert kinds keep the engine's wording with snake_case keys made into
   words; a prediction-severity summary still names its scenario slug.
-- **Companion spec** — found in Deepak's handoff bundle. He recommends committing the
-  bundle's `.md` copies to `docs/ai/vani/`; only PDFs have reached us so far.
+- ~~Companion spec~~ — the bundle's four PDFs are in `docs/ai/vani/` (2026-11-06). The
+  Markdown copies and Deepak's own README have not reached us; add them there if they do.
 
 ## Phase 6 — analysis tool: built on branch, approved 5 Nov (D57), live after Phase 5
 
