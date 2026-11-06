@@ -87,6 +87,29 @@ day, held by `uq_vani_call_prediction_day`.
   text, as the guide does, plus a separate `confidence`. Not yet sent to the live
   service: confirm with Deepak that it accepts this `trigger_action` body first.
 
+## Lane C — the fuller snapshot (D57), built 2026-11-06, off by default
+
+With `VANI_SNAPSHOT_DETAIL=true`, each machine in `/platform/account-snapshot` also
+carries (`src/vani/vani-snapshot.ts`):
+
+- `recent_alerts[]` — the last 5 from the past 30 days, newest first: `title`,
+  `severity`, `state`, `fired_at`, and `resolution` when resolved with a note.
+- `open_work_orders[]` — `created` or `in-progress`, soonest due first: `reference`,
+  `title`, `status`, `due_at`.
+- `open_predictions[]` — each scenario's latest live score from the past 7 days, kept
+  when it is `medium` or worse and not `none` confidence: `scenario`, `severity`,
+  `risk_score` (rounded), `confidence`, `scored_at`.
+
+Off, the snapshot is exactly what Vani already accepts. **Off until Deepak confirms
+Vani reads these fields**: a refused snapshot stops every snapshot for that account.
+No health card and no `last_reviewed_at`: 2.0 has no health score, and when the
+customer last heard a review is Vani's to know. The Phase 6 ask tool is the other half
+of Lane C and is unchanged; `VANI_ASK_ENABLED` turns it on at go-live.
+
+| Variable | Service | Purpose |
+|---|---|---|
+| `VANI_SNAPSHOT_DETAIL` | scheduler | `true` adds the Lane C fields. Off by default. |
+
 ## Running the test client locally
 
 ```bash
