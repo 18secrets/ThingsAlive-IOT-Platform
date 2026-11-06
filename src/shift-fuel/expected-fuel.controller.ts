@@ -1,9 +1,10 @@
-import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
-import { ExpectedFuelApiService, MachineExpectedFuel } from './expected-fuel-api.service';
+import { ClassFuelFiguresView, ExpectedFuelApiService, MachineExpectedFuel, classFuelFiguresView } from './expected-fuel-api.service';
 import { AccuracyQueryError, parseAccuracyQuery } from './shift-fuel-accuracy';
 import { ShiftFuelCoverage, ShiftFuelCoverageService } from './shift-fuel-coverage.service';
 
@@ -18,7 +19,27 @@ export class ExpectedFuelController {
   constructor(
     private readonly expected: ExpectedFuelApiService,
     private readonly coverageService: ShiftFuelCoverageService,
+    private readonly ds: DataSource,
   ) {}
+
+  /**
+   * A library class version's fuel figures and what D55 still needs from them (fuel test
+   * report, 4 Nov: nothing showed why every machine's expected litres were blocked). Behind
+   * `catalog.write`, as the class's OEM limits and the scenario rule are: BSFC and its
+   * datasheet are the same kind of supplier figure, for the people who load them.
+   */
+  @Get('catalog/authoring/equipment-classes/:slug/fuel-figures')
+  @Requires('catalog.write')
+  @ApiQuery({ name: 'version', required: true, description: 'The class version' })
+  @ApiOperation({
+    summary: 'A class version\'s fuel figures, and which D55 still needs before it can work out a shift\'s litres',
+    description: 'figures are as stored, null when unset. blockedBy is what expected-fuel would name for any machine on '
+      + 'this version, apart from its schedule: working_rate_not_set, nominal_unit_not_litres, working_share_not_set, '
+      + 'idle_fuel_per_hour_not_set. Empty means every machine with a shift schedule gets expected litres.',
+  })
+  classFigures(@Param('slug') slug: string, @Query('version', ParseIntPipe) version: number): Promise<ClassFuelFiguresView> {
+    return classFuelFiguresView(this.ds, slug, version);
+  }
 
   @Get('equipment/:sourceSystem/:externalId/expected-fuel')
   @Requires('prediction.read')

@@ -1,8 +1,9 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
+import { SiteDraftDto } from '../site-twin/site-twin.controller';
 import { PageService } from './page.service';
 
 /**
@@ -52,5 +53,19 @@ export class PageController {
   @ApiOperation({ summary: "A first layout composed from the machines assigned to the site and their categories; not saved" })
   siteTwinProposal(@CurrentScope() scope: RequestScope, @Param('plantId', ParseUUIDPipe) plantId: string) {
     return this.pages.siteTwinProposal(scope, plantId);
+  }
+
+  // A POST only because the draft is a body; nothing is written, so it needs no more than
+  // the GET beside it, and it answers 200, not 201.
+  @Post('sites/:plantId/twin/proposal')
+  @HttpCode(200)
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "Arrange the site's machines around the editor's draft: its zones kept as drawn, only missing structures added; not saved" })
+  siteTwinProposalAround(
+    @CurrentScope() scope: RequestScope,
+    @Param('plantId', ParseUUIDPipe) plantId: string,
+    @Body() body: SiteDraftDto,
+  ) {
+    return this.pages.siteTwinProposal(scope, plantId, new Date(), body);
   }
 }

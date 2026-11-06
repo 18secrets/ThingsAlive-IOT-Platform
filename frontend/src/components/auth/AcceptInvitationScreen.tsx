@@ -54,7 +54,7 @@ export const AcceptInvitationScreen: React.FC = () => {
       <div className="w-full max-w-sm">
 
         <div className="flex flex-col items-center mb-8">
-          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain" />
+          <img src={logoFull} alt="ThingsAlive" className="h-14 w-auto object-contain dark:invert dark:hue-rotate-180" />
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-6">

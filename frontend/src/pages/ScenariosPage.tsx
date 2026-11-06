@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { severityTone } from '../components/common/statusTone';
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react';
+import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,8 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { AnchorEditor } from '../components/visual/AnchorEditor';
@@ -23,6 +25,7 @@ import {
 } from '../lib/api';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
+const SEVERITIES = ['critical', 'high', 'medium', 'low', 'none'] as const;
 
 export const ScenariosPage: React.FC = () => {
   const { t } = useTranslation('scenarios');
@@ -31,6 +34,12 @@ export const ScenariosPage: React.FC = () => {
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [scenarios, setScenarios] = useState<ClientScenario[]>([]);
   const [classFilter, setClassFilter] = useState('all');
+  // The table had a class filter and nothing else, in the order the API sent (testing
+  // sheet TC_157): now a search, severity and on/off, and a sort.
+  const [query, setQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'on' | 'off'>('all');
+  const { sort, setSort, toggle: toggleSort } = useSort<'severity' | 'name' | 'enabled'>({ key: 'severity', dir: 'desc' });
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -52,10 +61,19 @@ export const ScenariosPage: React.FC = () => {
     () => [...new Set(scenarios.map((s) => s.clientEquipmentClassSlug))].sort(),
     [scenarios],
   );
-  const visible = useMemo(
-    () => scenarios.filter((s) => classFilter === 'all' || s.clientEquipmentClassSlug === classFilter),
-    [scenarios, classFilter],
-  );
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const rows = scenarios.filter((s) => (classFilter === 'all' || s.clientEquipmentClassSlug === classFilter)
+      && (severityFilter === 'all' || s.severity === severityFilter)
+      && (enabledFilter === 'all' || s.enabled === (enabledFilter === 'on'))
+      && (!term || s.name.toLowerCase().includes(term) || s.slug.toLowerCase().includes(term)
+        || s.requiredSignals.some((sig) => sig.toLowerCase().includes(term))));
+    return sortRows(rows, sort, {
+      severity: (s) => SEVERITY_RANK[s.severity] ?? -1,
+      name: (s) => s.name.toLowerCase(),
+      enabled: (s) => (s.enabled ? 1 : 0),
+    });
+  }, [scenarios, classFilter, severityFilter, enabledFilter, query, sort]);
 
   async function toggle(scenario: ClientScenario) {
     // Disabling stops scoring on every machine of the class; enabling only adds work.
@@ -129,15 +147,39 @@ export const ScenariosPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-56">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+          <Input size="sm" value={query} onChange={(v) => { setQuery(v); pager.setPage(1); }} placeholder={t('page.search')} className="w-full pl-9!" />
+        </div>
         <SelectPicker
           data={[{ label: t('page.allClasses'), value: 'all' }, ...classes.map((c) => ({ label: c, value: c }))]}
           value={classFilter}
-          onChange={(value) => setClassFilter(value ?? 'all')}
+          onChange={(value) => { setClassFilter(value ?? 'all'); pager.setPage(1); }}
           searchable={false}
           cleanable={false}
           size="sm"
-          className="w-64"
+          className="w-full sm:w-56"
+        />
+        <SelectPicker
+          data={[{ label: t('page.allSeverities'), value: 'all' }, ...SEVERITIES.map((v) => ({ label: t(`severity.${v}`), value: v }))]}
+          value={severityFilter}
+          onChange={(value) => { setSeverityFilter(value ?? 'all'); pager.setPage(1); }}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-40"
+        />
+        <SelectPicker
+          data={[
+            { label: t('page.allStates'), value: 'all' }, { label: t('page.enabledOnly'), value: 'on' }, { label: t('page.disabledOnly'), value: 'off' },
+          ]}
+          value={enabledFilter}
+          onChange={(value) => { setEnabledFilter((value ?? 'all') as 'all' | 'on' | 'off'); pager.setPage(1); }}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className="w-full sm:w-40"
         />
         {classFilter !== 'all' && (
           <button
@@ -147,7 +189,22 @@ export const ScenariosPage: React.FC = () => {
             <Settings className="w-3.5 h-3.5" /> {t('page.manageClass')}
           </button>
         )}
-        <div className="ml-auto"><ViewModeToggle mode={viewMode} onChange={setViewMode} /></div>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.count', { count: visible.length })}</span>
+          <span className="inline-flex items-center gap-2">
+            <SortSelect
+              sort={sort}
+              onChange={(next) => { setSort(next); pager.setPage(1); }}
+              options={[
+                { key: 'severity', dir: 'desc', label: ts('sort.severityHigh') },
+                { key: 'name', dir: 'asc', label: ts('sort.nameAz') },
+                { key: 'enabled', dir: 'desc', label: ts('sort.enabledFirst') },
+                { key: 'enabled', dir: 'asc', label: ts('sort.disabledFirst') },
+              ]}
+            />
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+          </span>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
@@ -159,9 +216,11 @@ export const ScenariosPage: React.FC = () => {
           ) : viewMode === 'list' ? (
             <ListTable bare
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.needs') },
-                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+                { label: ts('listCol.name'), sortKey: 'name' }, { label: ts('listCol.details'), sortKey: 'severity' }, { label: ts('listCol.needs') },
+                { label: ts('listCol.enabled'), sortKey: 'enabled' }, { label: ts('listCol.actions') },
               ]}
+              sort={sort}
+              onSort={(key) => { toggleSort(key as 'severity' | 'name' | 'enabled', key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
               rows={pageItems}
               rowKey={(s) => s.id}
               cells={(s) => [

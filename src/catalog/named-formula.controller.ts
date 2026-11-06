@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   IsArray, IsNotEmpty, IsOptional, IsString, ValidateNested,
@@ -84,6 +84,25 @@ export class NamedFormulaController {
     @Param('version', ParseIntPipe) version: number,
   ) {
     return this.namedFormulas.publish(scope, slug, version);
+  }
+
+  // Taking a formula out of use is `catalog.write`, like retiring a class; putting it back
+  // into the picker is `catalog.publish`, like unretiring one: offering it again is the act
+  // of accepting it into the library.
+  @Post('named-formulas/:slug/deactivate')
+  @HttpCode(200)
+  @Requires('catalog.write')
+  @ApiOperation({ summary: 'Make a named formula inactive (every version). Idempotent. Bound uses keep working; no new binding' })
+  deactivate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.namedFormulas.setActive(scope, slug, false);
+  }
+
+  @Post('named-formulas/:slug/activate')
+  @HttpCode(200)
+  @Requires('catalog.publish')
+  @ApiOperation({ summary: 'Make an inactive named formula active again (every version). Idempotent' })
+  activate(@CurrentScope() scope: RequestScope, @Param('slug') slug: string) {
+    return this.namedFormulas.setActive(scope, slug, true);
   }
 }
 

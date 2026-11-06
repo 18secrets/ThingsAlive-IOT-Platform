@@ -17,6 +17,7 @@ import {
   ApiError, EquipmentProfile, FleetLinkRow, Plant, Prediction, PredictionSeverity,
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
@@ -262,7 +263,7 @@ const ThingsCareCard: React.FC<{
           </div>
           <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{externalId}</p>
-          {prediction && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString() })}</p>}
+          {prediction && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString(appLocale()) })}</p>}
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">

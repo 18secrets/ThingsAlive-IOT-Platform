@@ -5,6 +5,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, Account, CreateAccountResult } from '../../lib/api';
 import { ClientAccount } from '../../types';
 import { copyToClipboard } from '../../lib/clipboard';
+import { appLocale } from '../../lib/dateLocale';
 
 interface AddClientModalProps {
   isOpen: boolean;
@@ -161,7 +162,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 <Trans
                   t={t}
                   i18nKey="addClient.tokenHelp"
-                  values={{ when: new Date(created.invitationExpiresAt).toLocaleString() }}
+                  values={{ when: new Date(created.invitationExpiresAt).toLocaleString(appLocale()) }}
                   components={{ 1: <code /> }}
                 />
               </p>

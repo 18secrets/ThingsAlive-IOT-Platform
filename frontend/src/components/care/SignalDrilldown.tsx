@@ -4,6 +4,7 @@ import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { ApiError, PredictionSignalDetail, apiGetPredictionSignalDetail } from '../../lib/api';
+import { appLocale } from '../../lib/dateLocale';
 
 const WINDOWS = [24, 72, 168] as const;
 
@@ -65,7 +66,7 @@ export const SignalDrilldown: React.FC<{
   const from = detail ? new Date(detail.window.from).getTime() : 0;
   const to = detail ? new Date(detail.window.to).getTime() : 0;
   const scoredAt = detail?.occurredAt ? new Date(detail.occurredAt).getTime() : null;
-  const tick = (ms: number) => new Date(ms).toLocaleString(undefined, hours <= 24
+  const tick = (ms: number) => new Date(ms).toLocaleString(appLocale(), hours <= 24
     ? { hour: '2-digit', minute: '2-digit' } : { day: '2-digit', month: 'short', hour: '2-digit' });
 
   return (
@@ -119,7 +120,7 @@ export const SignalDrilldown: React.FC<{
                   stroke="#fff" strokeWidth={1.5} ifOverflow="extendDomain" />
               )}
               <Tooltip
-                labelFormatter={(ms) => new Date(Number(ms)).toLocaleString()}
+                labelFormatter={(ms) => new Date(Number(ms)).toLocaleString(appLocale())}
                 formatter={(value, name) => (name === 'range'
                   ? [Array.isArray(value) ? `${fmt(Number(value[0]))} – ${fmt(Number(value[1]))}` : String(value), t('drill.minMax')]
                   : [fmt(Number(value)), t('drill.average')])}
@@ -154,7 +155,7 @@ function summary(t: (k: string, o?: Record<string, unknown>) => string, d: Predi
   if (!d) return '';
   const v = d.verdict;
   if (!v) return t('drill.notScoredYet');
-  const at = d.occurredAt ? new Date(d.occurredAt).toLocaleString() : '—';
+  const at = d.occurredAt ? new Date(d.occurredAt).toLocaleString(appLocale()) : '—';
   if (v.state === 'unscored') return t('drill.unscored', { reason: t(`unscoredReason.${v.reason ?? 'unknown'}`, { defaultValue: v.reason ?? '' }), at });
   if (typeof v.residual === 'number') {
     return t('drill.influenceSummary', { value: fmt(v.value), expected: fmt(v.expected), residual: fmt(Math.abs(v.residual)), dir: t(v.residual >= 0 ? 'drill.above' : 'drill.below'), at });

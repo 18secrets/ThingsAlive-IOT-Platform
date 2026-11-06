@@ -153,7 +153,7 @@
     "serialNumber": "సీరియల్ నంబర్",
     "serialNumberPlaceholder": "ఉదా. SER-4920",
     "serviceTier": "సర్వీస్ టియర్",
-    "machineType": "యంత్ర రకం",
+    "machineType": "యంత్రం క్లాస్",
     "unclassified": "వర్గీకరించబడలేదు",
     "noGrantedTypes": "ఈ క్లయింట్‌కు ఇంకా ఏ యంత్ర రకమూ ఇవ్వలేదు. ముందుగా Clients పేజీలో ఒకటి ఇవ్వండి.",
     "codeTaken": "ఈ కోడ్‌ను ఇప్పటికే {{name}} ఉపయోగిస్తోంది."

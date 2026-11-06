@@ -2,7 +2,7 @@ import { Body, Controller, Param, ParseUUIDPipe, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf,
+  ArrayMaxSize, IsArray, IsDefined, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
@@ -44,6 +44,12 @@ export class SitePlacementDto {
 
 export class ZoneProgressDto {
   @IsNumber() @Min(0) @Max(100) progressPct: number;
+}
+
+/** The editor's draft as auto-arrange receives it: the zones to keep, on the site as sized. */
+export class SiteDraftDto {
+  @IsDefined() @ValidateNested() @Type(() => SiteExtentDto) extent: SiteExtentDto;
+  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => SiteZoneDto) zones: SiteZoneDto[];
 }
 
 export class SiteLayoutDto {

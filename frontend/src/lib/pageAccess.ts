@@ -62,6 +62,16 @@ function staffCan(user: AuthUser, capability: string): boolean {
   return user.capabilities?.[capability] === true;
 }
 
+/**
+ * Whether a staff member's role may do one thing on a page it can open: a Catalog Author
+ * opens Equipment to read it, and its Register and Retire buttons only earned an error
+ * (testing sheet TC_141). A client's buttons are not gated here; their pages are.
+ */
+export function staffMay(user: AuthUser | null, capability: string): boolean {
+  if (!user || user.role === 'client') return true;
+  return staffCan(user, capability);
+}
+
 export function canOpenAdminSubTab(user: AuthUser, subTab: AdminSubTab | 'catalog-import'): boolean {
   if (user.role === 'client') return true;
   const capability = STAFF_ADMIN_CAPABILITY[subTab];

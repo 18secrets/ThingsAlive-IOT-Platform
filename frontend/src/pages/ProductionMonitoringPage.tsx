@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DateRangePicker } from 'rsuite';
@@ -13,10 +13,12 @@ import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle
 import { SortSelect } from '../components/common/SortSelect';
 import { sortRows, useSort } from '../lib/useSort';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
+import { FleetFuelPanel } from '../components/production/FleetFuelPanel';
 import {
   ApiError, EquipmentOee, EquipmentProfile, FleetAvailability, FleetLinkRow, Plant, SiteOee,
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
 } from '../lib/api';
+import { appLocale } from '../lib/dateLocale';
 
 const DAYS = 7;
 
@@ -125,6 +127,21 @@ export const ProductionMonitoringPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availability, equipment, linkHealth, scope, selectedKey]);
 
+  // The fleet fuel panel counts the machines the filters leave, by the list's own rules,
+  // so its litres and the list below always describe the same machines.
+  const fuelInScope = useCallback((sourceSystem: string, externalId: string) => {
+    const profile = profileOf(sourceSystem, externalId);
+    const term = scope.query.trim().toLowerCase();
+    return (selectedKey === 'all' || `${sourceSystem}|${externalId}` === selectedKey)
+      && (scope.plantId === 'all' || profile?.plantId === scope.plantId)
+      && (scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug)
+      && (scope.connection === 'all' || connectionOf(externalId) === scope.connection)
+      && (!term || name(sourceSystem, externalId).toLowerCase().includes(term) || externalId.toLowerCase().includes(term));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment, linkHealth, scope, selectedKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fuelName = useCallback((sourceSystem: string, externalId: string) => name(sourceSystem, externalId), [equipment]);
+
   // The tiles describe what the list shows. Unfiltered, that is the server's own fleet
   // figure; filtered, the same rule (hours summed, never ratios averaged — see
   // aggregateAvailability) over the machines left, as ThingsCare and Incidents do.
@@ -169,7 +186,7 @@ export const ProductionMonitoringPage: React.FC = () => {
       <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold tracking-wider uppercase text-sky-100">
-            {range ? `${range[0].toLocaleDateString()} – ${range[1].toLocaleDateString()}` : t('hero.lastDays', { count: DAYS })}
+            {range ? `${range[0].toLocaleDateString(appLocale())} – ${range[1].toLocaleDateString(appLocale())}` : t('hero.lastDays', { count: DAYS })}
           </span>
           <span title={t('hero.tooltip')}>
             <Info className="w-4 h-4 text-sky-200" />
@@ -230,6 +247,12 @@ export const ProductionMonitoringPage: React.FC = () => {
               {t('list.excluded', { noShift: headline.excluded.noShiftSchedule, noReadings: headline.excluded.noReadings })}
             </p>
           ) : null}
+
+          <FleetFuelPanel
+            inScope={fuelInScope}
+            nameOf={fuelName}
+            onOpen={(ss, id) => navigate(`/production-monitoring/${encodeURIComponent(ss)}/${encodeURIComponent(id)}`)}
+          />
 
           <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">

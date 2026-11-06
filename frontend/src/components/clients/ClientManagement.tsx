@@ -12,6 +12,7 @@ import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
 import { FleetOnboardingModal } from './FleetOnboardingModal';
 import { FleetImportModal } from './FleetImportModal';
+import { appLocale } from '../../lib/dateLocale';
 
 interface ClientManagementProps {
   clients: ClientAccount[];
@@ -418,7 +419,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                   </button>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  {t('shared:token.expires', { when: new Date(reissued.invitationExpiresAt).toLocaleString() })}
+                  {t('shared:token.expires', { when: new Date(reissued.invitationExpiresAt).toLocaleString(appLocale()) })}
                 </p>
               </div>
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">

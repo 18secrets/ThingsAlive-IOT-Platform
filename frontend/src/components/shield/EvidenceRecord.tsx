@@ -3,6 +3,7 @@ import { AlertCircle, Calendar, User, Pencil, History } from 'lucide-react';
 import { DatePicker, Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, ShieldEvidence, ShieldEvidenceInput, ShieldResult, ShieldStatus } from '../../lib/api';
+import { appLocale } from '../../lib/dateLocale';
 
 // Dates are picked as calendar days and sent as local midnight, so the day shown in the
 // picker is the day the backend stores whatever the browser's UTC offset.
@@ -10,7 +11,7 @@ function toDay(value: string | null): Date | null {
   return value ? new Date(value) : null;
 }
 
-const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '—');
+const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(appLocale()) : '—');
 
 // Labels live in shield.json under status.* and result.*, read at render time so they
 // follow the language switch.
@@ -70,7 +71,7 @@ export const EvidenceRecordCard: React.FC<{
           </button>
         ) : <span />}
         <span className="text-xs text-slate-400" title={t('record.recordedTitle')}>
-          {t('record.recorded', { date: new Date(record.recordedAt).toLocaleString() })}{record.supersedesId ? ` · ${t('record.aCorrection')}` : ''}
+          {t('record.recorded', { date: new Date(record.recordedAt).toLocaleString(appLocale()) })}{record.supersedesId ? ` · ${t('record.aCorrection')}` : ''}
         </span>
       </div>
     </div>

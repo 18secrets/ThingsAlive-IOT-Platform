@@ -7,8 +7,9 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
+import { appLocale } from '../../lib/dateLocale';
 
-const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' });
+const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(appLocale(), { year: 'numeric', month: 'short', timeZone: 'UTC' });
 const bytes = (n: string) => {
   const v = Number(n);
   if (v < 1024) return `${v} B`;
@@ -58,7 +59,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
     <>{a.part}</>,
     <span className="font-mono">{Number(a.rowCount).toLocaleString()}</span>,
     <span className="font-mono">{bytes(a.byteSize)}</span>,
-    <span className="text-slate-500">{new Date(a.exportedAt).toLocaleString()}</span>,
+    <span className="text-slate-500">{new Date(a.exportedAt).toLocaleString(appLocale())}</span>,
     <>{a.verifiedAt ? <Chip tone="emerald">{t('archive.status.verified')}</Chip>
                       : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">{t('archive.status.failed')}</Chip></span>
                         : <Chip tone="amber">{t('archive.status.pending')}</Chip>}</>,
@@ -71,7 +72,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
     <span className="font-mono">{d.partition_name}</span>,
     monthLabel(d.month),
     Number(d.rows_dropped).toLocaleString(),
-    new Date(d.dropped_at).toLocaleString(),
+    new Date(d.dropped_at).toLocaleString(appLocale()),
   ];
 
   return (

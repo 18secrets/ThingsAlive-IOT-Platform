@@ -21,6 +21,7 @@ import {
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { appLocale } from '../lib/dateLocale';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -129,7 +130,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
                       <td className="py-1.5 pr-3">{b.sampleCount ?? '—'}</td>
                       <td className="py-1.5 pr-3">{typeof b.coverageRatio === 'number' ? `${(b.coverageRatio * 100).toFixed(0)}%` : '—'}</td>
                       <td className="py-1.5 pr-3 font-sans">{b.source ?? '—'}</td>
-                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString() : '—'}</td>
+                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString(appLocale()) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -294,7 +295,7 @@ export const ThingsCareDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {predictions.map((p) => {
               const occurred = p.occurredAt ? new Date(p.occurredAt) : null;
-              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString() : '—';
+              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString(appLocale()) : '—';
               const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE(p.severity) : 'slate';
               const signals = (p.signals ?? []).slice().sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9));
               const healthy = signals.filter((s) => s.state === 'normal').length;

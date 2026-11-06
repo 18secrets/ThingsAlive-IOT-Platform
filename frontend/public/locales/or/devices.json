@@ -153,7 +153,7 @@
     "serialNumber": "କ୍ରମିକ ନମ୍ବର",
     "serialNumberPlaceholder": "ଯଥା SER-4920",
     "serviceTier": "ସର୍ଭିସ୍ ଟିୟର୍",
-    "machineType": "ମେସିନ୍ ପ୍ରକାର",
+    "machineType": "ଉପକରଣ କ୍ଲାସ୍",
     "unclassified": "ଅବର୍ଗୀକୃତ",
     "noGrantedTypes": "ଏହି କ୍ଲାଏଣ୍ଟଙ୍କୁ ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି ମେସିନ୍ ପ୍ରକାର ଦିଆଯାଇନାହିଁ। ପ୍ରଥମେ Clients ପୃଷ୍ଠାରେ ଗୋଟିଏ ଦିଅନ୍ତୁ।",
     "codeTaken": "ଏହି କୋଡ୍ ପୂର୍ବରୁ {{name}} ଦ୍ୱାରା ବ୍ୟବହୃତ।"

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Activity, Bell, GitBranch, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Activity, Bell, Fuel, GitBranch, Image as ImageIcon } from 'lucide-react';
 import {
   AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput, EquipmentClass, Scenario, ScenarioInput,
 } from '../lib/api';
@@ -11,9 +11,10 @@ import { ClassAlertTemplatesPanel } from '../components/admin/class-detail/Class
 import { ClassCausalChainsPanel } from '../components/admin/class-detail/ClassCausalChainsPanel';
 import { ClassVisualPanel } from '../components/admin/class-detail/ClassVisualPanel';
 import { ClassModelPanel } from '../components/admin/class-detail/ClassModelPanel';
+import { ClassFuelFiguresPanel } from '../components/admin/class-detail/ClassFuelFiguresPanel';
 import { representativeOf } from '../lib/classVersion';
 
-type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual';
+type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual' | 'fuel';
 
 interface EquipmentClassDetailPageProps {
   classes: EquipmentClass[];
@@ -80,6 +81,7 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
     { id: 'alerts', label: t('classDetail.tabs.alerts'), icon: Bell, count: alertTemplatesForClass.length },
     { id: 'chains', label: t('classDetail.tabs.chains'), icon: GitBranch, count: causalChainsForClass.length },
     { id: 'visual', label: t('classDetail.tabs.visual'), icon: ImageIcon },
+    { id: 'fuel', label: t('classDetail.tabs.fuel'), icon: Fuel },
   ];
 
   return (
@@ -99,7 +101,8 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      {/* Wraps on a phone: in one row the tabs ran past the screen edge. */}
+      <div className="flex flex-wrap items-center gap-2.5">
         {tabs.map((dt) => {
           const Icon = dt.icon;
           const isActive = tab === dt.id;
@@ -162,6 +165,7 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
           <ClassModelPanel key={`model-${cls.slug}-${cls.version}`} slug={cls.slug} version={cls.version} isDraft={cls.status === 'draft'} />
         </div>
       )}
+      {tab === 'fuel' && <ClassFuelFiguresPanel slug={cls.slug} version={cls.version} />}
     </div>
   );
 };

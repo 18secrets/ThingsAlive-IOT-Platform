@@ -7,7 +7,7 @@ import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
-  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageSignalChartData, PageWidget, RecordServiceInput,
+  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageReadinessRow, PageSignalChartData, PageWidget, RecordServiceInput,
   RuntimeUnit, ServiceKind, ShiftInput, ShiftRun, TenantModel, Weekday, apiCreateShift, apiGetMachinePage,
   apiGetMyClassModel, apiGetServiceHistory, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRecordService,
   apiRetireShift, apiUpdateShift,
@@ -19,6 +19,7 @@ import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidge
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
 import type { SceneMarker } from '../components/visual/ModelScene';
+import { appLocale } from '../lib/dateLocale';
 
 // Lazy, as in ModelAnchorEditor: three.js is fetched only when a machine has a model.
 const ModelScene = lazy(() => import('../components/visual/ModelScene'));
@@ -75,8 +76,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       if (shift.status === 'active') await apiRetireShift(sourceSystem, externalId, shift.id);
       else await apiReinstateShift(sourceSystem, externalId, shift.id);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.changeFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     } finally {
       setBusyId(null);
     }
@@ -87,8 +89,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiCreateShift(sourceSystem, externalId, input);
       setAdding(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.addFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
@@ -97,8 +100,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiUpdateShift(sourceSystem, externalId, shift.id, input);
       setEditing(null);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.saveFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
@@ -190,10 +194,18 @@ const ShiftForm: React.FC<{
   const [days, setDays] = useState<Weekday[]>(initial?.days ?? [1, 2, 3, 4, 5]);
   const [timeZone, setTimeZone] = useState(initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
 
+  // An end at or before the start runs past midnight, as the server reads it: a night
+  // shift 18:00–06:00 was refused here with its button greyed out (testing sheet, 5 Nov).
+  // Only start equal to end is no shift at all.
+  const overnight = useMemo(() => {
+    const s = clockToMinutes(start);
+    const e = clockToMinutes(end);
+    return s != null && e != null && e < s;
+  }, [start, end]);
   const valid = useMemo(() => {
     const s = clockToMinutes(start);
     const e = clockToMinutes(end);
-    return !!name.trim() && s != null && e != null && e > s && days.length > 0 && !!timeZone.trim();
+    return !!name.trim() && s != null && e != null && e !== s && days.length > 0 && !!timeZone.trim();
   }, [name, start, end, days, timeZone]);
 
   return (
@@ -202,8 +214,10 @@ const ShiftForm: React.FC<{
       onSubmit={(e) => {
         e.preventDefault();
         const startMinute = clockToMinutes(start);
-        const endMinute = clockToMinutes(end);
-        if (!valid || startMinute == null || endMinute == null) return;
+        const clockEnd = clockToMinutes(end);
+        if (!valid || startMinute == null || clockEnd == null) return;
+        // Midnight as an end is the end of the day, 1440, which the server takes; 0 it refuses.
+        const endMinute = clockEnd === 0 ? 1440 : clockEnd;
         onCreate({ name: name.trim(), startMinute, endMinute, days, timeZone: timeZone.trim() });
       }}
     >
@@ -221,6 +235,7 @@ const ShiftForm: React.FC<{
           <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
         </label>
       </div>
+      {overnight && <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">{t('shifts.overnight')}</p>}
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.days')}</span>
         <CheckPicker
@@ -280,8 +295,8 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
       await apiRecordService(sourceSystem, externalId, input);
       setRecording(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('service.recordFailed'));
+    } catch {
+      // The red toast already says why; an alert on top said it twice (testing sheet, 5 Nov).
     }
   }
 
@@ -305,7 +320,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
             <div key={r.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  {new Date(r.performedAt).toLocaleDateString()}
+                  {new Date(r.performedAt).toLocaleDateString(appLocale())}
                   {r.meterReading != null && r.meterUnit && (
                     <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
                   )}
@@ -327,7 +342,16 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
 const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: RecordServiceInput) => void }> = ({ onCancel, onRecord }) => {
   const { t } = useTranslation('equipment');
-  const [performedAt, setPerformedAt] = useState(new Date().toISOString().slice(0, 10));
+  // Today on the reader's own calendar: toISOString() is UTC, which before 05:30 in India
+  // is still yesterday.
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const [performedAt, setPerformedAt] = useState(today);
+  // A service is recorded once done, so a future date is caught here, not by a refusal
+  // and a toast after Save (testing sheet, 5 Nov).
+  const future = !!performedAt && performedAt > today;
   const [kind, setKind] = useState<ServiceKind>('scheduled');
   const [meterReading, setMeterReading] = useState('');
   const [meterUnit, setMeterUnit] = useState<RuntimeUnit | null>(null);
@@ -337,8 +361,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     const hasReading = meterReading.trim() !== '';
     if (hasReading !== !!meterUnit) return false;
     if (hasReading && (Number.isNaN(Number(meterReading)) || Number(meterReading) < 0)) return false;
-    return !!performedAt;
-  }, [meterReading, meterUnit, performedAt]);
+    return !!performedAt && !future;
+  }, [meterReading, meterUnit, performedAt, future]);
 
   return (
     <form
@@ -357,7 +381,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     >
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.datePerformed')}</span>
-        <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        <input type="date" value={performedAt} max={today} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        {future && <span className="block text-xs text-rose-600 dark:text-rose-400">{t('service.notFuture')}</span>}
       </label>
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.kind')}</span>
@@ -418,6 +443,16 @@ function latestBySignal(widgets: PageWidget[]): Map<string, string> {
   return out;
 }
 
+/** Each signal's readiness from the page's readiness list, when the layout has one. */
+function readinessBySignal(widgets: PageWidget[]): Map<string, PageReadinessRow['readiness']> {
+  const out = new Map<string, PageReadinessRow['readiness']>();
+  for (const w of widgets) {
+    if (w.widgetType !== 'readiness_list' || w.readiness !== 'ready' || !Array.isArray(w.data)) continue;
+    for (const row of w.data as PageReadinessRow[]) out.set(row.signal, row.readiness);
+  }
+  return out;
+}
+
 /** The machine's digital twin: its class's 3-D model, read only, with each marker labelled
  *  by its signal's latest value. Markers waiting for a recheck are left off — the geometry
  *  moved under them, so where they would be drawn is not known to be right. */
@@ -430,17 +465,27 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
     let live = true;
     apiGetMyClassModel(classSlug)
       .then((m) => { if (live) { setModel(m); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' })); });
+      // A role that may not read the class's model is told so, not shown the API's refusal.
+      .catch((err) => {
+        if (!live) return;
+        setError(err instanceof ApiError && err.status === 403 ? t('twin.notForRole')
+          : err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' }));
+      });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classSlug]);
 
   const markers = useMemo<SceneMarker[]>(() => {
     const values = latestBySignal(widgets);
+    const readiness = readinessBySignal(widgets);
     return (model?.anchors ?? []).filter((a) => !a.needsRecheck).map((a) => {
       const name = a.label || a.signal;
-      const value = values.get(a.signal);
-      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label: value ? `${name} · ${value}` : name, tone: 'normal' };
+      // A stale or unbound signal looked the same as a live one; it is grey and says so,
+      // and its last value is not shown as if it were current.
+      const notCurrent = readiness.has(a.signal) && readiness.get(a.signal) !== 'ready';
+      const value = notCurrent ? undefined : values.get(a.signal);
+      const label = notCurrent ? `${name} · ${t('twin.noCurrentReading')}` : value ? `${name} · ${value}` : name;
+      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label, tone: notCurrent ? 'stale' : 'normal' };
     });
   }, [model, widgets]);
 

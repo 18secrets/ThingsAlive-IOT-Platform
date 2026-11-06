@@ -12,7 +12,8 @@ import type { ModelAnchor, ModelBounds } from '../../lib/api';
  * The camera is fitted to it instead.
  */
 export interface SceneMarker extends ModelAnchor {
-  tone: 'normal' | 'selected' | 'recheck';
+  /** stale: the signal has no current reading, so its last value is not shown as live. */
+  tone: 'normal' | 'selected' | 'recheck' | 'stale';
 }
 
 // A pointer that travelled further than this between press and release was turning the
@@ -36,7 +37,7 @@ const Model: React.FC<{ url: string; onPlace?: (point: [number, number, number])
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
-const TONE = { normal: '#f43f5e', selected: '#0284c7', recheck: '#d97706' };
+const TONE = { normal: '#f43f5e', selected: '#0284c7', recheck: '#d97706', stale: '#94a3b8' };
 
 const ModelScene: React.FC<{
   url: string;
@@ -68,7 +69,9 @@ const ModelScene: React.FC<{
             <Html center distanceFactor={undefined} style={{ pointerEvents: 'none', transform: 'translateY(-18px)' }}>
               <span
                 className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold whitespace-nowrap shadow ${
-                  m.tone === 'selected' ? 'bg-sky-600 text-white' : m.tone === 'recheck' ? 'bg-amber-500 text-white' : 'bg-white/90 text-slate-800'
+                  m.tone === 'selected' ? 'bg-sky-600 text-white' : m.tone === 'recheck' ? 'bg-amber-500 text-white'
+                    : m.tone === 'stale' ? 'bg-slate-200/95 text-slate-600 dark:bg-slate-700/95 dark:text-slate-300'
+                      : 'bg-white/90 text-slate-800 dark:bg-slate-900/90 dark:text-slate-100'
                 }`}
               >
                 {m.label || m.signal}

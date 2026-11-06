@@ -97,7 +97,6 @@
     "details": "Details",
     "target": "Target: {{value}} {{unit}}",
     "range": "Range: {{min}} – {{max}} {{unit}}",
-    "last24h": "Last 24 hours",
     "signalReadiness": "Signal readiness",
     "alerts": "Alerts",
     "noOpenAlerts": "No open alerts",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "Latest {{actual}} {{unit}} vs predicted {{predicted}} (expected {{lo}} – {{hi}})",
     "noShiftSchedule": "No band yet: this machine has no shift schedule.",
-    "forecastAt": "Forecast {{at}} · {{model}}"
+    "forecastAt": "Forecast {{at}} · {{model}}",
+    "windowLastHours_one": "Last {{count}} h",
+    "windowLastHours_other": "Last {{count}} h",
+    "windowLastDays_one": "Last {{count}} day",
+    "windowLastDays_other": "Last {{count}} days",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI explorer",
@@ -198,8 +202,21 @@
     },
     "history": "Forecast from this machine's own past shifts",
     "historyNone": "No forecast from history: the existing platform has no shift totals for this machine yet.",
-    "actual": "burned {{litres}} L",
-    "inShift": "In this shift so far {{soFar}} L, heading for {{predicted}} L"
+    "shiftLabel": "Shift {{n}} · {{date}}",
+    "nowTitle": "{{shift}} · expected by its end",
+    "nowDetail": "{{soFar}} L burned so far + {{rest}} L expected in the rest of the shift",
+    "asOf": "Re-forecast {{time}}",
+    "stale": "fuel counter last read {{time}}",
+    "forecast": "Forecast {{litres}} L",
+    "noForecast": "No forecast issued",
+    "noHistory": "No history yet, so the forecast is 0 L",
+    "actualIn": "actual {{litres}} L in {{hours}} h",
+    "notTotalled": "actual not totalled yet",
+    "running": "Running",
+    "next": "Next",
+    "accuracy": "{{pct}}% accurate",
+    "method": "Forecast from this machine's own shifts over the last 28 days. Shift 1 is 08:00–20:00, shift 2 is 20:00–08:00 (India time).",
+    "unavailable": "Fuel per shift is not available for your role."
   },
   "shifts": {
     "title": "Shift schedule",
@@ -221,7 +238,8 @@
     "days": "Days",
     "timeZone": "Time zone (IANA)",
     "timeZonePlaceholder": "e.g. Asia/Kolkata",
-    "allDay": "24 hours from {{from}}"
+    "allDay": "24 hours from {{from}}",
+    "overnight": "Ends the next day: a night shift."
   },
   "runStatus": {
     "scored": "scored",
@@ -242,7 +260,8 @@
     "unit": "Unit",
     "readingUnitPair": "A meter reading needs its unit, and a unit needs a reading.",
     "notes": "Notes",
-    "notesPlaceholder": "What was done"
+    "notesPlaceholder": "What was done",
+    "notFuture": "A service is recorded once it is done, so the date cannot be in the future."
   },
   "serviceKind": {
     "scheduled": "Scheduled",
@@ -309,7 +328,11 @@
     "register": "Register Equipment",
     "codeTaken": "This code is already used by {{name}}.",
     "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library.",
-    "shiftsHint": "Shifts are set on the machine page, under \"Shift schedule\", once the machine is registered. OEE and the fuel forecast use them."
+    "shiftsHint": "Shifts are set on the machine page, under \"Shift schedule\", once the machine is registered. OEE and the fuel forecast use them.",
+    "scenarioCount_one": "{{count}} scenario",
+    "scenarioCount_other": "{{count}} scenarios",
+    "noScenarios": "no scenarios",
+    "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios."
   },
   "bindings": {
     "title": "Signal Bindings",
@@ -509,7 +532,6 @@
     "composeFailed": "A layout could not be composed.",
     "noMachines": "No machines are assigned to this site yet, so its digital twin has nothing to show. Assign equipment to the site and it appears here.",
     "title": "Site digital twin",
-    "onSite": "{{n}} machines on site",
     "overview": "Whole site",
     "edit": "Edit layout",
     "saving": "Saving…",
@@ -528,7 +550,6 @@
     "fullscreen": "Full screen",
     "routeNote": "Dashed line: illustrative route, travelled while the machine’s data is live and nothing says it is stopped. Not GPS.",
     "dragHint": "Drag a machine or a zone to move it.",
-    "openAlerts": "{{n}} open alerts",
     "breakdown": "Breakdown",
     "engagedAt": "at {{zone}}",
     "route": "Route while working (illustrative)",
@@ -540,7 +561,7 @@
     "openMachine": "Open machine page",
     "composing": "Composing…",
     "compose": "Auto-arrange from equipment",
-    "composeHint": "Lays the site out from the machines assigned to it: only the structures they need, and anything needing attention in the breakdown bay. Replaces this draft; nothing is saved until you save.",
+    "composeHint": "Arranges the machines assigned to this site around what is drawn: every zone here stays as it is, only the structures still missing are added, and anything needing attention goes to the breakdown bay. Machine positions are rearranged; nothing is saved until you save.",
     "siteSize": "Site size (metres)",
     "width": "Width (E–W)",
     "depth": "Depth (N–S)",
@@ -594,7 +615,15 @@
     "allEquipment": "All equipment",
     "demoTipper": "Demo tipper {{n}} (simulated)",
     "simulated": "Demo · simulated movement",
-    "simulatedHint": "Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform."
+    "simulatedHint": "Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform.",
+    "onSite_one": "{{count}} machine on site",
+    "onSite_other": "{{count}} machines on site",
+    "openAlerts_one": "{{count}} open alert",
+    "openAlerts_other": "{{count}} open alerts",
+    "zoneSize": "{{w}} × {{d}} m",
+    "floorsCount_one": "{{count}} floor",
+    "floorsCount_other": "{{count}} floors",
+    "refreshFailed": "Showing the last view: the twin could not be refreshed ({{error}})."
   },
   "portTwin": {
     "title": "Port overview",
@@ -617,6 +646,8 @@
   },
   "twin": {
     "title": "Digital twin",
-    "loadFailed": "The 3-D model could not be loaded."
+    "loadFailed": "The 3-D model could not be loaded.",
+    "notForRole": "The 3-D model is not available for your role.",
+    "noCurrentReading": "no current reading"
   }
 }

@@ -1285,6 +1285,11 @@ export interface NamedFormula {
   resultKind: "scalar" | "series" | null;
   status: "draft" | "published";
   publishedAt: string | null;
+  /** The soft delete (TC_151): an inactive formula is out of the picker and takes no new
+   *  binding; what is already bound keeps it. Every version alike. */
+  active: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
   createdBy: string | null;
   updatedAt: string;
   resultUnit: string | null;
@@ -1330,6 +1335,14 @@ export function apiEditNamedFormula(slug: string, version: number, input: NamedF
 /** Compiles and publishes. Immutable from this point on. */
 export function apiPublishNamedFormula(slug: string, version: number): Promise<NamedFormula> {
   return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${version}/publish`, {
+    method: "POST",
+  });
+}
+
+/** Inactive or active again, every version at once (`catalog.write` to deactivate,
+ *  `catalog.publish` to activate). Idempotent. Nothing is deleted. */
+export function apiSetNamedFormulaActive(slug: string, active: boolean): Promise<NamedFormula[]> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${active ? "activate" : "deactivate"}`, {
     method: "POST",
   });
 }
@@ -2370,6 +2383,15 @@ export function apiGetSiteTwinProposal(plantId: string): Promise<SiteTwinLayoutI
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`);
 }
 
+/** The site's machines arranged around the editor's draft (`POST /sites/:plantId/twin/proposal`):
+ *  every zone in it kept as drawn, a structure already drawn reused, only the missing ones
+ *  added clear of the drawing. Not saved. */
+export function apiArrangeSiteTwinAround(
+  plantId: string, draft: Pick<SiteTwinLayoutInput, 'extent' | 'zones'>,
+): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`, { method: 'POST', body: JSON.stringify(draft) });
+}
+
 /** Replaces the whole layout (`equipment.write`) and answers with the fresh twin. */
 export function apiSaveSiteTwinLayout(plantId: string, layout: SiteTwinLayoutInput): Promise<SiteTwin> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/layout`, { method: 'PUT', body: JSON.stringify(layout) });
@@ -2573,6 +2595,37 @@ export interface MachineShiftFuel {
 /** This machine's shifts over the last `days` (1–90), forecast beside actual. `prediction.read`. */
 export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 3): Promise<MachineShiftFuel> {
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
+}
+
+/** One machine's forecast for one of its newest shifts (D50). */
+export interface FleetShiftFuelForecast {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  predictedL: number;
+  inputsThrough: string | null;
+  issuedAt: string;
+}
+
+/**
+ * The fleet's fuel ahead (`/shift-fuel-forecasts`, D50 + D52): each machine's newest two
+ * shift forecasts, the fleet total per shift, and each machine's in-shift re-forecast of
+ * the shift under way. `prediction.read`; scoped to the caller's machines.
+ */
+export interface FleetShiftFuel {
+  method: string;
+  asOf: string;
+  forecasts: FleetShiftFuelForecast[];
+  totals: { sdate: string; shift: 1 | 2; predictedL: number; machines: number }[];
+  nowcasts: (ShiftFuelNowcast & { sourceSystem: string; externalId: string; name: string | null })[];
+}
+
+export function apiGetFleetShiftFuel(): Promise<FleetShiftFuel> {
+  return authFetch("/shift-fuel-forecasts");
 }
 
 /** Either date left out is today in India, on the server's clock. */
@@ -2832,6 +2885,23 @@ export interface MachineExpectedFuel {
   equipmentClass: { slug: string; version: number; name: string } | null;
   shifts: ExpectedShiftFuel[];
 }
+/** A library class version's fuel figures and what D55 still needs (`catalog.write`). */
+export interface ClassFuelFigures {
+  classSlug: string; classVersion: number; className: string;
+  figures: {
+    nominalFuelPerHour: number | null; nominalFuelUnit: string | null; nominalFuelSource: string | null;
+    ratedPowerKw: number | null; workingLoadPct: number | null; bsfcGPerKwh: number | null; bsfcSource: string | null;
+    idleFuelPerHour: number | null; workingShare: number | null;
+  };
+  /** Null until the figures give a full answer. */
+  workingRateFrom: "bsfc" | "nominal" | null;
+  /** Empty: every machine on this version with a shift schedule gets expected litres. */
+  blockedBy: Exclude<ExpectedFuelBlocker, "no_class" | "no_shift_schedule">[];
+}
+export function apiGetClassFuelFigures(slug: string, version: number): Promise<ClassFuelFigures> {
+  return authFetch(`/catalog/authoring/equipment-classes/${encodeURIComponent(slug)}/fuel-figures?version=${version}`);
+}
+
 export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Promise<MachineExpectedFuel> {
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
 }

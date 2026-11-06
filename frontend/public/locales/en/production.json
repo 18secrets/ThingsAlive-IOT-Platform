@@ -139,5 +139,25 @@
   },
   "period": {
     "label": "Availability period"
+  },
+  "fleetFuel": {
+    "title": "Fuel per shift (fleet)",
+    "subtitle": "Today's shifts for the machines the filters show, forecast from each machine's own last 28 days.",
+    "shiftLabel": "Shift {{n}} · {{date}}",
+    "machines_one": "{{count}} machine",
+    "machines_other": "{{count}} machines",
+    "running": "Running",
+    "next": "Next",
+    "ended": "Ended",
+    "heading": "Heading for {{litres}} L now · {{soFar}} L burned so far ({{count}} reporting)",
+    "col": {
+      "machine": "Machine",
+      "now": "In this shift now"
+    },
+    "nowCell": "{{soFar}} → {{predicted}} L",
+    "empty": "No fuel forecast for the machines shown. Forecasts cover machines whose shift fuel totals come from the existing platform.",
+    "unavailable": "Fuel forecasts are not available for your role.",
+    "note": "Shift 1 is 08:00–20:00, shift 2 is 20:00–08:00 (India time). \"In this shift now\" is litres burned so far → litres expected by the end of the shift. Open a machine for its own fuel per shift.",
+    "shiftShort": "Shift {{n}}"
   }
 }

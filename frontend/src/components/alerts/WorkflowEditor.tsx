@@ -17,7 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { Search, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Search, CheckCircle2, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import {
   ApiError, Workflow, WorkflowCompileResult, WorkflowNodeType, WorkflowScope, WorkflowVersion,
   apiCompileWorkflow, apiCreateWorkflow, apiNewWorkflowVersion, apiPublishWorkflow, apiReplaceWorkflowSpec,
@@ -78,9 +78,16 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
   const initialGraph = useMemo(() => specToFlow(draft.spec, draft.layout), [draft]);
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>(initialGraph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialGraph.edges);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, deleteElements } = useReactFlow();
 
   const selectedNode = nodes.find((n) => n.selected) ?? null;
+  const selectedEdge = selectedNode ? null : edges.find((e) => e.selected) ?? null;
+  // A node goes with the joins to and from it, as the Delete key takes it, so no join is
+  // left pointing at nothing.
+  const removeSelected = () => {
+    if (selectedNode) void deleteElements({ nodes: [{ id: selectedNode.id }] });
+    else if (selectedEdge) void deleteElements({ edges: [{ id: selectedEdge.id }] });
+  };
   const signals = scopeData.signalsFor(scope);
 
   const onConnect = useCallback((connection: Connection) => setEdges((eds) => addEdge(connection, eds)), [setEdges]);
@@ -294,6 +301,7 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
             </div>
           ))}
           <p className="text-[0.6875rem] text-slate-400 dark:text-slate-500 leading-relaxed">{t('workflow.dragHint')}</p>
+          <p className="text-[0.6875rem] text-slate-400 dark:text-slate-500 leading-relaxed">{t('workflow.deleteHint')}</p>
         </div>
 
         <div className="flex-1 relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
@@ -310,13 +318,24 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
             minZoom={0.4}
             maxZoom={1.5}
             proOptions={{ hideAttribution: true }}
+            // Backspace alone was React Flow's default, and nothing said so: a Windows
+            // keyboard's Delete did nothing, and the node could not be removed (4 Nov).
+            deleteKeyCode={['Backspace', 'Delete']}
           >
             <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
             <Controls showInteractive />
             <MiniMap pannable zoomable className="!bg-white dark:!bg-slate-800" />
             {selectedNode && (
               <Panel position="top-right">
-                <NodeInspector node={selectedNode} signals={signals} onParams={updateSelectedParams} onType={setSelectedType} />
+                <NodeInspector node={selectedNode} signals={signals} onParams={updateSelectedParams} onType={setSelectedType} onDelete={removeSelected} />
+              </Panel>
+            )}
+            {selectedEdge && (
+              <Panel position="top-right">
+                <div className="w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md p-3.5 space-y-2">
+                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('workflow.connection')}</div>
+                  <DeleteButton label={t('workflow.deleteConnection')} onClick={removeSelected} />
+                </div>
               </Panel>
             )}
           </ReactFlow>
@@ -391,12 +410,24 @@ const TextField: React.FC<{ label: string; value: unknown; onChange: (v: string)
   </label>
 );
 
+const DeleteButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+  >
+    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+    <span>{label}</span>
+  </button>
+);
+
 const NodeInspector: React.FC<{
   node: WorkflowNode;
   signals: string[];
   onParams: (patch: WorkflowParams) => void;
   onType: (type: WorkflowNodeType) => void;
-}> = ({ node, signals, onParams, onType }) => {
+  onDelete: () => void;
+}> = ({ node, signals, onParams, onType, onDelete }) => {
   const { t } = useTranslation('alerts');
   const { type, params } = node.data;
   const pick = (values: string[], keyPrefix: string) => values.map((v) => ({ label: t(`${keyPrefix}.${v}`, { defaultValue: v }), value: v }));
@@ -471,6 +502,8 @@ const NodeInspector: React.FC<{
           <TextField label={t('workflow.inspector.description')} value={params.description} onChange={(v) => onParams({ description: v })} placeholder={t('workflow.inspector.optional')} />
         </>
       )}
+
+      <DeleteButton label={t('workflow.deleteNode')} onClick={onDelete} />
     </div>
   );
 };

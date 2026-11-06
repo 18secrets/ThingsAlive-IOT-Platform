@@ -14,6 +14,7 @@ import { PasswordChecklist, passwordMeetsRules } from '../common/PasswordCheckli
 import { SessionDiagnostics } from './SessionDiagnostics';
 import { MeDiagnostics, apiGetMe } from '../../lib/api';
 import { TEXT_SIZES, useTextSize } from '../../lib/textSize';
+import { appLocale } from '../../lib/dateLocale';
 
 interface SettingsViewProps {
   authUser: AuthUser;
@@ -87,7 +88,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ authUser, clients, o
 
   const displayName = me?.fullName || (isMasterAdmin ? t('settings.masterAdmin') : (authUser.clientName || authUser.username));
   const organisation = me?.tenantName || authUser.clientName || '—';
-  const since = me?.tenantSince ? new Date(me.tenantSince).toLocaleDateString() : clientRecord?.createdAt || '—';
+  const since = me?.tenantSince ? new Date(me.tenantSince).toLocaleDateString(appLocale()) : clientRecord?.createdAt || '—';
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (

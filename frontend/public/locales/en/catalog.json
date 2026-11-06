@@ -40,7 +40,8 @@
     "tier": "Tier {{tier}}",
     "editDraftSubtitleList": "Editing the working draft — publishing it is a separate step, from the list.",
     "severityLabel": "Severity",
-    "noClassSignals": "This class has no expected signals declared yet — add some on the class itself first."
+    "noClassSignals": "This class has no expected signals declared yet — add some on the class itself first.",
+    "publishIsMasterAdmins": "Only Master Admin can publish or unretire. Your role drafts and edits."
   },
   "classes": {
     "searchPlaceholder": "Search Class Names, Slugs, or Tags...",
@@ -109,7 +110,12 @@
     "publishedAt": "Published {{date}}",
     "lastEdited": "Last edited {{date}}",
     "noInputRoles": "No input roles",
-    "noVersions": "No versions recorded."
+    "noVersions": "No versions recorded.",
+    "inactive": "Inactive",
+    "makeInactive": "Make inactive",
+    "makeActive": "Make active",
+    "inactiveHint": "An inactive formula is no longer offered for new classes or KPIs. Classes and KPIs already using it keep working. Nothing is deleted.",
+    "inactiveConfirm": "Make “{{name}}” inactive? It will no longer be offered for new classes or KPIs; those already using it keep working. You can make it active again."
   },
   "formulaModal": {
     "saveFailed": "Could not save the formula.",
@@ -324,7 +330,8 @@
       "predictions": "Predictive Maintenance",
       "alerts": "Alert Rules",
       "chains": "Causal Chains",
-      "visual": "Visual"
+      "visual": "Visual",
+      "fuel": "Fuel"
     }
   },
   "scenarios": {
@@ -577,5 +584,30 @@
     "confirmStill": "Still right",
     "remove": "Remove model",
     "storageUnavailable": "File storage is not configured on this server (ASSET_S3_*), so no 3-D model can be uploaded or shown."
+  },
+  "classFuel": {
+    "title": "Fuel figures · version {{version}}",
+    "lead": "What a machine on this version is expected to burn per shift is worked out from these, with no history needed.",
+    "ready": "Every machine on this version with a shift schedule gets expected litres per shift ({{source}}).",
+    "fromBsfc": "working rate from the datasheet BSFC",
+    "fromNominal": "working rate from the class nominal",
+    "blocked": "Expected litres per shift can't be worked out for machines on this version yet. Missing:",
+    "figures": "Figures",
+    "figure": {
+      "ratedPowerKw": "Rated power",
+      "workingLoadPct": "Working load",
+      "bsfcGPerKwh": "BSFC (fuel per kWh)",
+      "nominalFuelPerHour": "Class nominal fuel rate",
+      "idleFuelPerHour": "Idle burn",
+      "workingShare": "Working share of a shift (0–1)"
+    },
+    "notSet": "not set",
+    "source": "Source: {{source}}",
+    "noSource": "No datasheet recorded",
+    "howTitle": "How it is worked out",
+    "formula": "litres = (rated power × load × BSFC ÷ 835, or the nominal) × shift hours × working share + idle burn × the rest",
+    "howLoad": "Load these as the optional fuel columns of the catalog workbook in {{page}}, then publish a new version. A BSFC needs the datasheet it comes from.",
+    "loading": "Loading the fuel figures…",
+    "loadFailed": "The fuel figures could not be loaded."
   }
 }

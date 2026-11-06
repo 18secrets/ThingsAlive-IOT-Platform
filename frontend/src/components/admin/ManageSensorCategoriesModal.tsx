@@ -3,6 +3,7 @@ import { X, AlertCircle, Archive, RotateCcw, Trash2, Edit2, Check } from 'lucide
 import { useTranslation } from 'react-i18next';
 import { ApiError, SensorCategory } from '../../lib/api';
 import { compareByCategoryOrder } from '../../lib/sensorCategoryOrder';
+import { appLocale } from '../../lib/dateLocale';
 
 interface ManageSensorCategoriesModalProps {
   isOpen: boolean;
@@ -104,7 +105,7 @@ export const ManageSensorCategoriesModal: React.FC<ManageSensorCategoriesModalPr
                   )}
                   {retired && (
                     <div className="text-xs text-slate-400">
-                      {t('sensorCategories.retiredOn', { date: new Date(c.retiredAt!).toLocaleDateString() })}
+                      {t('sensorCategories.retiredOn', { date: new Date(c.retiredAt!).toLocaleDateString(appLocale()) })}
                     </div>
                   )}
                 </div>

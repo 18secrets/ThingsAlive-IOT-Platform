@@ -23,6 +23,7 @@ import { severityTone } from '../components/common/statusTone';
 import { MachineIcon } from '../components/common/MachineIcon';
 import { SelectPicker } from 'rsuite';
 import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
+import { useAuth } from '../lib/AuthProvider';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -71,6 +72,20 @@ export const LiveDashboardPage: React.FC = () => {
     : fitted ? fitted.length - (online ?? 0)
     : [...latestByImei.values()].filter((r) => r.state === 'dark').length;
   const overdueOrders = orders.state === 'ok' ? orders.data.filter((o) => o.dueAt && new Date(o.dueAt).getTime() < Date.now()).length : 0;
+  // An employee given a job saw only a count of open work orders here, never the job
+  // (testing sheet TC_148). Their own jobs come first, then the rest, earliest due first.
+  const { authUser } = useAuth();
+  const me = authUser?.role === 'client' ? authUser.userId : undefined;
+  const ordersMineFirst: Slot<WorkOrder[]> = orders.state === 'ok'
+    ? {
+      state: 'ok',
+      data: orders.data.slice().sort((a, b) => {
+        const mine = Number(b.assignedToUserId === me) - Number(a.assignedToUserId === me);
+        if (mine) return mine;
+        return (a.dueAt ? Date.parse(a.dueAt) : Infinity) - (b.dueAt ? Date.parse(b.dueAt) : Infinity);
+      }),
+    }
+    : orders;
   const breached = incidents.state === 'ok'
     ? incidents.data.filter((i) => i.sla.acknowledge.state === 'breached' || i.sla.resolve.state === 'breached').length : 0;
   const serviceDue = service.state === 'ok' ? service.data.filter((a) => a.status === 'due' || a.status === 'overdue') : [];
@@ -138,7 +153,17 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <Panel title={t('live.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
+          <List slot={ordersMineFirst} empty={t('live.noOpenWorkOrders')} render={(d) => d.slice(0, 5).map((o) => (
+            <PanelRow key={o.id} onClick={() => navigate('/work-orders')} title={`${o.reference} · ${o.title}`}
+              detail={`${machineName(o.sourceSystem, o.externalId)} · ${t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}`}
+              meta={o.dueAt ? t('live.due', { when: shortWhen(o.dueAt) }) : undefined}
+              right={o.assignedToUserId === me && me
+                ? <Chip tone="sky">{t('live.yours')}</Chip>
+                : <Chip tone={o.priority === 'urgent' || o.priority === 'high' ? 'amber' : 'slate'}>{t(`priority.${o.priority}`, { defaultValue: o.priority })}</Chip>} />
+          ))} />
+        </Panel>
         <Panel title={t('live.liveIncidents')} icon={<Siren className="w-4 h-4" />} onOpen={() => navigate('/incident-management')}>
           <List slot={incidents} empty={t('live.noLiveIncidents')} render={(d) => d.slice(0, 5).map((i) => (
             <PanelRow key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} title={machineName(i.machine.sourceSystem, i.machine.externalId)}

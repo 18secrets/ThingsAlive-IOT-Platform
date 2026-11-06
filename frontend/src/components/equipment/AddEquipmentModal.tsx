@@ -4,7 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption, ShiftTemplate,
-  apiApplyShiftTemplate, apiListShiftTemplates,
+  apiApplyShiftTemplate, apiListMyCatalogScenarios, apiListShiftTemplates,
 } from '../../lib/api';
 
 interface AddEquipmentModalProps {
@@ -54,12 +54,18 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   // given one here has shift hours from its first shift, so its fuel can be predicted.
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [shiftTemplate, setShiftTemplate] = useState('');
+  // Active scenarios per class, so the picker shows which classes bring predictions
+  // (test report OB-4: a class copy with none looked the same as one with five). Null when
+  // the account's scenarios cannot be read: then no counts, never a wrong zero.
+  const [scenarioCounts, setScenarioCounts] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const isEditing = !!existingEquipment;
 
   const equipmentClassOptions = equipmentClasses.map((ec) => ({ label: ec.name, value: ec.slug }));
+  const scenarioCountOf = (slug: string) => (scenarioCounts ? scenarioCounts[slug] ?? 0 : null);
+  const selectedHasNoScenarios = !!equipmentClassSlug && scenarioCountOf(equipmentClassSlug) === 0;
   const plantOptions = plants.map((p) => ({ label: p.name, value: p.id }));
 
   const reset = () => {
@@ -101,6 +107,14 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     let live = true;
     // Optional: without the library's templates the form still registers a machine.
     apiListShiftTemplates().then((list) => { if (live) setShiftTemplates(list); }).catch(() => { if (live) setShiftTemplates([]); });
+    apiListMyCatalogScenarios()
+      .then((list) => {
+        if (!live) return;
+        const counts: Record<string, number> = {};
+        for (const sc of list) if (sc.status === 'active') counts[sc.clientEquipmentClassSlug] = (counts[sc.clientEquipmentClassSlug] ?? 0) + 1;
+        setScenarioCounts(counts);
+      })
+      .catch(() => { if (live) setScenarioCounts(null); });
     return () => { live = false; };
   }, [isOpen]);
 
@@ -244,7 +258,25 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                 block
                 searchable={equipmentClassOptions.length > 6}
                 cleanable
+                renderOption={(label, item) => {
+                  const n = scenarioCountOf(String(item.value));
+                  return (
+                    <span className="flex items-center justify-between gap-3 w-full">
+                      <span className="truncate">{label}</span>
+                      {n !== null && (
+                        <span className={`shrink-0 text-xs ${n === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
+                          {n === 0 ? t('equipmentForm.noScenarios') : t('equipmentForm.scenarioCount', { count: n })}
+                        </span>
+                      )}
+                    </span>
+                  );
+                }}
               />
+              {selectedHasNoScenarios && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
+                  {t('equipmentForm.classHasNoScenarios')}
+                </p>
+              )}
               {equipmentClasses.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">
                   {t('equipmentForm.noClasses')}
