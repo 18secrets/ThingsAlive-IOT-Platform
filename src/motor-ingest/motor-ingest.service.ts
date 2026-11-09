@@ -33,6 +33,15 @@ const MINUTE_SIGNALS: readonly { signal: string; unit: string | null; expr: stri
   // motors (V-02); stored as the device sent it, under a name a class declares as
   // estimated, never as a measured speed.
   { signal: 'motor_speed_est', unit: 'rpm', expr: 'avg("rpm")' },
+  // The logger's added sensors (all optional in the payload; a logger without one leaves
+  // the column null and no signal is written for it, rather than a zero that reads as a
+  // cold room or a perfectly smooth bearing).
+  { signal: 'ambient_temperature', unit: 'degC', expr: 'avg("ambient_c")' },
+  { signal: 'vibration_velocity', unit: 'mm/s', expr: 'avg("vibration_mm_s")' },
+  { signal: 'vibration_velocity_max', unit: 'mm/s', expr: 'max("vibration_mm_s")' },
+  { signal: 'device_load_pct', unit: 'dimensionless', expr: 'avg("load_pct")' },
+  // Stored as sent until its unit and meaning are confirmed; nothing reads it yet.
+  { signal: 'water_air_gap', unit: null, expr: 'avg("water_air_gap")' },
 ];
 
 export interface PassSummary {
@@ -215,7 +224,10 @@ export class MotorIngestService {
     };
     for (const row of rows) {
       MINUTE_SIGNALS.forEach((s, i) => {
-        const v = Number(row[`s${i}`]);
+        const raw = row[`s${i}`];
+        // Number(null) is 0, a reading nobody took.
+        if (raw === null || raw === undefined) return;
+        const v = Number(raw);
         if (Number.isFinite(v)) add(s.signal, s.unit, v, new Date(row.minute));
       });
     }
