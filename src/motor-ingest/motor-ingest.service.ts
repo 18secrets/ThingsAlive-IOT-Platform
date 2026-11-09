@@ -2,7 +2,9 @@ import { HttpException, HttpStatus, Injectable, Logger, NotFoundException } from
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
+import { chainForEquipment, resolveParameters } from '../parameters/services/parameter-resolution';
 import { runTenantSpanning } from '../scope/tenant-session';
+import { RUNNING_SIGNAL } from '../shift/services/running-status';
 
 /** The firmware's body ceiling, overridable as the contract says. */
 export const MAX_BODY_BYTES = Number(process.env.MOTOR_MAX_BODY_BYTES) || 8192;
@@ -95,7 +97,9 @@ export class MotorIngestService {
           batch.boot ?? null, batch.lost_total ?? null, batch.dropped_total ?? null, batch.device_now ?? null, receivedAt],
       );
       if (batch.records.length && !stored.length) await this.warnOnSeqReset(m, batch);
-      if (stored.length) await this.writeMinutes(m, batch.device_id, stored, receivedAt);
+      const owner = await this.owner(m, batch.device_id);
+      if (stored.length) await this.writeMinutes(m, batch.device_id, stored, receivedAt, owner);
+      if (owner) await this.writeLoggerHealth(m, batch, receivedAt, owner);
       return { status: 'ok', ack_seq: batch.last_seq };
     });
   }
@@ -198,10 +202,18 @@ export class MotorIngestService {
    * kept, and reach telemetry once it is assigned and resends — never under a guessed
    * tenant.
    */
-  private async writeMinutes(m: EntityManager, deviceId: string, stored: { readingAt: Date }[], receivedAt: Date): Promise<void> {
-    const [owner] = await m.query(
-      `SELECT "tenant_id" FROM "device_inventory" WHERE "imei" = $1 AND "state" = 'assigned' AND "tenant_id" IS NOT NULL`, [deviceId],
+  /** The account a logger is assigned to, and the machine it is claimed onto, if any. */
+  private async owner(m: EntityManager, deviceId: string): Promise<Owner | null> {
+    const [row] = await m.query(
+      `SELECT "tenant_id", "equipment_external_id" FROM "device_inventory"
+        WHERE "imei" = $1 AND "state" = 'assigned' AND "tenant_id" IS NOT NULL`, [deviceId],
     );
+    return row ? { tenant_id: row.tenant_id, equipmentExternalId: row.equipment_external_id ?? null } : null;
+  }
+
+  private async writeMinutes(
+    m: EntityManager, deviceId: string, stored: { readingAt: Date }[], receivedAt: Date, owner: Owner | null,
+  ): Promise<void> {
     if (!owner) {
       this.logger.warn(`Motor logger ${deviceId} is not assigned to an account; readings stored, not scored.`);
       return;
@@ -229,12 +241,105 @@ export class MotorIngestService {
         tuples.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, 'live')`);
       });
     }
+    for (const row of await this.runningMinutes(m, owner, deviceId, minutes)) {
+      for (const [signal, unit, value] of [
+        [RUNNING_SIGNAL, 'dimensionless', row.ran ? 1 : 0], ['motor_starts', 'starts', Number(row.starts)],
+      ] as const) {
+        const o = values.length;
+        values.push(owner.tenant_id, deviceId, signal, value, unit, new Date(row.minute), receivedAt);
+        tuples.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, 'live')`);
+      }
+    }
     if (!tuples.length) return;
+    await upsertTelemetry(m, tuples, values);
+  }
+
+  /**
+   * Whether the motor ran in each minute, and how many times it started, judged per
+   * second before anything is averaged: a start is a moment, and a one-minute mean has
+   * already lost it. "Running" is the workbook's F1: supply above 15% of rated voltage
+   * and current above 5% of rated current, the machine's own ratings (nameplate first,
+   * then its model), so the floor scales with the motor.
+   *
+   * `engine_running_status` is the platform's one running signal — availability, duty
+   * cycle, the operating gate a baseline learns from, and the shift runner's "never
+   * ran" check all read it. With no ratings for the machine nothing is written: unknown,
+   * which the platform already treats as unknown, rather than a floor guessed for a class
+   * that spans a six-fold range of motors.
+   *
+   * A start needs the previous reading within five seconds. Across a gap in the data the
+   * motor's state in between is not known, and the logger coming back is not a start.
+   */
+  private async runningMinutes(
+    m: EntityManager, owner: Owner, deviceId: string, minutes: number[],
+  ): Promise<{ minute: Date; ran: boolean; starts: string }[]> {
+    if (!owner.equipmentExternalId || !minutes.length) return [];
+    const [profile] = await m.query(
+      `SELECT "id", "equipment_class_slug" AS "equipmentClassSlug", "plant_id" AS "plantId" FROM "equipment_profile"
+        WHERE "tenant_id" = $1 AND "external_id" = $2 ORDER BY ("source_system" = 'ta-2.0') DESC LIMIT 1`,
+      [owner.tenant_id, owner.equipmentExternalId],
+    );
+    if (!profile) return [];
+    const ratings = await resolveParameters(m, owner.tenant_id, chainForEquipment(profile), ['rated_voltage', 'rated_current'], new Date());
+    const v = ratings.get('rated_voltage')?.value;
+    const i = ratings.get('rated_current')?.value;
+    if (typeof v !== 'number' || typeof i !== 'number') return [];
+    return m.query(
+      `WITH r AS (
+         SELECT "reading_at", ("voltage_v" > $3 AND "current_a" > $4) AS "on"
+           FROM "motor_sensor_records"
+          WHERE "device_id" = $1 AND "reading_at" >= $5 AND "reading_at" < $6
+       ), t AS (
+         SELECT "reading_at", "on",
+                lag("on") OVER (ORDER BY "reading_at") AS "prev",
+                lag("reading_at") OVER (ORDER BY "reading_at") AS "prev_at"
+           FROM r
+       )
+       SELECT date_trunc('minute', "reading_at") AS "minute", bool_or("on") AS "ran",
+              count(*) FILTER (WHERE "on" AND "prev" = false AND "reading_at" - "prev_at" <= interval '5 seconds') AS "starts"
+         FROM t
+        WHERE date_trunc('minute', "reading_at") = ANY($2::timestamptz[])
+        GROUP BY 1`,
+      [deviceId, minutes.map((t) => new Date(t)), 0.15 * v, 0.05 * i,
+        new Date(minutes[0] - 60_000), new Date(minutes[minutes.length - 1] + 60_000)],
+    );
+  }
+
+  /**
+   * The logger's own health (U10): how many records it overwrote (flash full) or could
+   * not store since its previous upload, as signals an alert can watch. The contract says
+   * to alert if `lost_total` / `dropped_total` grow; the totals only ever grow, so what is
+   * written is the growth. A total lower than the last one is a counter reset (flash
+   * replaced, firmware reflashed), and the new total is what was lost since.
+   */
+  private async writeLoggerHealth(m: EntityManager, batch: MotorBatch, receivedAt: Date, owner: Owner): Promise<void> {
+    const [previous] = await m.query(
+      `SELECT "lost_total"::float8 AS "lost", "dropped_total"::float8 AS "dropped" FROM "motor_upload_log"
+        WHERE "device_id" = $1 AND "received_at" < $2 ORDER BY "received_at" DESC, "id" DESC LIMIT 1`,
+      [batch.device_id, receivedAt],
+    );
+    const growth = (now: number | undefined, before: number | null | undefined) =>
+      now == null ? null : before == null ? 0 : now >= before ? now - before : now;
+    const minute = new Date(Math.floor(receivedAt.getTime() / 60_000) * 60_000);
+    const values: unknown[] = [];
+    const tuples: string[] = [];
+    for (const [signal, value] of [
+      ['logger_records_lost', growth(batch.lost_total, previous?.lost)],
+      ['logger_records_dropped', growth(batch.dropped_total, previous?.dropped)],
+    ] as const) {
+      if (value === null) continue;
+      const o = values.length;
+      values.push(owner.tenant_id, batch.device_id, signal, value, 'records', minute, receivedAt);
+      tuples.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, 'live')`);
+    }
+    if (!tuples.length) return;
+    await m.query(`SELECT ensure_telemetry_partition($1::date)`, [minute.toISOString().slice(0, 7) + '-01']);
+    // Two uploads in one minute: the minute's growth is their sum, not the last one's.
     await m.query(
       `INSERT INTO "telemetry_reading" ("tenant_id", "imei", "signal", "value", "unit", "source_timestamp", "received_at", "source")
        VALUES ${tuples.join(', ')}
        ON CONFLICT ("imei", "signal", "source_timestamp") DO UPDATE
-         SET "value" = EXCLUDED."value", "received_at" = EXCLUDED."received_at"`,
+         SET "value" = "telemetry_reading"."value" + EXCLUDED."value", "received_at" = EXCLUDED."received_at"`,
       values,
     );
   }
@@ -257,6 +362,18 @@ export class MotorIngestService {
       );
     }
   }
+}
+
+interface Owner { tenant_id: string; equipmentExternalId: string | null }
+
+async function upsertTelemetry(m: EntityManager, tuples: string[], values: unknown[]): Promise<void> {
+  await m.query(
+    `INSERT INTO "telemetry_reading" ("tenant_id", "imei", "signal", "value", "unit", "source_timestamp", "received_at", "source")
+     VALUES ${tuples.join(', ')}
+     ON CONFLICT ("imei", "signal", "source_timestamp") DO UPDATE
+       SET "value" = EXCLUDED."value", "received_at" = EXCLUDED."received_at"`,
+    values,
+  );
 }
 
 const DEVICE_ID = /^[A-Za-z0-9_-]{1,64}$/;

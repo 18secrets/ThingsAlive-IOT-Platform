@@ -217,8 +217,9 @@ describeDb('motor logger: the bulk upload over HTTP', () => {
       `SELECT "signal", "value", "unit", "tenant_id" FROM "telemetry_reading" WHERE "imei" = 'MOTOR_001' ORDER BY "signal", "source_timestamp"`,
     );
     const signals = [...new Set(rows.map((r: { signal: string }) => r.signal))].sort();
-    expect(signals).toEqual(['input_power', 'motor_current', 'motor_current_max', 'motor_speed_est', 'motor_temperature',
-      'power_factor', 'supply_voltage', 'supply_voltage_max', 'supply_voltage_min']);
+    // The readings' nine, plus the logger's own health (no ratings here, so no running status).
+    expect(signals).toEqual(['input_power', 'logger_records_dropped', 'logger_records_lost', 'motor_current', 'motor_current_max',
+      'motor_speed_est', 'motor_temperature', 'power_factor', 'supply_voltage', 'supply_voltage_max', 'supply_voltage_min']);
     expect(rows.every((r: { tenant_id: string }) => r.tenant_id === 'motors')).toBe(true);
     // 50 readings, one a second: one or two minutes, never fifty rows a signal.
     expect(rows.filter((r: { signal: string }) => r.signal === 'motor_current').length).toBeLessThanOrEqual(2);
@@ -285,6 +286,55 @@ describeDb('motor logger: the bulk upload over HTTP', () => {
       `SELECT max("value")::float8 AS peak FROM "telemetry_reading" WHERE "imei" = 'MOTOR_001' AND "signal" = 'motor_current_max'`,
     );
     expect(peak).toBeGreaterThan(1.2 * MINI_1HP.ratedCurrent);
+  });
+
+  /** The logger claimed onto a machine of the account, with or without its ratings. */
+  const fitted = async (ratings: boolean) => {
+    await owner.query(`DELETE FROM "equipment_profile" WHERE "external_id" = 'PUMP-1'`);
+    await owner.query(`TRUNCATE "tenant_parameter"`);
+    const [{ id }] = await owner.query(
+      `INSERT INTO "equipment_profile" ("tenant_id", "source_system", "external_id", "tier", "readiness")
+       VALUES ('motors', 'ta-2.0', 'PUMP-1', 'basic', '{}') RETURNING "id"`);
+    await owner.query(`INSERT INTO "device_inventory" ("imei", "tenant_id", "state", "equipment_external_id")
+       VALUES ('MOTOR_001', 'motors', 'assigned', 'PUMP-1')`);
+    if (ratings) {
+      for (const [name, value, unit] of [['rated_current', 5.5, 'A'], ['rated_voltage', 220, 'V']] as const) {
+        await owner.query(
+          `INSERT INTO "tenant_parameter" ("tenant_id", "scope", "scope_ref", "name", "value", "unit", "effective_from", "created_by")
+           VALUES ('motors', 'equipment', $1, $2, $3::jsonb, $4, '2026-01-01', 'test')`, [id, name, JSON.stringify(value), unit]);
+      }
+    }
+  };
+  const series = (signal: string) => owner.query(
+    `SELECT "value"::float8 AS "v" FROM "telemetry_reading" WHERE "imei" = 'MOTOR_001' AND "signal" = $1 ORDER BY "source_timestamp"`, [signal],
+  ).then((rows: { v: number }[]) => rows.map((r) => r.v));
+
+  it('counts starts per second before averaging, and says when the motor ran (U6, U9)', async () => {
+    await fitted(true);
+    const end = Math.floor(Date.now() / 1000);
+    // Cycling: 90 s on, 30 s off. Five minutes hold two restarts, at 120 s and 240 s.
+    for (const b of batches('MOTOR_001', simulate('cycling', 300, end, end - 400), 400)) await post(b);
+    expect((await series('motor_starts')).reduce((a, b) => a + b, 0)).toBe(2);
+    expect(await series('engine_running_status')).toEqual(expect.arrayContaining([1]));
+    expect((await series('engine_running_status')).every((v) => v === 0 || v === 1)).toBe(true);
+  });
+
+  it('with no ratings for the machine, running is unknown: nothing written, no floor guessed', async () => {
+    await fitted(false);
+    const end = Math.floor(Date.now() / 1000);
+    for (const b of batches('MOTOR_001', simulate('cycling', 300, end, end - 400), 400)) await post(b);
+    expect(await series('engine_running_status')).toEqual([]);
+    expect(await series('motor_starts')).toEqual([]);
+    expect((await series('motor_current')).length).toBeGreaterThan(0);
+  });
+
+  it('logger health: the growth of lost and dropped records since the last upload (U10)', async () => {
+    await assign();
+    await post(batch(1001, 1002, { lost_total: 3, dropped_total: 0 }));
+    await post(batch(1003, 1004, { lost_total: 8, dropped_total: 0 }));
+    await post(batch(1003, 1004, { lost_total: 8, dropped_total: 0 })); // a retry: nothing new lost
+    expect((await series('logger_records_lost')).reduce((a, b) => a + b, 0)).toBe(5);
+    expect((await series('logger_records_dropped')).reduce((a, b) => a + b, 0)).toBe(0);
   });
 
   it('undoes its own migration, and the chain re-applies', async () => {
