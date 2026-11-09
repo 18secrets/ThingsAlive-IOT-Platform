@@ -64,6 +64,11 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
       + 'row and the one object it names, never a copy of the bytes; only its anchors are copied',
   },
   {
+    table: 'class_request', disposition: 'exclude',
+    reason: 'an account asking for a class the library lacks (OB-6); published_class_slug only points at '
+      + 'the class that answered it, so the row is the account\'s own record, not class content a grant copies',
+  },
+  {
     table: 'site_class', disposition: 'exclude',
     reason: 'platform-owned and read directly (resolveSiteClass); nothing grants a site class to a tenant, '
       + 'so there is no copy to make — the same shape as causal_chain',
