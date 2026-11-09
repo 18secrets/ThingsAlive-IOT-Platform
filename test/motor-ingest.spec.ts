@@ -3,7 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { createApp } from '../src/main';
-import { MotorBatch, readingTimes } from '../src/motor-ingest/motor-ingest.service';
+import { MAX_BODY_BYTES, MotorBatch, readingTimes, validateBatch } from '../src/motor-ingest/motor-ingest.service';
+import { batches, MINI_1HP, SCENARIOS, simulate } from '../scripts/motor-logger-sim';
 import { mintPlatformToken } from '../src/platform/platform-token';
 import { createTestDataSource, describeDb, undoMigrationNamed } from './db';
 
@@ -52,6 +53,59 @@ describe('motor logger: reading times', () => {
   it('a record dated after device_now came from before a reboot: approximate, never in the future', () => {
     const b = batch(1001, 1002, { device_now: 5 });
     expect(readingTimes(b, arrived).every((t) => t.basis === 'approximate' && t.readingAt <= arrived)).toBe(true);
+  });
+});
+
+/**
+ * The simulator (`scripts/motor-logger-sim.ts`) stands in for the real logger until one
+ * is wired, so it is held to the same contract the server enforces, and each scenario
+ * to the signature the RCA matrix says it leaves.
+ */
+describe('motor logger: the simulator', () => {
+  const END = 1_794_200_000;
+  const BOOT = END - 3600;
+  const run = (scenario: (typeof SCENARIOS)[number], seconds = 600) => simulate(scenario, seconds, END, BOOT);
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it('every scenario sends batches the server accepts, under the body limit', () => {
+    for (const scenario of SCENARIOS) {
+      for (const b of batches('MOTOR_001', run(scenario), END - BOOT)) {
+        expect(() => validateBatch(b)).not.toThrow();
+        expect(Buffer.byteLength(JSON.stringify(b))).toBeLessThanOrEqual(MAX_BODY_BYTES);
+        expect(b.records.length).toBeLessThanOrEqual(50);
+      }
+    }
+  });
+
+  it('normal runs near 0.85 of rated current at ~230 V, F4 speed just under synchronous', () => {
+    const r = run('normal');
+    expect(avg(r.map((x) => x.current)) / MINI_1HP.ratedCurrent).toBeCloseTo(0.85, 1);
+    expect(avg(r.map((x) => x.voltage))).toBeCloseTo(230, 0);
+    expect(Math.max(...r.map((x) => x.rpm))).toBeLessThan(3000);
+  });
+
+  it('overload ends above 1.2 × rated current; low voltage ends below the 180 V fault line, drawing more current', () => {
+    const over = run('overload');
+    expect(avg(over.slice(-30).map((x) => x.current))).toBeGreaterThan(1.2 * MINI_1HP.ratedCurrent);
+    const low = run('low-voltage');
+    expect(avg(low.slice(-30).map((x) => x.voltage))).toBeLessThan(180);
+    expect(avg(low.slice(-30).map((x) => x.current))).toBeGreaterThan(avg(low.slice(0, 30).map((x) => x.current)));
+    expect(avg(run('high-voltage').slice(-30).map((x) => x.voltage))).toBeGreaterThan(260);
+  });
+
+  it('dry run: current drops about 30% and power factor falls (RCA 1)', () => {
+    const r = run('dry-run', 900);
+    const before = avg(r.slice(0, 200).map((x) => x.current));
+    const after = avg(r.slice(-200).map((x) => x.current));
+    expect(after / before).toBeLessThan(0.75);
+    expect(avg(r.slice(-200).map((x) => x.power_factor))).toBeLessThan(avg(r.slice(0, 200).map((x) => x.power_factor)));
+  });
+
+  it('cycling stops and restarts every two minutes (RCA 10): zero current and speed while off', () => {
+    const r = run('cycling', 600);
+    const starts = r.filter((x, i) => i > 0 && r[i - 1].current === 0 && x.current > 0).length;
+    expect(starts).toBeGreaterThanOrEqual(4);
+    expect(r.filter((x) => x.current === 0).every((x) => x.rpm === 0)).toBe(true);
   });
 });
 
@@ -218,6 +272,19 @@ describeDb('motor logger: the bulk upload over HTTP', () => {
     expect((await post(batch(1001, 1002), old)).status).toBe(401);
     expect((await post(batch(1001, 1002), reissued.body.key)).status).toBe(200);
     expect(await owner.query(`SELECT "key_hash" FROM "motor_logger_key"`)).not.toContainEqual({ key_hash: reissued.body.key });
+  });
+
+  it('a simulated overload, sent the way the device sends it, reaches telemetry above 1.2 × rated current', async () => {
+    await assign();
+    const end = Math.floor(Date.now() / 1000);
+    const records = simulate('overload', 600, end, end - 700);
+    for (const b of batches('MOTOR_001', records, 700)) {
+      expect((await post(b)).text).toBe(`{"status":"ok","ack_seq":${b.last_seq}}`);
+    }
+    const [{ peak }] = await owner.query(
+      `SELECT max("value")::float8 AS peak FROM "telemetry_reading" WHERE "imei" = 'MOTOR_001' AND "signal" = 'motor_current_max'`,
+    );
+    expect(peak).toBeGreaterThan(1.2 * MINI_1HP.ratedCurrent);
   });
 
   it('undoes its own migration, and the chain re-applies', async () => {
