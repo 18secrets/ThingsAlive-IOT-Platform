@@ -598,10 +598,10 @@ Code: `src/shift-fuel/expected-fuel.ts` (the arithmetic, alone), `expected-fuel-
 - Template v5 rather than v6 for the new class columns: `class-oem-figures.spec.ts` pins
   v5, and every addition is optional, as v4 → v5's were.
 
-## D56 — Parameters carry their unit into the compiler (PROPOSED)
+## D56 — Parameters carry their unit into the compiler
 
-Proposed 2026-11-09 for the motor library (`Crompton_Pump_Library.xlsx`, *Universal
-Parameters & Formulas*). Not decided: review on the MR that adds it.
+Decided 2026-11-09 by Deepak, for the motor library (`Crompton_Pump_Library.xlsx`,
+*Universal Parameters & Formulas*). Built in MR !230.
 
 Every motor threshold is a statement about a ratio to a rated value: λ = I / I_rated,
 overload at λ > 1.20, "running" above 5% of rated current. Today `@param` compiles as
@@ -623,9 +623,10 @@ The unit check that exists to catch exactly this passes the wrong thing silently
   `currency/L` would change the result unit of formulas already published (D05). Moving them
   over is a separate change, one parameter at a time, with the formulas that read each.
 
-## D57 — Rated data lives on a model in the library, not on the class (PROPOSED)
+## D57 — Rated data lives on a model in the library, not on the class
 
-Proposed 2026-11-09. Not decided.
+Decided 2026-11-09 by Deepak. Built on `feature/motor-models-d57`
+(`1763700000000-ModelRatings`).
 
 One class covers a range: a single-phase induction motor class spans 0.37 to 2.2 kW, and
 rated current differs 6x across it. The workbook's finding V-01 is the failure this
@@ -651,11 +652,19 @@ Three places the rated figures could live:
 - **Missing is not configured, never a default** (G07, the workbook's GATE row). A model
   with no rated current leaves every λ formula `not_configured`, named.
 - Library → account follows D04: the account's copy is theirs. A corrected catalogue figure
-  is a new library version the account adopts, not an edit under their alerts.
+  reaches an account when it copies the model again, not as an edit under their alerts.
+- **A rating stores no unit.** Its unit is the rating's own, held in `rating_parameter`
+  (the database's copy of the D56 list; a test holds the two equal). A unit stored per row
+  could disagree with it; one that is not stored cannot.
+- **A model a machine names cannot be deleted** (RESTRICT): every motor KPI on that machine
+  would turn `not_configured` from somebody else's screen.
+- **A rating has no effective time.** It describes the model, not a moment, so a corrected
+  figure applies to every window it is read for.
 
-## D58 — The duty table is a curve on the model, read by two operators (PROPOSED)
+## D58 — The duty table is a curve on the model, read by one operator
 
-Proposed 2026-11-09. Not decided.
+Decided 2026-11-09 by Deepak. Built on `feature/duty-curve-d58`
+(`1763800000000-DutyCurves`).
 
 The sensorless design rests on the pump's catalogue performance table: at rated speed,
 head H → flow Q → input power P_in, printed per model (Mini 1 HP: 6 m → 4,250 LPH … 50 m →
@@ -667,13 +676,16 @@ deviation compares the two. Formulas cannot do any of this today.
   input_kw)`, with the units fixed by the curve kind and `source` required as for ratings.
   One curve kind, `duty`, to start. A second machine type needing a curve adds a kind, not a
   general-purpose table language.
-- **Two operators:** `curve_at(column, by_column, x)` reads one column at a value of
+- **One operator:** `curve_at(column, by_column, x)` reads one column at a value of
   another. `curve_at('flow_lpm', 'head_m', @install_head_m)` is expected flow at install
   head; `curve_at('flow_lpm', 'input_kw', avg(input_power))` is the flow estimate. Linear
   between points. The result carries the column's unit.
-- **The column read by must be strictly monotonic** along the curve, checked when the curve
-  is saved. On a non-monotonic column the reverse reading has two answers, and picking one
-  is a guess.
+- **The column read by must be strictly monotonic.** Head and flow always are, and the
+  database holds them to it at commit (rising flow, falling head, at least two points — a
+  deferred constraint trigger, since a row CHECK cannot see its neighbours). Input power is
+  not: on a self-priming regenerative pump it falls as flow rises, on a centrifugal one it
+  rises. So reading *by* power checks its order when read, and a curve where it turns back
+  answers `curve_not_monotonic` (not configured) rather than picking one of two flows.
 - **No extrapolation.** Outside the printed range the answer is `undefined_result`, named
   as out of curve. A pump running beyond its catalogue table is itself worth knowing, and
   an extrapolated flow would hide it.
