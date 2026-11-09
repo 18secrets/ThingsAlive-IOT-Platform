@@ -598,6 +598,91 @@ Code: `src/shift-fuel/expected-fuel.ts` (the arithmetic, alone), `expected-fuel-
 - Template v5 rather than v6 for the new class columns: `class-oem-figures.spec.ts` pins
   v5, and every addition is optional, as v4 → v5's were.
 
+## D56 — Parameters carry their unit into the compiler (PROPOSED)
+
+Proposed 2026-11-09 for the motor library (`Crompton_Pump_Library.xlsx`, *Universal
+Parameters & Formulas*). Not decided: review on the MR that adds it.
+
+Every motor threshold is a statement about a ratio to a rated value: λ = I / I_rated,
+overload at λ > 1.20, "running" above 5% of rated current. Today `@param` compiles as
+dimensionless, so `avg(motor_current) / @rated_current` comes out in **A**, and
+`λ > 1.2` is then accepted by literal polymorphism while comparing amps with a pure number.
+The unit check that exists to catch exactly this passes the wrong thing silently.
+
+- **The parameter catalog's unit becomes the compile unit**, for parameters that declare
+  one. `OPERATIONAL_PARAMETERS` already carries a `unit` per name; the compiler is handed
+  that map rather than assuming dimensionless.
+- **New motor parameters join the closed list with units**: rated voltage (V), rated current
+  (A), frequency (Hz), poles, phases, rated output (kW), rated PF, rated efficiency, rated
+  slip, temperature rise at rated load (K), thermal time constant (s), insulation class limit
+  (degC), operating and warning voltage band (V), locked-rotor multiple, max starts (1/h),
+  install head (m), ambient reference (degC).
+- **A value is stored in its declared unit or refused.** No conversion (QCE3: a dimension is
+  its unit). Writing `rated_current` in mA is refused, not divided by 1000 on the way in.
+- **Existing parameters keep compiling as they do now.** Giving `fuel_price` its
+  `currency/L` would change the result unit of formulas already published (D05). Moving them
+  over is a separate change, one parameter at a time, with the formulas that read each.
+
+## D57 — Rated data lives on a model in the library, not on the class (PROPOSED)
+
+Proposed 2026-11-09. Not decided.
+
+One class covers a range: a single-phase induction motor class spans 0.37 to 2.2 kW, and
+rated current differs 6x across it. The workbook's finding V-01 is the failure this
+prevents: a firmware global calibrated for a demo motor read a 1 HP pump at 4,600% load.
+
+Three places the rated figures could live:
+
+| | Where | Verdict |
+|---|---|---|
+| a | One column per figure on `equipment_class_profile`, as D55's fuel figures | No. Eighteen columns, and still one value for a whole range |
+| b | Per-machine parameters, typed from the nameplate | Works today with no code, and stays the override. As the only home, every machine of a model is retyped, which is the transcription error a library exists to remove |
+| c | **A model in the library**, carrying its rated figures; a machine names its model | **Proposed** |
+
+- **The model is `equipment_template`, extended.** It is already Master Admin's make/model
+  library and already copies to the account (`client_equipment_template`). It gains the
+  class it belongs to and a child table of ratings: `(template, parameter name, value, unit,
+  source)`. A child table, not JSON, so the database refuses an unknown name, a unit that
+  disagrees with the catalog, and a duplicate. **`source` is required**: every rated value
+  names the datasheet or catalogue page it came from (workbook step A2).
+- **A machine names its model** (its own `client_equipment_template`), and parameter
+  resolution gains one step: equipment → **model** → equipment_class → site → client. A
+  nameplate value typed on the machine still wins, per name, exactly as today.
+- **Missing is not configured, never a default** (G07, the workbook's GATE row). A model
+  with no rated current leaves every λ formula `not_configured`, named.
+- Library → account follows D04: the account's copy is theirs. A corrected catalogue figure
+  is a new library version the account adopts, not an edit under their alerts.
+
+## D58 — The duty table is a curve on the model, read by two operators (PROPOSED)
+
+Proposed 2026-11-09. Not decided.
+
+The sensorless design rests on the pump's catalogue performance table: at rated speed,
+head H → flow Q → input power P_in, printed per model (Mini 1 HP: 6 m → 4,250 LPH … 50 m →
+900 LPH). Flow is estimated by reading that table backwards from measured power, the
+expected power at install comes from reading it forwards at install head, and duty-point
+deviation compares the two. Formulas cannot do any of this today.
+
+- **Storage: ordered points on the model.** `(template, curve, point, head_m, flow_lpm,
+  input_kw)`, with the units fixed by the curve kind and `source` required as for ratings.
+  One curve kind, `duty`, to start. A second machine type needing a curve adds a kind, not a
+  general-purpose table language.
+- **Two operators:** `curve_at(column, by_column, x)` reads one column at a value of
+  another. `curve_at('flow_lpm', 'head_m', @install_head_m)` is expected flow at install
+  head; `curve_at('flow_lpm', 'input_kw', avg(input_power))` is the flow estimate. Linear
+  between points. The result carries the column's unit.
+- **The column read by must be strictly monotonic** along the curve, checked when the curve
+  is saved. On a non-monotonic column the reverse reading has two answers, and picking one
+  is a guess.
+- **No extrapolation.** Outside the printed range the answer is `undefined_result`, named
+  as out of curve. A pump running beyond its catalogue table is itself worth knowing, and
+  an extrapolated flow would hide it.
+- **A machine whose model has no curve is `not_configured`**, decided at evaluation. The
+  same formula runs on every model of the class, so publish cannot know.
+- **Accuracy is a claim to test, not a property.** The workbook's ±10–15% for estimated flow
+  is what POC test T0 measures against a reference meter. Until then the estimate is shown
+  as an estimate.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
