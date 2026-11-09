@@ -144,6 +144,13 @@ export class ModelRatings1763700000000 implements MigrationInterface {
           OR "tenant_id" = current_setting('ta.tenant_id', true)
         )`);
     await q.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "equipment_model" TO "ta_app"`);
+
+    // Parameter resolution now reads a machine's model, and the evaluation replay
+    // resolves parameters as `ta_eval` (EvaluationReplayReads1761600000000 granted it
+    // `tenant_parameter` for the same reason). Reads only, as there.
+    for (const table of ['rating_parameter', 'equipment_model', 'client_equipment_template_rating']) {
+      await q.query(`GRANT SELECT ON "${table}" TO "ta_eval"`);
+    }
   }
 
   public async down(q: QueryRunner): Promise<void> {
