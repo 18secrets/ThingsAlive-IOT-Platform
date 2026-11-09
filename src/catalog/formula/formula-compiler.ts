@@ -1,4 +1,5 @@
 import { FormulaCompileError } from './errors';
+import { operationalParameter } from '../../parameters/parameter-catalog';
 import { lookupOperator, SCALAR_FUNCTION_NAMES } from './operator-registry';
 import { CompareOp, MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
 import { divideUnits, multiplyUnits, parseUnitString, renderUnit, Unit, unitsEqual, DIMENSIONLESS } from './units';
@@ -433,7 +434,7 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       return { type: 'duration', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), hours: node.hours };
 
     case 'param':
-      return { type: 'param', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), name: node.name };
+      return { type: 'param', kind: 'scalar', unit: parameterUnit(node.name), name: node.name };
 
     // Reached only where a state is not an operator's state argument — those are
     // resolved in the call branch. A state is a label, not a number to add or compare.
@@ -753,6 +754,19 @@ function literalValue(node: PlanNode): number | null {
     return inner === null ? null : -inner;
   }
   return null;
+}
+
+/**
+ * A parameter's unit as the compiler sees it (D56). A rating declared with
+ * `compilesWithUnit` carries its catalog unit, so `avg(motor_current) / @rated_current`
+ * is a ratio and not amps. Every other parameter, platform or formula-declared, stays
+ * dimensionless as it always compiled: changing that would move the result unit of
+ * formulas already published.
+ */
+function parameterUnit(name: string): string {
+  const declared = operationalParameter(name);
+  if (!declared?.compilesWithUnit || !declared.unit) return renderUnit(DIMENSIONLESS);
+  return renderUnit(parseUnitString(declared.unit));
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
