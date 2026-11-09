@@ -149,7 +149,60 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
     name: 'time_in_zone', argKinds: ['series', 'series', 'zone'], resultKind: 'scalar',
     unitRule: () => multiplyByHour(DIMENSIONLESS), needsZone: true,
   },
+
+  // ----------------------------------------------------------- QSCAL1
+  // Scalar functions over values a formula has already reduced. They are what pump and
+  // motor physics needs once every threshold is a ratio to a rated value: "running" is
+  // two comparisons that must both hold, a speed estimate is clamped at synchronous
+  // speed, a health score is deductions capped at their band. Every argument is a
+  // scalar, never a series: apply `avg`/`last`/... to a signal first. A series here
+  // would have to be combined point by point, and two signals' readings do not share
+  // timestamps (the same reason a reducer's series argument must be a signal by name).
+  //
+  // `min`/`max` were already the series reducers, so the two-value forms are
+  // `least`/`greatest` (SQL's spelling), not an arity overload of the same name. One
+  // name meaning two things would read differently depending on whether a comma follows.
+  //
+  // Unit rules here are the simple case only. Literal polymorphism (`least(x, 100)`) and
+  // the "condition must be dimensionless" check need to know which argument was a bare
+  // literal, which a unit list cannot say, so the compiler applies those by name.
+  abs: {
+    name: 'abs', argKinds: ['scalar'], resultKind: 'scalar',
+    unitRule: ([u]) => u,
+  },
+  least: {
+    name: 'least', argKinds: ['scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: ([u]) => u,
+  },
+  greatest: {
+    name: 'greatest', argKinds: ['scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: ([u]) => u,
+  },
+  clamp: {
+    name: 'clamp', argKinds: ['scalar', 'scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: ([u]) => u,
+  },
+  // Conditions are dimensionless and true when non-zero, which is what a comparison
+  // (1 or 0) already produces. Two-argument forms nest for more conditions.
+  and: {
+    name: 'and', argKinds: ['scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS,
+  },
+  or: {
+    name: 'or', argKinds: ['scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS,
+  },
+  if: {
+    name: 'if', argKinds: ['scalar', 'scalar', 'scalar'], resultKind: 'scalar',
+    unitRule: ([, u]) => u,
+  },
 });
+
+/** The QSCAL1 functions: every argument is a value the formula already holds, so a
+ * series argument gets a refusal that says how to reduce it, not just "wrong kind". */
+export const SCALAR_FUNCTION_NAMES: ReadonlySet<string> = new Set(
+  ['abs', 'least', 'greatest', 'clamp', 'and', 'or', 'if'],
+);
 
 function unaryAggregate(name: string): OperatorEntry {
   return {
