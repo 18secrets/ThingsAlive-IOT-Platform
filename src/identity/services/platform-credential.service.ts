@@ -11,6 +11,7 @@ import { PlatformSession } from '../entities/platform-session.entity';
 import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-event.entity';
 import { PasswordService } from './password.service';
 import { ACCESS_TOKEN_SECONDS, RESET_HOURS, RequestContext, SignInResult } from './credential.service';
+import { rotatedWithinGrace } from '../refresh-grace';
 
 type Refusal = { kind: 'refused'; message: string };
 type Allowed<T> = { kind: 'allowed'; value: T };
@@ -128,13 +129,15 @@ export class PlatformCredentialService {
 
     const outcome = await runTenantSpanning(this.ds, 'platform session refresh', async (m) => {
       const sessions = m.getRepository(PlatformSession);
-      const session = await sessions.findOne({ where: { tokenHash: hash } });
+      // Locked and graced as client sessions are (MAJ-5; see REFRESH_REUSE_GRACE_MS).
+      const session = await sessions.findOne({ where: { tokenHash: hash }, lock: { mode: 'pessimistic_write' } });
       if (!session) return refuse('Please sign in again.');
 
       const user = await m.getRepository(PlatformUser).findOne({ where: { id: session.platformUserId } });
       if (!user) return refuse('Please sign in again.');
+      const graced = rotatedWithinGrace(session.rotatedAt, session.revokedAt, now) && session.expiresAt > now;
 
-      if (session.rotatedAt || session.revokedAt || session.expiresAt <= now) {
+      if (!graced && (session.rotatedAt || session.revokedAt || session.expiresAt <= now)) {
         if (session.rotatedAt || session.revokedAt) {
           await sessions.update(
             { family: session.family, revokedAt: IsNull() },
@@ -151,7 +154,7 @@ export class PlatformCredentialService {
 
       if (user.status === 'suspended') return refuse('This account has been suspended.');
 
-      await sessions.update(session.id, { rotatedAt: now });
+      if (!graced) await sessions.update(session.id, { rotatedAt: now });
       return allow(await this.startSession(m, user, ctx, now, session.family));
     });
 

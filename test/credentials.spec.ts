@@ -12,6 +12,7 @@ import { RoleService } from '../src/identity/services/role.service';
 import { ScopeResolverService } from '../src/identity/services/scope-resolver.service';
 import { UserService } from '../src/identity/services/user.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { REFRESH_REUSE_GRACE_MS } from '../src/identity/refresh-grace';
 
 describe('password policy', () => {
   const passwords = new PasswordService();
@@ -266,12 +267,15 @@ describeDb('credentials', () => {
     it('treats a reused token as theft and revokes the whole family', async () => {
       const first = await accept();
       const second = await credentials.refresh(first.refreshToken, {}, NOW);
+      // Past the reuse grace (MAJ-5, approved 9 Nov 2026: a token rotated under a minute
+      // ago is the same holder's second request, not a copy; refresh-reuse-grace.spec).
+      const later = new Date(NOW.getTime() + REFRESH_REUSE_GRACE_MS + 1_000);
 
       // The rightful holder has `second`. Anybody presenting `first` has a copy.
-      await expect(credentials.refresh(first.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
+      await expect(credentials.refresh(first.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
       // Both are now dead: the thief is out, and the victim signs in again. That is
       // the trade, and it is the only moment a stolen refresh token is detectable.
-      await expect(credentials.refresh(second.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
+      await expect(credentials.refresh(second.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
 
       expect((await events()).some((e) => e.type === 'session.reuse-detected')).toBe(true);
     });

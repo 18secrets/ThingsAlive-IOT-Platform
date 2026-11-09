@@ -11,6 +11,7 @@ import { PlatformCredentialService } from '../src/identity/services/platform-cre
 import { PasswordService } from '../src/identity/services/password.service';
 import { main as staffBootstrap } from '../src/database/seeds/staff-bootstrap';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { REFRESH_REUSE_GRACE_MS } from '../src/identity/refresh-grace';
 
 /**
  * Task QPA1 — the Things Alive login.
@@ -117,9 +118,11 @@ describeDb('platform staff sign-in', () => {
       await createStaff();
       const first = await credentials.signIn(EMAIL, PASSWORD, {}, NOW);
       const second = await credentials.refresh(first.refreshToken, {}, NOW);
+      // Past the reuse grace (MAJ-5, approved 9 Nov 2026; refresh-reuse-grace.spec).
+      const later = new Date(NOW.getTime() + REFRESH_REUSE_GRACE_MS + 1_000);
 
-      await expect(credentials.refresh(first.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
-      await expect(credentials.refresh(second.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
+      await expect(credentials.refresh(first.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
+      await expect(credentials.refresh(second.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
     });
 
     it('ends every token from one sign-in when somebody signs out', async () => {
