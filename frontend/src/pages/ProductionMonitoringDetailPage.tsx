@@ -13,6 +13,7 @@ import {
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 /** The fuel rate KPI the machine page and Signal Bindings show (fuel test report FU-4). */
 const FUEL_RATE_KPI = 'avg_fuel_consumption';
@@ -112,7 +113,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
-      {!oee && !error && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+      {!oee && !error && <Skeleton lines={2} />}
 
       {oee && (
         <>
@@ -259,7 +260,7 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (loading) return <Skeleton />;
 
   return (
     <div className="space-y-3">

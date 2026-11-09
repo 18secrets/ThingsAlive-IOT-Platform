@@ -18,6 +18,7 @@ import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { SortLabel } from '../common/ListTable';
 import { sortRows, useSort } from '../../lib/useSort';
+import { Skeleton } from '../common/Skeleton';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -349,7 +350,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
       {/* Main Equipment Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filteredList.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('equipmentList.empty')}</div>
+          loading ? <Skeleton lines={4} className="py-4" /> : <div className="py-8 text-center text-slate-400 text-sm">{t('equipmentList.empty')}</div>
         ) : viewMode === 'list' ? (
           <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} />
         ) : (

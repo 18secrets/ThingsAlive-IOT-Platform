@@ -18,6 +18,7 @@ import {
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
@@ -235,7 +236,7 @@ export const LivePredictionsPage: React.FC = () => {
         </div>
         <div className={LIST_PANEL}>
           {scenarios === null ? (
-            <p className="p-4 text-sm text-slate-400">{error ? '—' : t('common.loading')}</p>
+            error ? <p className="p-4 text-sm text-slate-400">—</p> : <Skeleton className="p-4" />
           ) : visibleScenarios.length === 0 ? (
             <p className="p-4 text-sm text-slate-400">{t('scenarios.empty')}</p>
           ) : viewMode === 'list' ? (
@@ -297,7 +298,7 @@ export const LivePredictionsPage: React.FC = () => {
         </p>
         <div className={LIST_PANEL}>
           {!equipmentLoaded ? (
-            <p className="p-4 text-sm text-slate-400">{t('common.loading')}</p>
+            <Skeleton className="p-4" />
           ) : sorted.length === 0 ? (
             <div className="py-10 text-center text-slate-400 text-sm">{t('kpis.noMatch')}</div>
           ) : viewMode === 'list' ? (

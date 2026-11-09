@@ -11,6 +11,7 @@ import { AddNamedFormulaModal } from './AddNamedFormulaModal';
 import { appLocale } from '../../lib/dateLocale';
 import { useAuth } from '../../lib/AuthProvider';
 import { staffMay } from '../../lib/pageAccess';
+import { Skeleton } from '../common/Skeleton';
 
 interface NamedFormulaViewProps {
   formulas: NamedFormula[];
@@ -314,7 +315,7 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
   }, [slug]);
 
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!versions) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (!versions) return <Skeleton />;
 
   return (
     <ol className="space-y-2.5">
