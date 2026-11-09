@@ -338,12 +338,14 @@ export class KpiEvaluatorService {
     // The model's duty curve (D58), read only when a formula here asks for it. Ordered
     // along the curve, as [head_m, flow_lpm, input_kw]: `CURVE_COLUMNS`' codes.
     const wantsCurve = [...targets, ...siblings.values()].some((f) => callsOperator(f.compiledPlan, 'curve_at'));
-    const dutyCurve = wantsCurve && profile.modelId
+    const dutyCurve = wantsCurve
       ? ((await m.query(
-        `SELECT "head_m" AS h, "flow_lpm" AS q, "input_kw" AS p
-           FROM "client_equipment_template_curve_point"
-          WHERE "tenant_id" = $1 AND "template_id" = $2 AND "curve" = 'duty'
-          ORDER BY "point"`, [tenantId, profile.modelId],
+        `SELECT c."head_m" AS h, c."flow_lpm" AS q, c."input_kw" AS p
+           FROM "equipment_model" em
+           JOIN "client_equipment_template_curve_point" c
+             ON c."tenant_id" = em."tenant_id" AND c."template_id" = em."client_equipment_template_id"
+          WHERE em."tenant_id" = $1 AND em."equipment_id" = $2 AND c."curve" = 'duty'
+          ORDER BY c."point"`, [tenantId, profile.id],
       )) as { h: number; q: number; p: number }[]).map((r) => [r.h, r.q, r.p])
       : null;
 

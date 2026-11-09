@@ -126,7 +126,7 @@ describeDb('D58: duty curves end to end', () => {
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
   beforeEach(async () => {
-    for (const t of ['telemetry_reading', 'signal_binding_version', 'device_projection', 'equipment_profile',
+    for (const t of ['telemetry_reading', 'signal_binding_version', 'device_projection', 'equipment_model', 'equipment_profile',
       'client_equipment_template', 'equipment_template', 'client_formula', 'client_equipment_class']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
@@ -240,7 +240,8 @@ describeDb('D58: duty curves end to end', () => {
       const t = await library.create({ name: 'Mini 1 HP', equipmentClassSlug: CLASS });
       await library.replaceDutyCurve(master, t.id, { source: SOURCE, points: CURVE });
       const copy = await models.copyFromMaster(acme, t.id);
-      await equipment.create(acme, { code: 'PUMP-C', name: 'Pump C', equipmentClassSlug: CLASS, modelId: copy.id });
+      await equipment.create(acme, { code: 'PUMP-C', name: 'Pump C', equipmentClassSlug: CLASS });
+      await equipment.setModel(acme, EQUIPMENT, copy.id);
     };
 
     it('estimates flow from measured power, through the curve copied with the model', async () => {
