@@ -1,4 +1,5 @@
 import { Severity, SEVERITY_ORDER } from '../../common/severity';
+import { OPERATIONAL_PARAMETERS } from '../../parameters/parameter-catalog';
 import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
 
 /**
@@ -50,9 +51,18 @@ export interface PredictionSeverityParams {
 
 export interface SignalThresholdParams {
   signal: string;
-  /** Either bound may be omitted; at least one is required. */
+  /** Either bound may be omitted; at least one is required. With `rating` set, each is a
+   * multiple of the machine's rating rather than a value in the signal's unit. */
   max?: number | null;
   min?: number | null;
+  /**
+   * A D56 motor rating the bounds are multiples of (D59): `{signal: motor_current,
+   * rating: rated_current, max: 1.2}` fires above 1.2 × this machine's own rated current.
+   * Resolved per machine, nameplate first, then its model (D57). One class spans a range
+   * of motors, so a fixed number in amps is right for one model and wrong for the rest.
+   * Still parameters, never an expression (D34, D25).
+   */
+  rating?: string | null;
   /**
    * How many recent readings, by source_timestamp, to look at before comparing to
    * the bound (task QALERT1, D34). Unset means the default applies — D32: an
@@ -95,7 +105,7 @@ export const MIN_REQUIRED_BREACHES = 1;
  * the same list instead of drifting out of sync with it by hand.
  */
 const SIGNAL_THRESHOLD_PARAM_KEY_SET: Record<keyof SignalThresholdParams, true> = {
-  signal: true, max: true, min: true, lookbackReadings: true, requiredBreaches: true,
+  signal: true, max: true, min: true, rating: true, lookbackReadings: true, requiredBreaches: true,
 };
 export const SIGNAL_THRESHOLD_PARAM_KEYS = Object.keys(SIGNAL_THRESHOLD_PARAM_KEY_SET) as
   (keyof SignalThresholdParams)[];
@@ -115,6 +125,8 @@ export const SIGNAL_THRESHOLD_PARAM_SOURCE: Record<keyof SignalThresholdParams, 
   signal: 'staged',
   min: 'staged',
   max: 'staged',
+  // D59: an optional `rating` column on the signal sheet, beside min and max.
+  rating: 'staged',
   // Lands with QREC0's template v4 (task QALERT1 item 4). Flipping this to 'staged'
   // is a one-word change — the moment it happens, the workbook-column half of the
   // sync test starts demanding the column, by construction.
@@ -229,10 +241,19 @@ export interface WindowChain {
   explainedBy?: { signal: string; because: string }[];
 }
 
+/** A machine's resolved rating (D59), in the rating's own unit. */
+export interface RatingValue {
+  value: number;
+  unit: string | null;
+}
+
 export interface EvaluationInput {
   trigger: AlertTrigger;
   params: AlertParams;
   readings: WindowReading[];
+  /** The machine's ratings by name, for rules whose bounds are multiples of one (D59).
+   * Absent or missing the name: such a rule does not fire, since it has no bound. */
+  ratings?: Map<string, RatingValue>;
   predictions: WindowPrediction[];
   /** Absent on the paths that do not run chains; a chain rule then simply does not fire. */
   chains?: WindowChain[];
@@ -341,14 +362,15 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
     }
 
     case 'signal-threshold': {
-      const params = input.params as SignalThresholdParams;
+      const params = resolveRatedBounds(input.params as SignalThresholdParams, input.ratings);
+      if (!params) return null;
       const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
       const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
       // Windows too short to possibly reach requiredBreaches are dropped here, not
       // compared: a rule watches "this equipment", but a window that cannot say
       // anything trustworthy must not fire just because it technically has zero
       // breaches (task QALERT1, D34).
-      const usable = signalWindows(input.readings, params.signal, lookbackReadings, requiredBreaches)
+      const usable = signalWindows(readingsInRatingUnit(input.readings, params), params.signal, lookbackReadings, requiredBreaches)
         .filter((w) => w.skippedReason === null);
       if (usable.length === 0) return null;
 
@@ -401,6 +423,7 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
           at: breach.r.sourceTimestamp,
           direction,
           bound,
+          ...(params.rated ? { rating: params.rated.rating, ratingValue: params.rated.value, factor: params.rated.factor[direction] } : {}),
           imei: breach.w.imei,
           lookbackReadings,
           requiredBreaches,
@@ -582,6 +605,18 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     if (p.max == null && p.min == null) {
       return 'A threshold rule needs a maximum, a minimum, or both.';
     }
+    if (p.rating != null) {
+      if (typeof p.rating !== 'string' || !RATING_UNITS.has(p.rating)) {
+        return `"${p.rating}" is not a rating a bound can be a multiple of. Ratings: ${[...RATING_UNITS.keys()].join(', ')}.`;
+      }
+      // A multiple of zero or less of a positive rating is a bound no motor reading
+      // means anything against.
+      for (const [field, value] of [['maximum', p.max], ['minimum', p.min]] as const) {
+        if (value != null && typeof value === 'number' && !(value > 0)) {
+          return `With a rating, the ${field} is a multiple of it and has to be above 0.`;
+        }
+      }
+    }
     // "abc" compared against a reading is always false, so the rule would never fire.
     for (const [field, value] of [['maximum', p.max], ['minimum', p.min]] as const) {
       if (value != null && (typeof value !== 'number' || !Number.isFinite(value))) {
@@ -617,6 +652,40 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
   return null;
 }
 
+/** The D56 ratings a rule's bounds may be multiples of, with their units. */
+const RATING_UNITS = new Map(OPERATIONAL_PARAMETERS.filter((p) => p.compilesWithUnit).map((p) => [p.name, p.unit]));
+
+/**
+ * A rule's bounds in the signal's own unit for this machine (D59). A rule with no
+ * `rating` is returned as it is. With one, the multiples become values: 1.2 × 5.5 A is a
+ * bound of 6.6 A. No rating on this machine, or one in another unit than the signal's
+ * readings, is no bound at all, and null: comparing amps with a rating in volts would
+ * fire on a number that means nothing.
+ */
+function resolveRatedBounds(
+  params: SignalThresholdParams, ratings?: Map<string, RatingValue>,
+): (SignalThresholdParams & { rated?: { rating: string; value: number; factor: { above?: number; below?: number } } }) | null {
+  if (!params.rating) return params;
+  const rating = ratings?.get(params.rating);
+  if (!rating || !Number.isFinite(rating.value)) return null;
+  return {
+    ...params,
+    max: params.max != null ? params.max * rating.value : params.max,
+    min: params.min != null ? params.min * rating.value : params.min,
+    rated: {
+      rating: params.rating, value: rating.value,
+      factor: { above: params.max ?? undefined, below: params.min ?? undefined },
+    },
+  };
+}
+
+/** Readings of a rated rule are compared only in the rating's unit (D59). */
+export function readingsInRatingUnit(readings: WindowReading[], params: SignalThresholdParams): WindowReading[] {
+  if (!params.rating) return readings;
+  const unit = RATING_UNITS.get(params.rating) ?? null;
+  return readings.filter((r) => r.signal !== params.signal || !r.unit || !unit || r.unit === unit);
+}
+
 /** What a renderer needs to name a signal in a sentence — its own vocabulary, not
  * the slug telemetry uses for it. */
 export interface SignalDisplayInfo {
@@ -640,19 +709,24 @@ export function describeSignalThresholdRule(
   const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
   const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
   const unitSuffix = signal.unit ? ` ${signal.unit}` : '';
+  // D59: "1.2 × rated current", the multiple and the rating it multiplies, never a
+  // number in amps that is right for one model of the class and wrong for the rest.
+  const bound = (value: number) => (params.rating
+    ? `${value} × ${params.rating.replace(/_/g, ' ')}`
+    : `${value}${unitSuffix}`);
   const clauses: string[] = [];
   if (params.max != null) {
     clauses.push(
       `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
-        + `rise above ${params.max}${unitSuffix}`,
+        + `rise above ${bound(params.max)}`,
     );
   }
   if (params.min != null) {
     clauses.push(
       clauses.length
-        ? `at least ${requiredBreaches} fall below ${params.min}${unitSuffix}`
+        ? `at least ${requiredBreaches} fall below ${bound(params.min)}`
         : `at least ${requiredBreaches} of the last ${lookbackReadings} readings of ${signal.displayName} `
-          + `fall below ${params.min}${unitSuffix}`,
+          + `fall below ${bound(params.min)}`,
     );
   }
   return `Fires when ${clauses.join(', or ')}.`;
