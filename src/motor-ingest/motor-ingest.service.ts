@@ -242,9 +242,17 @@ export class MotorIngestService {
       });
     }
     for (const row of await this.runningMinutes(m, owner, deviceId, minutes)) {
-      for (const [signal, unit, value] of [
-        [RUNNING_SIGNAL, 'dimensionless', row.ran ? 1 : 0], ['motor_starts', 'starts', Number(row.starts)],
-      ] as const) {
+      const minuteSignals: [string, string, number | null][] = [
+        [RUNNING_SIGNAL, 'dimensionless', row.ran ? 1 : 0],
+        ['motor_starts', 'starts', Number(row.starts)],
+        // The share of the minute's seconds it ran: a 30 s stop is half a minute, which
+        // the 1/0 flag above (any running at all) cannot say.
+        ['motor_running_share', 'dimensionless', Number(row.share)],
+        // Only while running, and only with enough seconds to have a spread at all.
+        ['current_fluctuation_pct', 'dimensionless', row.fluct == null ? null : Number(row.fluct)],
+      ];
+      for (const [signal, unit, value] of minuteSignals) {
+        if (value === null || !Number.isFinite(value)) continue;
         const o = values.length;
         values.push(owner.tenant_id, deviceId, signal, value, unit, new Date(row.minute), receivedAt);
         tuples.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, 'live')`);
@@ -272,7 +280,7 @@ export class MotorIngestService {
    */
   private async runningMinutes(
     m: EntityManager, owner: Owner, deviceId: string, minutes: number[],
-  ): Promise<{ minute: Date; ran: boolean; starts: string }[]> {
+  ): Promise<{ minute: Date; ran: boolean; starts: string; share: string; fluct: string | null }[]> {
     if (!owner.equipmentExternalId || !minutes.length) return [];
     const [profile] = await m.query(
       `SELECT "id", "equipment_class_slug" AS "equipmentClassSlug", "plant_id" AS "plantId" FROM "equipment_profile"
@@ -286,17 +294,23 @@ export class MotorIngestService {
     if (typeof v !== 'number' || typeof i !== 'number') return [];
     return m.query(
       `WITH r AS (
-         SELECT "reading_at", ("voltage_v" > $3 AND "current_a" > $4) AS "on"
+         SELECT "reading_at", "current_a", ("voltage_v" > $3 AND "current_a" > $4) AS "on"
            FROM "motor_sensor_records"
           WHERE "device_id" = $1 AND "reading_at" >= $5 AND "reading_at" < $6
        ), t AS (
-         SELECT "reading_at", "on",
+         SELECT "reading_at", "on", "current_a",
                 lag("on") OVER (ORDER BY "reading_at") AS "prev",
                 lag("reading_at") OVER (ORDER BY "reading_at") AS "prev_at"
            FROM r
        )
        SELECT date_trunc('minute', "reading_at") AS "minute", bool_or("on") AS "ran",
-              count(*) FILTER (WHERE "on" AND "prev" = false AND "reading_at" - "prev_at" <= interval '5 seconds') AS "starts"
+              avg(CASE WHEN "on" THEN 1 ELSE 0 END) AS "share",
+              count(*) FILTER (WHERE "on" AND "prev" = false AND "reading_at" - "prev_at" <= interval '5 seconds') AS "starts",
+              -- F, the current-fluctuation %: the input of the workbook's instability_score
+              -- (V-07: a current-noise index, not vibration). Running seconds only; ten at least.
+              CASE WHEN count(*) FILTER (WHERE "on") >= 10
+                   THEN 100 * stddev_samp("current_a") FILTER (WHERE "on") / NULLIF(avg("current_a") FILTER (WHERE "on"), 0)
+              END AS "fluct"
          FROM t
         WHERE date_trunc('minute', "reading_at") = ANY($2::timestamptz[])
         GROUP BY 1`,

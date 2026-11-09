@@ -317,6 +317,15 @@ describeDb('motor logger: the bulk upload over HTTP', () => {
     expect((await series('motor_starts')).reduce((a, b) => a + b, 0)).toBe(2);
     expect(await series('engine_running_status')).toEqual(expect.arrayContaining([1]));
     expect((await series('engine_running_status')).every((v) => v === 0 || v === 1)).toBe(true);
+    // 90 s on, 30 s off: three quarters of the seconds, whatever the 1/0 flag says.
+    const share = await series('motor_running_share');
+    const avgShare = share.reduce((a, b) => a + b, 0) / share.length;
+    expect(avgShare).toBeGreaterThan(0.65);
+    expect(avgShare).toBeLessThan(0.85);
+    // The simulator's ±2% current noise: a fluctuation of a percent or so, never zero.
+    const fluct = await series('current_fluctuation_pct');
+    expect(fluct.length).toBeGreaterThan(0);
+    expect(fluct.every((f) => f > 0 && f < 5)).toBe(true);
   });
 
   it('with no ratings for the machine, running is unknown: nothing written, no floor guessed', async () => {
