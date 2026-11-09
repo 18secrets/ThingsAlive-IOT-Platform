@@ -324,6 +324,10 @@ export class MotorIngestService {
       // Only while running, and only with enough seconds to have a spread at all.
       if (row.fluct != null && Number.isFinite(Number(row.fluct))) add('current_fluctuation_pct', 'dimensionless', Number(row.fluct), minute);
       if (row.runCurrent != null && Number.isFinite(Number(row.runCurrent))) add('running_current', 'A', Number(row.runCurrent), minute);
+      // Written every judged minute, zero included, so "no trip" is a reading, not a gap.
+      add('trip_overload', 'trips', Number(row.tripOverload), minute);
+      add('trip_supply', 'trips', Number(row.tripSupply), minute);
+      add('trip_overtemp', 'trips', Number(row.tripOvertemp), minute);
     }
     if (tuples.length) await upsertTelemetry(m, tuples, values);
     await this.writeStartsLastHour(m, deviceId, minutes, now, owner);
@@ -377,7 +381,10 @@ export class MotorIngestService {
    */
   private async runningMinutes(
     m: EntityManager, owner: Owner, deviceId: string, minutes: number[],
-  ): Promise<{ minute: Date; ran: boolean; starts: string; share: string; fluct: string | null; runCurrent: string | null }[]> {
+  ): Promise<{
+    minute: Date; ran: boolean; starts: string; share: string; fluct: string | null; runCurrent: string | null;
+    tripOverload: string; tripSupply: string; tripOvertemp: string;
+  }[]> {
     if (!owner.equipmentExternalId || !minutes.length) return [];
     const [profile] = await m.query(
       `SELECT "id", "equipment_class_slug" AS "equipmentClassSlug", "plant_id" AS "plantId" FROM "equipment_profile"
@@ -385,20 +392,39 @@ export class MotorIngestService {
       [owner.tenant_id, owner.equipmentExternalId],
     );
     if (!profile) return [];
-    const ratings = await resolveParameters(m, owner.tenant_id, chainForEquipment(profile), ['rated_voltage', 'rated_current'], new Date());
+    const ratings = await resolveParameters(
+      m, owner.tenant_id, chainForEquipment(profile), ['rated_voltage', 'rated_current', 'insulation_temp_limit'], new Date());
     const v = ratings.get('rated_voltage')?.value;
     const i = ratings.get('rated_current')?.value;
     if (typeof v !== 'number' || typeof i !== 'number') return [];
+    // No insulation class, no over-temperature trip line: never a guessed one.
+    const tClass = ratings.get('insulation_temp_limit')?.value;
+    const overtempLine = typeof tClass === 'number' ? tClass - 25 : null;
     return m.query(
       `WITH r AS (
-         SELECT "reading_at", "current_a", ("voltage_v" > $3 AND "current_a" > $4) AS "on"
+         SELECT "reading_at", "current_a", "voltage_v", "temperature_c", ("voltage_v" > $3 AND "current_a" > $4) AS "on"
            FROM "motor_sensor_records"
           WHERE "device_id" = $1 AND "reading_at" >= $5 AND "reading_at" < $6
        ), t AS (
-         SELECT "reading_at", "on", "current_a",
-                lag("on") OVER (ORDER BY "reading_at") AS "prev",
-                lag("reading_at") OVER (ORDER BY "reading_at") AS "prev_at"
-           FROM r
+         SELECT "reading_at", "on", "current_a", "voltage_v", "temperature_c",
+                lag("on") OVER w AS "prev",
+                lag("reading_at") OVER w AS "prev_at",
+                -- What the last ten running seconds looked like, for a stop's reason.
+                max("current_a") OVER (w ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING) AS "peak_before",
+                max("temperature_c") OVER (w ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING) AS "temp_before"
+           FROM r WINDOW w AS (ORDER BY "reading_at")
+       ), s AS (
+         -- A stop: running a second ago, not now. Its reason, by the relay's own rules
+         -- (F9) and the overload line (F8), most decisive first: a collapsed supply
+         -- explains everything after it; a hot winding explains a stop at normal current.
+         SELECT *, CASE
+             WHEN NOT "on" AND "prev" AND "reading_at" - "prev_at" <= interval '5 seconds' THEN
+               CASE WHEN "voltage_v" < $7 THEN 'supply'
+                    WHEN $9::float8 IS NOT NULL AND "temp_before" >= $9::float8 THEN 'overtemp'
+                    WHEN "peak_before" > $8 THEN 'overload'
+               END
+           END AS "trip"
+           FROM t
        )
        SELECT date_trunc('minute', "reading_at") AS "minute", bool_or("on") AS "ran",
               avg(CASE WHEN "on" THEN 1 ELSE 0 END) AS "share",
@@ -410,12 +436,18 @@ export class MotorIngestService {
               END AS "fluct",
               -- Current while running only (POC T3): a dry-run rule that read the minute's
               -- plain average would see every stop as a pump running dry.
-              CASE WHEN count(*) FILTER (WHERE "on") >= 10 THEN avg("current_a") FILTER (WHERE "on") END AS "runCurrent"
-         FROM t
+              CASE WHEN count(*) FILTER (WHERE "on") >= 10 THEN avg("current_a") FILTER (WHERE "on") END AS "runCurrent",
+              -- Trips inferred from the readings around each stop (POC T7, U6) until the
+              -- logger reports its own: overload, supply loss, over-temperature.
+              count(*) FILTER (WHERE "trip" = 'overload') AS "tripOverload",
+              count(*) FILTER (WHERE "trip" = 'supply') AS "tripSupply",
+              count(*) FILTER (WHERE "trip" = 'overtemp') AS "tripOvertemp"
+         FROM s
         WHERE date_trunc('minute', "reading_at") = ANY($2::timestamptz[])
         GROUP BY 1`,
       [deviceId, minutes.map((t) => new Date(t)), 0.15 * v, 0.05 * i,
-        new Date(minutes[0] - 60_000), new Date(minutes[minutes.length - 1] + 60_000)],
+        new Date(minutes[0] - 60_000), new Date(minutes[minutes.length - 1] + 60_000),
+        0.5 * v, 1.2 * i, overtempLine],
     );
   }
 

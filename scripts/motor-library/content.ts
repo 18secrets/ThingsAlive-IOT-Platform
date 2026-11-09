@@ -60,6 +60,11 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   // POC T3 / T8: written by the motor job from the per-second readings.
   { signal: 'running_current', unit: 'A', required: false, description: 'Current averaged over the seconds the motor ran (none in a minute it did not run).' },
   { signal: 'starts_last_hour', unit: 'starts', required: false, description: 'Starts in the hour ending at this minute: what a maker\'s starts-per-hour allowance is about.' },
+  // POC T7 / U6: trips inferred from the readings around each stop, until the logger
+  // reports its own. One count per reason, every judged minute (zero when none).
+  { signal: 'trip_overload', unit: 'trips', required: false, description: 'Stops right after current above 1.2 x rated: an overload trip (inferred).' },
+  { signal: 'trip_supply', unit: 'trips', required: false, description: 'Stops with the supply under half the rated voltage: supply loss (inferred).' },
+  { signal: 'trip_overtemp', unit: 'trips', required: false, description: 'Stops within 25 C of the insulation limit: the relay\'s over-temperature trip (F9, inferred).' },
   { signal: 'water_air_gap', unit: 'dimensionless', required: false, description: 'Water / air-gap sensor reading, stored as sent. Unit and meaning to confirm with the firmware team.' },
 ];
 
@@ -183,6 +188,9 @@ export const FORMULAS: FormulaRow[] = [
     basis: 'PROVISIONAL, for loggers without vibration/ambient sensors: 100 − 4/3 × (instability×1.2 [max 30] + temperature margin on the assumed ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10])',
     window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
   // The sensors on their own.
+  { classes: BOTH, key: 'trips_today', expression: 'sum(trip_overload) + sum(trip_supply) + sum(trip_overtemp)',
+    inputs: ['trip_overload', 'trip_supply', 'trip_overtemp'], unit: 'trips',
+    basis: 'Trips inferred from the readings around each stop, all reasons (POC T7, U6)', window: 'today', chart: 'number', useCase: 'U6' },
   { classes: BOTH, key: 'peak_starts_per_hour', expression: 'max(starts_last_hour)', inputs: ['starts_last_hour'], unit: 'starts',
     basis: 'Most starts in any hour of the last 24 h, against the maker\'s allowance (POC T8, RCA 10)', window: '24h', chart: 'number', useCase: 'U6' },
   { classes: BOTH, key: 'vibration_avg', expression: 'avg(vibration_velocity)', inputs: ['vibration_velocity'], unit: 'mm/s',
@@ -208,6 +216,7 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: BOTH, key: 'energy', type: 'kpi_number', boundTo: 'energy_kwh', title: 'Energy today', size: 'small' },
   { classes: BOTH, key: 'running', type: 'kpi_number', boundTo: 'running_pct', title: 'Running (% of last 24 h)', size: 'small' },
   { classes: BOTH, key: 'starts', type: 'kpi_number', boundTo: 'starts_today', title: 'Starts today', size: 'small' },
+  { classes: BOTH, key: 'trips', type: 'kpi_number', boundTo: 'trips_today', title: 'Trips today (inferred)', size: 'small' },
   { classes: BOTH, key: 'starts_hour', type: 'kpi_number', boundTo: 'peak_starts_per_hour', title: 'Most starts in an hour (24 h)', size: 'small' },
   { classes: BOTH, key: 'logger_loss', type: 'kpi_number', boundTo: 'logger_records_lost_24h', title: 'Logger records lost (24 h)', size: 'small' },
   { classes: BOTH, key: 'instability', type: 'kpi_number', boundTo: 'instability_score', title: 'Current instability (0-25; not vibration)', size: 'small' },
@@ -294,6 +303,14 @@ export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: stri
   // Class F). Body temperature runs below the winding, so a body this hot is overheating.
   { slugSuffix: 'overheating', name: 'Motor body above the insulation class warning line', severity: 'medium',
     params: { signal: 'motor_temperature', rating: 'insulation_temp_limit', max: 0.71 } },
+  // POC T7: a trip, with its reason in the rule's name. Any in the last ten minutes, once:
+  // a trip is an event, not a trend to wait on.
+  { slugSuffix: 'trip-overload', name: 'Trip: motor stopped on overload (inferred)', severity: 'critical',
+    params: { signal: 'trip_overload', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
+  { slugSuffix: 'trip-supply', name: 'Trip: motor stopped on supply loss (inferred)', severity: 'medium',
+    params: { signal: 'trip_supply', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
+  { slugSuffix: 'trip-overtemp', name: 'Trip: motor stopped on over-temperature (inferred)', severity: 'critical',
+    params: { signal: 'trip_overtemp', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
   { slugSuffix: 'vibration-warning', name: 'Vibration in ISO zone C (above 1.8 mm/s)', severity: 'medium',
     params: { signal: 'vibration_velocity', max: 1.8 } },
   { slugSuffix: 'vibration-critical', name: 'Vibration in ISO zone D (above 4.5 mm/s)', severity: 'critical',
