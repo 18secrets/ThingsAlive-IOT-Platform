@@ -4,6 +4,7 @@ import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not 
 import { RequestScope } from '../../auth/types/request-scope';
 import { Severity } from '../../common/severity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AlertAppliesTo, AlertRule } from '../entities/alert-rule.entity';
 import { AlertEvent } from '../entities/alert-event.entity';
@@ -12,8 +13,8 @@ import {
   alertRuleContentChecksum, describeProvenance, Provenance,
 } from '../../client-catalog/services/provenance';
 import {
-  AlertParams, AlertTrigger, evaluateRule, validateParams, WindowPrediction, WindowReading,
-  WindowChain,
+  AlertParams, AlertTrigger, evaluateRule, RatingValue, SignalThresholdParams, validateParams, WindowPrediction,
+  WindowReading, WindowChain,
 } from './alert-rules';
 
 export interface RuleInput {
@@ -298,15 +299,28 @@ export class AlertService {
       if (rules.length === 0) return [];
 
       const applicable = await this.applicableTo(m, context, rules);
+      const ratings = await this.ratingsFor(m, context, applicable);
       const fired: AlertEvent[] = [];
 
       for (const rule of applicable) {
+        const rating = rule.trigger === 'signal-threshold' ? (rule.params as SignalThresholdParams).rating : null;
+        if (rating && !ratings.has(rating)) {
+          // Not an alert, and not silence either: a rule whose bound is a multiple of a
+          // rating this machine does not have can say nothing about it (D59). Logged per
+          // shift so "why did the overload alert never fire" has an answer.
+          this.logger.warn(
+            `Rule "${rule.slug}" not evaluated on ${context.sourceSystem}/${context.externalId}: `
+              + `no "${rating}" on the machine or its model.`,
+          );
+          continue;
+        }
         const firing = evaluateRule({
           trigger: rule.trigger,
           params: rule.params,
           readings: context.readings,
           predictions: context.predictions,
           chains: context.chains,
+          ratings,
         });
         if (!firing) continue;
 
@@ -342,6 +356,31 @@ export class AlertService {
       await absorbAlerts(m, context.tenantId, fired);
       return fired;
     });
+  }
+
+  /**
+   * The machine's ratings that its rated rules need (D59), resolved the way a formula's
+   * `@rating` is: the machine's own nameplate value, else its model's (D57). Read only
+   * when some rule asks, at the window's end.
+   */
+  private async ratingsFor(
+    m: EntityManager, context: WindowContext, rules: AlertRule[],
+  ): Promise<Map<string, RatingValue>> {
+    const names = [...new Set(rules
+      .filter((r) => r.trigger === 'signal-threshold')
+      .map((r) => (r.params as SignalThresholdParams).rating)
+      .filter((n): n is string => !!n))];
+    const out = new Map<string, RatingValue>();
+    if (!names.length) return out;
+    const profile = await m.getRepository(EquipmentProfile).findOne({
+      where: { tenantId: context.tenantId, sourceSystem: context.sourceSystem, externalId: context.externalId },
+    });
+    if (!profile) return out;
+    const resolved = await resolveParameters(m, context.tenantId, chainForEquipment(profile), names, context.windowEnd);
+    for (const [name, r] of resolved) {
+      if (r && typeof r.value === 'number') out.set(name, { value: r.value, unit: r.unit });
+    }
+    return out;
   }
 
   /** Which of these rules cover this machine. */

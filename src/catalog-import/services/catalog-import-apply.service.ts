@@ -415,7 +415,7 @@ async function draftThresholdAlerts(
     if (t.min === undefined && t.max === undefined) continue;
     const slug = `${classSlug}-${signal}-limit`.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
     if (await repo.findOne({ where: { slug } })) continue;
-    const unit = t.unit ? ` ${t.unit}` : '';
+    const unit = t.rating ? ` × ${t.rating.replace(/_/g, ' ')}` : t.unit ? ` ${t.unit}` : '';
     const bounds = [t.min !== undefined && `below ${t.min}${unit}`, t.max !== undefined && `above ${t.max}${unit}`]
       .filter(Boolean).join(' or ');
     await repo.save(repo.create({
@@ -423,7 +423,10 @@ async function draftThresholdAlerts(
       name: `${signal} ${bounds}`,
       description: 'Drafted from the limits in a catalog import. Review, then publish to offer it to customers.',
       trigger: 'signal-threshold',
-      params: { signal, ...(t.min !== undefined ? { min: t.min } : {}), ...(t.max !== undefined ? { max: t.max } : {}) },
+      params: {
+        signal, ...(t.min !== undefined ? { min: t.min } : {}), ...(t.max !== undefined ? { max: t.max } : {}),
+        ...(t.rating ? { rating: t.rating } : {}),
+      },
       severity: (t.severity && severities.includes(t.severity) ? t.severity : Severity.High) as Severity,
       status: 'draft', publishedAt: null, createdBy,
     }));
