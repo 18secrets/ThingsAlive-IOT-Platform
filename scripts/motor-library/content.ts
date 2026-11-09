@@ -52,6 +52,12 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
     description: 'F: current fluctuation % over running seconds. Input of instability_score; current noise, NOT vibration (V-07).' },
   { signal: 'logger_records_lost', unit: 'records', required: false, description: 'Records the logger overwrote (flash full) since its last upload.' },
   { signal: 'logger_records_dropped', unit: 'records', required: false, description: 'Readings the logger could not store since its last upload.' },
+  // The logger's added sensors (firmware team, 9 Nov 2026): measured, optional per logger.
+  { signal: 'ambient_temperature', unit: 'degC', required: false, description: 'Environment (air) temperature at the pump, one-minute average (sensor).' },
+  { signal: 'vibration_velocity', unit: 'mm/s', required: false, description: 'Vibration velocity RMS on the pump/motor body, one-minute average (sensor).' },
+  { signal: 'vibration_velocity_max', unit: 'mm/s', required: false, description: 'Highest vibration reading in the minute (sensor).' },
+  { signal: 'device_load_pct', unit: 'dimensionless', required: false, description: 'The logger\'s own load figure, % of rated (device).' },
+  { signal: 'water_air_gap', unit: 'dimensionless', required: false, description: 'Water / air-gap sensor reading, stored as sent. Unit and meaning to confirm with the firmware team.' },
 ];
 
 export interface FormulaRow {
@@ -66,9 +72,21 @@ export interface FormulaRow {
 
 const BOTH = [MOTOR_CLASS, PUMP_CLASS];
 const lambda = '(avg(motor_current) / @rated_current)';
-/** The health score's four electrical bands (see health_score below). */
-const ELECTRICAL_DEDUCTIONS = '1.2 * #instability_score'
-  + ' + clamp(25 * (#winding_temp_est - @insulation_temp_limit + 45) / (@insulation_temp_limit - @insulation_temp_limit + 15), 0, 25)'
+// The platform has no unit conversion (QCE3), so a difference in mm/s or degC divided by a
+// width in the same unit is written as (x - x + width): the width carries the unit and the
+// ratio comes out dimensionless.
+const tempBand = (t: string) =>
+  `clamp(25 * (${t} - @insulation_temp_limit + 45) / (@insulation_temp_limit - @insulation_temp_limit + 15), 0, 25)`;
+/** The health score's bands without sensors: instability stands in for vibration. */
+const ELECTRICAL_DEDUCTIONS = `1.2 * #instability_score + ${tempBand('#winding_temp_est')}`
+  + ' + 5 * #voltage_tier + clamp(50 * (#peak_load_ratio - 1), 0, 10)';
+/**
+ * With the sensors: vibration on ISO 10816 class I (machines ≤ 15 kW) — 0 points at the
+ * B/C line 1.8 mm/s, all 30 at the C/D line 4.5 mm/s — and the winding estimate on the
+ * measured ambient rather than an assumed one.
+ */
+const SENSOR_DEDUCTIONS = 'clamp(30 * (avg(vibration_velocity) - 1.8) / (avg(vibration_velocity) - avg(vibration_velocity) + 2.7), 0, 30)'
+  + ` + ${tempBand('#winding_temp_measured')}`
   + ' + 5 * #voltage_tier + clamp(50 * (#peak_load_ratio - 1), 0, 10)';
 
 export const FORMULAS: FormulaRow[] = [
@@ -141,14 +159,35 @@ export const FORMULAS: FormulaRow[] = [
   // it: health_score is the four electrical bands rescaled × 4/3 to read out of 100, live
   // on every motor and pump today; health_score_with_duty is all five, and lights up on a
   // pump once its model has a duty curve and its install head is set.
-  { classes: BOTH, key: 'health_score', inputs: ['motor_current', 'motor_current_max', 'current_fluctuation_pct', 'supply_voltage'], unit: 'dimensionless',
+  // Three scores now the logger has vibration and ambient sensors (firmware, 9 Nov 2026):
+  //   health_score            measured vibration + temperature on measured ambient + supply + overload, × 4/3
+  //   health_score_with_duty  the same plus the duty band: all five, once the curve is entered (pump)
+  //   health_score_electrical the earlier electrical-only score, for loggers without the sensors
+  { classes: BOTH, key: 'health_score', inputs: ['motor_current', 'motor_current_max', 'vibration_velocity', 'ambient_temperature', 'supply_voltage'], unit: 'dimensionless',
+    expression: `100 - (4 / 3) * (${SENSOR_DEDUCTIONS})`,
+    basis: 'PROVISIONAL, pending Crompton: 100 − 4/3 × (vibration [ISO 10816 class I: 0 at 1.8, 30 at 4.5 mm/s] + temperature margin on measured ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10]) (F10; KPIs & Formulas pump_health_score bands, duty band excluded)',
+    window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
+  { classes: [PUMP_CLASS], key: 'health_score_with_duty', inputs: ['motor_current', 'motor_current_max', 'input_power', 'vibration_velocity', 'ambient_temperature', 'supply_voltage'], unit: 'dimensionless',
+    expression: `100 - (${SENSOR_DEDUCTIONS}) - clamp(abs(#load_loss_pct), 0, 25)`,
+    basis: 'PROVISIONAL, pending Crompton: 100 − vibration (max 30) − temperature margin (max 25) − duty deviation (max 25) − 5 × voltage tier (max 10) − overload (max 10) (F10; all five pump_health_score bands)',
+    window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
+  { classes: BOTH, key: 'health_score_electrical', inputs: ['motor_current', 'motor_current_max', 'current_fluctuation_pct', 'supply_voltage'], unit: 'dimensionless',
     expression: `100 - (4 / 3) * (${ELECTRICAL_DEDUCTIONS})`,
-    basis: 'PROVISIONAL, pending Crompton: 100 − 4/3 × (instability×1.2 [max 30] + temperature margin [max 25] + 5 × voltage tier [max 10] + overload [max 10]) (F10; KPIs & Formulas pump_health_score bands, duty band excluded)',
+    basis: 'PROVISIONAL, for loggers without vibration/ambient sensors: 100 − 4/3 × (instability×1.2 [max 30] + temperature margin on the assumed ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10])',
     window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
-  { classes: [PUMP_CLASS], key: 'health_score_with_duty', inputs: ['motor_current', 'motor_current_max', 'input_power', 'current_fluctuation_pct', 'supply_voltage'], unit: 'dimensionless',
-    expression: `100 - (${ELECTRICAL_DEDUCTIONS}) - clamp(abs(#load_loss_pct), 0, 25)`,
-    basis: 'PROVISIONAL, pending Crompton: 100 − instability×1.2 (max 30) − temperature margin (max 25) − duty deviation (max 25) − 5 × voltage tier (max 10) − overload (max 10) (F10; all five pump_health_score bands)',
-    window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
+  // The sensors on their own.
+  { classes: BOTH, key: 'vibration_avg', expression: 'avg(vibration_velocity)', inputs: ['vibration_velocity'], unit: 'mm/s',
+    basis: 'Vibration velocity RMS, 24 h mean (sensor). ISO 10816 class I: ≤ 0.71 good, ≤ 1.8 satisfactory, ≤ 4.5 unsatisfactory, above unacceptable',
+    window: '24h', chart: 'number', useCase: 'U2' },
+  { classes: BOTH, key: 'vibration_zone', inputs: ['vibration_velocity_max'], unit: 'dimensionless',
+    expression: 'if(max(vibration_velocity_max) > 4.5, 2, if(max(vibration_velocity_max) > 1.8, 1, 0))',
+    basis: 'ISO 10816 class I on the 24 h peak: 0 zone A/B (≤ 1.8 mm/s), 1 zone C (≤ 4.5), 2 zone D (> 4.5)',
+    window: '24h', chart: 'number', useCase: 'U4' },
+  { classes: BOTH, key: 'ambient_temp_avg', expression: 'avg(ambient_temperature)', inputs: ['ambient_temperature'], unit: 'degC',
+    basis: 'Environment temperature, 24 h mean (sensor) (U7)', window: '24h', chart: 'number', useCase: 'U7' },
+  { classes: BOTH, key: 'winding_temp_measured', inputs: ['motor_current', 'ambient_temperature'], unit: 'degC',
+    expression: `avg(ambient_temperature) + @rated_temp_rise * ${lambda} * ${lambda}`,
+    basis: 'F5 on the measured ambient: T_amb(measured) + ΔT_rated × λ². Advisory until bench-calibrated (V-04)', window: '24h', chart: 'number', useCase: 'U2' },
 ];
 
 /** The machine page (U1): what a motor shows, in order. */
@@ -163,6 +202,10 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: BOTH, key: 'logger_loss', type: 'kpi_number', boundTo: 'logger_records_lost_24h', title: 'Logger records lost (24 h)', size: 'small' },
   { classes: BOTH, key: 'instability', type: 'kpi_number', boundTo: 'instability_score', title: 'Current instability (0-25; not vibration)', size: 'small' },
   { classes: BOTH, key: 'health', type: 'kpi_gauge', boundTo: 'health_score', title: 'Health score (provisional weights)', size: 'small' },
+  { classes: BOTH, key: 'health_electrical', type: 'kpi_gauge', boundTo: 'health_score_electrical', title: 'Health score, electrical only (loggers without vibration sensor)', size: 'small' },
+  { classes: BOTH, key: 'vibration', type: 'kpi_number', boundTo: 'vibration_avg', title: 'Vibration (mm/s RMS)', size: 'small' },
+  { classes: BOTH, key: 'vibration_zone', type: 'kpi_number', boundTo: 'vibration_zone', title: 'Vibration zone (0 A/B, 1 C, 2 D)', size: 'small' },
+  { classes: BOTH, key: 'ambient', type: 'kpi_number', boundTo: 'ambient_temp_avg', title: 'Ambient temperature', size: 'small' },
   { classes: [PUMP_CLASS], key: 'health_duty', type: 'kpi_gauge', boundTo: 'health_score_with_duty', title: 'Health incl. duty deviation (needs the catalogue curve)', size: 'small' },
   { classes: BOTH, key: 'speed', type: 'kpi_number', boundTo: 'motor_speed_pct', title: 'Speed (% of synchronous, slip model)', size: 'small' },
   { classes: BOTH, key: 'temperature_tier', type: 'kpi_number', boundTo: 'temperature_tier', title: 'Temperature tier (0 normal, 1 warning, 2 fault)', size: 'small' },
@@ -170,6 +213,7 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: [PUMP_CLASS], key: 'load_loss', type: 'kpi_number', boundTo: 'load_loss_pct', title: 'Load loss vs catalogue', size: 'small' },
   { classes: BOTH, key: 'current_chart', type: 'signal_chart', boundTo: 'motor_current', title: 'Motor current', size: 'large' },
   { classes: BOTH, key: 'voltage_chart', type: 'signal_chart', boundTo: 'supply_voltage', title: 'Supply voltage', size: 'large' },
+  { classes: BOTH, key: 'vibration_chart', type: 'signal_chart', boundTo: 'vibration_velocity', title: 'Vibration', size: 'large' },
   { classes: BOTH, key: 'alerts', type: 'alert_list', boundTo: null, title: 'Alerts', size: 'medium' },
   { classes: BOTH, key: 'failure_modes', type: 'failure_modes', boundTo: null, title: 'What can go wrong', size: 'medium' },
   { classes: BOTH, key: 'recommendations', type: 'recommendations', boundTo: null, title: 'What to do', size: 'medium' },
@@ -184,8 +228,8 @@ export const FAILURE_MODES: { classes: string[]; code: string; name: string; sym
     signals: ['supply_voltage', 'supply_voltage_min', 'motor_current'],
     action: 'Record the voltage history as evidence of a site fault; separate grid damage from pump defect for warranty (RCA 2).', urgency: 'next_shift' },
   { classes: BOTH, code: 'bearing_drag', name: 'Bearing drag / rotor rub', severity: 'high',
-    symptom: 'Current rising at the same duty; starts heavier; overload trips begin (RCA 7).',
-    signals: ['motor_current', 'motor_current_max'],
+    symptom: 'Vibration rising; current rising at the same duty; starts heavier; overload trips begin (RCA 7).',
+    signals: ['vibration_velocity', 'motor_current', 'motor_current_max'],
     action: 'Dispatch with a bearing / motor plan before lock-up (RCA 7).', urgency: 'next_service' },
   { classes: BOTH, code: 'destructive_cycling', name: 'Destructive cycling', severity: 'medium',
     symptom: 'Starts per day far above normal (e.g. > 60); short runs (RCA 10).',
@@ -223,6 +267,12 @@ export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: stri
     params: { signal: 'logger_records_lost', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
   { slugSuffix: 'logger-records-dropped', name: 'Logger could not store readings', severity: 'medium',
     params: { signal: 'logger_records_dropped', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
+  // ISO 10816 class I (≤ 15 kW): zone C from 1.8 mm/s, zone D (damage) from 4.5. Fixed
+  // lines, not ratings: the standard sets them by machine class, not by model.
+  { slugSuffix: 'vibration-warning', name: 'Vibration in ISO zone C (above 1.8 mm/s)', severity: 'medium',
+    params: { signal: 'vibration_velocity', max: 1.8 } },
+  { slugSuffix: 'vibration-critical', name: 'Vibration in ISO zone D (above 4.5 mm/s)', severity: 'critical',
+    params: { signal: 'vibration_velocity', max: 4.5 } },
 ];
 
 const WB = 'Crompton_Pump_Library.xlsx';
@@ -247,6 +297,9 @@ export const SCENARIOS: { classes: string[]; slugSuffix: string; name: string; d
   { classes: [PUMP_CLASS], slugSuffix: 'wear-clogging', name: 'Impeller wear / clogging', severity: 'medium', minimumHistoryDays: 14,
     requiredSignals: ['input_power', 'current_fluctuation_pct'],
     description: 'Power drifting from this pump\'s own history at the same running pattern (RCA 4, 5, 6); the catalogue curve sharpens it once entered.' },
+  { classes: BOTH, slugSuffix: 'bearing-vibration', name: 'Bearing wear (vibration trend)', severity: 'high', minimumHistoryDays: 7,
+    requiredSignals: ['vibration_velocity', 'vibration_velocity_max'],
+    description: 'Vibration rising against this motor\'s own history before it reaches ISO zone D: bearing wear, misalignment or looseness (RCA 7). Plan the bearing job.' },
 ];
 
 /** The POC motor (Plan P2; Platform Prep Steps A2). Ratings with their sources. */
