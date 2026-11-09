@@ -12,8 +12,9 @@ export { FormulaCompileError } from './errors';
  * qce5.0.0: the `compare` node and `count_exceeding`.
  * qcat1.0.0: the `state` node and the categorical operators.
  * qgeo1.0.0: the site-boundary operators.
- * qscal1.0.0: the scalar functions (abs, least, greatest, clamp, and, or, if). */
-export const COMPILER_VERSION = 'qscal1.0.0';
+ * qscal1.0.0: the scalar functions (abs, least, greatest, clamp, and, or, if).
+ * qunit1.0.0: motor ratings compile in their catalog unit (D56). */
+export const COMPILER_VERSION = 'qunit1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
