@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { Between, DataSource, EntityManager, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
 import { Severity } from '../../common/severity';
@@ -444,8 +444,19 @@ export class PredictionService {
     scope: RequestScope,
     target: { sourceSystem: string; externalId: string; clientScenarioSlug: string },
     take = 100,
+    range: { from?: Date; to?: Date } = {},
   ): Promise<Prediction[]> {
     if (take < 1 || take > 1000) throw new NotFoundException('take must be between 1 and 1000.');
+    if (range.from && range.to && range.from > range.to) {
+      throw new BadRequestException('from must not be after to.');
+    }
+    // A range bounds which rows count; take still caps how many come back, newest
+    // first. Without the range a chart of last month showed only the newest hundred
+    // scores, which on a machine scored every few minutes is the last few hours.
+    const occurredAt = range.from && range.to ? Between(range.from, range.to)
+      : range.from ? MoreThanOrEqual(range.from)
+        : range.to ? LessThanOrEqual(range.to)
+          : undefined;
     return withTenantSession(this.ds, scope, (m) =>
       m.getRepository(Prediction).find({
         where: {
@@ -453,6 +464,7 @@ export class PredictionService {
           sourceSystem: target.sourceSystem,
           externalId: target.externalId,
           clientScenarioSlug: target.clientScenarioSlug,
+          ...(occurredAt ? { occurredAt } : {}),
         },
         order: { occurredAt: 'DESC' },
         take,
