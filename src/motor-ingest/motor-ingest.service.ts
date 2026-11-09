@@ -1,16 +1,24 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { chainForEquipment, resolveParameters } from '../parameters/services/parameter-resolution';
 import { runTenantSpanning } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import { RUNNING_SIGNAL } from '../shift/services/running-status';
+import { AlertService } from '../alert/services/alert.service';
 
 /** Its own lock, not the shift runner's: the two may run side by side. */
 export const MOTOR_TELEMETRY_LOCK_KEY = 7_315_009;
 
 /** Readings a pass takes from the queue. A logger's backlog after an outage drains over passes. */
 export const MAX_READINGS_PER_PASS = 20_000;
+
+/**
+ * How far back the live alert pass reads (POC T3). A rule judges its last N readings
+ * (lookbackReadings, 10 by default), one a minute here, so an hour is ample without
+ * reaching back into a stretch that was already judged at the last shift close.
+ */
+export const LIVE_ALERT_LOOKBACK_MS = 60 * 60_000;
 
 /**
  * What one minute of a logger becomes in `telemetry_reading`. Formulas, alerts and KPIs
@@ -48,6 +56,8 @@ export interface PassSummary {
   readings: number;
   devices: number;
   uploads: number;
+  /** Alerts the live pass raised (threshold rules judged as readings landed). */
+  alerts?: number;
 }
 
 interface Owner { tenant_id: string; equipmentExternalId: string | null }
@@ -69,7 +79,9 @@ interface Owner { tenant_id: string; equipmentExternalId: string | null }
 export class MotorIngestService {
   private readonly logger = new Logger(MotorIngestService.name);
 
-  constructor(private readonly ds: DataSource) {}
+  // Optional: a bare MotorIngestService(ds) (the ingest specs) places readings and
+  // writes telemetry exactly as before, and judges no alerts.
+  constructor(private readonly ds: DataSource, @Optional() private readonly alerts?: AlertService) {}
 
   /** One pass, unless another instance is mid-pass: then nothing, and its next tick does it. */
   async processExclusively(now = new Date()): Promise<PassSummary | null> {
@@ -88,7 +100,8 @@ export class MotorIngestService {
    * it marks, and a reading it has placed is not placed again.
    */
   async processPending(now = new Date(), maxReadings = MAX_READINGS_PER_PASS): Promise<PassSummary> {
-    return runTenantSpanning(this.ds, 'motor telemetry: readings the receiver stored', async (m) => {
+    const touched = new Map<string, { tenantId: string; deviceId: string; externalId: string }>();
+    const summary = await runTenantSpanning(this.ds, 'motor telemetry: readings the receiver stored', async (m) => {
       // The reading's wall-clock time. The device's timestamp is its own clock (seconds,
       // continuous within one boot); the receiver keeps no device clock at send time. So,
       // per logger and boot, the newest reading waiting in this pass is taken as received
@@ -147,6 +160,9 @@ export class MotorIngestService {
           continue;
         }
         await this.writeMinutes(m, deviceId, readingAts, now, owner);
+        if (owner.equipmentExternalId) {
+          touched.set(deviceId, { tenantId: owner.tenant_id, deviceId, externalId: owner.equipmentExternalId });
+        }
       }
 
       const uploads = await this.processUploads(m, now);
@@ -155,6 +171,62 @@ export class MotorIngestService {
       }
       return { readings: placed.length, devices: byDevice.size, uploads };
     });
+    // After the commit, so the minutes just written are what the rules read.
+    const alerts = await this.liveAlerts([...touched.values()], now);
+    return alerts ? { ...summary, alerts } : summary;
+  }
+
+  /**
+   * Threshold rules judged as a logger's readings land, not only when its shift closes
+   * (POC T3: a dry run or an overload is a call to make now, and a shift is twelve
+   * hours). The same AlertService and the same rules the shift close uses, over the
+   * logger's last hour of minutes; the shift close still judges every rule as before.
+   * One standing alert per rule per machine (uq_alert_event_standing) means the two
+   * paths cannot raise the same alert twice: whichever lands second is refused, and the
+   * other keeps it.
+   *
+   * Never fatal. Telemetry is written either way; an alert that could not be judged now
+   * is judged at the next pass or at the shift close.
+   */
+  private async liveAlerts(machines: { tenantId: string; deviceId: string; externalId: string }[], now: Date): Promise<number> {
+    if (!this.alerts || machines.length === 0) return 0;
+    let raised = 0;
+    for (const machine of machines) {
+      try {
+        const context = await runTenantSpanning(this.ds, `motor live alerts: ${machine.deviceId}`, async (m) => {
+          const [profile] = await m.query(
+            `SELECT p."source_system" AS "sourceSystem", coalesce(t."time_zone", 'Asia/Kolkata') AS "timeZone"
+               FROM "equipment_profile" p JOIN "tenant" t ON t."tenant_id" = p."tenant_id"
+              WHERE p."tenant_id" = $1 AND p."external_id" = $2 LIMIT 1`, [machine.tenantId, machine.externalId]);
+          if (!profile) return null;
+          const since = new Date(now.getTime() - LIVE_ALERT_LOOKBACK_MS);
+          const readings: { imei: string; signal: string; value: number; unit: string | null; sourceTimestamp: string }[] = (await m.query(
+            `SELECT "imei", "signal", "value"::float8 AS "value", "unit", "source_timestamp" AS "at"
+               FROM "telemetry_reading"
+              WHERE "tenant_id" = $1 AND "imei" = $2 AND "source_timestamp" > $3 AND "source_timestamp" <= $4
+              ORDER BY "source_timestamp"`, [machine.tenantId, machine.deviceId, since, now],
+          )).map((r: { imei: string; signal: string; value: number; unit: string | null; at: Date }) => ({
+            imei: r.imei, signal: r.signal, value: Number(r.value), unit: r.unit, sourceTimestamp: new Date(r.at).toISOString(),
+          }));
+          // The local date the alert belongs to, in the account's own time zone (MIN-12).
+          const shiftLocalDate = new Intl.DateTimeFormat('en-CA', { timeZone: profile.timeZone }).format(now);
+          return { sourceSystem: profile.sourceSystem as string, readings, since, shiftLocalDate };
+        });
+        if (!context || context.readings.length === 0) continue;
+        const fired = await this.alerts.evaluateWindow({
+          tenantId: machine.tenantId, sourceSystem: context.sourceSystem, externalId: machine.externalId,
+          shiftLocalDate: context.shiftLocalDate, windowStart: context.since, windowEnd: now,
+          readings: context.readings, predictions: [], onlyTriggers: ['signal-threshold'],
+        });
+        raised += fired.length;
+        for (const a of fired) this.logger.log(`Live alert on ${machine.externalId}: ${a.ruleName}.`);
+      } catch (error) {
+        // A race with the shift close on the same standing alert lands here as a unique
+        // violation: the alert exists, which is the point.
+        this.logger.warn(`Live alerts not judged for ${machine.externalId} this pass: ${(error as Error).message}`);
+      }
+    }
+    return raised;
   }
 
   /**
