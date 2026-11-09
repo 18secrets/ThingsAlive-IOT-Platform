@@ -1,16 +1,33 @@
 import { EntityManager } from 'typeorm';
-import { ParameterScope, RESOLUTION_ORDER } from '../parameter-catalog';
+import { ParameterScope } from '../parameter-catalog';
 
-/** Where to look, one ref per scope. A machine with no plant or no class simply has no
- * row at that level to find — the chain does not break, it skips. */
+/**
+ * Where a resolved value can come from: the four scopes a tenant sets values at, plus
+ * the machine's model (D57), whose rated figures are read, never set, here.
+ */
+export type ResolvedScope = ParameterScope | 'model';
+
+/**
+ * Most specific first. The model sits between the machine and its class: a nameplate
+ * value typed on the machine beats the model's catalogue figure, and the model's figure
+ * beats anything said for the whole class, which spans many models.
+ */
+export const RESOLVED_ORDER: readonly ResolvedScope[] = ['equipment', 'model', 'equipment_class', 'site', 'client'];
+
+/** Where to look, one ref per scope. A machine with no plant, class or model simply has
+ * no row at that level to find — the chain does not break, it skips. */
 export interface ParameterChain {
   equipment?: string | null;
+  /** The machine's model (D57). Left undefined, `resolveParameters` looks it up from
+   * `equipment_model` itself, so every caller that builds a chain from a profile gets
+   * the model step without knowing it exists. Null means "no model", looked up or not. */
+  model?: string | null;
   equipment_class?: string | null;
   site?: string | null;
 }
 
 export interface ParameterRow {
-  scope: ParameterScope;
+  scope: ResolvedScope;
   scopeRef: string | null;
   name: string;
   value: unknown;
@@ -23,7 +40,7 @@ export interface ResolvedParameter {
   value: unknown;
   unit: string | null;
   /** Which row answered — "why is this number what it is" without reading the database. */
-  source: { scope: ParameterScope; scopeRef: string | null; effectiveFrom: string };
+  source: { scope: ResolvedScope; scopeRef: string | null; effectiveFrom: string };
 }
 
 /**
@@ -44,7 +61,7 @@ export function resolveFromRows(
   const out = new Map<string, ResolvedParameter | null>();
   for (const name of names) {
     let found: ResolvedParameter | null = null;
-    for (const scope of RESOLUTION_ORDER) {
+    for (const scope of RESOLVED_ORDER) {
       const ref = scope === 'client' ? null : chain[scope] ?? undefined;
       if (ref === undefined) continue;
       const row = rows.find((r) => r.name === name && r.scope === scope && r.scopeRef === ref);
@@ -86,11 +103,37 @@ export async function resolveParameters(
       ORDER BY "scope", COALESCE("scope_ref", ''), "name", "effective_from" DESC`,
     [tenantId, names, at, chain.site ?? null, chain.equipment_class ?? null, chain.equipment ?? null],
   );
-  const rows = raw.map((r) => ({ ...r, effectiveFrom: new Date(r.effectiveFrom) }));
-  return resolveFromRows(rows, chain, names);
+  const rows: ParameterRow[] = raw.map((r) => ({ ...r, effectiveFrom: new Date(r.effectiveFrom) }));
+
+  // The model's rated figures (D57). No effective time of their own: a rating describes
+  // the model, not a moment, so a corrected figure applies to every window it is read
+  // for. `effectiveFrom` reports when it was last changed, which is what "why is this
+  // number what it is" needs.
+  const model = chain.model !== undefined || !chain.equipment ? chain.model ?? null
+    : ((await m.query(
+      `SELECT "client_equipment_template_id" AS "modelId" FROM "equipment_model" WHERE "tenant_id" = $1 AND "equipment_id" = $2`,
+      [tenantId, chain.equipment],
+    )) as { modelId: string }[])[0]?.modelId ?? null;
+  if (model) {
+    const ratings: { name: string; value: number; unit: string | null; updatedAt: Date }[] = await m.query(
+      `SELECT r."name", r."value", p."unit", r."updated_at" AS "updatedAt"
+         FROM "client_equipment_template_rating" r
+         JOIN "rating_parameter" p ON p."name" = r."name"
+        WHERE r."tenant_id" = $1 AND r."template_id" = $2 AND r."name" = ANY($3::text[])`,
+      [tenantId, model, names],
+    );
+    for (const r of ratings) {
+      rows.push({
+        scope: 'model', scopeRef: model, name: r.name, value: r.value, unit: r.unit,
+        effectiveFrom: new Date(r.updatedAt),
+      });
+    }
+  }
+  return resolveFromRows(rows, { ...chain, model }, names);
 }
 
-/** The chain for one machine: its own profile id, its class, its plant. */
+/** The chain for one machine: its own profile id, its class, its plant. Its model is
+ * looked up when the chain is resolved (see `ParameterChain.model`). */
 export function chainForEquipment(
   profile: { id: string; equipmentClassSlug: string | null; plantId: string | null },
 ): ParameterChain {

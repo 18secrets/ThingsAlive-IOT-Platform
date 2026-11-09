@@ -62,6 +62,13 @@ export class EquipmentPatchDto {
   @IsOptional() @IsString() tenantId?: string;
 }
 
+/** D57: one of the account's own models (`/my-equipment-templates`), or null for none. */
+export class EquipmentModelDto {
+  @IsOptional() @IsString() modelId?: string | null;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
+}
+
 export class MoveDto {
   /** Null takes the machine off site without retiring it. */
   @IsOptional() @IsString() toPlantId?: string | null;
@@ -191,6 +198,30 @@ export class EquipmentController {
       ...body,
       commissionedAt: body.commissionedAt ? new Date(body.commissionedAt) : undefined,
     }, body.tenantId);
+  }
+
+  @Get(':sourceSystem/:externalId/model')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Which of the account\'s models this machine is (D57)' })
+  model(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.equipment.model(scope, { sourceSystem, externalId }, tenantId);
+  }
+
+  @Put(':sourceSystem/:externalId/model')
+  @Requires('equipment.write')
+  @ApiOperation({ summary: 'Name the machine\'s model, or clear it with null. Its ratings and duty curve feed motor KPIs' })
+  setModel(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Body() body: EquipmentModelDto,
+  ) {
+    return this.equipment.setModel(scope, { sourceSystem, externalId }, body.modelId ?? null, body.tenantId);
   }
 
   @Post(':sourceSystem/:externalId/move')
