@@ -31,7 +31,7 @@
  */
 import { Workbook } from 'exceljs';
 import {
-  ALERT_TEMPLATES, CLASSES, FAILURE_MODES, FORMULAS, LAYOUT, MINI_1HP_MODEL, POC, SIGNALS,
+  ALERT_TEMPLATES, CLASSES, FAILURE_MODES, FORMULAS, LAYOUT, MINI_1HP_MODEL, POC, SCENARIOS, SIGNALS,
 } from './content';
 
 type Json = Record<string, any>;
@@ -151,6 +151,25 @@ async function platformSteps(master: Api, deviceId: string): Promise<{ masterMod
     }
   }
 
+  // Before the grant, so the grant copies them into the account (D04).
+  const scenarios: Json[] = (await master.get('/api/v1/catalog/authoring/scenarios')).body;
+  for (const c of CLASSES) {
+    for (const sc of SCENARIOS.filter((x) => x.classes.includes(c.slug))) {
+      const slug = `${c.slug}-${sc.slugSuffix}`;
+      const found = scenarios.find((t) => t.slug === slug);
+      if (!found) {
+        await master.post('/api/v1/catalog/scenarios', {
+          slug, equipmentClassSlug: c.slug, name: sc.name, description: sc.description, severity: sc.severity,
+          tier: 1, requiredSignals: sc.requiredSignals, minimumHistoryDays: sc.minimumHistoryDays, parameters: [],
+        });
+      }
+      if (!found || found.status !== 'published') {
+        await master.post(`/api/v1/catalog/scenarios/${slug}/publish`);
+        step(`Scenario ${slug} published.`);
+      }
+    }
+  }
+
   const models: Json[] = (await master.get('/api/v1/equipment-templates')).body;
   let model = models.find((t) => t.name === MINI_1HP_MODEL.name);
   if (!model) {
@@ -211,9 +230,20 @@ async function accountSteps(account: Api, masterModelId: string, t: Target): Pro
   for (const s of SIGNALS) {
     const r = await account.post(`/api/v1/equipment/${ref}/bindings`, {
       action: 'activate', signalKey: s.signal, measurementRole: s.signal, origin: 'physical', imei: t.deviceId, channel: s.signal,
-      canonicalUnit: s.unit, validFrom, discoveredBy: 'manual', expectedPeriodSeconds: 60,
+      // Logger health arrives once per upload (every five minutes); everything else per minute.
+      canonicalUnit: s.unit, validFrom, discoveredBy: 'manual', expectedPeriodSeconds: s.signal.startsWith('logger_') ? 300 : 60,
     }, [409]);
     if (r.status !== 409) step(`Bound ${s.signal} (${s.unit}) to ${t.deviceId}.`);
+  }
+
+  // U3: switch the class's scenarios on for this machine. Activation records what still
+  // blocks scoring (too little history, a missing signal) rather than refusing (G04).
+  const accountScenarios: Json[] = (await account.get('/api/v1/my-catalog/scenarios')).body;
+  for (const sc of accountScenarios.filter((x) => x.clientEquipmentClassSlug === MINI_1HP_MODEL.equipmentClassSlug)) {
+    const r = await account.post('/api/v1/activations/activate', {
+      sourceSystem: 'ta-2.0', externalId: t.machineCode, clientScenarioSlug: sc.slug, reason: 'Motor library POC',
+    }, [400, 409]);
+    step(r.status >= 400 ? `Scenario ${sc.slug}: ${JSON.stringify(r.body).slice(0, 160)}` : `Scenario ${sc.slug} activated on ${t.machineCode}.`);
   }
 }
 

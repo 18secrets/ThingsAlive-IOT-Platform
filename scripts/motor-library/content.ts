@@ -46,6 +46,9 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   { signal: 'engine_running_status', unit: 'dimensionless', required: false,
     description: '1 when the motor ran in the minute (F1: V > 15% of rated, I > 5% of rated, per second). The platform\'s running signal.' },
   { signal: 'motor_starts', unit: 'starts', required: false, description: 'Starts in the minute, counted on the one-second readings.' },
+  { signal: 'motor_running_share', unit: 'dimensionless', required: false, description: 'Share of the minute\'s seconds the motor ran (0-1).' },
+  { signal: 'current_fluctuation_pct', unit: 'dimensionless', required: false,
+    description: 'F: current fluctuation % over running seconds. Input of instability_score; current noise, NOT vibration (V-07).' },
   { signal: 'logger_records_lost', unit: 'records', required: false, description: 'Records the logger overwrote (flash full) since its last upload.' },
   { signal: 'logger_records_dropped', unit: 'records', required: false, description: 'Readings the logger could not store since its last upload.' },
 ];
@@ -84,16 +87,28 @@ export const FORMULAS: FormulaRow[] = [
     basis: 'Steady-state F5: T_amb + ΔT_rated × λ². Advisory until bench-calibrated (V-04)', window: '24h', chart: 'number', useCase: 'U2' },
   { classes: BOTH, key: 'starts_today', expression: 'sum(motor_starts)', inputs: ['motor_starts'], unit: 'starts',
     basis: 'starts_per_day: count(start events) / day; destructive cycling is far above normal, e.g. > 60 (KPIs & Formulas; RCA 10)', window: 'today', chart: 'number', useCase: 'U6' },
-  { classes: BOTH, key: 'running_pct', expression: '100 * avg(engine_running_status)', inputs: ['engine_running_status'], unit: 'dimensionless',
+  { classes: BOTH, key: 'running_pct', expression: '100 * avg(motor_running_share)', inputs: ['motor_running_share'], unit: 'dimensionless',
     basis: 'Share of minutes the motor ran (F1), the run_hours side of availability_pct (KPIs & Formulas)', window: '24h', chart: 'number', useCase: 'U9' },
   { classes: BOTH, key: 'logger_records_lost_24h', expression: 'sum(logger_records_lost) + sum(logger_records_dropped)', inputs: ['logger_records_lost', 'logger_records_dropped'], unit: 'records',
     basis: 'Records the logger lost or could not store (contract: lost_total / dropped_total, alert if they grow)', window: '24h', chart: 'number', useCase: 'U10' },
+  { classes: BOTH, key: 'instability_score', expression: 'clamp(25 * (avg(current_fluctuation_pct) / 2 - 1), 0, 25)',
+    inputs: ['current_fluctuation_pct'], unit: 'dimensionless',
+    basis: 'instability_score = clamp(25 × (F/F0\' − 1)), F0\' = the 2% floor (KPIs & Formulas; F6). Current noise, NOT vibration (V-07)', window: '24h', chart: 'number', useCase: 'U2' },
   { classes: [PUMP_CLASS], key: 'flow_estimate_lpm', expression: "curve_at('flow_lpm', 'input_kw', avg(input_power))", inputs: ['input_power'], unit: 'L/min',
     basis: 'Q_est: catalogue P-Q curve read backwards at measured power, ±10-15% until POC T0 (F7)', window: '24h', chart: 'number', useCase: 'U8' },
   { classes: [PUMP_CLASS], key: 'expected_power_kw', kind: 'empirical', expression: "curve_at('input_kw', 'head_m', @install_head)", inputs: [], unit: 'kW',
     basis: 'P0: catalogue power at the installation head, set at commissioning (V-06)', window: '24h', chart: 'number', useCase: 'U8' },
   { classes: [PUMP_CLASS], key: 'load_loss_pct', expression: '100 * (#expected_power_kw - avg(input_power)) / #expected_power_kw', inputs: ['input_power'], unit: 'dimensionless',
     basis: 'load_loss_pct = 100 × (P0 − P) / P0 (KPIs & Formulas); positive and growing = wear, clogging, dry running', window: '24h', chart: 'number', useCase: 'U8' },
+  // DRAFT. The workbook's own GAP: the weights are Things Alive's proposal and Crompton's
+  // service team ratifies them. F10's inputs (λ, duty deviation, F/F0', events) on the KPI
+  // sheet's bands, mapped one point per % over the line; the 25-point temperature band waits
+  // for a calibrated rise (V-04) and the events band for trip reasons from the firmware.
+  // Needs the duty curve (load loss), so it reads not_configured until that exists.
+  { classes: [PUMP_CLASS], key: 'health_score_draft', inputs: ['motor_current_max', 'input_power', 'current_fluctuation_pct', 'supply_voltage'], unit: 'dimensionless',
+    expression: '100 - clamp(100 * (#peak_load_ratio - 1), 0, 25) - clamp(abs(#load_loss_pct), 0, 25) - #instability_score - 5 * #voltage_tier',
+    basis: 'DRAFT for Crompton ratification: 100 − overload (1 pt per % over rated, max 25) − duty deviation (1 pt per % load loss, max 25) − instability (max 25) − 5 × voltage tier (max 10) (F10; KPIs & Formulas pump_health_score)',
+    window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
 ];
 
 /** The machine page (U1): what a motor shows, in order. */
@@ -106,6 +121,8 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: BOTH, key: 'running', type: 'kpi_number', boundTo: 'running_pct', title: 'Running (% of last 24 h)', size: 'small' },
   { classes: BOTH, key: 'starts', type: 'kpi_number', boundTo: 'starts_today', title: 'Starts today', size: 'small' },
   { classes: BOTH, key: 'logger_loss', type: 'kpi_number', boundTo: 'logger_records_lost_24h', title: 'Logger records lost (24 h)', size: 'small' },
+  { classes: BOTH, key: 'instability', type: 'kpi_number', boundTo: 'instability_score', title: 'Current instability (0-25; not vibration)', size: 'small' },
+  { classes: [PUMP_CLASS], key: 'health', type: 'kpi_gauge', boundTo: 'health_score_draft', title: 'Health score (DRAFT, pending Crompton)', size: 'small' },
   { classes: [PUMP_CLASS], key: 'flow', type: 'kpi_number', boundTo: 'flow_estimate_lpm', title: 'Flow (estimated)', size: 'small' },
   { classes: [PUMP_CLASS], key: 'load_loss', type: 'kpi_number', boundTo: 'load_loss_pct', title: 'Load loss vs catalogue', size: 'small' },
   { classes: BOTH, key: 'current_chart', type: 'signal_chart', boundTo: 'motor_current', title: 'Motor current', size: 'large' },
@@ -166,6 +183,28 @@ export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: stri
 ];
 
 const WB = 'Crompton_Pump_Library.xlsx';
+
+/**
+ * U3: Tier 1 scenarios — each scores its signals against the machine's own baseline,
+ * learned from running periods only (z-score: warning 1.5σ, critical 2.5σ). Severity and
+ * minimum history from the workbook's Predictions & Alerts sheet. They read "baseline not
+ * established" until a machine has that much history: true of every new pump.
+ */
+export const SCENARIOS: { classes: string[]; slugSuffix: string; name: string; description: string; severity: string;
+  requiredSignals: string[]; minimumHistoryDays: number }[] = [
+  { classes: BOTH, slugSuffix: 'bearing-drag', name: 'Bearing drag / rotor rub', severity: 'high', minimumHistoryDays: 14,
+    requiredSignals: ['motor_current', 'motor_current_max'],
+    description: 'Current rising at the same duty against this motor\'s own history; starts heavier (RCA 7). Dispatch before lock-up.' },
+  { classes: BOTH, slugSuffix: 'supply-damage', name: 'Supply-side damage risk (sags, low voltage)', severity: 'high', minimumHistoryDays: 3,
+    requiredSignals: ['supply_voltage_min', 'motor_current'],
+    description: 'Voltage sags with current up against this motor\'s history: winding insulation cooks silently (RCA 2).' },
+  { classes: BOTH, slugSuffix: 'destructive-cycling', name: 'Destructive cycling', severity: 'medium', minimumHistoryDays: 7,
+    requiredSignals: ['motor_starts'],
+    description: 'Starts far above this motor\'s own normal: level control, pressure switch or tank (RCA 10).' },
+  { classes: [PUMP_CLASS], slugSuffix: 'wear-clogging', name: 'Impeller wear / clogging', severity: 'medium', minimumHistoryDays: 14,
+    requiredSignals: ['input_power', 'current_fluctuation_pct'],
+    description: 'Power drifting from this pump\'s own history at the same running pattern (RCA 4, 5, 6); the catalogue curve sharpens it once entered.' },
+];
 
 /** The POC motor (Plan P2; Platform Prep Steps A2). Ratings with their sources. */
 export const MINI_1HP_MODEL = {
