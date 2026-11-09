@@ -695,6 +695,34 @@ deviation compares the two. Formulas cannot do any of this today.
   is what POC test T0 measures against a reference meter. Until then the estimate is shown
   as an estimate.
 
+## D59 — An alert bound can be a multiple of a motor rating
+
+Decided 2026-11-09 by Deepak. Built on `feature/rated-alerts-d59`.
+
+U4 (Crompton's Critical/Warning/Normal) needs thresholds relative to each motor: overload
+at 1.2 × rated current, the voltage band from the model's own warning lines. A
+`signal-threshold` rule compared a signal with one fixed number for the whole class, and
+a class spans motors whose rated current differs six-fold.
+
+- **One new parameter, `rating`.** With it, the rule's `max`/`min` are multiples of that
+  D56 rating, resolved per machine the way a formula's `@rating` is: nameplate on the
+  machine, else its model (D57). `{signal: motor_current, rating: rated_current, max: 1.2}`.
+  A voltage band is two rules: `{rating: voltage_warn_high, max: 1}` and
+  `{rating: voltage_warn_low, min: 1}`.
+- **Still parameters, never an expression** (D34, D25). It reads back as "rise above
+  1.2 × rated current", not as amps that are right for one model.
+- **Rejected:** a rule kind that watches a formula's value (a new trigger reading compiled
+  expressions — D25 and D34 revisited for one use); fixed numbers per model (every model
+  its own rules, and a corrected rating would not move its alert).
+- **No rating, no alert.** A machine without the rating gets nothing from that rule — not
+  a bound guessed from the class — and the skip is logged per shift. Readings in another
+  unit than the rating's are not compared with it.
+- **Import:** an optional `rating` column on the signal sheet, no template bump (QCE3's
+  precedent). One rating per signal row; a band from two different ratings is authored as
+  two templates on the class page.
+- **Open:** proposal replay passes no ratings, so a rated rule does not fire in a replay;
+  and nothing yet shows, per machine, that a rated rule is idle for want of a rating.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
