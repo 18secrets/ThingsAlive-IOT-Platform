@@ -19,6 +19,8 @@
  *                where they were taken, not shifted to now.
  *   --live       keep running: every --interval seconds (default 300, the device's own
  *                five minutes) send the readings taken since the last send
+ *   --lost-total N  report this lost_total (records overwritten when flash was full), to
+ *                exercise the logger-health signal and alert; default 0
  *   --print      print the first batch instead of sending anything
  *
  * The wire format is the logger contract's: ≤ 50 records a POST, one reading a second,
@@ -138,7 +140,7 @@ export function simulate(
 }
 
 /** Splits readings into the contract's batches: ≤ `size` records, oldest first. */
-export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50) {
+export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0) {
   const out = [];
   for (let i = 0; i < records.length; i += size) {
     const chunk = records.slice(i, i + size);
@@ -149,7 +151,7 @@ export function batches(deviceId: string, records: SimRecord[], deviceNow: numbe
       last_seq: chunk[chunk.length - 1].seq,
       count: chunk.length,
       boot: 1,
-      lost_total: 0,
+      lost_total: lostTotal,
       dropped_total: 0,
       device_now: deviceNow,
       records: chunk,
@@ -190,7 +192,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
       const half = Math.ceil(batch.records.length / 2);
       console.warn(`413 for ${batch.batch_id}; halving to ${half}`);
       await sleep(2000);
-      for (const part of batches(batch.device_id, batch.records, batch.device_now, half)) await send(url, key, part, maxRetries);
+      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total)) await send(url, key, part, maxRetries);
       return;
     }
     if (res.status === 401) throw new Error(`401: unknown device or wrong X-Device-Key (${text})`);
@@ -209,6 +211,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const backfillMin = Number(arg('backfill', argv) ?? 10);
   const interval = Number(arg('interval', argv) ?? 300);
   const endAgo = Number(arg('end-ago', argv) ?? 0);
+  const lostTotal = Number(arg('lost-total', argv) ?? 0);
   const live = argv.includes('--live');
   if (!SCENARIOS.includes(scenario)) {
     console.error(`--scenario must be one of: ${SCENARIOS.join(', ')}`);
@@ -221,7 +224,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const run = async (seconds: number, endsAgoSeconds = 0) => {
     const end = now() - endsAgoSeconds;
     const records = simulate(scenario, seconds, end, bootUnix);
-    const list = batches(device, records, now() - bootUnix);
+    const list = batches(device, records, now() - bootUnix, 50, lostTotal);
     if (argv.includes('--print')) {
       console.log(JSON.stringify(list[0]));
       return;
