@@ -48,6 +48,13 @@ export interface WindowContext {
    * chain, and firing on the absence would be an alert about our own plumbing.
    */
   chains?: WindowChain[];
+  /**
+   * Only rules of these kinds. The live pass (readings judged as they land, POC T3)
+   * names `signal-threshold`: the kinds that read predictions, chains or a whole
+   * shift's absence of data have nothing to judge until the shift closes, and the
+   * shift close still evaluates every kind as before. Omitted, every kind runs.
+   */
+  onlyTriggers?: AlertTrigger[];
 }
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
@@ -293,9 +300,9 @@ export class AlertService {
    */
   async evaluateWindow(context: WindowContext): Promise<AlertEvent[]> {
     return withTenantId(this.ds, context.tenantId, async (m) => {
-      const rules = await m.getRepository(AlertRule).find({
+      const rules = (await m.getRepository(AlertRule).find({
         where: { tenantId: context.tenantId, enabled: true },
-      });
+      })).filter((r) => !context.onlyTriggers || context.onlyTriggers.includes(r.trigger));
       if (rules.length === 0) return [];
 
       const applicable = await this.applicableTo(m, context, rules);
