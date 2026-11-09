@@ -26,6 +26,7 @@
     "schema:inventory": "ts-node scripts/generate-schema-inventory.ts",
     "create:platform-user": "ts-node src/database/seeds/create-platform-user.ts",
     "staff:bootstrap": "ts-node src/database/seeds/staff-bootstrap.ts",
+    "motor:provision": "ts-node scripts/motor-library/provision.ts",
     "motor:sim": "ts-node scripts/motor-logger-sim.ts",
     "catalog:template": "ts-node src/catalog-import/generate-template.ts"
   },
