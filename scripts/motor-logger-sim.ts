@@ -13,6 +13,10 @@
  *                Admin: POST /api/v1/motor-loggers/<device>/key
  *   --scenario   normal | overload | low-voltage | high-voltage | dry-run | cycling
  *   --backfill N generate the last N minutes and send them now (default 10)
+ *   --end-ago M  end that history M minutes ago instead of now: to place a scenario inside
+ *                a shift window that has already closed (the shift runner scores closed
+ *                windows). device_now is still the clock at send time, so the readings land
+ *                where they were taken, not shifted to now.
  *   --live       keep running: every --interval seconds (default 300, the device's own
  *                five minutes) send the readings taken since the last send
  *   --print      print the first batch instead of sending anything
@@ -204,18 +208,20 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const scenario = (arg('scenario', argv) ?? 'normal') as Scenario;
   const backfillMin = Number(arg('backfill', argv) ?? 10);
   const interval = Number(arg('interval', argv) ?? 300);
+  const endAgo = Number(arg('end-ago', argv) ?? 0);
   const live = argv.includes('--live');
   if (!SCENARIOS.includes(scenario)) {
     console.error(`--scenario must be one of: ${SCENARIOS.join(', ')}`);
     return 1;
   }
   const now = () => Math.floor(Date.now() / 1000);
-  const bootUnix = now() - backfillMin * 60 - 120; // the simulated device booted just before its history
+  // The simulated device booted just before its history.
+  const bootUnix = now() - endAgo * 60 - backfillMin * 60 - 120;
 
-  const run = async (seconds: number) => {
-    const end = now();
+  const run = async (seconds: number, endsAgoSeconds = 0) => {
+    const end = now() - endsAgoSeconds;
     const records = simulate(scenario, seconds, end, bootUnix);
-    const list = batches(device, records, end - bootUnix);
+    const list = batches(device, records, now() - bootUnix);
     if (argv.includes('--print')) {
       console.log(JSON.stringify(list[0]));
       return;
@@ -225,7 +231,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   };
 
   console.log(`Simulating ${device} (${scenario}) → ${url}/api/sensor-data/bulk`);
-  await run(Math.max(1, Math.round(backfillMin * 60)));
+  await run(Math.max(1, Math.round(backfillMin * 60)), Math.round(endAgo * 60));
   while (live && !argv.includes('--print')) {
     await sleep(interval * 1000);
     await run(interval);
