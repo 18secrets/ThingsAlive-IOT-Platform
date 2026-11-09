@@ -408,7 +408,10 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       if (!breach) return null;
 
       const direction = breach === high ? 'above' : 'below';
-      const bound = direction === 'above' ? params.max! : params.min!;
+      // A rated bound is factor × rating, and 1.2 × 5.5 is 6.6000000000000005 in floating
+      // point: the raw decimals COS-4 was about, back through D59. Six places removes the
+      // noise without moving any bound anybody set.
+      const bound = Math.round((direction === 'above' ? params.max! : params.min!) * 1e6) / 1e6;
       const window = breach.w.readings;
       return {
         summary: `${params.signal} breached ${bound}${breach.r.unit ? ` ${breach.r.unit}` : ''} `
