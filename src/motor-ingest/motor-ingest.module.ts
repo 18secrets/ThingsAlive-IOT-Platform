@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MotorIngestController, MotorLoggerKeyController } from './motor-ingest.controller';
+import { MotorIngestController } from './motor-ingest.controller';
 import { MotorIngestService } from './motor-ingest.service';
+import { MotorTelemetryScheduler } from './motor-telemetry.scheduler';
 
 @Module({
-  controllers: [MotorIngestController, MotorLoggerKeyController],
-  providers: [MotorIngestService],
+  controllers: [MotorIngestController],
+  providers: [MotorIngestService, MotorTelemetryScheduler],
+  exports: [MotorIngestService],
 })
 export class MotorIngestModule {}

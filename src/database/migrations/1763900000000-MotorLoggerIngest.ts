@@ -1,99 +1,87 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * The motor loggers' own landing tables (SIM800L GSM loggers, `POST /api/sensor-data/bulk`).
+ * The motor loggers' landing tables (SIM800L GSM loggers).
  *
- * The first device that posts to 2.0 directly rather than reaching it through the
- * existing platform's sensor map. The two tables are the logger contract's, column for
- * column, so the firmware's guarantees hold as written: one row per (device_id, seq),
- * inserted with ON CONFLICT DO NOTHING, so a resent range — after a lost ACK, or halved
- * after a 413 — is stored once whatever its batch size.
+ * The receiver is `motor_logger_http_server.py` (Flask): it takes the loggers' POSTs to
+ * `/api/sensor-data/bulk`, inserts with ON CONFLICT DO NOTHING, ACKs after commit, and
+ * writes straight into this database. These two tables are its schema, column for
+ * column and index for index, so its own `CREATE TABLE IF NOT EXISTS` finds them here
+ * and its inserts — which name their columns — work unchanged. Created IF NOT EXISTS for
+ * the same reason the other way round: if the receiver ran first, its tables are
+ * adopted, not refused.
  *
- * What is added to the contract, and why:
- *   - `reading_at`: the reading's wall-clock time. The device's `timestamp` is its own
- *     clock, not Unix time, and a batch can arrive hours late after a GSM outage, so
- *     `received_at` is not when anything was measured. The firmware sends `device_now`
- *     (its clock at send time) and the reading happened `device_now - timestamp`
- *     seconds before the request arrived.
- *   - `time_basis`: 'device_now' when that arithmetic was possible; 'approximate' when a
- *     batch came without `device_now` (older firmware), and the newest record was
- *     assumed to be taken as it arrived. Kept on the row, so nothing downstream mistakes
- *     a guessed time for a measured one.
- *   - `motor_logger_key`: a hash of each logger's key. Plain HTTP and no TLS is what the
- *     modem can do; without a key anyone with a device_id could post readings as that
- *     motor. The key itself is shown once, when issued, and never stored.
+ * What 2.0 adds is nullable, so the receiver never has to know about it:
+ *   - `reading_at` / `time_basis`: the reading's wall-clock time, filled in by 2.0's
+ *     motor telemetry job. The device's `timestamp` is its own clock, not Unix time; the
+ *     receiver keeps no device clock at send time, so the newest record of each batch is
+ *     anchored to the batch's `received_at` and the rest placed by the device clock
+ *     before it — 'approximate', and said so on the row.
+ *   - `processed_at` on the upload log: the job's mark that a batch's logger-health
+ *     counters have been turned into signals.
+ *   A row whose `reading_at` is null is the job's queue; a partial index keeps finding it
+ *   cheap however large the table grows.
  *
- * No tenant column on the readings. They arrive before 2.0 knows whose they are: a
- * logger maps to an account through `device_inventory`, and a logger can move between
- * machines. Reads go through that mapping, never straight from these tables to a tenant.
+ * No tenant column: readings arrive before 2.0 knows whose they are. A logger maps to
+ * an account through `device_inventory`, and reads go through that mapping.
+ *
+ * No range CHECKs, deliberately. The receiver is the writer of record and validates
+ * shape, not range; a CHECK here would turn one odd reading into a 500, and the device
+ * retries a 500 for ever, holding everything behind it. The job skips what it cannot
+ * use instead.
  */
 export class MotorLoggerIngest1763900000000 implements MigrationInterface {
   name = 'MotorLoggerIngest1763900000000';
 
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`
-      CREATE TABLE "motor_sensor_records" (
-        "device_id"     varchar(64)   NOT NULL,
-        "seq"           bigint        NOT NULL,
-        "device_ts"     bigint        NOT NULL,
-        "voltage_v"     numeric(7,1)  NOT NULL,
-        "current_a"     numeric(7,2)  NOT NULL,
-        "power_factor"  numeric(4,2)  NOT NULL,
-        "temperature_c" numeric(7,1)  NOT NULL,
-        "rpm"           integer       NOT NULL,
-        "batch_id"      varchar(128)  NOT NULL,
-        "received_at"   timestamptz   NOT NULL DEFAULT now(),
-        "reading_at"    timestamptz   NOT NULL,
-        "time_basis"    text          NOT NULL,
-        PRIMARY KEY ("device_id", "seq"),
-        -- The contract's ranges. A reading outside them is a firmware or wiring fault,
-        -- and storing it would put it on a chart as a measurement.
-        CONSTRAINT "ck_motor_sensor_records_seq" CHECK ("seq" BETWEEN 1 AND 4294967295),
-        CONSTRAINT "ck_motor_sensor_records_values" CHECK (
-          "voltage_v" BETWEEN 0 AND 6553.5 AND "current_a" BETWEEN 0 AND 655.35
-          AND "power_factor" BETWEEN 0 AND 1 AND "temperature_c" BETWEEN -3276.8 AND 3276.7
-          AND "rpm" BETWEEN 0 AND 65535),
-        CONSTRAINT "ck_motor_sensor_records_time_basis" CHECK ("time_basis" IN ('device_now', 'approximate'))
+      CREATE TABLE IF NOT EXISTS "motor_sensor_records" (
+        "device_id"     VARCHAR(64)   NOT NULL,
+        "seq"           BIGINT        NOT NULL,
+        "device_ts"     BIGINT        NOT NULL,
+        "voltage_v"     NUMERIC(7,1)  NOT NULL,
+        "current_a"     NUMERIC(7,2)  NOT NULL,
+        "power_factor"  NUMERIC(4,2)  NOT NULL,
+        "temperature_c" NUMERIC(7,1)  NOT NULL,
+        "rpm"           INTEGER       NOT NULL,
+        "batch_id"      VARCHAR(128)  NOT NULL,
+        "received_at"   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY ("device_id", "seq")
       )`);
-    // "This motor's readings over the last hour" is the only read shape.
-    await q.query(`CREATE INDEX "ix_motor_sensor_records_reading_at" ON "motor_sensor_records" ("device_id", "reading_at")`);
-
     await q.query(`
-      CREATE TABLE "motor_upload_log" (
-        "id"            bigserial     PRIMARY KEY,
-        "device_id"     varchar(64)   NOT NULL,
-        "batch_id"      varchar(128)  NOT NULL,
-        "first_seq"     bigint        NOT NULL,
-        "last_seq"      bigint        NOT NULL,
-        "record_count"  integer       NOT NULL,
-        "stored_count"  integer       NOT NULL,
-        "boot"          bigint,
-        "lost_total"    bigint,
-        "dropped_total" bigint,
-        "device_now"    bigint,
-        "received_at"   timestamptz   NOT NULL DEFAULT now()
+      CREATE TABLE IF NOT EXISTS "motor_upload_log" (
+        "id"            BIGSERIAL     PRIMARY KEY,
+        "device_id"     VARCHAR(64)   NOT NULL,
+        "batch_id"      VARCHAR(128)  NOT NULL,
+        "first_seq"     BIGINT        NOT NULL,
+        "last_seq"      BIGINT        NOT NULL,
+        "record_count"  INTEGER       NOT NULL,
+        "stored_count"  INTEGER       NOT NULL,
+        "boot"          BIGINT,
+        "lost_total"    BIGINT,
+        "dropped_total" BIGINT,
+        "received_at"   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       )`);
-    await q.query(`CREATE INDEX "ix_motor_upload_log_device" ON "motor_upload_log" ("device_id", "received_at" DESC)`);
+    // The receiver's own indexes, by its own names, so its IF NOT EXISTS finds them.
+    await q.query(`CREATE INDEX IF NOT EXISTS "idx_motor_records_device_received" ON "motor_sensor_records" ("device_id", "received_at")`);
+    await q.query(`CREATE INDEX IF NOT EXISTS "idx_motor_upload_log_device" ON "motor_upload_log" ("device_id", "received_at")`);
 
+    await q.query(`ALTER TABLE "motor_sensor_records" ADD COLUMN IF NOT EXISTS "reading_at" timestamptz`);
+    await q.query(`ALTER TABLE "motor_sensor_records" ADD COLUMN IF NOT EXISTS "time_basis" text`);
     await q.query(`
-      CREATE TABLE "motor_logger_key" (
-        "device_id"  varchar(64) PRIMARY KEY,
-        "key_hash"   text        NOT NULL,
-        "issued_by"  text        NOT NULL,
-        "issued_at"  timestamptz NOT NULL DEFAULT now(),
-        CONSTRAINT "ck_motor_logger_key_hash" CHECK ("key_hash" ~ '^[0-9a-f]{64}$')
-      )`);
+      ALTER TABLE "motor_sensor_records" ADD CONSTRAINT "ck_motor_sensor_records_time_basis"
+        CHECK ("time_basis" IS NULL OR "time_basis" IN ('device_now', 'approximate'))`);
+    await q.query(`ALTER TABLE "motor_upload_log" ADD COLUMN IF NOT EXISTS "processed_at" timestamptz`);
+    await q.query(`CREATE INDEX IF NOT EXISTS "ix_motor_sensor_records_reading_at" ON "motor_sensor_records" ("device_id", "reading_at")`);
+    await q.query(`CREATE INDEX IF NOT EXISTS "ix_motor_sensor_records_pending" ON "motor_sensor_records" ("received_at") WHERE "reading_at" IS NULL`);
+    await q.query(`CREATE INDEX IF NOT EXISTS "ix_motor_upload_log_pending" ON "motor_upload_log" ("id") WHERE "processed_at" IS NULL`);
 
-    // Device-level rows, no tenant: guarded by grants, like the projection mirrors. The
-    // log and the readings are append-only from the app's side.
-    await q.query(`GRANT SELECT, INSERT ON "motor_sensor_records" TO "ta_app"`);
-    await q.query(`GRANT SELECT, INSERT ON "motor_upload_log" TO "ta_app"`);
-    await q.query(`GRANT USAGE ON SEQUENCE "motor_upload_log_id_seq" TO "ta_app"`);
-    await q.query(`GRANT SELECT, INSERT, UPDATE ON "motor_logger_key" TO "ta_app"`);
+    // The app reads both and fills in its own columns; the receiver inserts as its own login.
+    await q.query(`GRANT SELECT, UPDATE ON "motor_sensor_records" TO "ta_app"`);
+    await q.query(`GRANT SELECT, UPDATE ON "motor_upload_log" TO "ta_app"`);
   }
 
   public async down(q: QueryRunner): Promise<void> {
-    await q.query(`DROP TABLE IF EXISTS "motor_logger_key"`);
     await q.query(`DROP TABLE IF EXISTS "motor_upload_log"`);
     await q.query(`DROP TABLE IF EXISTS "motor_sensor_records"`);
   }

@@ -6,11 +6,11 @@
  *   npx ts-node scripts/motor-logger-sim.ts --url https://<api-host> --device MOTOR_001 \
  *     --key <X-Device-Key> --scenario overload --backfill 30
  *
- *   --url        API base (default http://localhost:3000); the path is the firmware's own,
- *                /api/sensor-data/bulk
+ *   --url        the receiver (motor_logger_http_server.py, default http://localhost:8080);
+ *                the path is the firmware's own, /api/sensor-data/bulk
  *   --device     device_id (default MOTOR_001)
- *   --key        X-Device-Key, or MOTOR_DEVICE_KEY in the environment. Issued by Master
- *                Admin: POST /api/v1/motor-loggers/<device>/key
+ *   --key        optional X-Device-Key header (or MOTOR_DEVICE_KEY); the receiver,
+ *                motor_logger_http_server.py, does not check one yet
  *   --scenario   normal | overload | low-voltage | high-voltage | dry-run | cycling
  *   --backfill N generate the last N minutes and send them now (default 10)
  *   --end-ago M  end that history M minutes ago instead of now: to place a scenario inside
@@ -176,7 +176,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
     const body = JSON.stringify(batch);
     const res = await fetch(`${url}/api/sensor-data/bulk`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Device-Key': key, 'Idempotency-Key': batch.batch_id },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': batch.batch_id, ...(key ? { 'X-Device-Key': key } : {}) },
       body,
       signal: AbortSignal.timeout(120_000),
     }).catch((e: Error) => ({ status: 0, text: async () => e.message }) as unknown as Response);
@@ -195,7 +195,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
       for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total)) await send(url, key, part, maxRetries);
       return;
     }
-    if (res.status === 401) throw new Error(`401: unknown device or wrong X-Device-Key (${text})`);
+    if (res.status === 401) throw new Error(`401: the receiver refused the device (${text})`);
     if (attempt >= maxRetries) throw new Error(`Gave up on ${batch.batch_id} after ${attempt + 1} tries: ${res.status} ${text}`);
     console.warn(`${res.status || 'no response'} for ${batch.batch_id}: ${text.slice(0, 200)}; retrying in ${backoff / 1000} s`);
     await sleep(backoff);
@@ -204,7 +204,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
-  const url = (arg('url', argv) ?? 'http://localhost:3000').replace(/\/+$/, '');
+  const url = (arg('url', argv) ?? 'http://localhost:8080').replace(/\/+$/, '');
   const device = arg('device', argv) ?? 'MOTOR_001';
   const key = arg('key', argv) ?? process.env.MOTOR_DEVICE_KEY ?? '';
   const scenario = (arg('scenario', argv) ?? 'normal') as Scenario;
@@ -229,7 +229,6 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       console.log(JSON.stringify(list[0]));
       return;
     }
-    if (!key) throw new Error('No key: pass --key or set MOTOR_DEVICE_KEY (Master Admin issues it).');
     for (const b of list) await send(url, key, b);
   };
 
