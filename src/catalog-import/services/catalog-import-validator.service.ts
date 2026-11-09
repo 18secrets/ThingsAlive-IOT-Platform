@@ -1,4 +1,5 @@
 import { retiredSignalProblems } from '../../device-catalog/services/sensor-retirement';
+import { validateParams } from '../../alert/services/alert-rules';
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { compileClassFormulas, DeclaredSignal } from '../../catalog/formula/formula-compiler';
@@ -33,7 +34,7 @@ const UNIT_COLUMN_BY_SHEET: Record<string, string> = {
 /** unit, required, description, min, max, severity — must agree across every row
  * sharing (class_slug, signal); component_scope, criticality, min_count, enables and
  * notes are legitimately different per component and are not checked here. */
-const SIGNAL_AGREEMENT_FIELDS = ['unit', 'required', 'description', 'min', 'max', 'severity'] as const;
+const SIGNAL_AGREEMENT_FIELDS = ['unit', 'required', 'description', 'min', 'max', 'severity', 'rating'] as const;
 
 const parseNumber = (value: unknown): number | undefined => {
   if (typeof value !== 'string' || value.trim() === '') return undefined;
@@ -659,6 +660,15 @@ export class CatalogImportValidatorService {
         }
         if (min !== undefined && max !== undefined && min >= max) {
           invalidate(r, `signal row ${r.rowNumber}: min (${min}) must be below max (${max}).`);
+        }
+        // D59: the same refusals the alert engine makes on write, said with a row number.
+        const rating = typeof r.payload.rating === 'string' ? r.payload.rating.trim() : '';
+        if (rating) {
+          const problem = validateParams('signal-threshold', {
+            signal: String(r.payload.signal ?? ''), rating,
+            ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}),
+          });
+          if (problem) invalidate(r, `signal row ${r.rowNumber}: ${problem}`);
         }
       }
 

@@ -1,5 +1,6 @@
 import { FormulaCompileError } from './errors';
-import { lookupOperator } from './operator-registry';
+import { operationalParameter } from '../../parameters/parameter-catalog';
+import { CURVE_COLUMNS, lookupOperator, SCALAR_FUNCTION_NAMES } from './operator-registry';
 import { CompareOp, MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
 import { divideUnits, multiplyUnits, parseUnitString, renderUnit, Unit, unitsEqual, DIMENSIONLESS } from './units';
 
@@ -10,8 +11,11 @@ export { FormulaCompileError } from './errors';
  * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition.
  * qce5.0.0: the `compare` node and `count_exceeding`.
  * qcat1.0.0: the `state` node and the categorical operators.
- * qgeo1.0.0: the site-boundary operators. */
-export const COMPILER_VERSION = 'qgeo1.0.0';
+ * qgeo1.0.0: the site-boundary operators.
+ * qscal1.0.0: the scalar functions (abs, least, greatest, clamp, and, or, if).
+ * qunit1.0.0: motor ratings compile in their catalog unit (D56).
+ * qcurve1.0.0: the `curve_column` node and `curve_at` (D58). */
+export const COMPILER_VERSION = 'qcurve1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -35,6 +39,8 @@ export type PlanNode =
   /** A geofence zone by code (task QGEO2), looked up among the machine's zones when it is
    * evaluated: the same formula runs on every machine of the class, each with its own zones. */
   | { type: 'zone'; kind: 'scalar'; unit: string; code: string }
+  /** A duty-curve column by name (D58), with the code the executor reads it by. */
+  | { type: 'curve_column'; kind: 'scalar'; unit: string; name: string; code: number }
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
@@ -432,7 +438,7 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       return { type: 'duration', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), hours: node.hours };
 
     case 'param':
-      return { type: 'param', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), name: node.name };
+      return { type: 'param', kind: 'scalar', unit: parameterUnit(node.name), name: node.name };
 
     // Reached only where a state is not an operator's state argument — those are
     // resolved in the call branch. A state is a label, not a number to add or compare.
@@ -544,16 +550,25 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       }
       // State arguments are resolved after the rest, against the series argument's
       // signal (task QCAT1) — a state name only means something for one signal.
-      const quoted = (i: number) => entry.argKinds[i] === 'state' || entry.argKinds[i] === 'zone';
+      const quoted = (i: number) => ['state', 'zone', 'curve_column'].includes(entry.argKinds[i]);
       const nonState = node.args.map((a, i) => (quoted(i) ? null : infer(a, ctx)));
       const args = node.args.map((a, i) => nonState[i]
-        ?? (entry.argKinds[i] === 'zone' ? inferZone(node.name, a) : inferState(node.name, a, nonState[0], ctx)));
+        ?? (entry.argKinds[i] === 'zone' ? inferZone(node.name, a)
+          : entry.argKinds[i] === 'curve_column' ? inferCurveColumn(node.name, a)
+            : inferState(node.name, a, nonState[0], ctx)));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
         // A duration literal reports kind:'scalar' (task QCE4) so it never widens
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
-        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone' : a.kind;
+        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone'
+          : a.type === 'curve_column' ? 'curve_column' : a.kind;
+        if (actual === 'series' && expected === 'scalar' && (SCALAR_FUNCTION_NAMES.has(node.name) || node.name === 'curve_at')) {
+          throw new FormulaCompileError(
+            `calls "${node.name}" with argument ${i + 1} as a series; "${node.name}" works on values the formula `
+              + 'has already reduced. Reduce the signal first, e.g. avg(x) or last(x).',
+          );
+        }
         if (actual !== expected) {
           throw new FormulaCompileError(
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
@@ -592,6 +607,24 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
               + `carry the series' unit ("${args[0].unit}").`,
           );
         }
+      }
+
+      if (SCALAR_FUNCTION_NAMES.has(node.name)) {
+        return { type: 'call', kind: 'scalar', unit: scalarFunctionUnit(node.name, args), name: node.name, args };
+      }
+
+      if (node.name === 'curve_at') {
+        const [column, by, x] = args as [Extract<PlanNode, { type: 'curve_column' }>, Extract<PlanNode, { type: 'curve_column' }>, PlanNode];
+        if (column.name === by.name) {
+          throw new FormulaCompileError(`calls "curve_at" reading '${column.name}' by itself; that is the value it was given.`);
+        }
+        if (!isLiteral(x) && !unitsEqual(parseUnitStringFromRendered(x.unit), parseUnitString(CURVE_COLUMNS[by.name].unit))) {
+          throw new FormulaCompileError(
+            `calls "curve_at" by '${by.name}' with a value in "${x.unit}"; it must be in "${CURVE_COLUMNS[by.name].unit}". `
+              + 'No unit is converted.',
+          );
+        }
+        return { type: 'call', kind: 'scalar', unit: column.unit, name: node.name, args };
       }
 
       const argUnits = args.map((a) => parseUnitStringFromRendered(a.unit));
@@ -664,12 +697,111 @@ function inferState(operator: string, raw: RawNode, series: PlanNode | null, ctx
   return { type: 'state', kind: 'scalar', unit, name: raw.name, code };
 }
 
+/** A duty-curve column by name (D58): one of `CURVE_COLUMNS`, carrying that column's unit. */
+function inferCurveColumn(operator: string, raw: RawNode): PlanNode {
+  // Own keys only: `'constructor'` is a quoted name the parser accepts, and an inherited one.
+  if (raw.type !== 'state' || !Object.prototype.hasOwnProperty.call(CURVE_COLUMNS, raw.name)) {
+    const given = raw.type === 'state' ? `'${raw.name}'` : 'an expression';
+    throw new FormulaCompileError(
+      `calls "${operator}" with ${given} as a curve column; the duty curve's columns are `
+        + `${Object.keys(CURVE_COLUMNS).map((c) => `'${c}'`).join(', ')}.`,
+    );
+  }
+  const col = CURVE_COLUMNS[raw.name];
+  return { type: 'curve_column', kind: 'scalar', unit: renderUnit(parseUnitString(col.unit)), name: raw.name, code: col.code };
+}
+
 /** A zone by code (task QGEO2). Its existence is the machine's to answer at evaluation. */
 function inferZone(operator: string, raw: RawNode): PlanNode {
   if (raw.type !== 'state') {
     throw new FormulaCompileError(`calls "${operator}" with a zone that is not a quoted zone code, e.g. 'PIT'.`);
   }
   return { type: 'zone', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), code: raw.name };
+}
+
+/**
+ * Units for the QSCAL1 functions, with the same literal polymorphism `+`, `-` and
+ * comparisons already have: `least(x, 100)` takes x's unit, while `least(x, y)` across
+ * two dimensions is refused, because "the smaller of 5 A and 230 V" has no answer.
+ *
+ * A condition (`and`, `or`, `if`'s first argument) must be dimensionless. A comparison
+ * already is. `if(avg(motor_current), ...)` treats "any current at all" as true, which
+ * is almost never what the author meant. The floor that says "running" belongs in the
+ * formula, written as a comparison: `avg(motor_current) > 0.3`.
+ */
+function scalarFunctionUnit(name: string, args: PlanNode[]): string {
+  const sameUnit = (role: string, nodes: PlanNode[]): string => {
+    const measured = nodes.filter((n) => !isLiteral(n));
+    if (!measured.length) return renderUnit(DIMENSIONLESS);
+    const first = parseUnitStringFromRendered(measured[0].unit);
+    const other = measured.find((n) => !unitsEqual(parseUnitStringFromRendered(n.unit), first));
+    if (other) {
+      throw new FormulaCompileError(
+        `calls "${name}" with ${role} in "${measured[0].unit}" and "${other.unit}", which are different units.`,
+      );
+    }
+    return measured[0].unit;
+  };
+  const condition = (n: PlanNode, which: string): void => {
+    if (!isLiteral(n) && !unitsEqual(parseUnitStringFromRendered(n.unit), DIMENSIONLESS)) {
+      throw new FormulaCompileError(
+        `calls "${name}" with ${which} in "${n.unit}"; a condition must be dimensionless, `
+          + 'such as a comparison. Write the threshold into it, e.g. avg(x) > 5.',
+      );
+    }
+  };
+
+  switch (name) {
+    case 'abs':
+      return args[0].unit;
+    case 'least':
+    case 'greatest':
+      return sameUnit('its two values', args);
+    case 'clamp': {
+      const [, lo, hi] = args;
+      if (literalValue(lo) !== null && literalValue(hi) !== null && literalValue(lo)! > literalValue(hi)!) {
+        throw new FormulaCompileError(
+          `calls "clamp" with a lower bound (${literalValue(lo)}) above its upper bound (${literalValue(hi)}).`,
+        );
+      }
+      // Bounds are stated in the value's unit. Two literal bounds around a literal value
+      // is constant arithmetic, and dimensionless like any other.
+      return sameUnit('a value and bounds', args);
+    }
+    case 'and':
+    case 'or':
+      condition(args[0], 'argument 1');
+      condition(args[1], 'argument 2');
+      return renderUnit(DIMENSIONLESS);
+    case 'if':
+      condition(args[0], 'its condition');
+      return sameUnit('its two outcomes', [args[1], args[2]]);
+    default:
+      throw new FormulaCompileError(`calls "${name}", which has no unit rule.`);
+  }
+}
+
+/** The number a literal node stands for, or null for anything computed. */
+function literalValue(node: PlanNode): number | null {
+  if (node.type === 'const') return node.value;
+  if (node.type === 'unary' && node.op === '-') {
+    const inner = literalValue(node.operand);
+    return inner === null ? null : -inner;
+  }
+  return null;
+}
+
+/**
+ * A parameter's unit as the compiler sees it (D56). A rating declared with
+ * `compilesWithUnit` carries its catalog unit, so `avg(motor_current) / @rated_current`
+ * is a ratio and not amps. Every other parameter, platform or formula-declared, stays
+ * dimensionless as it always compiled: changing that would move the result unit of
+ * formulas already published.
+ */
+function parameterUnit(name: string): string {
+  const declared = operationalParameter(name);
+  if (!declared?.compilesWithUnit || !declared.unit) return renderUnit(DIMENSIONLESS);
+  return renderUnit(parseUnitString(declared.unit));
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
@@ -722,6 +854,7 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
     case 'param':
     case 'state':
     case 'zone':
+    case 'curve_column':
       return { nodes: 1, depth: 1 };
     case 'unary': {
       const c = computeExpansion(node.operand, resolved);
@@ -760,6 +893,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
     case 'param':
     case 'state':
     case 'zone':
+    case 'curve_column':
       return 0;
     case 'unary':
       return computeCompositionDepth(node.operand, resolved);

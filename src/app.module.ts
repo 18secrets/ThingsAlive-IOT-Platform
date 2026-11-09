@@ -28,6 +28,7 @@ import { ShieldModule } from './shield/shield.module';
 import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
 import { PageModule } from './page/page.module';
 import { SiteTwinModule } from './site-twin/site-twin.module';
+import { MotorIngestModule } from './motor-ingest/motor-ingest.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
@@ -116,6 +117,7 @@ export class AppModule {
               KpiModule,
       PageModule,
       SiteTwinModule,
+      MotorIngestModule,
       IncidentModule,
       ShieldModule,
       OnboardingStatusModule,

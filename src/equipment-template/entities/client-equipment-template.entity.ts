@@ -7,11 +7,18 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateCol
  * Onboarding fields only. Alert rules, KPI formulas and predictive rules belong on the
  * client's copy of an equipment class (`my-catalog`), which is what the alert engine and
  * the KPI evaluator read; a second place to define them would be one nothing runs.
+ *
+ * Rated figures are the exception (D57): they are not rules but facts about the model,
+ * which a machine naming this template reads as parameters.
  */
 @Entity('client_equipment_template')
 export class ClientEquipmentTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /** The class this is a model of, copied from the library template (D57). */
+  @Column({ name: 'equipment_class_slug', type: 'text', nullable: true })
+  equipmentClassSlug: string | null;
 
   @Column({ name: 'tenant_id', type: 'text' })
   tenantId: string;

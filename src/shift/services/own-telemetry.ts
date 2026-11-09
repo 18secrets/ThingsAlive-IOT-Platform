@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { MAX_READINGS_PER_PULL, PullRequest, PullResult } from '../../legacy/legacy-telemetry.reader';
+import { LateArrival, LateArrivalRequest, MAX_READINGS_PER_PULL, PullRequest, PullResult } from '../../legacy/legacy-telemetry.reader';
 import { TELEMETRY_READING_V1 } from '../../projection/contracts/contracts';
 import { withTenantId } from '../../scope/tenant-session';
 
@@ -76,4 +76,35 @@ export async function ownExpectedSignals(ds: DataSource, request: PullRequest): 
   const byImei = new Map<string, string[]>();
   for (const r of rows) byImei.set(r.imei, [...(byImei.get(r.imei) ?? []), r.signal_key]);
   return byImei;
+}
+
+/**
+ * Readings that reached 2.0 directly after the shift's arrivals watermark — the
+ * counterpart of `LegacyTelemetryReader.lateArrivals` for a machine whose loggers post
+ * to 2.0 itself (G06: a late reading revises an outcome).
+ *
+ * Store-and-forward is how these loggers work: after a GSM outage a motor logger flushes
+ * hours of buffered readings at once, all dated in shifts already scored. Without this
+ * sweep those shifts were never scored again, so an overload during an outage raised no
+ * alert. Arrival is `received_at`, 2.0's own clock; the readings it finds are the ones
+ * `pullOwnTelemetry` would read for the machine, through the same bindings.
+ */
+export async function ownLateArrivals(ds: DataSource, request: LateArrivalRequest): Promise<LateArrival | null> {
+  const [row]: { earliest: Date | null; seen_through: Date | null; count: number }[] = await withTenantId(
+    ds, request.tenantId, (m) => m.query(
+      `SELECT min(r."source_timestamp") AS earliest, max(r."received_at") AS seen_through, count(*)::int AS count
+         FROM "telemetry_reading" r
+        WHERE r."tenant_id" = $1
+          AND r."received_at" > $4 AND r."received_at" <= $5
+          AND EXISTS (
+            SELECT 1 FROM "signal_binding_version" b
+             WHERE b."tenant_id" = r."tenant_id" AND b."source_system" = $2 AND b."external_id" = $3
+               AND b."imei" = r."imei"
+               AND b."is_primary" AND b."status" = 'active'
+               AND r."source_timestamp" >= b."valid_from"
+               AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to"))`,
+      [request.tenantId, request.sourceSystem, request.externalId, request.since ?? new Date(0), request.upTo],
+    ));
+  if (!row?.count || !row.earliest || !row.seen_through) return null;
+  return { earliestReading: new Date(row.earliest), seenThrough: new Date(row.seen_through), count: Number(row.count) };
 }
