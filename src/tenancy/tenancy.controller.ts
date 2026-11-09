@@ -25,6 +25,7 @@ export class ProvisionDto {
   @IsString() @IsNotEmpty() name: string;
   @IsOptional() @IsString() plan?: string;
   @IsOptional() @IsString() region?: string;
+  @IsOptional() @IsString() @IsNotEmpty() timeZone?: string;
   // Without @ValidateNested the property carries no validation metadata at all, and a
   // whitelisting pipe does not ignore such a property — it strips it, then refuses the
   // request for containing it. This route was unusable in production for exactly that
@@ -49,6 +50,7 @@ export class UpdateAccountDto {
   @IsOptional() @IsString() @IsNotEmpty() name?: string;
   @IsOptional() @IsString() plan?: string;
   @IsOptional() @IsString() region?: string;
+  @IsOptional() @IsString() @IsNotEmpty() timeZone?: string;
   // Same @ValidateNested requirement as ProvisionDto.superAdmin — without it a
   // whitelisting pipe strips this object and then refuses the request for
   // carrying an unrecognised property.

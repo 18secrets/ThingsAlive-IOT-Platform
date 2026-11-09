@@ -37,6 +37,14 @@ export class Tenant {
   region: string | null;
 
   /**
+   * The IANA zone the account's dates are shown in (MIN-12). Timestamps stay UTC
+   * everywhere; this is what the UI converts them with. The database refuses a name
+   * it does not know (`ck_tenant_time_zone`).
+   */
+  @Column({ name: 'time_zone', type: 'text', default: 'Asia/Kolkata' })
+  timeZone: string;
+
+  /**
    * Suspending an account is not the same as suspending everybody in it.
    *
    * This is the commercial lever: non-payment, a contract ending, a security
