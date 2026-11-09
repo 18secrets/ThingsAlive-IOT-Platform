@@ -43,6 +43,11 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   { signal: 'input_power', unit: 'kW', required: true, description: 'Input power V × I × PF, one-minute average (F2).' },
   { signal: 'motor_temperature', unit: 'degC', required: false, description: 'Logger temperature channel, one-minute average.' },
   { signal: 'motor_speed_est', unit: 'rpm', required: false, description: 'Firmware speed figure. ESTIMATED, not measured (Formula Verification V-02).' },
+  { signal: 'engine_running_status', unit: 'dimensionless', required: false,
+    description: '1 when the motor ran in the minute (F1: V > 15% of rated, I > 5% of rated, per second). The platform\'s running signal.' },
+  { signal: 'motor_starts', unit: 'starts', required: false, description: 'Starts in the minute, counted on the one-second readings.' },
+  { signal: 'logger_records_lost', unit: 'records', required: false, description: 'Records the logger overwrote (flash full) since its last upload.' },
+  { signal: 'logger_records_dropped', unit: 'records', required: false, description: 'Readings the logger could not store since its last upload.' },
 ];
 
 export interface FormulaRow {
@@ -77,6 +82,12 @@ export const FORMULAS: FormulaRow[] = [
   { classes: BOTH, key: 'winding_temp_est', inputs: ['motor_current'], unit: 'degC',
     expression: `@ambient_temp_reference + @rated_temp_rise * ${lambda} * ${lambda}`,
     basis: 'Steady-state F5: T_amb + ΔT_rated × λ². Advisory until bench-calibrated (V-04)', window: '24h', chart: 'number', useCase: 'U2' },
+  { classes: BOTH, key: 'starts_today', expression: 'sum(motor_starts)', inputs: ['motor_starts'], unit: 'starts',
+    basis: 'starts_per_day: count(start events) / day; destructive cycling is far above normal, e.g. > 60 (KPIs & Formulas; RCA 10)', window: 'today', chart: 'number', useCase: 'U6' },
+  { classes: BOTH, key: 'running_pct', expression: '100 * avg(engine_running_status)', inputs: ['engine_running_status'], unit: 'dimensionless',
+    basis: 'Share of minutes the motor ran (F1), the run_hours side of availability_pct (KPIs & Formulas)', window: '24h', chart: 'number', useCase: 'U9' },
+  { classes: BOTH, key: 'logger_records_lost_24h', expression: 'sum(logger_records_lost) + sum(logger_records_dropped)', inputs: ['logger_records_lost', 'logger_records_dropped'], unit: 'records',
+    basis: 'Records the logger lost or could not store (contract: lost_total / dropped_total, alert if they grow)', window: '24h', chart: 'number', useCase: 'U10' },
   { classes: [PUMP_CLASS], key: 'flow_estimate_lpm', expression: "curve_at('flow_lpm', 'input_kw', avg(input_power))", inputs: ['input_power'], unit: 'L/min',
     basis: 'Q_est: catalogue P-Q curve read backwards at measured power, ±10-15% until POC T0 (F7)', window: '24h', chart: 'number', useCase: 'U8' },
   { classes: [PUMP_CLASS], key: 'expected_power_kw', kind: 'empirical', expression: "curve_at('input_kw', 'head_m', @install_head)", inputs: [], unit: 'kW',
@@ -92,6 +103,9 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: BOTH, key: 'voltage_tier', type: 'kpi_number', boundTo: 'voltage_tier', title: 'Voltage tier (0 normal, 1 warning, 2 fault)', size: 'small' },
   { classes: BOTH, key: 'power', type: 'kpi_number', boundTo: 'input_power_avg', title: 'Input power', size: 'small' },
   { classes: BOTH, key: 'energy', type: 'kpi_number', boundTo: 'energy_kwh', title: 'Energy today', size: 'small' },
+  { classes: BOTH, key: 'running', type: 'kpi_number', boundTo: 'running_pct', title: 'Running (% of last 24 h)', size: 'small' },
+  { classes: BOTH, key: 'starts', type: 'kpi_number', boundTo: 'starts_today', title: 'Starts today', size: 'small' },
+  { classes: BOTH, key: 'logger_loss', type: 'kpi_number', boundTo: 'logger_records_lost_24h', title: 'Logger records lost (24 h)', size: 'small' },
   { classes: [PUMP_CLASS], key: 'flow', type: 'kpi_number', boundTo: 'flow_estimate_lpm', title: 'Flow (estimated)', size: 'small' },
   { classes: [PUMP_CLASS], key: 'load_loss', type: 'kpi_number', boundTo: 'load_loss_pct', title: 'Load loss vs catalogue', size: 'small' },
   { classes: BOTH, key: 'current_chart', type: 'signal_chart', boundTo: 'motor_current', title: 'Motor current', size: 'large' },
@@ -132,7 +146,7 @@ export const FAILURE_MODES: { classes: string[]; code: string; name: string; sym
  * one-minute readings must breach: sustained, not a single spike (D34).
  */
 export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: string;
-  params: { signal: string; rating: string; max?: number; min?: number } }[] = [
+  params: { signal: string; rating?: string; max?: number; min?: number; lookbackReadings?: number; requiredBreaches?: number } }[] = [
   { slugSuffix: 'overload', name: 'Overload: current above 1.2 × rated', severity: 'critical',
     params: { signal: 'motor_current', rating: 'rated_current', max: 1.2 } },
   { slugSuffix: 'voltage-fault-high', name: 'Voltage above the rated band', severity: 'critical',
@@ -143,6 +157,12 @@ export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: stri
     params: { signal: 'supply_voltage', rating: 'voltage_warn_high', max: 1 } },
   { slugSuffix: 'voltage-warn-low', name: 'Voltage below the warning line', severity: 'medium',
     params: { signal: 'supply_voltage', rating: 'voltage_warn_low', min: 1 } },
+  // U10, the contract's own instruction: alert if lost_total / dropped_total grow. Any
+  // growth in the last ten uploads, once: lost readings are gone, not a trend to wait on.
+  { slugSuffix: 'logger-records-lost', name: 'Logger lost data (flash full)', severity: 'medium',
+    params: { signal: 'logger_records_lost', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
+  { slugSuffix: 'logger-records-dropped', name: 'Logger could not store readings', severity: 'medium',
+    params: { signal: 'logger_records_dropped', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
 ];
 
 const WB = 'Crompton_Pump_Library.xlsx';

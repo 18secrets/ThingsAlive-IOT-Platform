@@ -139,7 +139,9 @@ async function platformSteps(master: Api, deviceId: string): Promise<{ masterMod
       if (!found) {
         await master.post('/api/v1/catalog/alert-templates', {
           slug, equipmentClassSlug: c.slug, name: a.name, trigger: 'signal-threshold', params: a.params, severity: a.severity,
-          description: 'Bound is a multiple of each machine\'s own rating (D59), from its nameplate or its model.',
+          description: a.params.rating
+            ? 'Bound is a multiple of each machine\'s own rating (D59), from its nameplate or its model.'
+            : 'From the motor logger contract.',
         });
       }
       if (!found || found.status !== 'published') {
