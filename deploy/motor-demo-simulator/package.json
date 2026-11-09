@@ -1,0 +1,9 @@
+{
+  "name": "motor-demo-simulator",
+  "private": true,
+  "description": "Simulated motor logger for demos: posts the logger contract's batches to motor-receiver every five minutes.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node motor-logger-sim.js --url \"$RECEIVER_URL\" --device \"${DEMO_DEVICE_ID:-DEMO_MOTOR_01}\" --scenario \"${DEMO_SCENARIO:-normal}\" --backfill 60 --live"
+  }
+}
