@@ -462,6 +462,7 @@ export class CredentialService {
   /** The caller's own name and address, for the screens that show who is signed in. */
   async ownIdentity(scope: RequestScope): Promise<{
     email: string; fullName: string; roleName: string | null; tenantName: string | null; tenantSince: Date | null;
+    tenantTimeZone: string | null;
   } | null> {
     return withTenantId(this.ds, scope.tenantId, async (m) => {
       const user = await m.getRepository(AppUser).findOne({ where: { id: scope.userId } });
@@ -473,6 +474,7 @@ export class CredentialService {
       return {
         email: user.email, fullName: user.fullName, roleName: role?.name ?? null,
         tenantName: tenant?.name ?? null, tenantSince: tenant?.createdAt ?? null,
+        tenantTimeZone: tenant?.timeZone ?? null,
       };
     });
   }
