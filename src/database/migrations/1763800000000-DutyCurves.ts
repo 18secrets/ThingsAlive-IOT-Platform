@@ -75,6 +75,9 @@ export class DutyCurves1763800000000 implements MigrationInterface {
           OR "tenant_id" = current_setting('ta.tenant_id', true)
         )`);
     await q.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "client_equipment_template_curve_point" TO "ta_app"`);
+    // The KPI evaluator reads it for any formula calling `curve_at`; an evaluation session
+    // evaluates as `ta_eval`, read-only (ModelRatings1763700000000 granted the ratings).
+    await q.query(`GRANT SELECT ON "client_equipment_template_curve_point" TO "ta_eval"`);
 
     // One function for both tables: the shape rule is the same, only the table differs.
     // Fewer than two points cannot be read between; an empty curve is simply absent.
