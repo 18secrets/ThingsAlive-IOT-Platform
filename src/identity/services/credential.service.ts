@@ -12,6 +12,7 @@ import { UserSecurityEvent, SecurityEventType } from '../entities/user-security-
 import { UserSession } from '../entities/user-session.entity';
 import { TenantRole } from '../entities/tenant-role.entity';
 import { PasswordService } from './password.service';
+import { rotatedWithinGrace } from '../refresh-grace';
 
 export interface SignInResult {
   accessToken: string;
@@ -298,18 +299,22 @@ export class CredentialService {
 
     const outcome = await runTenantSpanning<Outcome<SignInResult>>(this.ds, 'session refresh', async (m) => {
       const sessions = m.getRepository(UserSession);
-      const session = await sessions.findOne({ where: { tokenHash: hash } });
+      // Locked, so two refreshes with one token queue instead of both reading it as
+      // unrotated; the second then finds it rotated a moment ago, inside the grace.
+      const session = await sessions.findOne({ where: { tokenHash: hash }, lock: { mode: 'pessimistic_write' } });
       if (!session) return refuse('Please sign in again.');
 
       const user = await m.getRepository(AppUser).findOne({ where: { id: session.userId } });
       if (!user) return refuse('Please sign in again.');
+      // The same holder a moment later (MAJ-5): see REFRESH_REUSE_GRACE_MS.
+      const graced = rotatedWithinGrace(session.rotatedAt, session.revokedAt, now) && session.expiresAt > now;
 
       // A token that has already been rotated or revoked is being presented by
       // somebody who should not have it — the rightful holder has the replacement. It
       // is the only moment a stolen refresh token is detectable, so the whole family
       // goes, which throws out both the thief and the victim. The victim signs in
       // again; the thief cannot.
-      if (session.rotatedAt || session.revokedAt || session.expiresAt <= now) {
+      if (!graced && (session.rotatedAt || session.revokedAt || session.expiresAt <= now)) {
         if (session.rotatedAt || session.revokedAt) {
           await sessions.update(
             { family: session.family, revokedAt: IsNull() },
@@ -344,9 +349,13 @@ export class CredentialService {
           : 'This account can no longer sign in.');
       }
 
-      session.rotatedAt = now;
-      await sessions.save(session);
-      await this.record(m, 'session.refreshed', { user, ctx });
+      // A graced token keeps the moment it was first rotated, so its minute does not
+      // restart with every reuse.
+      if (!graced) {
+        session.rotatedAt = now;
+        await sessions.save(session);
+      }
+      await this.record(m, 'session.refreshed', { user, ctx, ...(graced ? { detail: 'within reuse grace' } : {}) });
 
       return allow(await this.startSession(m, user, ctx, now, session.family));
     });

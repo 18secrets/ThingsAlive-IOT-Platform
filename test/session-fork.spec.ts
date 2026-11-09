@@ -10,6 +10,7 @@ import { PasswordService } from '../src/identity/services/password.service';
 import { RoleService } from '../src/identity/services/role.service';
 import { UserService } from '../src/identity/services/user.service';
 import { createAppDataSource, createTestDataSource, describeDb } from './db';
+import { REFRESH_REUSE_GRACE_MS } from '../src/identity/refresh-grace';
 
 /**
  * A second browser tab in the same sign-in (test report MAJ-5).
@@ -90,8 +91,10 @@ describeDb('session fork', () => {
     const tabA = await signIn();
     const tabB = await credentials.forkSession(dana, tabA.accessToken, {}, NOW);
     await credentials.refresh(tabA.refreshToken, {}, NOW);
-    await expect(credentials.refresh(tabA.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
-    await expect(credentials.refresh(tabB.refreshToken, {}, NOW)).rejects.toThrow(UnauthorizedException);
+    // Past the reuse grace (MAJ-5, approved 9 Nov 2026; refresh-reuse-grace.spec).
+    const later = new Date(NOW.getTime() + REFRESH_REUSE_GRACE_MS + 1_000);
+    await expect(credentials.refresh(tabA.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
+    await expect(credentials.refresh(tabB.refreshToken, {}, later)).rejects.toThrow(UnauthorizedException);
   });
 
   it('does not outlive the sign-in it came from: a fork expires with the row it was forked from', async () => {
