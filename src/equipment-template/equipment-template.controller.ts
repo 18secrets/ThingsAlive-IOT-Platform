@@ -34,6 +34,19 @@ export class RatingsDto {
   ratings: RatingDto[];
 }
 
+export class CurvePointDto {
+  @IsNumber() headM: number;
+  @IsNumber() flowLpm: number;
+  @IsNumber() inputKw: number;
+}
+
+/** A duty curve as printed: head (m), flow (L/min), input power (kW) per point (D58). */
+export class DutyCurveDto {
+  @IsString() source: string;
+  @IsArray() @ArrayMaxSize(64) @ValidateNested({ each: true }) @Type(() => CurvePointDto)
+  points: CurvePointDto[];
+}
+
 export class CreateEquipmentTemplateDto extends EquipmentTemplateDto {
   @IsString() @IsNotEmpty() declare name: string;
 }
@@ -80,5 +93,19 @@ export class EquipmentTemplateController {
   @ApiOperation({ summary: 'Replace the model\'s rated figures. Idempotent; accounts\' copies are not changed' })
   replaceRatings(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: RatingsDto) {
     return this.templates.replaceRatings(scope, id, dto.ratings);
+  }
+
+  @Get(':id/duty-curve')
+  @Requires('equipment-template.read')
+  @ApiOperation({ summary: 'The model\'s catalogue duty curve: head, flow, input power per point (D58)' })
+  dutyCurve(@Param('id') id: string) {
+    return this.templates.dutyCurve(id);
+  }
+
+  @Put(':id/duty-curve')
+  @Requires('equipment-template.write')
+  @ApiOperation({ summary: 'Replace the model\'s duty curve; an empty list removes it. Idempotent' })
+  replaceDutyCurve(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: DutyCurveDto) {
+    return this.templates.replaceDutyCurve(scope, id, dto);
   }
 }

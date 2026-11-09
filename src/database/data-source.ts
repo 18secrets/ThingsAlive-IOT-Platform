@@ -80,6 +80,8 @@ import { ClientEquipmentTemplate } from '../equipment-template/entities/client-e
 import { ClientEquipmentTemplateRating } from '../equipment-template/entities/client-equipment-template-rating.entity';
 import { EquipmentTemplateRating } from '../equipment-template/entities/equipment-template-rating.entity';
 import { EquipmentModel } from '../equipment/entities/equipment-model.entity';
+import { EquipmentTemplateCurvePoint } from '../equipment-template/entities/equipment-template-curve-point.entity';
+import { ClientEquipmentTemplateCurvePoint } from '../equipment-template/entities/client-equipment-template-curve-point.entity';
 import { SITE_TWIN_ENTITIES } from '../site-twin/site-twin.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
 import { IndustryType } from '../device-catalog/entities/industry-type.entity';
@@ -191,6 +193,8 @@ export const ENTITIES = [
   ClientEquipmentTemplateRating,
   EquipmentTemplateRating,
   EquipmentModel,
+  EquipmentTemplateCurvePoint,
+  ClientEquipmentTemplateCurvePoint,
   BreakdownEvent,
   IndustryType,
   Incident,

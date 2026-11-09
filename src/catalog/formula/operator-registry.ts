@@ -3,7 +3,7 @@ import { divideByHour, DIMENSIONLESS, multiplyByHour, Unit } from './units';
 /** `'state'` (task QCAT1): a quoted categorical state, resolved to its code at publish.
  * `'zone'` (task QGEO2): a quoted geofence zone code, resolved per machine at evaluation —
  * zones belong to the account and apply per machine, so publish cannot know them. */
-export type ArgKind = 'series' | 'scalar' | 'duration' | 'state' | 'zone';
+export type ArgKind = 'series' | 'scalar' | 'duration' | 'state' | 'zone' | 'curve_column';
 
 export interface OperatorEntry {
   name: string;
@@ -24,6 +24,9 @@ export interface OperatorEntry {
   /** Reads one of the machine's geofence zones by code (task QGEO2); a code that does not
    * apply to the machine is `not_configured`, never "outside". */
   needsZone?: boolean;
+  /** Reads the duty curve of the machine's model (D58); a machine whose model has none,
+   * or which names no model, is `not_configured`. */
+  needsCurve?: boolean;
 }
 
 /**
@@ -196,6 +199,23 @@ export const OPERATOR_REGISTRY: Readonly<Record<string, OperatorEntry>> = Object
     name: 'if', argKinds: ['scalar', 'scalar', 'scalar'], resultKind: 'scalar',
     unitRule: ([, u]) => u,
   },
+
+  // ------------------------------------------------------------- D58
+  // `curve_at('flow_lpm', 'input_kw', avg(input_power))`: one column of the machine's
+  // model's duty curve, read at a value of another, linearly between printed points.
+  // The result carries the read column's unit, and the value must carry the other's;
+  // the compiler applies both, since they depend on which columns were named.
+  curve_at: {
+    name: 'curve_at', argKinds: ['curve_column', 'curve_column', 'scalar'], resultKind: 'scalar',
+    unitRule: () => DIMENSIONLESS, needsCurve: true,
+  },
+});
+
+/** The duty curve's columns (D58): a code the executor indexes by, and a fixed unit. */
+export const CURVE_COLUMNS: Readonly<Record<string, { code: number; unit: string }>> = Object.freeze({
+  head_m: { code: 0, unit: 'm' },
+  flow_lpm: { code: 1, unit: 'L/min' },
+  input_kw: { code: 2, unit: 'kW' },
 });
 
 /** The QSCAL1 functions: every argument is a value the formula already holds, so a
