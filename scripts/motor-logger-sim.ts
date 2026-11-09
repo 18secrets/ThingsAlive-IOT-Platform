@@ -162,7 +162,7 @@ export function simulate(
  * first. With the added sensors a record is ~190 bytes, so 50 no longer fit in 8 KiB;
  * the firmware has to size by bytes as well (or halve on 413, as it does).
  */
-export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0) {
+export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0, boot = 1) {
   const out = [];
   for (let i = 0; i < records.length;) {
     let n = Math.min(size, records.length - i);
@@ -174,7 +174,7 @@ export function batches(deviceId: string, records: SimRecord[], deviceNow: numbe
         first_seq: chunk[0].seq,
         last_seq: chunk[chunk.length - 1].seq,
         count: chunk.length,
-        boot: 1,
+        boot,
         lost_total: lostTotal,
         dropped_total: 0,
         device_now: deviceNow,
@@ -221,7 +221,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
       const half = Math.ceil(batch.records.length / 2);
       console.warn(`413 for ${batch.batch_id}; halving to ${half}`);
       await sleep(2000);
-      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total)) await send(url, key, part, maxRetries);
+      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total, batch.boot)) await send(url, key, part, maxRetries);
       return;
     }
     if (res.status === 401) throw new Error(`401: the receiver refused the device (${text})`);
@@ -253,7 +253,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const run = async (seconds: number, endsAgoSeconds = 0) => {
     const end = now() - endsAgoSeconds;
     const records = simulate(scenario, seconds, end, bootUnix, MINI_1HP, !argv.includes('--no-sensors'));
-    const list = batches(device, records, now() - bootUnix, 50, lostTotal);
+    // Each run is its own simulated boot, with its own device clock. A real logger counts
+    // its boots; two runs both saying boot 1 had their clocks anchored together, and the
+    // second run's readings landed a day early.
+    const list = batches(device, records, now() - bootUnix, 50, lostTotal, bootUnix % 1_000_000);
     if (argv.includes('--print')) {
       console.log(JSON.stringify(list[0]));
       return;
