@@ -3,7 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentTemplate } from '../entities/equipment-template.entity';
+import { EquipmentTemplateCurvePoint } from '../entities/equipment-template-curve-point.entity';
 import { EquipmentTemplateRating } from '../entities/equipment-template-rating.entity';
+import { CurveInput, CurveView, toCurveView, validateCurve } from './curves';
 import { RatingInput, RatingView, toView, validateRatings } from './ratings';
 
 type TemplateDraft = Partial<Pick<EquipmentTemplate,
@@ -84,6 +86,35 @@ export class EquipmentTemplateService {
       }
       const rows = await repo.find({ where: { templateId: id }, order: { name: 'ASC' } });
       return rows.map(toView);
+    });
+  }
+
+  async dutyCurve(id: string): Promise<CurveView> {
+    const template = isUuid(id) ? await this.templates.findOne({ where: { id } }) : null;
+    if (!template) throw new NotFoundException(`No equipment template "${id}".`);
+    return toCurveView(await this.ds.getRepository(EquipmentTemplateCurvePoint).find({ where: { templateId: id, curve: 'duty' } }));
+  }
+
+  /**
+   * Replaces the model's duty curve (D58). Idempotent, locked on the template row like
+   * the ratings. An empty list removes the curve; formulas reading it then answer
+   * not_configured on machines of this model, which is the truth.
+   */
+  async replaceDutyCurve(scope: RequestScope, id: string, input: CurveInput): Promise<CurveView> {
+    const curve = input.points?.length ? validateCurve(input) : { source: '', points: [] };
+    if (!isUuid(id)) throw new NotFoundException(`No equipment template "${id}".`);
+    return this.ds.transaction(async (m) => {
+      const locked = await m.getRepository(EquipmentTemplate).createQueryBuilder('t')
+        .where('t.id = :id', { id }).setLock('pessimistic_write').getOne();
+      if (!locked) throw new NotFoundException(`No equipment template "${id}".`);
+      const repo = m.getRepository(EquipmentTemplateCurvePoint);
+      await repo.delete({ templateId: id, curve: 'duty' });
+      if (curve.points.length) {
+        await repo.insert(curve.points.map((p, point) => ({
+          templateId: id, curve: 'duty' as const, point, ...p, source: curve.source, updatedBy: scope.userId,
+        })));
+      }
+      return toCurveView(await repo.find({ where: { templateId: id, curve: 'duty' } }));
     });
   }
 }

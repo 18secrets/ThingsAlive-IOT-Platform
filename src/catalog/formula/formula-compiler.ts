@@ -1,6 +1,6 @@
 import { FormulaCompileError } from './errors';
 import { operationalParameter } from '../../parameters/parameter-catalog';
-import { lookupOperator, SCALAR_FUNCTION_NAMES } from './operator-registry';
+import { CURVE_COLUMNS, lookupOperator, SCALAR_FUNCTION_NAMES } from './operator-registry';
 import { CompareOp, MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
 import { divideUnits, multiplyUnits, parseUnitString, renderUnit, Unit, unitsEqual, DIMENSIONLESS } from './units';
 
@@ -13,8 +13,9 @@ export { FormulaCompileError } from './errors';
  * qcat1.0.0: the `state` node and the categorical operators.
  * qgeo1.0.0: the site-boundary operators.
  * qscal1.0.0: the scalar functions (abs, least, greatest, clamp, and, or, if).
- * qunit1.0.0: motor ratings compile in their catalog unit (D56). */
-export const COMPILER_VERSION = 'qunit1.0.0';
+ * qunit1.0.0: motor ratings compile in their catalog unit (D56).
+ * qcurve1.0.0: the `curve_column` node and `curve_at` (D58). */
+export const COMPILER_VERSION = 'qcurve1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -38,6 +39,8 @@ export type PlanNode =
   /** A geofence zone by code (task QGEO2), looked up among the machine's zones when it is
    * evaluated: the same formula runs on every machine of the class, each with its own zones. */
   | { type: 'zone'; kind: 'scalar'; unit: string; code: string }
+  /** A duty-curve column by name (D58), with the code the executor reads it by. */
+  | { type: 'curve_column'; kind: 'scalar'; unit: string; name: string; code: number }
   | { type: 'formula_ref'; kind: ValueKind; unit: string; formulaKey: string }
   | { type: 'unary'; kind: ValueKind; unit: string; op: '-'; operand: PlanNode }
   | { type: 'binary'; kind: ValueKind; unit: string; op: '+' | '-' | '*' | '/'; left: PlanNode; right: PlanNode }
@@ -547,17 +550,20 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
       }
       // State arguments are resolved after the rest, against the series argument's
       // signal (task QCAT1) — a state name only means something for one signal.
-      const quoted = (i: number) => entry.argKinds[i] === 'state' || entry.argKinds[i] === 'zone';
+      const quoted = (i: number) => ['state', 'zone', 'curve_column'].includes(entry.argKinds[i]);
       const nonState = node.args.map((a, i) => (quoted(i) ? null : infer(a, ctx)));
       const args = node.args.map((a, i) => nonState[i]
-        ?? (entry.argKinds[i] === 'zone' ? inferZone(node.name, a) : inferState(node.name, a, nonState[0], ctx)));
+        ?? (entry.argKinds[i] === 'zone' ? inferZone(node.name, a)
+          : entry.argKinds[i] === 'curve_column' ? inferCurveColumn(node.name, a)
+            : inferState(node.name, a, nonState[0], ctx)));
       args.forEach((a, i) => {
         const expected = entry.argKinds[i];
         // A duration literal reports kind:'scalar' (task QCE4) so it never widens
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
-        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone' : a.kind;
-        if (actual === 'series' && expected === 'scalar' && SCALAR_FUNCTION_NAMES.has(node.name)) {
+        const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone'
+          : a.type === 'curve_column' ? 'curve_column' : a.kind;
+        if (actual === 'series' && expected === 'scalar' && (SCALAR_FUNCTION_NAMES.has(node.name) || node.name === 'curve_at')) {
           throw new FormulaCompileError(
             `calls "${node.name}" with argument ${i + 1} as a series; "${node.name}" works on values the formula `
               + 'has already reduced. Reduce the signal first, e.g. avg(x) or last(x).',
@@ -605,6 +611,20 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
 
       if (SCALAR_FUNCTION_NAMES.has(node.name)) {
         return { type: 'call', kind: 'scalar', unit: scalarFunctionUnit(node.name, args), name: node.name, args };
+      }
+
+      if (node.name === 'curve_at') {
+        const [column, by, x] = args as [Extract<PlanNode, { type: 'curve_column' }>, Extract<PlanNode, { type: 'curve_column' }>, PlanNode];
+        if (column.name === by.name) {
+          throw new FormulaCompileError(`calls "curve_at" reading '${column.name}' by itself; that is the value it was given.`);
+        }
+        if (!isLiteral(x) && !unitsEqual(parseUnitStringFromRendered(x.unit), parseUnitString(CURVE_COLUMNS[by.name].unit))) {
+          throw new FormulaCompileError(
+            `calls "curve_at" by '${by.name}' with a value in "${x.unit}"; it must be in "${CURVE_COLUMNS[by.name].unit}". `
+              + 'No unit is converted.',
+          );
+        }
+        return { type: 'call', kind: 'scalar', unit: column.unit, name: node.name, args };
       }
 
       const argUnits = args.map((a) => parseUnitStringFromRendered(a.unit));
@@ -675,6 +695,20 @@ function inferState(operator: string, raw: RawNode, series: PlanNode | null, ctx
     );
   }
   return { type: 'state', kind: 'scalar', unit, name: raw.name, code };
+}
+
+/** A duty-curve column by name (D58): one of `CURVE_COLUMNS`, carrying that column's unit. */
+function inferCurveColumn(operator: string, raw: RawNode): PlanNode {
+  // Own keys only: `'constructor'` is a quoted name the parser accepts, and an inherited one.
+  if (raw.type !== 'state' || !Object.prototype.hasOwnProperty.call(CURVE_COLUMNS, raw.name)) {
+    const given = raw.type === 'state' ? `'${raw.name}'` : 'an expression';
+    throw new FormulaCompileError(
+      `calls "${operator}" with ${given} as a curve column; the duty curve's columns are `
+        + `${Object.keys(CURVE_COLUMNS).map((c) => `'${c}'`).join(', ')}.`,
+    );
+  }
+  const col = CURVE_COLUMNS[raw.name];
+  return { type: 'curve_column', kind: 'scalar', unit: renderUnit(parseUnitString(col.unit)), name: raw.name, code: col.code };
 }
 
 /** A zone by code (task QGEO2). Its existence is the machine's to answer at evaluation. */
@@ -820,6 +854,7 @@ function computeExpansion(node: PlanNode, resolved: Map<string, ResolvedSibling>
     case 'param':
     case 'state':
     case 'zone':
+    case 'curve_column':
       return { nodes: 1, depth: 1 };
     case 'unary': {
       const c = computeExpansion(node.operand, resolved);
@@ -858,6 +893,7 @@ function computeCompositionDepth(node: PlanNode, resolved: Map<string, ResolvedS
     case 'param':
     case 'state':
     case 'zone':
+    case 'curve_column':
       return 0;
     case 'unary':
       return computeCompositionDepth(node.operand, resolved);

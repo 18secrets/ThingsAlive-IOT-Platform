@@ -58,6 +58,8 @@ interface PlanEvalContext {
   siteBoundary: SiteBoundary | null;
   /** The machine's enabled geofence zones by code (task QGEO2). */
   zones: Map<string, ZoneShape>;
+  /** The machine's model's duty curve (D58), or null: no model, or a model without one. */
+  dutyCurve: number[][] | null;
   siblings: Map<string, { plan: unknown }>;
   /** Per-signal (task QCE2.1 §5) — a rule on oil pressure must not dirty a
    * coolant-temperature baseline. Work-order ranges are machine-wide (no
@@ -333,6 +335,18 @@ export class KpiEvaluatorService {
         .map((z) => [z.code, z.shape] as [string, ZoneShape]),
     );
 
+    // The model's duty curve (D58), read only when a formula here asks for it. Ordered
+    // along the curve, as [head_m, flow_lpm, input_kw]: `CURVE_COLUMNS`' codes.
+    const wantsCurve = [...targets, ...siblings.values()].some((f) => callsOperator(f.compiledPlan, 'curve_at'));
+    const dutyCurve = wantsCurve && profile.modelId
+      ? ((await m.query(
+        `SELECT "head_m" AS h, "flow_lpm" AS q, "input_kw" AS p
+           FROM "client_equipment_template_curve_point"
+          WHERE "tenant_id" = $1 AND "template_id" = $2 AND "curve" = 'duty'
+          ORDER BY "point"`, [tenantId, profile.modelId],
+      )) as { h: number; q: number; p: number }[]).map((r) => [r.h, r.q, r.p])
+      : null;
+
     const signals = new Map<string, SignalStatus>();
     for (const signal of allRequiredSignals) {
       const staleAfterSeconds = staleAfterSecondsBySignal.get(signal) ?? tenantStaleAfter ?? DEFAULT_STALE_AFTER_SECONDS;
@@ -345,6 +359,7 @@ export class KpiEvaluatorService {
       target, perTargetWindow.get(target.formulaKey) ?? null,
       {
         signals, parameters, excludedRangesBySignal, siteBoundary, zones, operating,
+        dutyCurve: dutyCurve && dutyCurve.length >= 2 ? dutyCurve : null,
         siblings: new Map([...siblings].map(([k, f]) => [k, { plan: f.compiledPlan }])),
       },
       m, tenantId, toTelemetry(segments),
@@ -421,6 +436,7 @@ export class KpiEvaluatorService {
       signals: Map<string, SignalStatus>; parameters: Map<string, number>;
       siblings: Map<string, { plan: unknown }>; excludedRangesBySignal: Map<string, ExcludedRange[]>;
       siteBoundary: SiteBoundary | null; zones: Map<string, ZoneShape>; operating?: OperatingGate;
+      dutyCurve: number[][] | null;
     },
     m: EntityManager, tenantId: string, segments: TelemetrySegment[],
   ): Promise<KpiEnvelope> {
@@ -478,7 +494,7 @@ export class KpiEvaluatorService {
     const ctx: PlanEvalContext = {
       window, signals: ctxBase.signals, parameters: ctxBase.parameters, siblings: ctxBase.siblings,
       excludedRangesBySignal: ctxBase.excludedRangesBySignal, siteBoundary: ctxBase.siteBoundary,
-      zones: ctxBase.zones, operating: ctxBase.operating,
+      zones: ctxBase.zones, operating: ctxBase.operating, dutyCurve: ctxBase.dutyCurve,
     };
 
     if (resultKind === 'series') {
@@ -559,7 +575,9 @@ export class KpiEvaluatorService {
 /** No schedule is a configuration gap; too little operating data is a block on the
  * baseline as a whole (QFIX-BASELINE §3); everything else is a value not available now. */
 function readinessFor(reason: Reason): Readiness {
-  if (reason === 'no_shift_schedule') return 'not_configured';
+  // A curve with two answers is a fault in the model's data, fixed by whoever owns it;
+  // a reading outside the printed range is today's operating condition.
+  if (reason === 'no_shift_schedule' || reason === 'curve_not_monotonic') return 'not_configured';
   if (reason === 'insufficient_coverage') return 'blocked';
   return 'not_available';
 }
@@ -771,6 +789,10 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
         zoneShape = zoneArg ? ctx.zones.get(zoneArg.code) ?? null : null;
         if (!zoneShape) return { ok: false, readiness: 'not_configured', reason: 'zone_not_applied' };
       }
+      // A machine with no model, or a model with no curve, has no duty point to read (D58).
+      if (opEntry.needsCurve && !ctx.dutyCurve) {
+        return { ok: false, readiness: 'not_configured', reason: 'duty_curve_not_set' };
+      }
       const seriesArgs: Reading[][] = [];
       const scalarArgs: number[] = [];
       const durationArgs: number[] = [];
@@ -783,6 +805,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
           continue;
         }
         if (kind === 'zone') continue; // resolved above, into zoneShape
+        if (kind === 'curve_column') { scalarArgs.push(argNode.code); continue; }
 
         // A state's code, resolved at publish (task QCAT1). Null only in a plan that
         // never went through publish — not configured, rather than a guessed state.
@@ -812,7 +835,7 @@ function evalNode(node: any, ctx: PlanEvalContext): EvalResult {
       const excludedRanges = seriesArgSignal ? (ctx.excludedRangesBySignal.get(seriesArgSignal) ?? []) : [];
       const execCtx: ExecContext = {
         windowFrom: ctx.window.from, windowTo: ctx.window.to, history: [], excludedRanges,
-        siteBoundary: ctx.siteBoundary, zoneShape, operating: ctx.operating,
+        siteBoundary: ctx.siteBoundary, zoneShape, operating: ctx.operating, dutyCurve: ctx.dutyCurve,
       };
       const result = executor.run(seriesArgs, scalarArgs, durationArgs, execCtx);
       if (result.ok === false) return { ok: false, readiness: readinessFor(result.reason), reason: result.reason };

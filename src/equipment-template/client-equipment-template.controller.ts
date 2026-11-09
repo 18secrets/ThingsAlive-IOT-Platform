@@ -4,7 +4,7 @@ import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString } from 'c
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
-import { RatingsDto } from './equipment-template.controller';
+import { DutyCurveDto, RatingsDto } from './equipment-template.controller';
 import { ClientEquipmentTemplateService } from './services/client-equipment-template.service';
 
 /** The same fields as Master Admin's template DTO; the database holds the same rules. */
@@ -86,5 +86,19 @@ export class ClientEquipmentTemplateController {
   @ApiOperation({ summary: 'Replace this account\'s rated figures for the model. Idempotent' })
   replaceRatings(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: RatingsDto) {
     return this.templates.replaceRatings(scope, id, dto.ratings);
+  }
+
+  @Get(':id/duty-curve')
+  @Requires('equipment-template.read')
+  @ApiOperation({ summary: 'The duty curve machines of this model are read against (D58)' })
+  dutyCurve(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.templates.dutyCurve(scope, id);
+  }
+
+  @Put(':id/duty-curve')
+  @Requires('equipment.write')
+  @ApiOperation({ summary: 'Replace this account\'s duty curve for the model. Idempotent' })
+  replaceDutyCurve(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: DutyCurveDto) {
+    return this.templates.replaceDutyCurve(scope, id, dto);
   }
 }

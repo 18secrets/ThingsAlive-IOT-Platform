@@ -3,9 +3,12 @@ import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
 import { ClientEquipmentTemplate } from '../entities/client-equipment-template.entity';
+import { ClientEquipmentTemplateCurvePoint } from '../entities/client-equipment-template-curve-point.entity';
 import { ClientEquipmentTemplateRating } from '../entities/client-equipment-template-rating.entity';
 import { EquipmentTemplate } from '../entities/equipment-template.entity';
+import { EquipmentTemplateCurvePoint } from '../entities/equipment-template-curve-point.entity';
 import { EquipmentTemplateRating } from '../entities/equipment-template-rating.entity';
+import { CurveInput, CurveView, toCurveView, validateCurve } from './curves';
 import { RatingInput, RatingView, toView, validateRatings } from './ratings';
 
 export type ClientTemplateDraft = Partial<Pick<ClientEquipmentTemplate,
@@ -67,7 +70,45 @@ export class ClientEquipmentTemplateService {
           updatedBy: scope.userId,
         })));
       }
+      // The duty curve too (D58), for the same reason as the ratings.
+      const points = await m.getRepository(EquipmentTemplateCurvePoint).find({ where: { templateId: master.id } });
+      if (points.length) {
+        await m.getRepository(ClientEquipmentTemplateCurvePoint).insert(points.map((p) => ({
+          tenantId: scope.tenantId, templateId: copy.id, curve: p.curve, point: p.point,
+          headM: p.headM, flowLpm: p.flowLpm, inputKw: p.inputKw, source: p.source, updatedBy: scope.userId,
+        })));
+      }
       return copy;
+    }).catch(mapWriteError);
+  }
+
+  async dutyCurve(scope: RequestScope, id: string): Promise<CurveView> {
+    refusePlatform(scope);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      return toCurveView(await m.getRepository(ClientEquipmentTemplateCurvePoint)
+        .find({ where: { tenantId: scope.tenantId, templateId: template.id, curve: 'duty' } }));
+    });
+  }
+
+  /** This account's own duty curve for the model (D58, D04). Idempotent and locked. */
+  async replaceDutyCurve(scope: RequestScope, id: string, input: CurveInput): Promise<CurveView> {
+    refusePlatform(scope);
+    const curve = input.points?.length ? validateCurve(input) : { source: '', points: [] };
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      await m.getRepository(ClientEquipmentTemplate).createQueryBuilder('t')
+        .where('t.id = :id AND t.tenantId = :tenantId', { id: template.id, tenantId: scope.tenantId })
+        .setLock('pessimistic_write').getOne();
+      const repo = m.getRepository(ClientEquipmentTemplateCurvePoint);
+      await repo.delete({ tenantId: scope.tenantId, templateId: template.id, curve: 'duty' });
+      if (curve.points.length) {
+        await repo.insert(curve.points.map((p, point) => ({
+          tenantId: scope.tenantId, templateId: template.id, curve: 'duty' as const, point, ...p,
+          source: curve.source, updatedBy: scope.userId,
+        })));
+      }
+      return toCurveView(await repo.find({ where: { tenantId: scope.tenantId, templateId: template.id, curve: 'duty' } }));
     }).catch(mapWriteError);
   }
 
