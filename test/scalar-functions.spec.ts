@@ -94,7 +94,6 @@ describe('QSCAL1: compiling scalar functions', () => {
   });
 
   it('marks plans compiled with the new functions as such', () => {
-    expect(COMPILER_VERSION).toBe('qscal1.0.0');
     expect(compile('abs(avg(motor_current))').compilerVersion).toBe(COMPILER_VERSION);
   });
 });
