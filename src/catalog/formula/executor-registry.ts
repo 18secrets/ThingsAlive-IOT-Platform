@@ -255,7 +255,35 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
       return t.ok === false ? t : { ok: true, value: t.inside };
     },
   },
+
+  // ---------------------------------------------------------------------- QSCAL1
+  // Arguments arrive already evaluated. If any of them could not be evaluated, the
+  // evaluator has already returned without calling these, `if` included: an untaken
+  // branch whose parameter is unset still makes the formula not_configured. The
+  // workbook's own completeness rule is "a formula activates only when all its
+  // parameters exist", and a formula whose answer depended on which branch ran would
+  // look configured on Monday and not on Tuesday.
+  abs: { run: (_q, [x]) => finite(Math.abs(x)) },
+  least: { run: (_q, [a, b]) => finite(Math.min(a, b)) },
+  greatest: { run: (_q, [a, b]) => finite(Math.max(a, b)) },
+  clamp: {
+    run: (_q, [x, lo, hi]) => {
+      // Literal bounds out of order are refused at compile. Parameter bounds can only be
+      // caught here, and picking either bound would be a confident wrong answer.
+      if (lo > hi) return UNDEFINED_RESULT;
+      return finite(Math.min(Math.max(x, lo), hi));
+    },
+  },
+  and: { run: (_q, [a, b]) => ({ ok: true, value: a !== 0 && b !== 0 ? 1 : 0 }) },
+  or: { run: (_q, [a, b]) => ({ ok: true, value: a !== 0 || b !== 0 ? 1 : 0 }) },
+  if: { run: (_q, [cond, then, otherwise]) => finite(cond !== 0 ? then : otherwise) },
 });
+
+/** A NaN reaching a scalar function came from arithmetic upstream. Passing it on would
+ * print as a number on a KPI tile; `undefined_result` says there is no answer. */
+function finite(value: number): ExecValue {
+  return Number.isFinite(value) ? { ok: true, value } : UNDEFINED_RESULT;
+}
 
 function zonePositions([lat, lng]: Reading[][], ctx: ExecContext): Position[] {
   return pairPositions(windowed(lat, ctx.windowFrom, ctx.windowTo), windowed(lng, ctx.windowFrom, ctx.windowTo));

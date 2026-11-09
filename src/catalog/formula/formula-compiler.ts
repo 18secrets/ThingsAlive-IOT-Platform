@@ -1,5 +1,5 @@
 import { FormulaCompileError } from './errors';
-import { lookupOperator } from './operator-registry';
+import { lookupOperator, SCALAR_FUNCTION_NAMES } from './operator-registry';
 import { CompareOp, MAX_DEPTH, MAX_NODES, parseExpression, RawNode } from './parser';
 import { divideUnits, multiplyUnits, parseUnitString, renderUnit, Unit, unitsEqual, DIMENSIONLESS } from './units';
 
@@ -10,8 +10,9 @@ export { FormulaCompileError } from './errors';
  * qce1.1.0: literal unit polymorphism in +/-, and #formula_key composition.
  * qce5.0.0: the `compare` node and `count_exceeding`.
  * qcat1.0.0: the `state` node and the categorical operators.
- * qgeo1.0.0: the site-boundary operators. */
-export const COMPILER_VERSION = 'qgeo1.0.0';
+ * qgeo1.0.0: the site-boundary operators.
+ * qscal1.0.0: the scalar functions (abs, least, greatest, clamp, and, or, if). */
+export const COMPILER_VERSION = 'qscal1.0.0';
 
 /** How many `#ref` hops deep a formula may compose (task QCE1.1) — a chain of
  * formulas each referencing the next, six deep, is refused even if every one of
@@ -554,6 +555,12 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
         // ValueKind, but it is not interchangeable with one: `baseline_avg(x, 5)`
         // and `avg(90d)` are both wrong shapes, not merely wrong units.
         const actual = a.type === 'duration' ? 'duration' : a.type === 'state' ? 'state' : a.type === 'zone' ? 'zone' : a.kind;
+        if (actual === 'series' && expected === 'scalar' && SCALAR_FUNCTION_NAMES.has(node.name)) {
+          throw new FormulaCompileError(
+            `calls "${node.name}" with argument ${i + 1} as a series; "${node.name}" works on values the formula `
+              + 'has already reduced. Reduce the signal first, e.g. avg(x) or last(x).',
+          );
+        }
         if (actual !== expected) {
           throw new FormulaCompileError(
             `calls "${node.name}" with argument ${i + 1} as ${actual}; it takes ${expected}.`,
@@ -592,6 +599,10 @@ function infer(node: RawNode, ctx: InferContext): PlanNode {
               + `carry the series' unit ("${args[0].unit}").`,
           );
         }
+      }
+
+      if (SCALAR_FUNCTION_NAMES.has(node.name)) {
+        return { type: 'call', kind: 'scalar', unit: scalarFunctionUnit(node.name, args), name: node.name, args };
       }
 
       const argUnits = args.map((a) => parseUnitStringFromRendered(a.unit));
@@ -670,6 +681,78 @@ function inferZone(operator: string, raw: RawNode): PlanNode {
     throw new FormulaCompileError(`calls "${operator}" with a zone that is not a quoted zone code, e.g. 'PIT'.`);
   }
   return { type: 'zone', kind: 'scalar', unit: renderUnit(DIMENSIONLESS), code: raw.name };
+}
+
+/**
+ * Units for the QSCAL1 functions, with the same literal polymorphism `+`, `-` and
+ * comparisons already have: `least(x, 100)` takes x's unit, while `least(x, y)` across
+ * two dimensions is refused, because "the smaller of 5 A and 230 V" has no answer.
+ *
+ * A condition (`and`, `or`, `if`'s first argument) must be dimensionless. A comparison
+ * already is. `if(avg(motor_current), ...)` treats "any current at all" as true, which
+ * is almost never what the author meant. The floor that says "running" belongs in the
+ * formula, written as a comparison: `avg(motor_current) > 0.3`.
+ */
+function scalarFunctionUnit(name: string, args: PlanNode[]): string {
+  const sameUnit = (role: string, nodes: PlanNode[]): string => {
+    const measured = nodes.filter((n) => !isLiteral(n));
+    if (!measured.length) return renderUnit(DIMENSIONLESS);
+    const first = parseUnitStringFromRendered(measured[0].unit);
+    const other = measured.find((n) => !unitsEqual(parseUnitStringFromRendered(n.unit), first));
+    if (other) {
+      throw new FormulaCompileError(
+        `calls "${name}" with ${role} in "${measured[0].unit}" and "${other.unit}", which are different units.`,
+      );
+    }
+    return measured[0].unit;
+  };
+  const condition = (n: PlanNode, which: string): void => {
+    if (!isLiteral(n) && !unitsEqual(parseUnitStringFromRendered(n.unit), DIMENSIONLESS)) {
+      throw new FormulaCompileError(
+        `calls "${name}" with ${which} in "${n.unit}"; a condition must be dimensionless, `
+          + 'such as a comparison. Write the threshold into it, e.g. avg(x) > 5.',
+      );
+    }
+  };
+
+  switch (name) {
+    case 'abs':
+      return args[0].unit;
+    case 'least':
+    case 'greatest':
+      return sameUnit('its two values', args);
+    case 'clamp': {
+      const [, lo, hi] = args;
+      if (literalValue(lo) !== null && literalValue(hi) !== null && literalValue(lo)! > literalValue(hi)!) {
+        throw new FormulaCompileError(
+          `calls "clamp" with a lower bound (${literalValue(lo)}) above its upper bound (${literalValue(hi)}).`,
+        );
+      }
+      // Bounds are stated in the value's unit. Two literal bounds around a literal value
+      // is constant arithmetic, and dimensionless like any other.
+      return sameUnit('a value and bounds', args);
+    }
+    case 'and':
+    case 'or':
+      condition(args[0], 'argument 1');
+      condition(args[1], 'argument 2');
+      return renderUnit(DIMENSIONLESS);
+    case 'if':
+      condition(args[0], 'its condition');
+      return sameUnit('its two outcomes', [args[1], args[2]]);
+    default:
+      throw new FormulaCompileError(`calls "${name}", which has no unit rule.`);
+  }
+}
+
+/** The number a literal node stands for, or null for anything computed. */
+function literalValue(node: PlanNode): number | null {
+  if (node.type === 'const') return node.value;
+  if (node.type === 'unary' && node.op === '-') {
+    const inner = literalValue(node.operand);
+    return inner === null ? null : -inner;
+  }
+  return null;
 }
 
 /** `PlanNode.unit` is already a rendered string (so the stored plan needs no second
