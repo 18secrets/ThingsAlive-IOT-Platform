@@ -26,6 +26,8 @@ export interface ThresholdEntry {
   max?: number;
   unit?: string;
   severity?: string;
+  /** D59: min/max are multiples of this rating on each machine, not values in `unit`. */
+  rating?: string;
 }
 
 export interface SensorRequirementContent {
@@ -274,6 +276,7 @@ export function buildProposedClass(
           const max = num(r.payload.max); if (max !== undefined) entry.max = max;
           const unit = strOrNull(r.payload.unit); if (unit) entry.unit = unit;
           const severity = strOrNull(r.payload.severity); if (severity) entry.severity = severity;
+          const rating = strOrNull(r.payload.rating); if (rating) entry.rating = rating;
           return [str(r.payload.signal), entry];
         }))
       : current.defaultThresholds,

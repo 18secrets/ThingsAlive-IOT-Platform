@@ -2,11 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
+import { ClientEquipmentTemplate } from '../../equipment-template/entities/client-equipment-template.entity';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
 import {
   CLIENT_SOURCE_SYSTEM, EquipmentProfile, EquipmentStatus, ServiceTier,
 } from '../equipment-profile.entity';
+import { EquipmentModel } from '../entities/equipment-model.entity';
 import { EquipmentPlacementEvent } from '../entities/equipment-placement-event.entity';
 import { Plant } from '../entities/plant.entity';
 
@@ -59,6 +61,35 @@ export async function pinnedClassVersion(
   if (!classSlug) return null;
   const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId, slug: classSlug } });
   return cls && cls.templateSlug === classSlug ? cls.templateVersion : null;
+}
+
+/**
+ * The model a machine names (D57): one of its own account's templates, of the machine's
+ * own class when both say which class they are. A 5 HP pump model on a motor class would
+ * hand the machine ratings for something it is not; the motor KPIs would compute, wrongly.
+ *
+ * The database refuses another account's model by itself (the key includes the tenant);
+ * this says so in a sentence first.
+ */
+export async function resolveModel(
+  m: EntityManager, tenantId: string, modelId: string | null, classSlug: string | null,
+): Promise<string | null> {
+  if (modelId === null || modelId === '') return null;
+  const notFound = () => new NotFoundException(`No equipment model "${modelId}" in this account.`);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)) throw notFound();
+  const model = await m.getRepository(ClientEquipmentTemplate).findOne({ where: { tenantId, id: modelId } });
+  if (!model) throw notFound();
+  if (model.equipmentClassSlug && classSlug) {
+    const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId, slug: classSlug } });
+    const machineClass = cls?.templateSlug ?? classSlug;
+    if (model.equipmentClassSlug !== machineClass && model.equipmentClassSlug !== classSlug) {
+      throw new BadRequestException(
+        `"${model.name}" is a model of "${model.equipmentClassSlug}", and this machine is a "${classSlug}". `
+          + 'Its rated figures would describe a different machine.',
+      );
+    }
+  }
+  return model.id;
 }
 
 /**
@@ -172,6 +203,12 @@ export class EquipmentService {
         if (input[key] !== undefined) (asset as any)[key] = input[key] ?? null;
       }
       if (input.tier !== undefined) asset.tier = input.tier;
+      // A change of class re-checks the model the machine names: a pump model left on a
+      // machine that became a motor would hand it ratings for something it is not.
+      if (asset.equipmentClassSlug !== classBefore) {
+        const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+        if (named) await resolveModel(m, tenantId, named.modelId, asset.equipmentClassSlug);
+      }
       // Only a change of class moves the version. Re-pinning on every edit would quietly
       // move a machine onto a newer template the moment somebody fixed a typo in its name.
       if (asset.equipmentClassSlug !== classBefore) {
@@ -181,6 +218,42 @@ export class EquipmentService {
       // consequences, and burying it among seven descriptive fields would hide them.
       asset.updatedBy = scope.userId;
       return m.getRepository(EquipmentProfile).save(asset);
+    });
+  }
+
+  /** The model this machine names (D57), or null. */
+  async model(scope: RequestScope, ref: AssetRef, onBehalfOfTenantId?: string): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+      return { modelId: named?.modelId ?? null };
+    });
+  }
+
+  /**
+   * Names the machine's model, or clears it with null (D57). Its rated figures, and a
+   * pump's duty curve, are read from the model from the next evaluation on; a value set
+   * on the machine itself still wins. Idempotent: naming the model it already has
+   * changes nothing.
+   */
+  async setModel(
+    scope: RequestScope, ref: AssetRef, modelId: string | null, onBehalfOfTenantId?: string,
+  ): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const resolved = await resolveModel(m, tenantId, modelId, asset.equipmentClassSlug);
+      const repo = m.getRepository(EquipmentModel);
+      if (resolved === null) {
+        await repo.delete({ tenantId, equipmentId: asset.id });
+      } else {
+        await repo.upsert(
+          { tenantId, equipmentId: asset.id, modelId: resolved, assignedBy: scope.userId },
+          ['tenantId', 'equipmentId'],
+        );
+      }
+      return { modelId: resolved };
     });
   }
 

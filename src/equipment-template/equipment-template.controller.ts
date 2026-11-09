@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
+import { RequestScope } from '../auth/types/request-scope';
 import { EquipmentTemplateService } from './services/equipment-template.service';
 
 export class EquipmentTemplateDto {
@@ -12,6 +15,36 @@ export class EquipmentTemplateDto {
   @IsOptional() @IsNumber() fuelTankCapacityLiters?: number;
   @IsOptional() @IsNumber() serviceIntervalHours?: number;
   @IsOptional() @IsString() description?: string;
+  /** The library class this is a model of (D57). */
+  @IsOptional() @IsString() equipmentClassSlug?: string;
+}
+
+/** One rated figure (D57). `unit` is optional and, when given, must be the rating's own. */
+export class RatingDto {
+  @IsString() @IsNotEmpty() name: string;
+  @IsNumber() value: number;
+  @IsOptional() @IsString() unit?: string;
+  @IsString() @IsNotEmpty() source: string;
+}
+
+export class RatingsDto {
+  // Without @ValidateNested a whitelisting pipe strips the list and then refuses the
+  // request for carrying it (the same trap ProvisionDto.superAdmin documents).
+  @IsArray() @ArrayMaxSize(64) @ValidateNested({ each: true }) @Type(() => RatingDto)
+  ratings: RatingDto[];
+}
+
+export class CurvePointDto {
+  @IsNumber() headM: number;
+  @IsNumber() flowLpm: number;
+  @IsNumber() inputKw: number;
+}
+
+/** A duty curve as printed: head (m), flow (L/min), input power (kW) per point (D58). */
+export class DutyCurveDto {
+  @IsString() source: string;
+  @IsArray() @ArrayMaxSize(64) @ValidateNested({ each: true }) @Type(() => CurvePointDto)
+  points: CurvePointDto[];
 }
 
 export class CreateEquipmentTemplateDto extends EquipmentTemplateDto {
@@ -46,5 +79,33 @@ export class EquipmentTemplateController {
   @ApiOperation({ summary: 'Edit an equipment template' })
   update(@Param('id') id: string, @Body() dto: EquipmentTemplateDto) {
     return this.templates.update(id, dto);
+  }
+
+  @Get(':id/ratings')
+  @Requires('equipment-template.read')
+  @ApiOperation({ summary: 'The model\'s rated figures, each with its unit and source (D57)' })
+  ratings(@Param('id') id: string) {
+    return this.templates.ratings(id);
+  }
+
+  @Put(':id/ratings')
+  @Requires('equipment-template.write')
+  @ApiOperation({ summary: 'Replace the model\'s rated figures. Idempotent; accounts\' copies are not changed' })
+  replaceRatings(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: RatingsDto) {
+    return this.templates.replaceRatings(scope, id, dto.ratings);
+  }
+
+  @Get(':id/duty-curve')
+  @Requires('equipment-template.read')
+  @ApiOperation({ summary: 'The model\'s catalogue duty curve: head, flow, input power per point (D58)' })
+  dutyCurve(@Param('id') id: string) {
+    return this.templates.dutyCurve(id);
+  }
+
+  @Put(':id/duty-curve')
+  @Requires('equipment-template.write')
+  @ApiOperation({ summary: 'Replace the model\'s duty curve; an empty list removes it. Idempotent' })
+  replaceDutyCurve(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() dto: DutyCurveDto) {
+    return this.templates.replaceDutyCurve(scope, id, dto);
   }
 }

@@ -170,6 +170,11 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'min', requiredCell: false },
       { name: 'max', requiredCell: false },
       { name: 'severity', requiredCell: false },
+      // D59: optional, so no template bump (QCE3's precedent: an optional column asks
+      // nothing of a workbook that predates it). Set, it makes min and max multiples of
+      // a motor rating on each machine — `rated_current` with max 1.2 is overload at
+      // 1.2 × that motor's own rated current — instead of one value for every model.
+      { name: 'rating', requiredCell: false },
       { name: 'component_scope', requiredCell: false },
       { name: 'criticality', requiredCell: false },
       { name: 'min_count', requiredCell: false },
