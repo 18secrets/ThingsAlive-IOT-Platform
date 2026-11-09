@@ -28,5 +28,10 @@ low-voltage, high-voltage, dry-run, cycling); `DEMO_DEVICE_ID` the device.
 Redeploy (from this folder, after compiling the simulator into it):
 
     npx tsc ../../scripts/motor-logger-sim.ts --target es2022 --module commonjs --outDir . --skipLibCheck --types node
-    railway up . --path-as-root --project 19b6333d-9ce5-4934-aef0-0366f74f8e64 \
+    railway up . --path-as-root --no-gitignore --project 19b6333d-9ce5-4934-aef0-0366f74f8e64 \
       --service motor-demo-simulator --environment Development --ci
+
+`--no-gitignore` is required: the compiled `motor-logger-sim.js` is git-ignored (it is a
+build output), and `railway up` honours `.gitignore`, so without the flag the service is
+deployed with no script and crashes on MODULE_NOT_FOUND. Check `ls` shows the `.js` first:
+`npx tsc` run where no `node_modules` exists does not compile, it only prints advice.
