@@ -1,6 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { ActivationService } from '../../activation/services/activation.service';
+import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { RequestScope } from '../../auth/types/request-scope';
+import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
 import { ClientEquipmentTemplate } from '../../equipment-template/entities/client-equipment-template.entity';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
@@ -110,7 +113,12 @@ export async function resolveModel(
 export class EquipmentService {
   private readonly logger = new Logger(EquipmentService.name);
 
-  constructor(private readonly ds: DataSource) {}
+  constructor(
+    private readonly ds: DataSource,
+    // Optional so the register still stands on its own where activation is not wired
+    // (a spec constructing it directly); in the app it is always there.
+    @Optional() private readonly activation?: ActivationService,
+  ) {}
 
   async list(
     scope: RequestScope,
@@ -152,7 +160,7 @@ export class EquipmentService {
     }
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
 
-    return withTenantId(this.ds, tenantId, async (m) => {
+    const created = await withTenantId(this.ds, tenantId, async (m) => {
       const repo = m.getRepository(EquipmentProfile);
       const existing = await repo.findOne({
         where: { tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: input.code },
@@ -188,13 +196,16 @@ export class EquipmentService {
       }
       return saved;
     });
+    await this.adoptClassScenarios(scope, tenantId, created);
+    return created;
   }
 
   async update(
     scope: RequestScope, ref: AssetRef, input: Partial<EquipmentInput>, onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile> {
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
-    return withTenantId(this.ds, tenantId, async (m) => {
+    let classChanged = false;
+    const updated = await withTenantId(this.ds, tenantId, async (m) => {
       const asset = await this.find(m, tenantId, ref);
       const classBefore = asset.equipmentClassSlug;
 
@@ -217,8 +228,53 @@ export class EquipmentService {
       // Placement is not edited here. It has its own method because it has its own
       // consequences, and burying it among seven descriptive fields would hide them.
       asset.updatedBy = scope.userId;
+      classChanged = asset.equipmentClassSlug !== classBefore;
       return m.getRepository(EquipmentProfile).save(asset);
     });
+    if (classChanged) await this.adoptClassScenarios(scope, tenantId, updated);
+    return updated;
+  }
+
+  /**
+   * Switches on the class's scenarios for a machine that has just been given a class
+   * (test report OB-1b: a new machine said "No scenarios adopted", and onboarding stayed
+   * at "no active scenario" until somebody found the activation screen for each one).
+   *
+   * Through the activation service, so it is exactly what a person activating them
+   * would have done: the blockers that still stand (a sensor not bound yet, too little
+   * history) are recorded on the row and in the history, not hidden, and a scenario that
+   * can never run on this machine is refused there and skipped here. A scenario the
+   * account switched off for the class (`enabled = false`), or one this machine already
+   * has a row for in any state, is left alone: a decision somebody made is not undone by
+   * a class change.
+   *
+   * After the machine's own transaction has committed, because activation reads the
+   * machine. A failure here never fails the create: the machine exists either way, and
+   * its scenarios can still be switched on by hand.
+   */
+  private async adoptClassScenarios(scope: RequestScope, tenantId: string, asset: EquipmentProfile): Promise<void> {
+    if (!this.activation || !asset.equipmentClassSlug) return;
+    const candidates = await withTenantId(this.ds, tenantId, async (m) => {
+      const scenarios = await m.getRepository(ClientScenario).find({
+        where: { tenantId, clientEquipmentClassSlug: asset.equipmentClassSlug!, enabled: true, status: 'active' },
+        order: { slug: 'ASC' },
+      });
+      const existing = new Set((await m.getRepository(EquipmentScenario).find({
+        where: { tenantId, sourceSystem: asset.sourceSystem, externalId: asset.externalId },
+      })).map((r) => r.clientScenarioSlug));
+      return scenarios.filter((sc) => !existing.has(sc.slug));
+    });
+    // Staff acting on an account act in it; the history names who did it.
+    const actor: RequestScope = scope.isPlatformRole ? { ...scope, tenantId, isPlatformRole: false } : scope;
+    for (const sc of candidates) {
+      try {
+        await this.activation.apply(actor, 'activate', {
+          sourceSystem: asset.sourceSystem, externalId: asset.externalId, clientScenarioSlug: sc.slug,
+        }, { reason: 'Adopted with the equipment class' });
+      } catch (error) {
+        this.logger.warn(`${sc.slug} not adopted on ${asset.externalId}: ${(error as Error).message}`);
+      }
+    }
   }
 
   /** The model this machine names (D57), or null. */
