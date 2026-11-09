@@ -89,6 +89,8 @@ export const FORMULAS: FormulaRow[] = [
     basis: 'starts_per_day: count(start events) / day; destructive cycling is far above normal, e.g. > 60 (KPIs & Formulas; RCA 10)', window: 'today', chart: 'number', useCase: 'U6' },
   { classes: BOTH, key: 'running_pct', expression: '100 * avg(motor_running_share)', inputs: ['motor_running_share'], unit: 'dimensionless',
     basis: 'Share of minutes the motor ran (F1), the run_hours side of availability_pct (KPIs & Formulas)', window: '24h', chart: 'number', useCase: 'U9' },
+  { classes: BOTH, key: 'running_pct_mtd', expression: '100 * avg(motor_running_share)', inputs: ['motor_running_share'], unit: 'dimensionless',
+    basis: 'Month to date: the per-pump monthly figure the subscription report needs (Plan P5; U9 target 99%)', window: 'mtd', chart: 'number', useCase: 'U9' },
   { classes: BOTH, key: 'logger_records_lost_24h', expression: 'sum(logger_records_lost) + sum(logger_records_dropped)', inputs: ['logger_records_lost', 'logger_records_dropped'], unit: 'records',
     basis: 'Records the logger lost or could not store (contract: lost_total / dropped_total, alert if they grow)', window: '24h', chart: 'number', useCase: 'U10' },
   { classes: BOTH, key: 'instability_score', expression: 'clamp(25 * (avg(current_fluctuation_pct) / 2 - 1), 0, 25)',
