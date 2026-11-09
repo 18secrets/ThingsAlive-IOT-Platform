@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentTemplate } from '../entities/equipment-template.entity';
+import { EquipmentTemplateRating } from '../entities/equipment-template-rating.entity';
+import { RatingInput, RatingView, toView, validateRatings } from './ratings';
 
 type TemplateDraft = Partial<Pick<EquipmentTemplate,
   'name' | 'category' | 'manufacturer' | 'engineType' | 'fuelTankCapacityLiters'
-  | 'serviceIntervalHours' | 'description'>>;
+  | 'serviceIntervalHours' | 'description' | 'equipmentClassSlug'>>;
 
 /**
  * Flat CRUD, no lifecycle — onboarding convenience, not a versioned product. See the
@@ -15,6 +18,7 @@ type TemplateDraft = Partial<Pick<EquipmentTemplate,
 export class EquipmentTemplateService {
   constructor(
     @InjectRepository(EquipmentTemplate) private readonly templates: Repository<EquipmentTemplate>,
+    private readonly ds: DataSource,
   ) {}
 
   list(): Promise<EquipmentTemplate[]> {
@@ -31,6 +35,7 @@ export class EquipmentTemplateService {
       fuelTankCapacityLiters: draft.fuelTankCapacityLiters ?? null,
       serviceIntervalHours: draft.serviceIntervalHours ?? null,
       description: draft.description ?? null,
+      equipmentClassSlug: draft.equipmentClassSlug?.trim() || null,
     }));
   }
 
@@ -46,4 +51,43 @@ export class EquipmentTemplateService {
     }
     return this.templates.save(template);
   }
+
+  async ratings(id: string): Promise<RatingView[]> {
+    const template = isUuid(id) ? await this.templates.findOne({ where: { id } }) : null;
+    if (!template) throw new NotFoundException(`No equipment template "${id}".`);
+    const rows = await this.ds.getRepository(EquipmentTemplateRating)
+      .find({ where: { templateId: id }, order: { name: 'ASC' } });
+    return rows.map(toView);
+  }
+
+  /**
+   * Replaces the model's whole set of ratings (D57). Idempotent: the same body twice
+   * leaves the same rows. The template row is locked first, so two editors saving at
+   * once take turns instead of both deleting and then colliding on insert.
+   *
+   * An account's copy is not touched (D04, G13): a corrected catalogue figure reaches an
+   * account when it copies the model again, not under alerts it already runs.
+   */
+  async replaceRatings(scope: RequestScope, id: string, input: RatingInput[]): Promise<RatingView[]> {
+    const ratings = validateRatings(input);
+    if (!isUuid(id)) throw new NotFoundException(`No equipment template "${id}".`);
+    return this.ds.transaction(async (m) => {
+      const locked = await m.getRepository(EquipmentTemplate).createQueryBuilder('t')
+        .where('t.id = :id', { id }).setLock('pessimistic_write').getOne();
+      if (!locked) throw new NotFoundException(`No equipment template "${id}".`);
+      const repo = m.getRepository(EquipmentTemplateRating);
+      await repo.delete({ templateId: id });
+      if (ratings.length) {
+        await repo.insert(ratings.map((r) => ({
+          templateId: id, name: r.name, value: r.value, source: r.source, updatedBy: scope.userId,
+        })));
+      }
+      const rows = await repo.find({ where: { templateId: id }, order: { name: 'ASC' } });
+      return rows.map(toView);
+    });
+  }
+}
+
+function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }

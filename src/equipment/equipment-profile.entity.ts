@@ -129,6 +129,13 @@ export class EquipmentProfile {
   @Column({ name: 'plant_id', type: 'uuid', nullable: true })
   plantId: string | null;
 
+  /**
+   * The account's model this machine is (D57): where its rated figures come from when
+   * the machine has none of its own. A nameplate value set on the machine still wins.
+   */
+  @Column({ name: 'client_equipment_template_id', type: 'uuid', nullable: true })
+  modelId: string | null;
+
   @Column({ name: 'created_by', type: 'text', nullable: true })
   createdBy: string | null;
 

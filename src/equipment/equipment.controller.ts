@@ -44,6 +44,8 @@ export class EquipmentDto {
   @IsOptional() @IsIn(['basic', 'standard', 'advanced', 'full']) tier?: ServiceTier;
   @IsOptional() @IsISO8601() commissionedAt?: string;
   @IsOptional() @IsInt() serviceIntervalHours?: number;
+  /** One of the account's own models (`/my-equipment-templates`); its ratings feed motor KPIs (D57). Null clears it. */
+  @IsOptional() @IsString() modelId?: string | null;
   /** Master Admin only — acts on this account instead of the caller's own. */
   @IsOptional() @IsString() tenantId?: string;
 }
@@ -58,6 +60,8 @@ export class EquipmentPatchDto {
   @IsOptional() @IsIn(['basic', 'standard', 'advanced', 'full']) tier?: ServiceTier;
   @IsOptional() @IsISO8601() commissionedAt?: string;
   @IsOptional() @IsInt() serviceIntervalHours?: number;
+  /** One of the account's own models (`/my-equipment-templates`); its ratings feed motor KPIs (D57). Null clears it. */
+  @IsOptional() @IsString() modelId?: string | null;
   /** Master Admin only — acts on this account instead of the caller's own. */
   @IsOptional() @IsString() tenantId?: string;
 }
