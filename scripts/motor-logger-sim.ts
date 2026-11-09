@@ -69,7 +69,12 @@ export type Scenario = (typeof SCENARIOS)[number];
 
 export interface SimRecord {
   seq: number; timestamp: number; voltage: number; current: number; power_factor: number; temperature: number; rpm: number;
+  /** The added sensors (firmware, 9 Nov), sent only when the run asks for them. */
+  ambient_c?: number; vibration_mm_s?: number; load_pct?: number;
 }
+
+/** The receiver's request limit (MOTOR_MAX_BODY_BYTES, default 8192). */
+export const MAX_BODY_BYTES = 8192;
 
 /** Deterministic noise, so a run can be reproduced: the same second gives the same wobble. */
 const noise = (seed: number, scale: number) => {
@@ -110,7 +115,7 @@ function operatingPoint(scenario: Scenario, p: number, secondOfRun: number): Ope
  * `timestamp` is seconds since the simulated boot, the device clock the contract describes.
  */
 export function simulate(
-  scenario: Scenario, seconds: number, endUnix: number, bootUnix: number, m: MotorModel = MINI_1HP,
+  scenario: Scenario, seconds: number, endUnix: number, bootUnix: number, m: MotorModel = MINI_1HP, sensors = false,
 ): SimRecord[] {
   const nSync = (120 * m.frequency) / m.poles;
   let temperature = m.ambient;
@@ -130,32 +135,56 @@ export function simulate(
     temperature += (target - temperature) * (1 / m.timeConstant);
     // F4: slip grows with load; stopped is 0.
     const rpm = !op.on ? 0 : Math.min(nSync, nSync * (1 - m.ratedSlip * lambda));
-    out.push({
+    const record: SimRecord = {
       seq: unix, timestamp: unix - bootUnix,
       voltage: round(Math.max(0, voltage), 1), current: round(Math.max(0, current), 2),
       power_factor: round(pf, 2), temperature: round(temperature, 1), rpm: Math.round(rpm),
-    });
+    };
+    if (sensors) {
+      // Ambient: a day's swing of ±3 °C about the model's ambient, warmest mid-afternoon IST.
+      const hourIst = ((unix / 3600 + 5.5) % 24 + 24) % 24;
+      record.ambient_c = round(m.ambient + 3 * Math.sin(((hourIst - 9) / 24) * 2 * Math.PI) + noise(unix + 11, 0.2), 1);
+      // Vibration velocity, ISO 10816 class I terms: ~1.1 mm/s healthy (zone A/B); load
+      // past rated shakes it towards 2.8; a dry-running pump rattles into zone C/D.
+      const vib = !op.on ? 0.05
+        : scenario === 'dry-run' && op.pfFactor < 1 ? 3.6
+          : 1.1 + 2.5 * Math.max(0, lambda - 0.9);
+      record.vibration_mm_s = round(Math.max(0, vib + noise(unix + 13, 0.08)), 2);
+      record.load_pct = round(lambda * 100, 1);
+    }
+    out.push(record);
   }
   return out;
 }
 
-/** Splits readings into the contract's batches: ≤ `size` records, oldest first. */
-export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0) {
+/**
+ * Splits readings into the contract's batches: ≤ `size` records and ≤ 8 KiB, oldest
+ * first. With the added sensors a record is ~190 bytes, so 50 no longer fit in 8 KiB;
+ * the firmware has to size by bytes as well (or halve on 413, as it does).
+ */
+export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0, boot = 1) {
   const out = [];
-  for (let i = 0; i < records.length; i += size) {
-    const chunk = records.slice(i, i + size);
-    out.push({
-      device_id: deviceId,
-      batch_id: `${deviceId}-${chunk[0].seq}-${chunk[chunk.length - 1].seq}`,
-      first_seq: chunk[0].seq,
-      last_seq: chunk[chunk.length - 1].seq,
-      count: chunk.length,
-      boot: 1,
-      lost_total: lostTotal,
-      dropped_total: 0,
-      device_now: deviceNow,
-      records: chunk,
-    });
+  for (let i = 0; i < records.length;) {
+    let n = Math.min(size, records.length - i);
+    const make = (k: number) => {
+      const chunk = records.slice(i, i + k);
+      return {
+        device_id: deviceId,
+        batch_id: `${deviceId}-${chunk[0].seq}-${chunk[chunk.length - 1].seq}`,
+        first_seq: chunk[0].seq,
+        last_seq: chunk[chunk.length - 1].seq,
+        count: chunk.length,
+        boot,
+        lost_total: lostTotal,
+        dropped_total: 0,
+        device_now: deviceNow,
+        records: chunk,
+      };
+    };
+    let batch = make(n);
+    while (n > 1 && JSON.stringify(batch).length > MAX_BODY_BYTES) batch = make(--n);
+    out.push(batch);
+    i += n;
   }
   return out;
 }
@@ -192,7 +221,7 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
       const half = Math.ceil(batch.records.length / 2);
       console.warn(`413 for ${batch.batch_id}; halving to ${half}`);
       await sleep(2000);
-      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total)) await send(url, key, part, maxRetries);
+      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total, batch.boot)) await send(url, key, part, maxRetries);
       return;
     }
     if (res.status === 401) throw new Error(`401: the receiver refused the device (${text})`);
@@ -223,8 +252,11 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
 
   const run = async (seconds: number, endsAgoSeconds = 0) => {
     const end = now() - endsAgoSeconds;
-    const records = simulate(scenario, seconds, end, bootUnix);
-    const list = batches(device, records, now() - bootUnix, 50, lostTotal);
+    const records = simulate(scenario, seconds, end, bootUnix, MINI_1HP, !argv.includes('--no-sensors'));
+    // Each run is its own simulated boot, with its own device clock. A real logger counts
+    // its boots; two runs both saying boot 1 had their clocks anchored together, and the
+    // second run's readings landed a day early.
+    const list = batches(device, records, now() - bootUnix, 50, lostTotal, bootUnix % 1_000_000);
     if (argv.includes('--print')) {
       console.log(JSON.stringify(list[0]));
       return;

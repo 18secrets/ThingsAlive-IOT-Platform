@@ -5,6 +5,7 @@ import { Severity } from '../../common/severity';
 import { PredictionTrigger, WorkRaiser } from '../../prediction/work-raiser';
 import { WorkOrderEvent } from '../entities/work-order-event.entity';
 import { WorkOrder } from '../entities/work-order.entity';
+import { routeToEngineer } from '../../service-roster/roster-routing';
 
 /**
  * The severity at which a warning becomes work.
@@ -84,6 +85,12 @@ export class PredictionWorkRaiser implements WorkRaiser {
     );
     const reference = `WO-${String(Number(row.next_number) - 1).padStart(6, '0')}`;
 
+    // The rule this used to lack (U5): an account that keeps a service roster has said
+    // who covers each site, so the job goes straight to that region's first engineer.
+    // Without a roster, or with nobody on it for this machine's site, it stays
+    // unassigned for a manager, exactly as before.
+    const routed = await routeToEngineer(m, scope.tenantId, trigger.sourceSystem, trigger.externalId);
+
     const order = await repo.save(repo.create({
       tenantId: scope.tenantId,
       reference,
@@ -92,13 +99,16 @@ export class PredictionWorkRaiser implements WorkRaiser {
       // "when raised": the card sat the raise-time 100 beside today's 13 with nothing
       // saying which was which (test report MIN-8).
       title: `${trigger.clientScenarioSlug}: risk ${Math.round(trigger.riskScore)} when raised`,
-      description: 'Raised automatically from a critical prediction. Assign somebody to it.',
+      description: routed
+        ? `Raised automatically from a critical prediction; sent to the region ${routed.regionCode} engineer on the service roster.`
+        : 'Raised automatically from a critical prediction. Assign somebody to it.',
       status: 'created',
       // A critical prediction is not an ordinary job, and arriving at 'normal' next to
       // hand-raised routine work is how it gets read as one.
       priority: 'high',
-      // Unassigned on purpose. This is the human in the loop.
-      assignedToUserId: null,
+      // Unassigned unless the account's roster names somebody: then the human in the
+      // loop is the engineer, who can still hand it back.
+      assignedToUserId: routed?.userId ?? null,
       predictionId: trigger.predictionId,
       origin: 'prediction',
       raisedForScenario: trigger.clientScenarioSlug,
@@ -125,6 +135,16 @@ export class PredictionWorkRaiser implements WorkRaiser {
         + `${trigger.occurredAt.toISOString()}.`,
       actorUserId: 'system:prediction',
     }));
+    if (routed) {
+      // In the history as its own step, as a manager's assignment would be, so "why is
+      // this with me" has an answer on the job itself.
+      await events.save(events.create({
+        tenantId: scope.tenantId, workOrderId: order.id, kind: 'assigned',
+        fromStatus: 'created', toStatus: 'created', fromAssignee: null, toAssignee: routed.userId,
+        note: `Service roster: region ${routed.regionCode}, rank ${routed.rank}.`,
+        actorUserId: 'system:service-roster',
+      }));
+    }
 
     this.logger.log(
       `Raised ${reference} for ${trigger.externalId} from a ${trigger.severity} prediction.`,

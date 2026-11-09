@@ -241,6 +241,17 @@ def _ensure_schema(cur):
         );
         """
     )
+    # Optional sensors (ambient, vibration, load, water/air gap). Nullable: loggers
+    # without them keep sending what they send today.
+    cur.execute(
+        """
+        ALTER TABLE motor_sensor_records
+            ADD COLUMN IF NOT EXISTS ambient_c       NUMERIC(6,1),
+            ADD COLUMN IF NOT EXISTS vibration_mm_s  NUMERIC(7,2),
+            ADD COLUMN IF NOT EXISTS load_pct        NUMERIC(6,1),
+            ADD COLUMN IF NOT EXISTS water_air_gap   NUMERIC(10,2);
+        """
+    )
     cur.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_motor_records_device_received
@@ -300,8 +311,9 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                     """
                     INSERT INTO motor_sensor_records
                         (device_id, seq, device_ts, voltage_v, current_a,
-                         power_factor, temperature_c, rpm, batch_id, received_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         power_factor, temperature_c, rpm, batch_id, received_at,
+                         ambient_c, vibration_mm_s, load_pct, water_air_gap)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (device_id, seq) DO NOTHING
                     """,
                     (
@@ -315,6 +327,10 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                         rec["rpm"],
                         batch_id,
                         received_at,
+                        rec.get("ambient_c"),
+                        rec.get("vibration_mm_s"),
+                        rec.get("load_pct"),
+                        rec.get("water_air_gap"),
                     ),
                 )
                 stored += cur.rowcount
@@ -376,6 +392,8 @@ def _store_bulk(body: dict, received_at: datetime):
 
 _REQUIRED_BATCH_FIELDS = ("device_id", "batch_id", "first_seq", "last_seq", "count")
 _REQUIRED_RECORD_FIELDS = ("seq", "timestamp", "voltage", "current", "power_factor", "temperature", "rpm")
+# Optional per-record sensors: absent or null means the logger has no such sensor.
+_OPTIONAL_NUMERIC_FIELDS = ("ambient_c", "vibration_mm_s", "load_pct", "water_air_gap")
 
 
 def _validate(body: dict) -> str | None:
@@ -406,6 +424,12 @@ def _validate(body: dict) -> str | None:
         for field in _REQUIRED_RECORD_FIELDS:
             if field not in rec:
                 return f"records[{i}] missing field: {field}"
+
+        for field in _OPTIONAL_NUMERIC_FIELDS:
+            value = rec.get(field)
+            # bool is an int in Python; true is not a temperature.
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+                return f"records[{i}].{field} must be a number or null"
 
         seq = rec["seq"]
         if not isinstance(seq, int):
@@ -1030,6 +1054,10 @@ h3{font-size:.88rem;font-weight:700;color:#1e293b;margin:18px 0 8px}
       <tr><td class="fname">power_factor</td><td class="ftype">number</td><td>—</td><td>0.00 – 1.00</td><td>2 decimal places</td></tr>
       <tr><td class="fname">temperature</td><td class="ftype">number</td><td>°C</td><td>−3276.8 – 3276.7</td><td>1 decimal place</td></tr>
       <tr><td class="fname">rpm</td><td class="ftype">integer</td><td>rev/min</td><td>0 – 65535</td><td></td></tr>
+      <tr><td class="fname">ambient_c</td><td class="ftype">number | null</td><td>°C</td><td>—</td><td>Optional. Environment (air) temperature at the pump, 1 decimal place</td></tr>
+      <tr><td class="fname">vibration_mm_s</td><td class="ftype">number | null</td><td>mm/s RMS</td><td>—</td><td>Optional. Vibration velocity from the sensor on the pump/motor body, 2 decimal places</td></tr>
+      <tr><td class="fname">load_pct</td><td class="ftype">number | null</td><td>% of rated</td><td>—</td><td>Optional. The device's load figure, 1 decimal place</td></tr>
+      <tr><td class="fname">water_air_gap</td><td class="ftype">number | null</td><td>to confirm</td><td>—</td><td>Optional. Water / air-gap sensor reading, stored as sent</td></tr>
     </tbody>
   </table>
   <div class="warn-note">&#9888; &nbsp;Numbers are always plain decimal (e.g. <code>230.0</code>, <code>-5.2</code>). Never exponent notation. Stored as <code>NUMERIC</code> in PostgreSQL, not <code>FLOAT</code>, to avoid rounding errors.</div>
