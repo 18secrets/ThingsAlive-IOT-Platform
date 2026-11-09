@@ -180,7 +180,7 @@ function mapWriteError(error: unknown): never {
     if (e.code === '23505' && e.constraint === 'uq_client_equipment_template_name') {
       throw new ConflictException('This account already has a template with that name.');
     }
-    if (e.code === '23503' && e.constraint === 'fk_equipment_profile_model') {
+    if (e.code === '23503' && e.constraint === 'fk_equipment_model_template') {
       throw new ConflictException(
         'Machines name this template as their model and read their rated figures from it. '
           + 'Give them another model, or none, before deleting it.',

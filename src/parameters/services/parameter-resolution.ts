@@ -18,6 +18,9 @@ export const RESOLVED_ORDER: readonly ResolvedScope[] = ['equipment', 'model', '
  * no row at that level to find — the chain does not break, it skips. */
 export interface ParameterChain {
   equipment?: string | null;
+  /** The machine's model (D57). Left undefined, `resolveParameters` looks it up from
+   * `equipment_model` itself, so every caller that builds a chain from a profile gets
+   * the model step without knowing it exists. Null means "no model", looked up or not. */
   model?: string | null;
   equipment_class?: string | null;
   site?: string | null;
@@ -106,32 +109,35 @@ export async function resolveParameters(
   // the model, not a moment, so a corrected figure applies to every window it is read
   // for. `effectiveFrom` reports when it was last changed, which is what "why is this
   // number what it is" needs.
-  if (chain.model) {
+  const model = chain.model !== undefined || !chain.equipment ? chain.model ?? null
+    : ((await m.query(
+      `SELECT "client_equipment_template_id" AS "modelId" FROM "equipment_model" WHERE "tenant_id" = $1 AND "equipment_id" = $2`,
+      [tenantId, chain.equipment],
+    )) as { modelId: string }[])[0]?.modelId ?? null;
+  if (model) {
     const ratings: { name: string; value: number; unit: string | null; updatedAt: Date }[] = await m.query(
       `SELECT r."name", r."value", p."unit", r."updated_at" AS "updatedAt"
          FROM "client_equipment_template_rating" r
          JOIN "rating_parameter" p ON p."name" = r."name"
         WHERE r."tenant_id" = $1 AND r."template_id" = $2 AND r."name" = ANY($3::text[])`,
-      [tenantId, chain.model, names],
+      [tenantId, model, names],
     );
     for (const r of ratings) {
       rows.push({
-        scope: 'model', scopeRef: chain.model, name: r.name, value: r.value, unit: r.unit,
+        scope: 'model', scopeRef: model, name: r.name, value: r.value, unit: r.unit,
         effectiveFrom: new Date(r.updatedAt),
       });
     }
   }
-  return resolveFromRows(rows, chain, names);
+  return resolveFromRows(rows, { ...chain, model }, names);
 }
 
-/** The chain for one machine: its own profile id, its model, its class, its plant. */
+/** The chain for one machine: its own profile id, its class, its plant. Its model is
+ * looked up when the chain is resolved (see `ParameterChain.model`). */
 export function chainForEquipment(
-  profile: { id: string; equipmentClassSlug: string | null; plantId: string | null; modelId?: string | null },
+  profile: { id: string; equipmentClassSlug: string | null; plantId: string | null },
 ): ParameterChain {
-  return {
-    equipment: profile.id, model: profile.modelId ?? null,
-    equipment_class: profile.equipmentClassSlug, site: profile.plantId,
-  };
+  return { equipment: profile.id, equipment_class: profile.equipmentClassSlug, site: profile.plantId };
 }
 
 /** A tenant `stale_after_seconds` for this machine, or null when none is set. */

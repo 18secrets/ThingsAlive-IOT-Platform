@@ -8,6 +8,7 @@ import { EquipmentProjection } from '../../projection/entities/equipment-project
 import {
   CLIENT_SOURCE_SYSTEM, EquipmentProfile, EquipmentStatus, ServiceTier,
 } from '../equipment-profile.entity';
+import { EquipmentModel } from '../entities/equipment-model.entity';
 import { EquipmentPlacementEvent } from '../entities/equipment-placement-event.entity';
 import { Plant } from '../entities/plant.entity';
 
@@ -24,8 +25,6 @@ export interface EquipmentInput {
   tier?: ServiceTier;
   commissionedAt?: Date | null;
   serviceIntervalHours?: number | null;
-  /** One of the account's own models (`client_equipment_template`), or null for none (D57). */
-  modelId?: string | null;
 }
 
 export interface AssetRef {
@@ -162,7 +161,6 @@ export class EquipmentService {
 
       const plantId = await this.resolvePlant(m, tenantId, input.plantId ?? null);
       const equipmentClassSlug = input.equipmentClassSlug ?? null;
-      const modelId = await resolveModel(m, tenantId, input.modelId ?? null, equipmentClassSlug);
       const saved = await repo.save(repo.create({
         tenantId,
         sourceSystem: CLIENT_SOURCE_SYSTEM,
@@ -180,7 +178,6 @@ export class EquipmentService {
         tier: input.tier ?? 'basic',
         commissionedAt: input.commissionedAt ?? null,
         serviceIntervalHours: input.serviceIntervalHours ?? null,
-        modelId,
         readiness: {},
         createdBy: scope.userId,
         updatedBy: scope.userId,
@@ -206,12 +203,11 @@ export class EquipmentService {
         if (input[key] !== undefined) (asset as any)[key] = input[key] ?? null;
       }
       if (input.tier !== undefined) asset.tier = input.tier;
-      // Checked against the class the machine ends up with, so changing both in one edit
-      // is judged on the new pair, and changing only the class re-checks the model it has.
-      if (input.modelId !== undefined || asset.equipmentClassSlug !== classBefore) {
-        asset.modelId = await resolveModel(
-          m, tenantId, input.modelId !== undefined ? input.modelId : asset.modelId, asset.equipmentClassSlug,
-        );
+      // A change of class re-checks the model the machine names: a pump model left on a
+      // machine that became a motor would hand it ratings for something it is not.
+      if (asset.equipmentClassSlug !== classBefore) {
+        const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+        if (named) await resolveModel(m, tenantId, named.modelId, asset.equipmentClassSlug);
       }
       // Only a change of class moves the version. Re-pinning on every edit would quietly
       // move a machine onto a newer template the moment somebody fixed a typo in its name.
@@ -222,6 +218,42 @@ export class EquipmentService {
       // consequences, and burying it among seven descriptive fields would hide them.
       asset.updatedBy = scope.userId;
       return m.getRepository(EquipmentProfile).save(asset);
+    });
+  }
+
+  /** The model this machine names (D57), or null. */
+  async model(scope: RequestScope, ref: AssetRef, onBehalfOfTenantId?: string): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+      return { modelId: named?.modelId ?? null };
+    });
+  }
+
+  /**
+   * Names the machine's model, or clears it with null (D57). Its rated figures, and a
+   * pump's duty curve, are read from the model from the next evaluation on; a value set
+   * on the machine itself still wins. Idempotent: naming the model it already has
+   * changes nothing.
+   */
+  async setModel(
+    scope: RequestScope, ref: AssetRef, modelId: string | null, onBehalfOfTenantId?: string,
+  ): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const resolved = await resolveModel(m, tenantId, modelId, asset.equipmentClassSlug);
+      const repo = m.getRepository(EquipmentModel);
+      if (resolved === null) {
+        await repo.delete({ tenantId, equipmentId: asset.id });
+      } else {
+        await repo.upsert(
+          { tenantId, equipmentId: asset.id, modelId: resolved, assignedBy: scope.userId },
+          ['tenantId', 'equipmentId'],
+        );
+      }
+      return { modelId: resolved };
     });
   }
 

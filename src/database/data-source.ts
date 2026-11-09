@@ -79,6 +79,7 @@ import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
 import { ClientEquipmentTemplate } from '../equipment-template/entities/client-equipment-template.entity';
 import { ClientEquipmentTemplateRating } from '../equipment-template/entities/client-equipment-template-rating.entity';
 import { EquipmentTemplateRating } from '../equipment-template/entities/equipment-template-rating.entity';
+import { EquipmentModel } from '../equipment/entities/equipment-model.entity';
 import { SITE_TWIN_ENTITIES } from '../site-twin/site-twin.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
 import { IndustryType } from '../device-catalog/entities/industry-type.entity';
@@ -189,6 +190,7 @@ export const ENTITIES = [
   ClientEquipmentTemplate,
   ClientEquipmentTemplateRating,
   EquipmentTemplateRating,
+  EquipmentModel,
   BreakdownEvent,
   IndustryType,
   Incident,

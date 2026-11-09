@@ -13,6 +13,11 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * now nothing referenced a template after onboarding; from here a machine may, and a
  * template a machine names cannot be deleted from under it.
  *
+ * Which model a machine is lives in `equipment_model`, beside `equipment_profile`
+ * rather than as a column on it (D06's shape: 2.0 owns a table beside a row instead of
+ * widening it). The profile is read by nearly every path in the platform, including
+ * specs that roll the schema back past this migration and read it through its entity.
+ *
  * A rating has no unit column. Its unit is the rating's own, fixed by `rating_parameter`
  * (the database's copy of the D56 ratings in `parameter-catalog.ts`; a test holds the
  * two equal). A unit stored per row could disagree with that; a unit that is not stored
@@ -101,26 +106,49 @@ export class ModelRatings1763700000000 implements MigrationInterface {
         )`);
     await q.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "client_equipment_template_rating" TO "ta_app"`);
 
-    // A machine names one of its own account's models. The key includes the tenant, so a
-    // machine cannot be pointed at another account's model even by a query that forgot
-    // its filter. RESTRICT: deleting a model a machine reads its ratings from would turn
-    // every one of its motor KPIs to not_configured, silently, from somebody else's screen.
-    await q.query(`ALTER TABLE "equipment_profile" ADD COLUMN "client_equipment_template_id" uuid`);
+    // A machine names one of its own account's models. Both keys include the tenant, so a
+    // machine cannot be pointed at another account's model, nor a link written for another
+    // account's machine, even by a query that forgot its filter. RESTRICT on the model:
+    // deleting one a machine reads its ratings from would turn every one of its motor KPIs
+    // to not_configured, silently, from somebody else's screen. CASCADE on the machine: a
+    // deleted machine has no model to remember.
     await q.query(`
       ALTER TABLE "equipment_profile"
-        ADD CONSTRAINT "fk_equipment_profile_model"
-        FOREIGN KEY ("tenant_id", "client_equipment_template_id")
-        REFERENCES "client_equipment_template" ("tenant_id", "id") ON DELETE RESTRICT`);
+        ADD CONSTRAINT "uq_equipment_profile_tenant_id" UNIQUE ("tenant_id", "id")`);
     await q.query(`
-      CREATE INDEX "ix_equipment_profile_model"
-        ON "equipment_profile" ("tenant_id", "client_equipment_template_id")
-        WHERE "client_equipment_template_id" IS NOT NULL`);
+      CREATE TABLE "equipment_model" (
+        "tenant_id" text NOT NULL,
+        "equipment_id" uuid NOT NULL,
+        "client_equipment_template_id" uuid NOT NULL,
+        "assigned_by" text NOT NULL,
+        "assigned_at" timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY ("tenant_id", "equipment_id"),
+        CONSTRAINT "fk_equipment_model_equipment"
+          FOREIGN KEY ("tenant_id", "equipment_id")
+          REFERENCES "equipment_profile" ("tenant_id", "id") ON DELETE CASCADE,
+        CONSTRAINT "fk_equipment_model_template"
+          FOREIGN KEY ("tenant_id", "client_equipment_template_id")
+          REFERENCES "client_equipment_template" ("tenant_id", "id") ON DELETE RESTRICT
+      )`);
+    await q.query(`CREATE INDEX "ix_equipment_model_template" ON "equipment_model" ("tenant_id", "client_equipment_template_id")`);
+    await q.query(`ALTER TABLE "equipment_model" ENABLE ROW LEVEL SECURITY`);
+    await q.query(`ALTER TABLE "equipment_model" FORCE ROW LEVEL SECURITY`);
+    await q.query(`
+      CREATE POLICY "tenant_isolation" ON "equipment_model"
+        USING (
+          current_setting('ta.bypass', true) = 'on'
+          OR "tenant_id" = current_setting('ta.tenant_id', true)
+        )
+        WITH CHECK (
+          current_setting('ta.bypass', true) = 'on'
+          OR "tenant_id" = current_setting('ta.tenant_id', true)
+        )`);
+    await q.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON "equipment_model" TO "ta_app"`);
   }
 
   public async down(q: QueryRunner): Promise<void> {
-    await q.query(`DROP INDEX IF EXISTS "ix_equipment_profile_model"`);
-    await q.query(`ALTER TABLE "equipment_profile" DROP CONSTRAINT IF EXISTS "fk_equipment_profile_model"`);
-    await q.query(`ALTER TABLE "equipment_profile" DROP COLUMN IF EXISTS "client_equipment_template_id"`);
+    await q.query(`DROP TABLE IF EXISTS "equipment_model"`);
+    await q.query(`ALTER TABLE "equipment_profile" DROP CONSTRAINT IF EXISTS "uq_equipment_profile_tenant_id"`);
     await q.query(`DROP TABLE IF EXISTS "client_equipment_template_rating"`);
     await q.query(`ALTER TABLE "client_equipment_template" DROP CONSTRAINT IF EXISTS "uq_client_equipment_template_tenant_id"`);
     await q.query(`DROP TABLE IF EXISTS "equipment_template_rating"`);

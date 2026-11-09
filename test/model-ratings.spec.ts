@@ -64,7 +64,7 @@ describeDb('D57: model ratings', () => {
 
   beforeEach(async () => {
     await owner.query(`TRUNCATE "tenant_parameter"`);
-    for (const t of ['telemetry_reading', 'signal_binding_version', 'device_projection', 'equipment_profile',
+    for (const t of ['telemetry_reading', 'signal_binding_version', 'device_projection', 'equipment_model', 'equipment_profile',
       'client_equipment_template_rating', 'client_equipment_template', 'equipment_template_rating',
       'equipment_template', 'client_formula', 'client_equipment_class']) {
       await owner.query(`DELETE FROM "${t}"`);
@@ -182,8 +182,11 @@ describeDb('D57: model ratings', () => {
       modelId = (await models.copyFromMaster(acme, (await libraryModel()).id)).id;
     });
 
-    const machine = (extra: Record<string, unknown> = {}) =>
-      equipment.create(acme, { code: 'PUMP-1', name: 'Pump 1', equipmentClassSlug: CLASS, ...extra } as never);
+    const machine = async (named?: string) => {
+      const profile = await equipment.create(acme, { code: 'PUMP-1', name: 'Pump 1', equipmentClassSlug: CLASS });
+      if (named) await equipment.setModel(acme, EQUIPMENT, named);
+      return profile;
+    };
 
     const wireLoadRatio = async () => {
       await owner.getRepository(DeviceProjection).save({
@@ -219,7 +222,7 @@ describeDb('D57: model ratings', () => {
     };
 
     it('reads its rated current from the model: the load ratio computes with nothing typed on the machine', async () => {
-      await machine({ modelId });
+      await machine(modelId);
       await wireLoadRatio();
       expect(await evaluator.evaluateOne(acme, EQUIPMENT, 'load_ratio', NOW)).toMatchObject({
         readiness: 'ready', value: 1, unit: 'dimensionless',
@@ -227,10 +230,21 @@ describeDb('D57: model ratings', () => {
     });
 
     it('a nameplate value on the machine beats the model\'s catalogue figure', async () => {
-      const profile = await machine({ modelId });
+      const profile = await machine(modelId);
       await wireLoadRatio();
       await parameters.set(acme, { scope: 'equipment', scopeRef: profile.id, name: 'rated_current', value: 5, effectiveFrom: EARLIER });
       expect((await evaluator.evaluateOne(acme, EQUIPMENT, 'load_ratio', NOW)).value).toBeCloseTo(1.1, 5);
+    });
+
+    it('naming the model is idempotent, and reads back', async () => {
+      await machine();
+      const results = await Promise.allSettled([
+        equipment.setModel(acme, EQUIPMENT, modelId), equipment.setModel(acme, EQUIPMENT, modelId),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+      expect(await equipment.model(acme, EQUIPMENT)).toEqual({ modelId });
+      const [{ n }] = await owner.query(`SELECT count(*)::int AS n FROM "equipment_model"`);
+      expect(n).toBe(1);
     });
 
     it('with no model and no nameplate value it is not_configured, never a default', async () => {
@@ -243,22 +257,23 @@ describeDb('D57: model ratings', () => {
 
     it('refuses a model of another class', async () => {
       const pumpModel = (await models.copyFromMaster(acme, (await libraryModel('Borewell 5 HP', 'pump-borewell')).id)).id;
-      await expect(machine({ modelId: pumpModel })).rejects.toThrow(/is a model of "pump-borewell", and this machine is a "motor-1ph"/);
+      await expect(machine(pumpModel)).rejects.toThrow(/is a model of "pump-borewell", and this machine is a "motor-1ph"/);
     });
 
     it('refuses another account\'s model — and so does the database, by itself', async () => {
       const theirs = (await models.copyFromMaster(other, (await libraryModel('Theirs')).id)).id;
-      await expect(machine({ modelId: theirs })).rejects.toThrow(/No equipment model/);
       const profile = await machine();
+      await expect(equipment.setModel(acme, EQUIPMENT, theirs)).rejects.toThrow(/No equipment model/);
       await expect(owner.query(
-        `UPDATE "equipment_profile" SET "client_equipment_template_id" = $1 WHERE "id" = $2`, [theirs, profile.id],
-      )).rejects.toThrow(/fk_equipment_profile_model/);
+        `INSERT INTO "equipment_model" ("tenant_id", "equipment_id", "client_equipment_template_id", "assigned_by")
+         VALUES ('acme', $1, $2, 'u')`, [profile.id, theirs],
+      )).rejects.toThrow(/fk_equipment_model_template/);
     });
 
     it('deleting a model a machine names is refused; once released, it deletes with its ratings', async () => {
-      await machine({ modelId });
+      await machine(modelId);
       await expect(models.remove(acme, modelId)).rejects.toThrow(/Machines name this template as their model/);
-      await equipment.update(acme, EQUIPMENT, { modelId: null });
+      await equipment.setModel(acme, EQUIPMENT, null);
       await models.remove(acme, modelId);
       const [{ n }] = await owner.query(`SELECT count(*)::int AS n FROM "client_equipment_template_rating" WHERE "template_id" = $1`, [modelId]);
       expect(n).toBe(0);
@@ -269,10 +284,10 @@ describeDb('D57: model ratings', () => {
     await undoMigrationNamed(owner, MIGRATION);
     const gone = await owner.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('rating_parameter', 'equipment_template_rating', 'client_equipment_template_rating')`);
     expect(gone).toHaveLength(0);
-    const col = await owner.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'equipment_profile' AND column_name = 'client_equipment_template_id'`);
-    expect(col).toHaveLength(0);
+    const link = await owner.query(`SELECT 1 FROM information_schema.tables WHERE table_name = 'equipment_model'`);
+    expect(link).toHaveLength(0);
     await owner.runMigrations({ transaction: 'all' });
-    const back = await owner.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('rating_parameter', 'equipment_template_rating', 'client_equipment_template_rating')`);
-    expect(back).toHaveLength(3);
+    const back = await owner.query(`SELECT 1 FROM information_schema.tables WHERE table_name IN ('rating_parameter', 'equipment_template_rating', 'client_equipment_template_rating', 'equipment_model')`);
+    expect(back).toHaveLength(4);
   });
 });
