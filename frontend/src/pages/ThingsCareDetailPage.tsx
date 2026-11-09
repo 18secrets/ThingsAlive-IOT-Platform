@@ -22,6 +22,7 @@ import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -100,7 +101,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
             </button>
           </div>
 
-          {loading && <p className="text-slate-400">{t('common.loading')}</p>}
+          {loading && <Skeleton />}
           {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
 
           {baselines && baselines.length === 0 && (
@@ -222,7 +223,7 @@ export const ThingsCareDetailPage: React.FC = () => {
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (loading) return <Skeleton />;
 
   return (
     <div className="space-y-3">

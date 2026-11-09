@@ -19,6 +19,7 @@ import {
   apiGetDeviceHealthFleet, apiGetFleetAvailability, apiGetSiteOee, apiListEquipment, apiListPlants,
 } from '../lib/api';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const DAYS = 7;
 
@@ -227,7 +228,7 @@ export const ProductionMonitoringPage: React.FC = () => {
       />
 
       {loading ? (
-        <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        <Skeleton />
       ) : (
         <>
           <div className={`grid grid-cols-2 sm:grid-cols-4 ${selectedSiteOee ? 'lg:grid-cols-5' : ''} gap-4`}>

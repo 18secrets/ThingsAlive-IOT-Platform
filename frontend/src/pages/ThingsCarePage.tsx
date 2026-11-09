@@ -18,6 +18,7 @@ import {
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
 } from '../lib/api';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
@@ -145,7 +146,7 @@ export const ThingsCarePage: React.FC = () => {
       />
 
       {loading ? (
-        <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        <Skeleton />
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

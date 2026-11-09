@@ -7,6 +7,7 @@ import { ListTable } from '../common/ListTable';
 import { TablePagination, usePagination } from '../common/TablePagination';
 import { sortRows, useSort } from '../../lib/useSort';
 import { appLocale } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const litres = (l: number) => l.toFixed(1);
 /** "2026-11-03" as that calendar day, not UTC midnight moved into the reader's zone. */
@@ -108,7 +109,7 @@ export const FleetFuelPanel: React.FC<{
         <p className="text-xs text-slate-500">{t('fleetFuel.subtitle')}</p>
       </div>
 
-      {state === 'loading' ? <p className="text-xs text-slate-500">{t('common.loading')}</p>
+      {state === 'loading' ? <Skeleton lines={2} />
         : state === 'unavailable' ? <p className="text-xs text-slate-500">{t('fleetFuel.unavailable')}</p>
           : view.shifts.length === 0 ? <p className="text-xs text-slate-500">{t('fleetFuel.empty')}</p> : (
             <>

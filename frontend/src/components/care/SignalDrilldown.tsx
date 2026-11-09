@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { ApiError, PredictionSignalDetail, apiGetPredictionSignalDetail } from '../../lib/api';
 import { appLocale } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const WINDOWS = [24, 72, 168] as const;
 
@@ -90,7 +91,7 @@ export const SignalDrilldown: React.FC<{
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
-      {loading && !detail && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+      {loading && !detail && <Skeleton lines={2} />}
 
       {detail && data.length === 0 && !loading && (
         <p className="text-xs text-slate-400 py-6 text-center">{t('drill.noReadings')}</p>

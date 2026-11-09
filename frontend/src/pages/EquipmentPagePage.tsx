@@ -20,6 +20,7 @@ import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
 import type { SceneMarker } from '../components/visual/ModelScene';
 import { appLocale } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 // Lazy, as in ModelAnchorEditor: three.js is fetched only when a machine has a model.
 const ModelScene = lazy(() => import('../components/visual/ModelScene'));
@@ -117,7 +118,7 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : shifts.length === 0 ? (
         <p className="text-xs text-slate-400">{t('shifts.empty')}</p>
       ) : (
@@ -311,7 +312,7 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : records.length === 0 ? (
         <p className="text-xs text-slate-400">{t('service.empty')}</p>
       ) : (
@@ -501,7 +502,7 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
         <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
       ) : (
         <div className="h-96 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800/50">
-          <Suspense fallback={<p className="text-xs text-slate-400 p-3">{t('common.loading')}</p>}>
+          <Suspense fallback={<Skeleton lines={2} className="p-3" />}>
             <ModelScene url={model!.modelUrl!} bounds={model!.bounds} markers={markers} />
           </Suspense>
         </div>
@@ -541,7 +542,7 @@ export const EquipmentPagePage: React.FC = () => {
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (loading) return <Skeleton />;
   if (error) {
     return (
       <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">

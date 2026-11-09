@@ -7,6 +7,7 @@ import {
 import { Chip } from '../common/Chip';
 import { PanelRow, PanelRows, shortWhen } from '../common/PanelRow';
 import { appLocale } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const litres = (l: number) => l.toFixed(1);
 /** "2026-11-03" as that calendar day, not UTC midnight moved into the reader's zone. */
@@ -87,7 +88,7 @@ export function FuelPerShiftPanel({ sourceSystem, externalId }: { sourceSystem: 
         <Fuel className="w-4 h-4" />{t('fuelPerShift.title')}
       </p>
       {loading ? (
-        <p className="text-xs text-slate-500">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : !expected && !history ? (
         <p className="text-xs text-slate-500">{t('fuelPerShift.unavailable')}</p>
       ) : (

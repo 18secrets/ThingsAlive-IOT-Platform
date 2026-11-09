@@ -6,6 +6,7 @@ import {
   apiGetClassVisual, apiRequestClassVisualUpload, apiSetClassAnchors,
 } from '../../../lib/api';
 import { AnchorEditor } from '../../visual/AnchorEditor';
+import { Skeleton } from '../../common/Skeleton';
 
 /** What the browser measured; the API never sees the bytes. An SVG without explicit
  *  size reports 0, so it falls back to a nominal 1000x1000 rather than refusing. */
@@ -117,7 +118,7 @@ export const ClassVisualPanel: React.FC<{ slug: string; version: number; isDraft
       )}
 
       {!visual ? (
-        !error && <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        !error && <Skeleton />
       ) : visual.state === 'assets_unavailable' ? (
         <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <ImageOff className="w-4 h-4" />

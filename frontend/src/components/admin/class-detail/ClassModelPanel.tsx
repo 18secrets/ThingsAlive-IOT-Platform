@@ -6,6 +6,7 @@ import {
   apiGetClassModel, apiRequestClassModelUpload, apiSetClassModelAnchors,
 } from '../../../lib/api';
 import { ModelAnchorEditor, measureModel } from '../../visual/ModelAnchorEditor';
+import { Skeleton } from '../../common/Skeleton';
 
 /**
  * The class's 3-D model and its signal markers (QTWIN1), beside the schematic and on
@@ -112,7 +113,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
       )}
 
       {!model ? (
-        !error && <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        !error && <Skeleton />
       ) : model.state === 'assets_unavailable' ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('model.storageUnavailable')}</p>
       ) : model.state === 'no_model' || model.state === 'upload_pending' ? (
