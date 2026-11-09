@@ -13,7 +13,7 @@ import { assessLink } from '../../device-health/services/link-health';
 import { computeDutyCycle } from '../../utilization/services/duty-cycle';
 import { UtilizationService } from '../../utilization/services/utilization.service';
 import { alertWindow } from './alert-window';
-import { ownExpectedSignals, pullOwnTelemetry } from './own-telemetry';
+import { ownExpectedSignals, ownLateArrivals, pullOwnTelemetry } from './own-telemetry';
 import { withTenantId } from '../../scope/tenant-session';
 import { ShiftRun } from '../entities/shift-run.entity';
 import { tryTakePassLock } from './pass-lock';
@@ -179,18 +179,23 @@ export class ShiftRunner {
    * true when made, and the newest is the one that counts.
    */
   private async sweepLateArrivals(now: Date): Promise<number> {
-    if (!this.reader.connected) return 0;
     let rewound = 0;
 
     for (const shift of await this.shifts.activeShifts()) {
       try {
-        const late = await this.reader.lateArrivals({
+        const request = {
           tenantId: shift.tenantId,
           sourceSystem: shift.sourceSystem,
           externalId: shift.externalId,
           since: shift.arrivalsThrough,
           upTo: now,
-        });
+        };
+        // Late readings come from wherever this pass scores from: the existing platform
+        // when there is a route to it, else 2.0's own store — where a logger posting
+        // directly (a motor logger flushing its buffer after an outage) puts them.
+        const late = this.reader.connected
+          ? await this.reader.lateArrivals(request)
+          : await ownLateArrivals(this.ds, request);
         if (!late) continue;
 
         const didRewind = await this.shifts.rewindForLateArrivals(
