@@ -84,8 +84,12 @@ const ELECTRICAL_DEDUCTIONS = `1.2 * #instability_score + ${tempBand('#winding_t
  * With the sensors: vibration on ISO 10816 class I (machines ≤ 15 kW) — 0 points at the
  * B/C line 1.8 mm/s, all 30 at the C/D line 4.5 mm/s — and the winding estimate on the
  * measured ambient rather than an assumed one.
+ *
+ * Vibration is judged on the worst one-minute mean of the day, not the day's mean: an hour
+ * of dry running in zone C averaged into a healthy day read 100 (local run, 9 Nov). A
+ * minute mean already smooths a one-second knock, so one bad minute is a real minute.
  */
-const SENSOR_DEDUCTIONS = 'clamp(30 * (avg(vibration_velocity) - 1.8) / (avg(vibration_velocity) - avg(vibration_velocity) + 2.7), 0, 30)'
+const SENSOR_DEDUCTIONS = 'clamp(30 * (max(vibration_velocity) - 1.8) / (max(vibration_velocity) - max(vibration_velocity) + 2.7), 0, 30)'
   + ` + ${tempBand('#winding_temp_measured')}`
   + ' + 5 * #voltage_tier + clamp(50 * (#peak_load_ratio - 1), 0, 10)';
 
@@ -165,7 +169,7 @@ export const FORMULAS: FormulaRow[] = [
   //   health_score_electrical the earlier electrical-only score, for loggers without the sensors
   { classes: BOTH, key: 'health_score', inputs: ['motor_current', 'motor_current_max', 'vibration_velocity', 'ambient_temperature', 'supply_voltage'], unit: 'dimensionless',
     expression: `100 - (4 / 3) * (${SENSOR_DEDUCTIONS})`,
-    basis: 'PROVISIONAL, pending Crompton: 100 − 4/3 × (vibration [ISO 10816 class I: 0 at 1.8, 30 at 4.5 mm/s] + temperature margin on measured ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10]) (F10; KPIs & Formulas pump_health_score bands, duty band excluded)',
+    basis: 'PROVISIONAL, pending Crompton: 100 − 4/3 × (vibration, worst minute [ISO 10816 class I: 0 at 1.8, 30 at 4.5 mm/s] + temperature margin on measured ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10]) (F10; KPIs & Formulas pump_health_score bands, duty band excluded)',
     window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
   { classes: [PUMP_CLASS], key: 'health_score_with_duty', inputs: ['motor_current', 'motor_current_max', 'input_power', 'vibration_velocity', 'ambient_temperature', 'supply_voltage'], unit: 'dimensionless',
     expression: `100 - (${SENSOR_DEDUCTIONS}) - clamp(abs(#load_loss_pct), 0, 25)`,
