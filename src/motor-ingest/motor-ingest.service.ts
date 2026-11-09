@@ -251,6 +251,38 @@ export class MotorIngestService {
       add('motor_running_share', 'dimensionless', Number(row.share), minute);
       // Only while running, and only with enough seconds to have a spread at all.
       if (row.fluct != null && Number.isFinite(Number(row.fluct))) add('current_fluctuation_pct', 'dimensionless', Number(row.fluct), minute);
+      if (row.runCurrent != null && Number.isFinite(Number(row.runCurrent))) add('running_current', 'A', Number(row.runCurrent), minute);
+    }
+    if (tuples.length) await upsertTelemetry(m, tuples, values);
+    await this.writeStartsLastHour(m, deviceId, minutes, now, owner);
+  }
+
+  /**
+   * Starts in the hour ending at each minute (POC T8): what a maker's "starts per hour"
+   * allowance is a statement about, as a signal a threshold rule can read. Summed from
+   * the per-minute motor_starts just written and the hour before them, so a minute
+   * recomputed later (a late batch) gets its window recomputed too. Only minutes the
+   * running judgement covered: a machine with no ratings has no starts, and no window.
+   */
+  private async writeStartsLastHour(m: EntityManager, deviceId: string, minutes: number[], now: Date, owner: Owner): Promise<void> {
+    if (!minutes.length) return;
+    const rows: { minute: Date; starts: string }[] = await m.query(
+      `SELECT j."source_timestamp" AS "minute", coalesce(sum(t."value"), 0) AS "starts"
+         FROM "telemetry_reading" j
+         JOIN "telemetry_reading" t
+           ON t."tenant_id" = j."tenant_id" AND t."imei" = j."imei" AND t."signal" = 'motor_starts'
+          AND t."source_timestamp" > j."source_timestamp" - interval '60 minutes' AND t."source_timestamp" <= j."source_timestamp"
+        WHERE j."tenant_id" = $1 AND j."imei" = $2 AND j."signal" = 'motor_starts'
+          AND j."source_timestamp" = ANY($3::timestamptz[])
+        GROUP BY j."source_timestamp"`,
+      [owner.tenant_id, deviceId, minutes.map((t) => new Date(t))],
+    );
+    const values: unknown[] = [];
+    const tuples: string[] = [];
+    for (const r of rows) {
+      const o = values.length;
+      values.push(owner.tenant_id, deviceId, 'starts_last_hour', Number(r.starts), 'starts', new Date(r.minute), now);
+      tuples.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, 'live')`);
     }
     if (tuples.length) await upsertTelemetry(m, tuples, values);
   }
@@ -273,7 +305,7 @@ export class MotorIngestService {
    */
   private async runningMinutes(
     m: EntityManager, owner: Owner, deviceId: string, minutes: number[],
-  ): Promise<{ minute: Date; ran: boolean; starts: string; share: string; fluct: string | null }[]> {
+  ): Promise<{ minute: Date; ran: boolean; starts: string; share: string; fluct: string | null; runCurrent: string | null }[]> {
     if (!owner.equipmentExternalId || !minutes.length) return [];
     const [profile] = await m.query(
       `SELECT "id", "equipment_class_slug" AS "equipmentClassSlug", "plant_id" AS "plantId" FROM "equipment_profile"
@@ -303,7 +335,10 @@ export class MotorIngestService {
               -- (V-07: a current-noise index, not vibration). Running seconds only; ten at least.
               CASE WHEN count(*) FILTER (WHERE "on") >= 10
                    THEN 100 * stddev_samp("current_a") FILTER (WHERE "on") / NULLIF(avg("current_a") FILTER (WHERE "on"), 0)
-              END AS "fluct"
+              END AS "fluct",
+              -- Current while running only (POC T3): a dry-run rule that read the minute's
+              -- plain average would see every stop as a pump running dry.
+              CASE WHEN count(*) FILTER (WHERE "on") >= 10 THEN avg("current_a") FILTER (WHERE "on") END AS "runCurrent"
          FROM t
         WHERE date_trunc('minute', "reading_at") = ANY($2::timestamptz[])
         GROUP BY 1`,

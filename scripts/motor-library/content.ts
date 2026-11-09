@@ -57,6 +57,9 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   { signal: 'vibration_velocity', unit: 'mm/s', required: false, description: 'Vibration velocity RMS on the pump/motor body, one-minute average (sensor).' },
   { signal: 'vibration_velocity_max', unit: 'mm/s', required: false, description: 'Highest vibration reading in the minute (sensor).' },
   { signal: 'device_load_pct', unit: 'dimensionless', required: false, description: 'The logger\'s own load figure, % of rated (device).' },
+  // POC T3 / T8: written by the motor job from the per-second readings.
+  { signal: 'running_current', unit: 'A', required: false, description: 'Current averaged over the seconds the motor ran (none in a minute it did not run).' },
+  { signal: 'starts_last_hour', unit: 'starts', required: false, description: 'Starts in the hour ending at this minute: what a maker\'s starts-per-hour allowance is about.' },
   { signal: 'water_air_gap', unit: 'dimensionless', required: false, description: 'Water / air-gap sensor reading, stored as sent. Unit and meaning to confirm with the firmware team.' },
 ];
 
@@ -180,6 +183,8 @@ export const FORMULAS: FormulaRow[] = [
     basis: 'PROVISIONAL, for loggers without vibration/ambient sensors: 100 − 4/3 × (instability×1.2 [max 30] + temperature margin on the assumed ambient [max 25] + 5 × voltage tier [max 10] + overload [max 10])',
     window: '24h', chart: 'gauge', target: { value: 100, direction: 'higher_better' }, useCase: 'U2' },
   // The sensors on their own.
+  { classes: BOTH, key: 'peak_starts_per_hour', expression: 'max(starts_last_hour)', inputs: ['starts_last_hour'], unit: 'starts',
+    basis: 'Most starts in any hour of the last 24 h, against the maker\'s allowance (POC T8, RCA 10)', window: '24h', chart: 'number', useCase: 'U6' },
   { classes: BOTH, key: 'vibration_avg', expression: 'avg(vibration_velocity)', inputs: ['vibration_velocity'], unit: 'mm/s',
     basis: 'Vibration velocity RMS, 24 h mean (sensor). ISO 10816 class I: ≤ 0.71 good, ≤ 1.8 satisfactory, ≤ 4.5 unsatisfactory, above unacceptable',
     window: '24h', chart: 'number', useCase: 'U2' },
@@ -203,6 +208,7 @@ export const LAYOUT: { classes: string[]; key: string; type: string; boundTo: st
   { classes: BOTH, key: 'energy', type: 'kpi_number', boundTo: 'energy_kwh', title: 'Energy today', size: 'small' },
   { classes: BOTH, key: 'running', type: 'kpi_number', boundTo: 'running_pct', title: 'Running (% of last 24 h)', size: 'small' },
   { classes: BOTH, key: 'starts', type: 'kpi_number', boundTo: 'starts_today', title: 'Starts today', size: 'small' },
+  { classes: BOTH, key: 'starts_hour', type: 'kpi_number', boundTo: 'peak_starts_per_hour', title: 'Most starts in an hour (24 h)', size: 'small' },
   { classes: BOTH, key: 'logger_loss', type: 'kpi_number', boundTo: 'logger_records_lost_24h', title: 'Logger records lost (24 h)', size: 'small' },
   { classes: BOTH, key: 'instability', type: 'kpi_number', boundTo: 'instability_score', title: 'Current instability (0-25; not vibration)', size: 'small' },
   { classes: BOTH, key: 'health', type: 'kpi_gauge', boundTo: 'health_score', title: 'Health score (provisional weights)', size: 'small' },
@@ -273,6 +279,21 @@ export const ALERT_TEMPLATES: { slugSuffix: string; name: string; severity: stri
     params: { signal: 'logger_records_dropped', max: 0, lookbackReadings: 10, requiredBreaches: 1 } },
   // ISO 10816 class I (≤ 15 kW): zone C from 1.8 mm/s, zone D (damage) from 4.5. Fixed
   // lines, not ratings: the standard sets them by machine class, not by model.
+  // POC T3, PROVISIONAL: the workbook's dry-run judgement (V-03) is load loss against
+  // the catalogue curve, which Crompton has not sent. Until it is entered this is the
+  // electrical half alone: current while running under 60% of rated, on 2 of the last
+  // 3 minutes so a dry run is called in the pass that sees it. It can false-fire on a
+  // high-head install that legitimately draws little (V-03); the curve-based dry_run
+  // KPI is the confirmation, and a high-head site can disable this rule.
+  { slugSuffix: 'dry-run-provisional', name: 'Possible dry run: running current under 60% of rated (provisional)', severity: 'critical',
+    params: { signal: 'running_current', rating: 'rated_current', min: 0.6, lookbackReadings: 3, requiredBreaches: 2 } },
+  // POC T8: starts in the last hour above the maker's allowance (PARAM-M Starts_max).
+  { slugSuffix: 'cycling', name: 'Destructive cycling: more starts in an hour than the maker allows', severity: 'medium',
+    params: { signal: 'starts_last_hour', rating: 'max_starts_per_hour', max: 1, lookbackReadings: 1, requiredBreaches: 1 } },
+  // F8 on the measured body temperature: the class's warning line T_class - 45 (110 C for
+  // Class F). Body temperature runs below the winding, so a body this hot is overheating.
+  { slugSuffix: 'overheating', name: 'Motor body above the insulation class warning line', severity: 'medium',
+    params: { signal: 'motor_temperature', rating: 'insulation_temp_limit', max: 0.71 } },
   { slugSuffix: 'vibration-warning', name: 'Vibration in ISO zone C (above 1.8 mm/s)', severity: 'medium',
     params: { signal: 'vibration_velocity', max: 1.8 } },
   { slugSuffix: 'vibration-critical', name: 'Vibration in ISO zone D (above 4.5 mm/s)', severity: 'critical',
@@ -301,6 +322,12 @@ export const SCENARIOS: { classes: string[]; slugSuffix: string; name: string; d
   { classes: [PUMP_CLASS], slugSuffix: 'wear-clogging', name: 'Impeller wear / clogging', severity: 'medium', minimumHistoryDays: 14,
     requiredSignals: ['input_power', 'current_fluctuation_pct'],
     description: 'Power drifting from this pump\'s own history at the same running pattern (RCA 4, 5, 6); the catalogue curve sharpens it once entered.' },
+  { classes: BOTH, slugSuffix: 'overheating', name: 'Overheating (temperature trend)', severity: 'high', minimumHistoryDays: 7,
+    requiredSignals: ['motor_temperature', 'motor_current'],
+    description: 'Motor temperature climbing against this motor\'s own history at the same current: cooling, ventilation or a winding fault (POC prep A5).' },
+  { classes: BOTH, slugSuffix: 'energy-drift', name: 'Energy drift', severity: 'medium', minimumHistoryDays: 14,
+    requiredSignals: ['input_power', 'motor_running_share'],
+    description: 'Power per running minute drifting from this motor\'s own history: rising losses or a changed duty (POC prep A5; kWh per kL once the curve is entered).' },
   { classes: BOTH, slugSuffix: 'bearing-vibration', name: 'Bearing wear (vibration trend)', severity: 'high', minimumHistoryDays: 7,
     requiredSignals: ['vibration_velocity', 'vibration_velocity_max'],
     description: 'Vibration rising against this motor\'s own history before it reaches ISO zone D: bearing wear, misalignment or looseness (RCA 7). Plan the bearing job.' },
@@ -328,6 +355,7 @@ export const MINI_1HP_MODEL = {
     { name: 'rated_slip', value: 0.05, source: `${WB}, Formula Verification V-02: 1 − 2,850 / 3,000. Confirm from the datasheet` },
     { name: 'rated_temp_rise', value: 40, source: `PROVISIONAL. ${WB}, Formula Verification V-04: the firmware's 40 °C, uncalibrated; bench-calibrate in POC T0` },
     { name: 'ambient_temp_reference', value: 30, source: `PROVISIONAL. ${WB}, Formula Verification V-04: the firmware's fixed 30 °C ambient; set per site where measured` },
+    { name: 'max_starts_per_hour', value: 20, source: 'PROVISIONAL. Typical maker allowance for fractional-HP monoblocks; confirm from the Crompton manual' },
     { name: 'locked_rotor_multiple', value: 6, source: 'PROVISIONAL. Typical for small single-phase induction motors (5-7 × rated); confirm from the Crompton datasheet' },
   ],
 };
