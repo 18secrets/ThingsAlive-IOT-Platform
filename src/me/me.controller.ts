@@ -52,6 +52,9 @@ export class MeController {
       roleName: identity && 'roleName' in identity ? identity.roleName : null,
       tenantName: identity && 'tenantName' in identity ? identity.tenantName : null,
       tenantSince: identity && 'tenantSince' in identity ? identity.tenantSince : null,
+      // The zone the account's dates are shown in (MIN-12). Null for staff, who have
+      // no account of their own; the UI then keeps the browser's zone.
+      tenantTimeZone: identity && 'tenantTimeZone' in identity ? identity.tenantTimeZone : null,
       roles: scope.roles,
       isPlatformRole: scope.isPlatformRole,
       scope: {

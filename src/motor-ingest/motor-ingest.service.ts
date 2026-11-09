@@ -87,7 +87,7 @@ export class MotorIngestService {
    * turns new uploads' counters into logger-health signals. Idempotent: what it has done
    * it marks, and a reading it has placed is not placed again.
    */
-  async processPending(now = new Date()): Promise<PassSummary> {
+  async processPending(now = new Date(), maxReadings = MAX_READINGS_PER_PASS): Promise<PassSummary> {
     return runTenantSpanning(this.ds, 'motor telemetry: readings the receiver stored', async (m) => {
       // The reading's wall-clock time. The device's timestamp is its own clock (seconds,
       // continuous within one boot); the receiver keeps no device clock at send time. So,
@@ -98,6 +98,12 @@ export class MotorIngestService {
       // batches seconds apart, and anchoring each batch to its own arrival squeezed five
       // minutes into one — a backfill after an outage into seconds. Still approximate (off
       // by however long the newest reading waited on the device), and said so on the row.
+      //
+      // The anchor is the newest reading still waiting for that boot, not the newest in
+      // this pass. A backlog larger than one pass (a logger back after hours offline)
+      // used to be anchored pass by pass, each chunk on "now", so 23 hours of readings
+      // were stacked onto the last five. Waiting readings are few in steady running and
+      // found through the partial index on reading_at IS NULL.
       const result: unknown = await m.query(
         `WITH pending AS (
            SELECT "device_id", "seq", "device_ts", "batch_id", "received_at"
@@ -109,8 +115,13 @@ export class MotorIngestService {
                                   ORDER BY u."id" LIMIT 1), -1) AS "boot"
              FROM pending p
          ), anchor AS (
-           SELECT DISTINCT ON ("device_id", "boot") "device_id", "boot", "device_ts" AS "a_ts", "received_at" AS "a_at"
-             FROM booted ORDER BY "device_id", "boot", "device_ts" DESC, "received_at" DESC
+           SELECT DISTINCT ON (w."device_id", "boot") w."device_id", "boot", w."device_ts" AS "a_ts", w."received_at" AS "a_at"
+             FROM "motor_sensor_records" w
+             CROSS JOIN LATERAL (SELECT coalesce((SELECT u."boot" FROM "motor_upload_log" u
+                                   WHERE u."device_id" = w."device_id" AND u."batch_id" = w."batch_id"
+                                   ORDER BY u."id" LIMIT 1), -1) AS "boot") wb
+            WHERE w."reading_at" IS NULL AND w."device_id" IN (SELECT "device_id" FROM pending)
+            ORDER BY w."device_id", "boot", w."device_ts" DESC, w."received_at" DESC
          )
          UPDATE "motor_sensor_records" r
             SET "reading_at" = a."a_at" - make_interval(secs => greatest(0, a."a_ts" - b."device_ts")),
@@ -118,7 +129,7 @@ export class MotorIngestService {
            FROM booted b JOIN anchor a ON a."device_id" = b."device_id" AND a."boot" = b."boot"
           WHERE r."device_id" = b."device_id" AND r."seq" = b."seq" AND r."reading_at" IS NULL
         RETURNING r."device_id", r."reading_at"`,
-        [MAX_READINGS_PER_PASS],
+        [maxReadings],
       );
       // TypeORM's postgres driver returns [rows, affected] for an UPDATE ... RETURNING.
       const placed = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result) as { device_id: string; reading_at: Date }[];
