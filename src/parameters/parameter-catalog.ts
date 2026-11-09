@@ -96,7 +96,7 @@ export const OPERATIONAL_PARAMETERS: readonly OperationalParameter[] = [
   motorRating('voltage_warn_low', 'V', 'Supply voltage below which a warning is raised, inside the operating band.'),
   motorRating('voltage_warn_high', 'V', 'Supply voltage above which a warning is raised, inside the operating band.'),
   motorRating('locked_rotor_multiple', null, 'Locked-rotor current as a multiple of rated current.'),
-  motorRating('max_starts_per_hour', null, 'Starts the maker allows in one hour. Compare with a start count over one hour.'),
+  motorRating('max_starts_per_hour', 'starts', 'Starts the maker allows in one hour. Compare with starts_last_hour (POC T8).'),
   motorRating('install_head', 'm', 'Static head at this installation, measured at commissioning.'),
   motorRating('ambient_temp_reference', 'degC', 'Ambient temperature to assume where none is measured on site.'),
 ];

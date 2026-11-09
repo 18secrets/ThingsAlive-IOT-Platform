@@ -109,25 +109,26 @@ async function buildWorkbook(template: Buffer): Promise<Buffer> {
 }
 
 async function platformSteps(master: Api, deviceId: string): Promise<{ masterModelId: string }> {
-  const existing: Json[] = (await master.get('/api/v1/catalog/authoring/equipment-classes')).body;
-  const published = (slug: string) => existing.some((c) => c.slug === slug && c.status === 'published');
-
-  if (CLASSES.every((c) => published(c.slug))) {
-    step('Classes already published; import skipped.');
+  // Imported every run: the import itself says which classes changed ("unchanged" when
+  // the content is byte-identical), so a re-run after content.ts changes publishes new
+  // versions of exactly those classes, and a re-run without changes publishes nothing.
+  const workbook = await buildWorkbook(await master.download('/api/v1/platform/catalog/template'));
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(workbook)]), 'motor-library.xlsx');
+  const { body: batch } = await master.post('/api/v1/platform/catalog/imports', form);
+  const { body: diff } = await master.get(`/api/v1/platform/catalog/imports/${batch.id}`);
+  // Anything but a valid row would be left out of the catalog without failing the apply.
+  const refused = JSON.stringify(diff).match(/"status":"(invalid|skipped)"/g)?.length ?? 0;
+  if (refused) throw new Error(`The workbook has ${refused} refused row(s): ${JSON.stringify(diff).slice(0, 3000)}`);
+  const changed = ((diff.classes ?? []) as Json[]).filter((c) => c.action !== 'unchanged').map((c) => c.slug as string);
+  if (changed.length === 0) {
+    step('Classes unchanged; nothing to publish.');
   } else {
-    const workbook = await buildWorkbook(await master.download('/api/v1/platform/catalog/template'));
-    const form = new FormData();
-    form.append('file', new Blob([new Uint8Array(workbook)]), 'motor-library.xlsx');
-    const { body: batch } = await master.post('/api/v1/platform/catalog/imports', form);
-    const { body: diff } = await master.get(`/api/v1/platform/catalog/imports/${batch.id}`);
-    // Anything but a valid row would be left out of the catalog without failing the apply.
-    const refused = JSON.stringify(diff).match(/"status":"(invalid|skipped)"/g)?.length ?? 0;
-    if (refused) throw new Error(`The workbook has ${refused} refused row(s): ${JSON.stringify(diff).slice(0, 3000)}`);
     await master.post(`/api/v1/platform/catalog/imports/${batch.id}/apply`, { acknowledgeWarnings: true });
-    step(`Imported ${CLASSES.length} classes (batch ${batch.id}).`);
-    for (const c of CLASSES) {
-      await master.post(`/api/v1/catalog/equipment-classes/${c.slug}/publish`, { acknowledgeWarnings: true });
-      step(`Published class ${c.slug}.`);
+    step(`Imported ${changed.join(', ')} (batch ${batch.id}).`);
+    for (const slug of changed) {
+      await master.post(`/api/v1/catalog/equipment-classes/${slug}/publish`, { acknowledgeWarnings: true });
+      step(`Published class ${slug}.`);
     }
   }
 
@@ -203,6 +204,25 @@ async function platformSteps(master: Api, deviceId: string): Promise<{ masterMod
 }
 
 interface Target { machineCode: string; machineName: string; deviceId: string }
+
+/**
+ * An account that already holds the classes gets what was published since: its class
+ * copies upgraded to the latest version (formulas, layout; anything it changed is kept),
+ * then a re-grant, which adds the alert rules and scenarios it does not have yet (add-only,
+ * by slug). The upgrade has to come first: a re-grant over an older copy is refused.
+ */
+async function bringAccountUpToDate(master: Api, account: Api): Promise<void> {
+  for (const c of CLASSES) {
+    const preview = await account.get(`/api/v1/my-catalog/equipment-classes/${c.slug}/upgrade`, [404]);
+    if (preview.status === 404) continue; // not granted yet: the grant below copies the latest
+    if (!preview.body.upToDate) {
+      await account.post(`/api/v1/my-catalog/equipment-classes/${c.slug}/upgrade`, { toVersion: preview.body.toVersion });
+      step(`Account copy of ${c.slug} upgraded v${preview.body.fromVersion} → v${preview.body.toVersion}.`);
+    }
+    const grant = (await master.post('/api/v1/catalog/entitlements', { tenantId: POC.tenantId, equipmentClassSlug: c.slug, note: 'Motor library (Crompton POC)' })).body;
+    if (grant) step(`Re-granted ${c.slug}: new alert rules and scenarios added to the account.`);
+  }
+}
 
 async function accountSteps(account: Api, masterModelId: string, t: Target): Promise<void> {
   const mine: Json[] = (await account.get('/api/v1/my-equipment-templates')).body;
@@ -301,6 +321,7 @@ async function main(): Promise<number> {
   };
   console.log(`Provisioning the motor library on ${url}`);
   const { masterModelId } = await platformSteps(master, target.deviceId);
+  await bringAccountUpToDate(master, account);
   await accountSteps(account, masterModelId, target);
   // No key to issue: loggers post to the Python receiver (deploy/motor-receiver), which
   // takes any device id and writes motor_sensor_records; 2.0 reads them from there. The
