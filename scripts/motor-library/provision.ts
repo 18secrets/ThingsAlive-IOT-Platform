@@ -25,7 +25,7 @@
  * Master Admin (platform) steps: import the two classes from the template workbook,
  * publish them, create and publish the rated alert templates, create the Crompton Mini
  * 1 HP model with its ratings, grant both classes to the account, register the logger
- * and assign it to the account, issue its key.
+ * and assign it to the account.
  * Account (motors super admin) steps: copy the model, add the POC machine, name its
  * model, give it the day/night shifts, claim the logger onto it, bind its signals.
  */
@@ -302,9 +302,11 @@ async function main(): Promise<number> {
   console.log(`Provisioning the motor library on ${url}`);
   const { masterModelId } = await platformSteps(master, target.deviceId);
   await accountSteps(account, masterModelId, target);
-  const key = (await master.post(`/api/v1/motor-loggers/${target.deviceId}/key`)).body.key;
-  console.log(`\nDone. Logger ${target.deviceId} key (shown once; replaces any earlier key):\n  ${key}`);
-  console.log(`Send data: npm run motor:sim -- --url ${url} --device ${target.deviceId} --key ${key} --scenario normal --backfill 30`);
+  // No key to issue: loggers post to the Python receiver (deploy/motor-receiver), which
+  // takes any device id and writes motor_sensor_records; 2.0 reads them from there. The
+  // key route went with the in-API receiver, and asking for it ended every run on a 404.
+  console.log(`\nDone. Logger ${target.deviceId} is on ${target.machineCode}; its readings arrive through the motor receiver.`);
+  console.log(`Send data: npm run motor:sim -- --url <receiver url> --device ${target.deviceId} --scenario normal --backfill 30`);
   return 0;
 }
 
