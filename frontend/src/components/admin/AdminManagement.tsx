@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Disc,
+  Gauge,
+  MapPinned,
   LayoutGrid,
   Building2,
   Wrench,
@@ -38,6 +40,8 @@ import { MasterEquipmentManagement } from '../equipment/MasterEquipmentManagemen
 import { ClientManagement } from '../clients/ClientManagement';
 import { StaffManagement } from '../staff/StaffManagement';
 import { FuelForecastAccuracyPage } from '../../pages/FuelForecastAccuracyPage';
+import { ModelsTab } from '../models/ModelsView';
+import { ServiceRosterView } from '../service-roster/ServiceRosterView';
 
 interface AdminManagementProps {
   sensors: SensorItem[];
@@ -206,7 +210,9 @@ interface AdminManagementProps {
 
 // Fuel forecast accuracy (D53) is a reading of the account's own fleet, beside the fleet
 // it reads; Administration is where an account's people already go to see that fleet.
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'fuel-forecast-accuracy'];
+// Models: the account's own copies, which its machines name for their ratings (D57).
+// Service roster (Crompton U5): which engineer a job on each site goes to.
+const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'model', 'service-roster', 'fuel-forecast-accuracy'];
 
 // Master Admin only (task: move to the sidebar, 2026-10-10) — see Shell.tsx's
 // ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
@@ -345,6 +351,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'plant', label: t('tabs.plant'), icon: Building2 },
     { id: 'category', label: t('tabs.equipmentClasses'), icon: LayoutGrid },
     { id: 'named-formula', label: t('tabs.namedFormulas'), icon: FunctionSquare },
+    { id: 'model', label: t('tabs.models'), icon: Gauge },
+    { id: 'service-roster', label: t('tabs.serviceRoster'), icon: MapPinned },
     { id: 'sensor', label: t('tabs.sensor'), icon: Disc },
     { id: 'tool-mapping', label: t('tabs.toolMapping'), icon: Wrench },
     { id: 'signal-alias', label: t('tabs.signalAliases'), icon: Disc },
@@ -497,6 +505,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         )}
 
         {restrictToClientAdmin && activeSubTab === 'fuel-forecast-accuracy' && <FuelForecastAccuracyPage />}
+
+        {activeSubTab === 'model' && <ModelsTab scope={restrictToClientAdmin ? 'account' : 'library'} />}
+
+        {restrictToClientAdmin && activeSubTab === 'service-roster' && <ServiceRosterView />}
 
         {restrictToClientAdmin && activeSubTab === 'plant' && (
           <PlantView

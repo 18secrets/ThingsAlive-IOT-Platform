@@ -132,6 +132,8 @@ export type AdminSubTab =
   | 'devices'
   | 'equipment'
   | 'named-formula'
+  | 'model'
+  | 'service-roster'
   | 'clients'
   | 'staff'
   | 'telemetry-archive'

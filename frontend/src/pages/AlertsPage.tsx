@@ -16,7 +16,7 @@ import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
   apiAcknowledgeAlert, apiCreateAlertRule, apiDisableAlertRule, apiEnableAlertRule, apiListAlertRules,
-  apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
+  apiListAlerts, apiListEquipment, apiListMyCatalogEquipmentClasses, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 import { sortRows, useSort } from '../lib/useSort';
 import { appLocale, appTimeZone } from '../lib/dateLocale';
@@ -54,6 +54,8 @@ export const AlertsPage: React.FC = () => {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
+  // Class category by slug: motor and pump alerts also read in Crompton's three tiers (U4).
+  const [classCategory, setClassCategory] = useState<Map<string, string | null>>(new Map());
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -69,6 +71,7 @@ export const AlertsPage: React.FC = () => {
     // shouldn't blank out data the others already loaded.
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiListEquipment().then((eq) => { if (live) setEquipment(eq); }).catch(() => {});
+    apiListMyCatalogEquipmentClasses().then((c) => { if (live) setClassCategory(new Map(c.map((x) => [x.slug, x.category ?? null]))); }).catch(() => {});
     apiListAlertRules().then((r) => { if (live) setRules(r); }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadRules')); });
     apiListAlerts({ state: ['open', 'acknowledged'] })
       .then((e) => { if (live) { setEvents(e); setError(undefined); } })
@@ -180,6 +183,18 @@ export const AlertsPage: React.FC = () => {
   ) : null;
   const machineName = (e: Event) =>
     equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
+  // Crompton's Critical / Warning / Normal (U4) beside our five severities, for motors and
+  // pumps only: every other account's alerts read exactly as before.
+  const tierOf = (e: Event): 'critical' | 'warning' | 'normal' | null => {
+    const slug = equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.equipmentClassSlug;
+    const category = slug ? classCategory.get(slug) : null;
+    if (category !== 'motor' && category !== 'pump') return null;
+    return e.severity === 'critical' ? 'critical' : e.severity === 'high' || e.severity === 'medium' ? 'warning' : 'normal';
+  };
+  const tierChip = (e: Event) => {
+    const tier = tierOf(e);
+    return tier ? <Chip tone={tier === 'critical' ? 'rose' : tier === 'warning' ? 'amber' : 'emerald'} title={t('tier.title')}>{t(`tier.${tier}`)}</Chip> : null;
+  };
   const eventActions = (e: Event) => (
     <>
       {e.state === 'open' && (
@@ -319,7 +334,7 @@ export const AlertsPage: React.FC = () => {
               rows={eventPage.pageItems}
               rowKey={(e) => e.id}
               cells={(e) => [
-                <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
+                <span className="inline-flex flex-wrap items-center gap-1"><Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>{tierChip(e)}</span>,
                 <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
                 <span className="font-medium">{e.ruleName}</span>,
                 machineName(e),
@@ -333,7 +348,7 @@ export const AlertsPage: React.FC = () => {
               {eventPage.pageItems.map((e) => (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
+                    <span className="inline-flex flex-wrap items-center gap-1"><Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>{tierChip(e)}</span>
                     <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>

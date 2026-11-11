@@ -1090,6 +1090,8 @@ export interface SignalThresholdParams {
   signal: string;
   max?: number | null;
   min?: number | null;
+  /** D59: max/min are multiples of this rating, read per machine (nameplate, then model). */
+  rating?: string | null;
   /** Tenant alert rules only — unsupported in class-level template authoring, which
    *  has no live machine to default these against. */
   lookbackReadings?: number;
@@ -1363,6 +1365,119 @@ export function apiPublishNamedFormula(slug: string, version: number): Promise<N
 export function apiSetNamedFormulaActive(slug: string, active: boolean): Promise<NamedFormula[]> {
   return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${active ? "activate" : "deactivate"}`, {
     method: "POST",
+  });
+}
+
+// ------------------------------------------------------------------ models (D57, D58)
+
+/**
+ * A model of a machine: make and model, the class it belongs to, and since D57 the rated
+ * figures and duty curve every machine naming it is measured against (Crompton POC).
+ * Master Admin keeps the library (`/equipment-templates`); an account keeps its own copies
+ * (`/my-equipment-templates`), and a machine names one of those.
+ */
+export interface EquipmentModel {
+  id: string;
+  name: string;
+  equipmentClassSlug: string | null;
+  category: string | null;
+  manufacturer: string | null;
+  description: string | null;
+  /** Account copies only: the library model it was copied from. */
+  copiedFromId?: string | null;
+  updatedAt: string;
+}
+
+export interface ModelInput {
+  name?: string;
+  equipmentClassSlug?: string;
+  category?: string;
+  manufacturer?: string;
+  description?: string;
+}
+
+/** A rating a model can carry (D56): its unit is fixed by the name. */
+export interface RatingName { name: string; unit: string | null; description: string | null }
+
+export interface ModelRating {
+  name: string;
+  value: number;
+  unit: string | null;
+  /** The datasheet or catalogue page the figure came from. Required. */
+  source: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface DutyCurvePoint { headM: number; flowLpm: number; inputKw: number }
+export interface DutyCurve { source: string | null; points: (DutyCurvePoint & { point?: number })[] }
+
+/** `library`: Master Admin's models. `account`: the signed-in account's own copies. */
+export type ModelScope = "library" | "account";
+const modelBase = (scope: ModelScope) => (scope === "library" ? "/equipment-templates" : "/my-equipment-templates");
+
+export function apiListModels(scope: ModelScope): Promise<EquipmentModel[]> {
+  return authFetch(modelBase(scope));
+}
+
+export function apiCreateModel(scope: ModelScope, input: ModelInput & { name: string }): Promise<EquipmentModel> {
+  return authFetch(modelBase(scope), { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiUpdateModel(scope: ModelScope, id: string, input: ModelInput): Promise<EquipmentModel> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Account copies only. Refused while a machine names the model. */
+export function apiDeleteMyModel(id: string): Promise<void> {
+  return authFetch(`/my-equipment-templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Copies a library model, with its ratings and curve, into the account. Later library edits do not follow. */
+export function apiCopyModelFromLibrary(masterId: string, name?: string): Promise<EquipmentModel> {
+  return authFetch(`/my-equipment-templates/from/${encodeURIComponent(masterId)}`, {
+    method: "POST", body: JSON.stringify(name ? { name } : {}),
+  });
+}
+
+export function apiGetRatingNames(): Promise<RatingName[]> {
+  return authFetch("/equipment-templates/rating-names");
+}
+
+export function apiGetModelRatings(scope: ModelScope, id: string): Promise<ModelRating[]> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/ratings`);
+}
+
+/** Replaces every rating of the model. Idempotent. */
+export function apiReplaceModelRatings(
+  scope: ModelScope, id: string, ratings: { name: string; value: number; source: string }[],
+): Promise<ModelRating[]> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/ratings`, {
+    method: "PUT", body: JSON.stringify({ ratings }),
+  });
+}
+
+export function apiGetDutyCurve(scope: ModelScope, id: string): Promise<DutyCurve> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/duty-curve`);
+}
+
+/** Replaces the curve; no points removes it. The server orders the points and refuses a
+ *  curve whose flow does not rise as head falls. */
+export function apiReplaceDutyCurve(scope: ModelScope, id: string, curve: { source: string; points: DutyCurvePoint[] }): Promise<DutyCurve> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/duty-curve`, {
+    method: "PUT", body: JSON.stringify(curve),
+  });
+}
+
+/** Which of the account's models a machine is. */
+export function apiGetMachineModel(sourceSystem: string, externalId: string): Promise<{ modelId: string | null }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`);
+}
+
+/** Names the machine's model (one of the account's, of the machine's class), or clears it. */
+export function apiSetMachineModel(sourceSystem: string, externalId: string, modelId: string | null): Promise<{ modelId: string | null }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`, {
+    method: "PUT", body: JSON.stringify({ modelId }),
   });
 }
 
@@ -2347,6 +2462,23 @@ export function apiGetMachinePage(sourceSystem: string, externalId: string): Pro
   return authFetch(
     `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/page`,
   );
+}
+
+export type MachineEventKind = "start" | "trip_overload" | "trip_supply" | "trip_overtemp" | "voltage_low" | "voltage_high";
+
+/** A pump's starts, trips and voltage events (Crompton U6), read from its own signals. */
+export interface MachineEvents {
+  from: string;
+  to: string;
+  events: { at: string; kind: MachineEventKind; value: number; limit?: number }[];
+  unavailable: { kind: "starts" | "trips" | "voltage"; reason: "unbound" | "no_voltage_band" }[];
+  truncated: boolean;
+}
+
+/** Newest first; the last day unless a window (up to 7 days) is given. */
+export function apiGetMachineEvents(sourceSystem: string, externalId: string, range?: { from: Date; to: Date }): Promise<MachineEvents> {
+  const qs = range ? `?from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}` : "";
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/events${qs}`);
 }
 
 /** The composed dashboard for one site (`GET /sites/:plantId/page`) — every machine
@@ -3886,7 +4018,7 @@ export interface EffectiveParameter {
   name: string;
   value: number | string | null;
   unit: string | null;
-  source: { scope: ParameterScope; scopeRef: string | null; effectiveFrom: string } | null;
+  source: { scope: ParameterScope | "model"; scopeRef: string | null; effectiveFrom: string } | null;
 }
 
 export interface TenantParameterRow {
@@ -4886,6 +5018,71 @@ export function apiPlanFleetImport(file: File, tenantId?: string): Promise<Fleet
 /** Adds the machines and fits the loggers. Idempotent; refused whole on any row error. */
 export function apiApplyFleetImport(file: File, tenantId?: string): Promise<FleetImportPlan & { applied: true }> {
   return postFleetWorkbook("apply", file, tenantId) as Promise<FleetImportPlan & { applied: true }>;
+}
+
+// ---------------------------------------------------------------- service roster (U5)
+
+/**
+ * The account's service roster (Crompton U5): regions of sites and the engineers who cover
+ * them, rank 1 first. A critical prediction's job on a machine goes to its site's region's
+ * top engineer who can still sign in; with no roster it stays unassigned, as before.
+ * `action.assign`.
+ */
+export interface RosterRegion {
+  code: string;
+  name: string;
+  sites: { id: string; code: string; name: string }[];
+  engineers: { userId: string; email: string; fullName: string; status: string; rank: number }[];
+}
+
+export interface RosterPlan {
+  valid: boolean;
+  regions: { code: string; name: string; sites: number; engineers: number }[];
+  errors: { row?: number; region: string; message: string }[];
+}
+
+export function apiGetServiceRoster(): Promise<RosterRegion[]> {
+  return authFetch("/service-roster");
+}
+
+/** Creates or replaces one region. Engineers in the order they take a job. */
+export function apiPutRosterRegion(
+  code: string, input: { name: string; siteCodes: string[]; engineers: { email: string; rank: number }[] },
+): Promise<RosterRegion> {
+  return authFetch(`/service-roster/regions/${encodeURIComponent(code)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+/** Removes a region; its sites' jobs go unassigned again. */
+export function apiDeleteRosterRegion(code: string): Promise<void> {
+  return authFetch(`/service-roster/regions/${encodeURIComponent(code)}`, { method: "DELETE" });
+}
+
+export async function apiDownloadRosterTemplate(): Promise<Blob> {
+  const res = await authFetchRaw("/service-roster/template");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.error?.message ?? "Could not download the template.", res.status);
+  }
+  return res.blob();
+}
+
+async function postRosterWorkbook(step: "plan" | "apply", file: File): Promise<RosterPlan> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw(`/service-roster/import/${step}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body?.error?.message ?? "Could not read the workbook.", res.status);
+  return body;
+}
+
+/** Checks the workbook row by row. Writes nothing. */
+export function apiPlanRosterImport(file: File): Promise<RosterPlan> {
+  return postRosterWorkbook("plan", file);
+}
+
+/** Replaces the whole roster with the workbook; refused whole on any row error. */
+export function apiApplyRosterImport(file: File): Promise<RosterPlan> {
+  return postRosterWorkbook("apply", file);
 }
 
 // ---------------------------------------------------------------- recommendations
