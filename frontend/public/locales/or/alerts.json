@@ -308,5 +308,11 @@
         "blocked": "ଅବରୋଧିତ"
       }
     }
+  },
+  "tier": {
+    "title": "Crompton ର ଆଲର୍ଟ ସ୍ତର",
+    "critical": "ଗୁରୁତର",
+    "warning": "ଚେତାବନୀ",
+    "normal": "ସାଧାରଣ"
   }
 }

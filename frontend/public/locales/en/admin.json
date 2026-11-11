@@ -9,7 +9,9 @@
     "signalAliases": "Signal Aliases",
     "signalStates": "Signal States",
     "telemetryArchive": "Telemetry Archive",
-    "fuelForecastAccuracy": "Fuel forecast accuracy"
+    "fuelForecastAccuracy": "Fuel forecast accuracy",
+    "models": "Models",
+    "serviceRoster": "Service roster"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",

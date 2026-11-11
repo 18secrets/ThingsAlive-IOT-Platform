@@ -9,7 +9,9 @@
     "signalAliases": "ସିଗନାଲ୍ ଉପନାମ",
     "signalStates": "ସିଗନାଲ୍ ସ୍ଥିତି",
     "telemetryArchive": "ଟେଲିମେଟ୍ରି ଆର୍କାଇଭ୍",
-    "fuelForecastAccuracy": "ଇନ୍ଧନ ପୂର୍ବାନୁମାନ ସଠିକତା"
+    "fuelForecastAccuracy": "ଇନ୍ଧନ ପୂର୍ବାନୁମାନ ସଠିକତା",
+    "models": "ମଡେଲ୍",
+    "serviceRoster": "ସର୍ଭିସ୍ ରୋଷ୍ଟର"
   },
   "archive": {
     "loadFailed": "ଟେଲିମେଟ୍ରି ଆର୍କାଇଭ୍ ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ।",

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
@@ -25,6 +25,19 @@ export class PageController {
     @Param('externalId') externalId: string,
   ) {
     return this.pages.machinePage(scope, { sourceSystem, externalId });
+  }
+
+  @Get('equipment/:sourceSystem/:externalId/events')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "One machine's starts, trips and voltage events over a window (default the last day, at most 7 days), newest first" })
+  machineEvents(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.pages.machineEvents(scope, { sourceSystem, externalId }, parseDate(from, 'from'), parseDate(to, 'to'));
   }
 
   @Get('sites/:plantId/page')
@@ -68,4 +81,12 @@ export class PageController {
   ) {
     return this.pages.siteTwinProposal(scope, plantId, new Date(), body);
   }
+}
+
+/** Unreadable is refused, not dropped: an Invalid Date silently matches nothing. */
+function parseDate(raw: string | undefined, field: string): Date | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) throw new BadRequestException(`${field} is not a date I can read: "${raw}".`);
+  return parsed;
 }

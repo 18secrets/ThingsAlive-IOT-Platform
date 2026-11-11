@@ -308,5 +308,11 @@
         "blocked": "Blocked"
       }
     }
+  },
+  "tier": {
+    "title": "Crompton’s alert tier",
+    "critical": "Critical",
+    "warning": "Warning",
+    "normal": "Normal"
   }
 }

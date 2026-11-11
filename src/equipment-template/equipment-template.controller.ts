@@ -6,6 +6,7 @@ import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
 import { EquipmentTemplateService } from './services/equipment-template.service';
+import { ratingNames } from './services/ratings';
 
 export class EquipmentTemplateDto {
   @IsOptional() @IsString() name?: string;
@@ -65,6 +66,15 @@ export class EquipmentTemplateController {
   @ApiOperation({ summary: 'Every equipment template' })
   list() {
     return this.templates.list();
+  }
+
+  // Read by Master Admin's model form and by an account's own (tenant roles hold
+  // equipment-template.read): the names, units and meanings a rating can have (D56).
+  @Get('rating-names')
+  @Requires('equipment-template.read')
+  @ApiOperation({ summary: 'The ratings a model can carry, each with its unit and meaning (D56)' })
+  ratingNames() {
+    return ratingNames();
   }
 
   @Post()
