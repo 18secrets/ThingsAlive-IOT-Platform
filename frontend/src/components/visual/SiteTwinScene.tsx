@@ -373,11 +373,20 @@ const Load: React.FC<{ visible: React.MutableRefObject<boolean> }> = ({ visible 
   );
 };
 
-/** A stable phase per machine, so a fleet on one route is spread along it. */
+/** A stable phase per machine, using an avalanche hash so sequential keys (like EX-01, EX-02)
+ *  are widely separated in phase rather than bunching up. */
 const phaseOf = (key: string) => {
-  let h = 7;
-  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) % 100_003;
-  return h;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return Math.abs(h);
 };
 
 /** Exhaust from a running engine: three puffs rising and thinning, on a loop. */
@@ -418,8 +427,27 @@ export const Machine: React.FC<{
   const phase = phaseOf(m.key);
   const isCrane = /crane/i.test(m.classSlug ?? '');
   const motion = motionOf(m.classSlug);
-  // Start somewhere along the route, not all at its first stop.
-  const travelled = useRef(phase % 400);
+
+  const circuit = useMemo(() => {
+    let len = 0;
+    for (let i = 1; i < m.path.length; i += 1) {
+      len += Math.hypot(m.path[i][0] - m.path[i - 1][0], m.path[i][1] - m.path[i - 1][1]);
+    }
+    return len * 2;
+  }, [m.path]);
+
+  // Start somewhere along the route, evenly spacing multiple machines sharing the route.
+  const travelled = useRef((() => {
+    const tipperMatch = m.key.match(/^demo-tipper-(\d+)$/);
+    if (tipperMatch && circuit > 0.01) {
+      const idx = parseInt(tipperMatch[1], 10);
+      return (idx / 3) * circuit;
+    }
+    if (circuit > 0.01) {
+      return ((phase % 1000) / 1000) * circuit;
+    }
+    return phase % 400;
+  })());
   // Motion follows the machine's own data: it travels its route, or slews in place,
   // only while duty-cycle classifies it as working. Never while the layout is edited.
   // It moves while its data is live and nothing says it is stopped: working, or engine on
