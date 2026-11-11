@@ -15,7 +15,7 @@ import { EditUserAccessModal } from './EditUserAccessModal';
 import { ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface ClientUserManagementProps {
   users: TenantUser[];
@@ -339,7 +339,7 @@ const InviteUserModal: React.FC<InviteUserModalProps> = ({ isOpen, onClose, onIn
               </div>
               {invited.invitationExpiresAt && (
                 <p className="text-xs text-slate-400 mt-1">
-                  {t('invite.expires', { date: new Date(invited.invitationExpiresAt).toLocaleString(appLocale()) })}
+                  {t('invite.expires', { date: new Date(invited.invitationExpiresAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
                 </p>
               )}
             </div>

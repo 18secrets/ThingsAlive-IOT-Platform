@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthUser, NavigationTab } from '../types';
 import {
-  ApiError, apiAcceptInvitation, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
+  ApiError, apiAcceptInvitation, apiGetMe, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
   hasStoredSession, setSessionDeadHandler, shareSessionWithNewTabs, SignedInUser, takeSessionEndReason,
 } from './api';
+import { setAccountTimeZone } from './dateLocale';
 
 const SESSION_KEY = 'ta_session';
 
@@ -33,11 +34,16 @@ function loadSession(): AuthUser | null {
 // admin" (holding both user.manage and role.manage).
 async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
   const { capabilities, allowedTabs } = await apiMyPermissions();
+  // Staff have no account of their own, so no zone: they keep the browser's.
+  setAccountTimeZone(null);
   if (user.tenantId === PLATFORM_TENANT_ID) {
     // Every staff member uses the platform screens ('master-admin' here names that
     // side of the app); what each may open comes from their own role's capabilities.
     return { role: 'master-admin', username: user.email, platformRole: user.roleSlug, capabilities };
   }
+  // Every date on the account's screens is written in its own zone (MIN-12), set before
+  // the first screen draws. A /me that fails leaves the browser's zone, as before.
+  setAccountTimeZone(await apiGetMe().then((me) => me.tenantTimeZone).catch(() => null));
   return {
     role: 'client',
     username: user.email,
@@ -155,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (authUser) void apiSignOut();
     setSessionEndedReason(null);
     setSignedOutOnPurpose(true);
+    setAccountTimeZone(null);
     setAuthUser(null);
   };
 

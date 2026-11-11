@@ -6,14 +6,14 @@ import { Chip } from '../common/Chip';
 import { ListTable } from '../common/ListTable';
 import { TablePagination, usePagination } from '../common/TablePagination';
 import { sortRows, useSort } from '../../lib/useSort';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 import { Skeleton } from '../common/Skeleton';
 
 const litres = (l: number) => l.toFixed(1);
 /** "2026-11-03" as that calendar day, not UTC midnight moved into the reader's zone. */
 const shiftDate = (sdate: string) => {
   const [y, m, d] = sdate.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
+  return new Date(y, m - 1, d).toLocaleDateString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short' });
 };
 const shiftKey = (s: { sdate: string; shift: 1 | 2 }) => `${s.sdate}|${s.shift}`;
 

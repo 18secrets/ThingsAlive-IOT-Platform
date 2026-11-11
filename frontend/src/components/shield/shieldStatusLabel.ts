@@ -8,9 +8,11 @@ import type { ShieldEvidence, ShieldStatus } from '../../lib/api';
  * past-due passed Safety item was under (test report MIN-4); it says both now.
  */
 export function shieldStatusLabel(
-  t: TFunction, cell: { status: ShieldStatus; record: ShieldEvidence | null }, now: Date = new Date(),
+  t: TFunction, cell: { status: ShieldStatus; record: ShieldEvidence | null; overdueDays?: number }, now: Date = new Date(),
 ): string {
   const label = t(`status.${cell.status}`);
   const pastDue = !!cell.record?.dueAt && new Date(cell.record.dueAt).getTime() < now.getTime();
-  return cell.status === 'action_required' && pastDue ? `${label} · ${t('status.alsoOverdue')}` : label;
+  if (cell.status !== 'action_required' || !pastDue) return label;
+  // How far past due, from the server's count (MIN-4, 11 Nov); an older server sent none.
+  return `${label} · ${cell.overdueDays ? t('status.overdueBy', { count: cell.overdueDays }) : t('status.alsoOverdue')}`;
 }

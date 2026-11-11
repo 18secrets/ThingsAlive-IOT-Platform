@@ -241,7 +241,10 @@
     "title_other": "पिछले {{count}} स्कोर पर जोखिम स्कोर (0–100)",
     "caption_one": "जोखिम, पिछला स्कोर",
     "caption_other": "जोखिम, पिछले {{count}} स्कोर",
-    "risk": "जोखिम"
+    "risk": "जोखिम",
+    "period": "जोखिम रुझान",
+    "lastScores_one": "अंतिम स्कोर",
+    "lastScores_other": "अंतिम {{count}} स्कोर"
   },
   "drill": {
     "loadError": "यह सिग्नल लोड नहीं हो सका।",

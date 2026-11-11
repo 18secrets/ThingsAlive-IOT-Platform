@@ -10,7 +10,7 @@ import {
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   Plant, EquipmentPlacementEvent,
 } from '../../lib/api';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 import { Skeleton } from '../common/Skeleton';
 
 interface EquipmentBindingsModalProps {
@@ -475,7 +475,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                           {plantName(p.fromPlantId)} → {plantName(p.toPlantId)}
                           {p.reason ? `: "${p.reason}"` : ''}
                         </span>
-                        <span className="text-slate-400 shrink-0">{new Date(p.at).toLocaleString(appLocale())}</span>
+                        <span className="text-slate-400 shrink-0">{new Date(p.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                       </div>
                     ))}
                   </div>
@@ -543,7 +543,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                             : ` (→ ${t(`activationState.${h.toState}`, { defaultValue: h.toState })})`}
                           {h.reason ? `: "${h.reason}"` : ''}
                         </span>
-                        <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale())}</span>
+                        <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                       </div>
                     ))}
                   </div>

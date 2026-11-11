@@ -16,7 +16,7 @@ import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
 import { sortRows, useSort } from '../../lib/useSort';
 import { useAuth } from '../../lib/AuthProvider';
 import { staffMay } from '../../lib/pageAccess';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface MasterEquipmentManagementProps {
   equipment: EquipmentProfile[];
@@ -298,7 +298,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                                     {plantName(historyItem.tenantId, h.fromPlantId)} → {plantName(historyItem.tenantId, h.toPlantId)}
                                     {h.reason ? `: "${h.reason}"` : ''}
                                   </span>
-                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale())}</span>
+                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                                 </div>
                               ))}
                             </div>

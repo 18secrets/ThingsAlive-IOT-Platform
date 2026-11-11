@@ -149,8 +149,23 @@ export async function apiForgotPassword(email: string): Promise<void> {
   await parse(res);
 }
 
-/** Exchanges the stored refresh token for a fresh access token. False means the session is dead. */
-export async function apiResume(): Promise<SignedInUser | null> {
+/**
+ * Exchanges the stored refresh token for a fresh access token. Null means the session is dead.
+ *
+ * One refresh at a time (test report MAJ-5). A reload restores the session while the first
+ * requests' 401s ask for a refresh of their own — StrictMode alone restores twice — and
+ * each presented the same refresh token: the first rotated it, the second read as a reused
+ * token and the server ended the session. Callers now share the refresh already under way.
+ * The server's one-minute reuse grace (7fa9b2f) covers other tabs; this covers this one.
+ */
+let resumeInFlight: Promise<SignedInUser | null> | null = null;
+
+export function apiResume(): Promise<SignedInUser | null> {
+  resumeInFlight ??= resumeOnce().finally(() => { resumeInFlight = null; });
+  return resumeInFlight;
+}
+
+async function resumeOnce(): Promise<SignedInUser | null> {
   const refreshToken = sessionStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
@@ -359,6 +374,8 @@ export interface Account {
   status: "active" | "suspended";
   plan: string | null;
   region: string | null;
+  /** IANA zone the account's dates are shown in (MIN-12). Asia/Kolkata unless set. */
+  timeZone: string;
   suspendedAt: string | null;
   suspendedReason: string | null;
   provisionedBy: string | null;
@@ -386,6 +403,7 @@ export function apiListAccounts(): Promise<Account[]> {
 export function apiCreateAccount(input: {
   tenantId: string;
   name: string;
+  timeZone?: string;
   superAdmin: { email: string; fullName: string; phone?: string };
 }): Promise<CreateAccountResult> {
   return authFetch("/accounts", {
@@ -398,6 +416,7 @@ export function apiUpdateAccount(
   tenantId: string,
   input: {
     name?: string;
+    timeZone?: string;
     superAdmin?: { fullName?: string; email?: string; phone?: string };
   },
 ): Promise<Account> {
@@ -1345,6 +1364,61 @@ export function apiSetNamedFormulaActive(slug: string, active: boolean): Promise
   return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${active ? "activate" : "deactivate"}`, {
     method: "POST",
   });
+}
+
+// ------------------------------------------------------------------ class requests
+
+export type ClassRequestStatus = "new" | "in_progress" | "published" | "declined";
+
+/** An account asking Things Alive for an equipment class the library lacks (test report OB-6). */
+export interface ClassRequest {
+  id: string;
+  tenantId: string;
+  machineType: string;
+  manufacturer: string | null;
+  model: string | null;
+  signals: string[];
+  note: string | null;
+  status: ClassRequestStatus;
+  /** What staff told the account: why it was declined, or anything about the new class. */
+  staffNote: string | null;
+  /** Set when published: the class to look for in the picker. */
+  publishedClassSlug: string | null;
+  requestedBy: string;
+  decidedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewClassRequest {
+  machineType: string;
+  manufacturer?: string;
+  model?: string;
+  signals?: string[];
+  note?: string;
+}
+
+/** The account asks (`client-catalog.write`). */
+export function apiCreateClassRequest(input: NewClassRequest): Promise<ClassRequest> {
+  return authFetch("/my-catalog/class-requests", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** This account's requests, newest first. */
+export function apiListMyClassRequests(): Promise<ClassRequest[]> {
+  return authFetch("/my-catalog/class-requests");
+}
+
+/** Staff: every account's requests, open ones first, oldest at the top. */
+export function apiListClassRequestQueue(status?: ClassRequestStatus): Promise<ClassRequest[]> {
+  return authFetch(`/catalog/class-requests${status ? `?status=${status}` : ""}`);
+}
+
+/** Staff move a request on (`catalog.write`). Published names the class; declined says why.
+ *  Once published or declined it is final: the account makes a new request. */
+export function apiAnswerClassRequest(
+  id: string, input: { status: ClassRequestStatus; staffNote?: string; publishedClassSlug?: string },
+): Promise<ClassRequest> {
+  return authFetch(`/catalog/class-requests/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 // ------------------------------------------------------------------ catalog import
@@ -2656,7 +2730,8 @@ export function apiGetEquipmentAvailability(
  * (`utilization.read`). Each factor carries its own readiness: a factor that can't be
  * computed says why rather than reading as zero.
  */
-export type OeeWindow = "day" | "week" | "month";
+/** `range` is what a from/to answers with (P3-D4); it is not asked for by name. */
+export type OeeWindow = "day" | "week" | "month" | "range";
 
 /** Which level supplied a parameter OEE used; `oem` is the class library's figure. */
 export type OeeParameterSource = "equipment" | "class" | "site" | "client" | "oem";
@@ -2722,10 +2797,14 @@ export interface BreakdownEvent {
 }
 
 export function apiGetEquipmentOee(
-  sourceSystem: string, externalId: string, window: OeeWindow = "day",
+  sourceSystem: string, externalId: string, window: OeeWindow | { from: Date; to: Date } = "day",
 ): Promise<EquipmentOee> {
+  // A picked range, up to 92 days (test report P3-D4), or a named window.
+  const qs = typeof window === "string"
+    ? `window=${window}`
+    : `from=${encodeURIComponent(window.from.toISOString())}&to=${encodeURIComponent(window.to.toISOString())}`;
   return authFetch(
-    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/oee?window=${window}`,
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/oee?${qs}`,
   );
 }
 
@@ -3131,8 +3210,13 @@ export function apiGetLatestPredictions(sourceSystem: string, externalId: string
 
 export function apiGetPredictionHistory(
   sourceSystem: string, externalId: string, clientScenarioSlug: string, take?: number,
+  /** Bounds which scores count (P3-D4); `take` still caps how many come back, newest first. */
+  range?: { from: Date; to: Date },
 ): Promise<Prediction[]> {
-  const qs = take ? `?take=${take}` : "";
+  const params = new URLSearchParams();
+  if (take) params.set("take", String(take));
+  if (range) { params.set("from", range.from.toISOString()); params.set("to", range.to.toISOString()); }
+  const qs = params.toString() ? `?${params}` : "";
   return authFetch(
     `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/${encodeURIComponent(clientScenarioSlug)}/history${qs}`,
   );
@@ -3859,6 +3943,8 @@ export interface MeDiagnostics {
   roleName?: string | null;
   tenantName?: string | null;
   tenantSince?: string | null;
+  /** The account's IANA zone (MIN-12); null for staff, who keep the browser's. */
+  tenantTimeZone?: string | null;
   roles: string[];
   isPlatformRole: boolean;
   scope: {
@@ -4147,7 +4233,8 @@ export interface ShieldMachine {
   machine: { sourceSystem: string; externalId: string; name: string | null; classSlug: string | null; plantId: string | null };
   /** How far ahead "due soon" looks, and whether a parameter or the default set it. */
   dueSoonWindow: { days: number; source: "parameter" | "default"; parameter: { scope: string; scopeRef: string | null } | null };
-  categories: Record<ShieldCategory, { status: ShieldStatus; record: ShieldEvidence | null }>;
+  /** `overdueDays`: whole days past the due date, present only when past due (MIN-4). */
+  categories: Record<ShieldCategory, { status: ShieldStatus; record: ShieldEvidence | null; overdueDays?: number }>;
 }
 
 export interface ShieldSummary {

@@ -439,7 +439,8 @@
     "chainSlug": "Chain slug (optional)",
     "anyChain": "any published chain",
     "chainHint": "Left unset, watches every published chain bound to this class — narrow to one stage or one chain once there's a reason to route it differently.",
-    "enabledOnCopy": "Enabled by default when a client's copy is created"
+    "enabledOnCopy": "Enabled by default when a client's copy is created",
+    "negativeAllowed": "Negative values are allowed, for signals that go below zero."
   },
   "chainModal": {
     "direction": {
@@ -609,5 +610,51 @@
     "howLoad": "Load these as the optional fuel columns of the catalog workbook in {{page}}, then publish a new version. A BSFC needs the datasheet it comes from.",
     "loading": "Loading the fuel figures…",
     "loadFailed": "The fuel figures could not be loaded."
+  },
+  "classRequests": {
+    "status": {
+      "new": "New",
+      "in_progress": "In progress",
+      "published": "Class published",
+      "declined": "Declined"
+    },
+    "askButton": "Request a class",
+    "askTitle": "Request an equipment class",
+    "askSubtitle": "Ask Things Alive to add a machine type the library does not have yet",
+    "machineType": "Machine type",
+    "machineTypePlaceholder": "e.g. Mobile tower crane",
+    "manufacturer": "Manufacturer",
+    "model": "Model",
+    "signals": "Signals it reports",
+    "signalsPlaceholder": "engine_rpm, coolant_temp, fuel_level",
+    "signalsHint": "Optional. Separate with commas.",
+    "note": "Anything else",
+    "notePlaceholder": "What it does on site, a datasheet link…",
+    "cancel": "Cancel",
+    "send": "Send request",
+    "sending": "Sending…",
+    "sendFailed": "The request could not be sent.",
+    "yours_one": "Your class request",
+    "yours_other": "Your class requests ({{count}})",
+    "asked": "Asked {{when}}",
+    "publishedAs": "Added to the library as “{{slug}}”: choose it as the machine’s class.",
+    "staffSaid": "Things Alive: {{note}}",
+    "queueButton": "Class requests",
+    "queueTitle": "Class requests",
+    "queueSubtitle": "Machine types accounts asked for. Open ones first, oldest at the top.",
+    "queueEmpty": "No class requests yet.",
+    "loadFailed": "Class requests could not be loaded.",
+    "answerFailed": "The answer could not be saved.",
+    "fromAccount": "From {{account}} · {{when}}",
+    "signalsList": "Signals: {{signals}}",
+    "start": "Start",
+    "publish": "Published as…",
+    "decline": "Decline",
+    "whichClass": "The published class it became",
+    "pickClass": "Choose a published class",
+    "whyDeclined": "Why it was declined (the account sees this)",
+    "noteForAccount": "A note for the account (optional)",
+    "confirmPublish": "Answer: published",
+    "confirmDecline": "Answer: declined"
   }
 }

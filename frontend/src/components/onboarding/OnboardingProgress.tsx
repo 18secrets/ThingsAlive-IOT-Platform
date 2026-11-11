@@ -16,7 +16,7 @@ import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { TablePagination, usePagination } from '../common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /**
  * Real onboarding progress (QONBOARD-STATUS), in place of the mock session list.
@@ -233,7 +233,7 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
         {filtered.length > 0 && <TablePagination pinToBottom {...pager} />}
         {summary && (
           <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-500 dark:text-slate-400">
-            {t('progress.asOf', { date: new Date(summary.asOf).toLocaleString(appLocale()) })}
+            {t('progress.asOf', { date: new Date(summary.asOf).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
           </div>
         )}
       </div>

@@ -107,7 +107,9 @@
     "nominalFromLibrary": "ମାନକ {{rate}} {{unit}}, ଲାଇବ୍ରେରୀ ଶ୍ରେଣୀ {{className}} (ସଂସ୍କରଣ {{version}}) ରୁ",
     "nominalCitation": "ଉତ୍ସ: {{citation}}",
     "nominalNoCitation": "ଲାଇବ୍ରେରୀରେ ଏହି ସଂଖ୍ୟା ପାଇଁ କୌଣସି ଡାଟାସିଟ୍ ରେକର୍ଡ ହୋଇନାହିଁ।",
-    "nominalFromParameter": "ମାନକ {{rate}} {{unit}}, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ {{source}} ଦ୍ୱାରା ସ୍ଥିର"
+    "nominalFromParameter": "ମାନକ {{rate}} {{unit}}, ଖର୍ଚ୍ଚ ପ୍ରଶାସନରେ {{source}} ଦ୍ୱାରା ସ୍ଥିର",
+    "formulaRange": "ଉପଲବ୍ଧତା × କାର୍ଯ୍ୟଦକ୍ଷତା × ଗୁଣବତ୍ତା · ବଛାଯାଇଥିବା ତାରିଖ, ପୂରା ଦିନ",
+    "pickDates": "କିମ୍ବା ତାରିଖ ବାଛନ୍ତୁ (92 ଦିନ ପର୍ଯ୍ୟନ୍ତ)"
   },
   "detail": {
     "availabilityNotAvailable": "ଉପଲବ୍ଧତା ତଥ୍ୟ ଉପଲବ୍ଧ ନାହିଁ",

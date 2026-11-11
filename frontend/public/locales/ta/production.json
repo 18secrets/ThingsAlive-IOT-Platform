@@ -107,7 +107,9 @@
     "nominalFromLibrary": "பெயரளவு {{rate}} {{unit}}, நூலக வகை {{className}} (பதிப்பு {{version}}) இலிருந்து",
     "nominalCitation": "ஆதாரம்: {{citation}}",
     "nominalNoCitation": "நூலகத்தில் இந்த மதிப்புக்கு தரவுத்தாள் எதுவும் பதிவு செய்யப்படவில்லை.",
-    "nominalFromParameter": "பெயரளவு {{rate}} {{unit}}, செலவு நிர்வாகத்தில் {{source}} அமைத்தது"
+    "nominalFromParameter": "பெயரளவு {{rate}} {{unit}}, செலவு நிர்வாகத்தில் {{source}} அமைத்தது",
+    "formulaRange": "கிடைக்கும் தன்மை × செயல்திறன் × தரம் · தேர்ந்தெடுத்த தேதிகள், முழு நாட்கள்",
+    "pickDates": "அல்லது தேதிகளைத் தேர்ந்தெடுக்கவும் (92 நாட்கள் வரை)"
   },
   "detail": {
     "availabilityNotAvailable": "கிடைப்புத்தன்மை தகவல் இல்லை",

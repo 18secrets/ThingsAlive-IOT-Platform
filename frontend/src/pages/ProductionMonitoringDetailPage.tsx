@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Clock3, Plus } from 'lucide-react';
+import { DateRangePicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
@@ -12,7 +13,7 @@ import {
   OeeWindow, UtilizationShiftRow, apiGetEquipmentAvailability, apiGetEquipmentKpi, apiGetEquipmentOee,
   apiGetEquipmentUtilization, apiListEquipment,
 } from '../lib/api';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 import { Skeleton } from '../components/common/Skeleton';
 
 /** The fuel rate KPI the machine page and Signal Bindings show (fuel test report FU-4). */
@@ -56,6 +57,8 @@ const FactorTile: React.FC<{ kind: 'availability' | 'performance' | 'quality'; l
 function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; externalId: string }) {
   const { t, i18n } = useTranslation('production');
   const [oeeWindow, setOeeWindow] = useState<OeeWindow>('day');
+  // Dates picked instead of a window (test report P3-D4): whole days, the last one to its end.
+  const [range, setRange] = useState<[Date, Date] | null>(null);
   const [oee, setOee] = useState<EquipmentOee | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   // The fuel rate for this same window, from the same KPI the machine page and Signal
@@ -75,11 +78,15 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
     setError(undefined);
     // The previous window's numbers must not stand under the newly selected one.
     setOee(null);
-    apiGetEquipmentOee(sourceSystem, externalId, oeeWindow)
+    const period = range
+      ? { from: new Date(range[0].getFullYear(), range[0].getMonth(), range[0].getDate()),
+        to: new Date(range[1].getFullYear(), range[1].getMonth(), range[1].getDate() + 1) }
+      : oeeWindow;
+    apiGetEquipmentOee(sourceSystem, externalId, period)
       .then((result) => { if (live) setOee(result); })
       .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadOee')); });
     return () => { live = false; };
-  }, [sourceSystem, externalId, oeeWindow]);
+  }, [sourceSystem, externalId, oeeWindow, range]);
 
   useEffect(() => {
     let live = true;
@@ -97,18 +104,33 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('oee.title')}</h3>
-          <p className="text-xs text-slate-400">{t('oee.formula', { window: t(`oee.windowUnit.${oeeWindow}`) })}</p>
+          <p className="text-xs text-slate-400">
+            {range ? t('oee.formulaRange') : t('oee.formula', { window: t(`oee.windowUnit.${oeeWindow}`) })}
+          </p>
         </div>
-        <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-          {(['day', 'week', 'month'] as OeeWindow[]).map((w) => (
-            <button
-              key={w}
-              onClick={() => setOeeWindow(w)}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${oeeWindow === w ? 'bg-sky-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-            >
-              {t(`oee.window.${w}`)}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+            {(['day', 'week', 'month'] as OeeWindow[]).map((w) => (
+              <button
+                key={w}
+                onClick={() => { setRange(null); setOeeWindow(w); }}
+                className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${!range && oeeWindow === w ? 'bg-sky-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              >
+                {t(`oee.window.${w}`)}
+              </button>
+            ))}
+          </div>
+          <DateRangePicker
+            size="sm"
+            format="yyyy-MM-dd"
+            value={range}
+            onChange={(v) => setRange((v as [Date, Date] | null) ?? null)}
+            // The server takes up to 92 days and nothing after today.
+            shouldDisableDate={(date) => date.getTime() > Date.now()}
+            placeholder={t('oee.pickDates')}
+            cleanable
+            className="w-full sm:w-auto! sm:min-w-[220px]"
+          />
         </div>
       </div>
 
@@ -125,7 +147,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               <RingGauge value={oee.oee.value != null ? oee.oee.value * 100 : null} size={72} colorClass="text-emerald-500 dark:text-emerald-400" />
               <p className="text-xs text-slate-400">
                 {oee.oee.readiness === 'ready'
-                  ? `${new Date(oee.from).toLocaleString(appLocale())} – ${new Date(oee.to).toLocaleString(appLocale())}`
+                  ? `${new Date(oee.from).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – ${new Date(oee.to).toLocaleString(appLocale(), { timeZone: appTimeZone() })}`
                   : sharedReason
                     ? t(`oeeReason.${sharedReason}`, { defaultValue: sharedReason })
                     : waitingOn.length
@@ -208,7 +230,7 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
               breakdowns.map((b) => (
                 <div key={b.id} className="flex items-center justify-between gap-2 text-xs border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
                   <span className="text-slate-600 dark:text-slate-300">
-                    {new Date(b.startedAt).toLocaleString(appLocale())} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString(appLocale()) : t('oee.ongoing')}
+                    {new Date(b.startedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – {b.endedAt ? new Date(b.endedAt).toLocaleTimeString(appLocale(), { timeZone: appTimeZone() }) : t('oee.ongoing')}
                   </span>
                   <Chip tone={b.endedAt ? 'amber' : 'rose'}>{b.durationMinutes != null ? `${b.durationMinutes} min` : t('oee.ongoing')}</Chip>
                 </div>

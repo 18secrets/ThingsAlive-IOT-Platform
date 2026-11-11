@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Activity } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Sensor } from '../../lib/api';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface SensorDetailModalProps {
   sensor: Sensor | null;
@@ -99,8 +99,8 @@ export const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ sensor, ca
           </div>
 
           <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-700">
-            <span>{t('sensorDetail.created', { date: new Date(sensor.createdAt).toLocaleDateString(appLocale()) })}</span>
-            <span>{t('sensorDetail.updated', { date: new Date(sensor.updatedAt).toLocaleDateString(appLocale()) })}</span>
+            <span>{t('sensorDetail.created', { date: new Date(sensor.createdAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}</span>
+            <span>{t('sensorDetail.updated', { date: new Date(sensor.updatedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}</span>
           </div>
         </div>
 

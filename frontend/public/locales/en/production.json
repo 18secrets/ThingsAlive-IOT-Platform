@@ -107,7 +107,9 @@
     "noneRecorded": "None recorded.",
     "ongoing": "ongoing",
     "waitingOn": "OEE needs {{factors}} first",
-    "nominalOverride": "To use your own figure, set nominal fuel per hour in Cost Administration."
+    "nominalOverride": "To use your own figure, set nominal fuel per hour in Cost Administration.",
+    "formulaRange": "Availability × Performance × Quality · the dates picked, whole days",
+    "pickDates": "Or pick dates (up to 92 days)"
   },
   "detail": {
     "availabilityNotAvailable": "Availability not available",

@@ -1,5 +1,5 @@
 import React from 'react';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /**
  * One item in a dashboard-style panel, on two lines: what it is, then what it is about.
@@ -47,4 +47,4 @@ export const PanelRows: React.FC<{ children: React.ReactNode }> = ({ children })
 
 /** "3 Nov, 14:05": when, short enough for the corner of a row. */
 export const shortWhen = (iso: string) =>
-  new Date(iso).toLocaleString(appLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  new Date(iso).toLocaleString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });

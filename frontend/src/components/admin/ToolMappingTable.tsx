@@ -8,7 +8,7 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface ToolMappingTableProps {
   mappings: ToolMapping[];
@@ -93,7 +93,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
       <><span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-semibold text-xs border border-slate-200 dark:border-slate-700">
                         {t('toolMappings.channelsShort', { count: activeParametersCount })}
                       </span></>,
-      <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(item.updatedAt).toLocaleDateString(appLocale())}</span>,
+      <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(item.updatedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}</span>,
       <><div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => { setEditingMapping(item); setIsModalOpen(true); }}

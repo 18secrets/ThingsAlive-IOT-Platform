@@ -450,7 +450,7 @@ const NodeInspector: React.FC<{
       {type === 'Threshold' && (
         <>
           <NumberField label={t('workflow.inspector.above')} value={params.max} onChange={(v) => onParams({ max: v })} />
-          <NumberField label={t('workflow.inspector.below')} value={params.min} onChange={(v) => onParams({ min: v })} />
+          <NumberField label={t('workflow.inspector.below')} value={params.min} onChange={(v) => onParams({ min: v })} hint={t('form.negativeAllowed')} />
           <NumberField label={t('workflow.inspector.lookback')} value={params.lookbackReadings} onChange={(v) => onParams({ lookbackReadings: v })} hint={t('workflow.inspector.lookbackHint')} />
           <NumberField label={t('workflow.inspector.required')} value={params.requiredBreaches} onChange={(v) => onParams({ requiredBreaches: v })} hint={t('workflow.inspector.requiredHint')} />
         </>

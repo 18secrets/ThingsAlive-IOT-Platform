@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
+import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download, Send } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,7 @@ import { ExportCsvButton } from '../common/ExportCsvButton';
 import { SortLabel } from '../common/ListTable';
 import { sortRows, useSort } from '../../lib/useSort';
 import { Skeleton } from '../common/Skeleton';
+import { ClassRequestModal, MyClassRequests, useMyClassRequests } from '../catalog/ClassRequests';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -92,6 +93,10 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
 }) => {
   const { t } = useTranslation('equipment');
   const { t: ts } = useTranslation('shared');
+  const { t: tc } = useTranslation('catalog');
+  // A class the library lacks is asked for here, or from the register form's hint (OB-6).
+  const classRequests = useMyClassRequests();
+  const [requestingClass, setRequestingClass] = useState<{ manufacturer?: string; model?: string } | null>(null);
   const statusOptions = STATUS_VALUES.map((value) => ({ label: t(`status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -328,6 +333,16 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             <span>{importing ? t('equipmentList.importing') : t('equipmentList.importFromLegacy')}</span>
           </button>
 
+          <button
+            id="request-class-btn"
+            onClick={() => setRequestingClass({})}
+            title={tc('classRequests.askSubtitle')}
+            className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+          >
+            <Send className="w-4 h-4" />
+            <span>{tc('classRequests.askButton')}</span>
+          </button>
+
           {/* Add Equipment Button */}
           <button
             id="add-equipment-btn"
@@ -382,7 +397,17 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         </div>
       </Modal>
 
+      <MyClassRequests requests={classRequests.requests} />
+
+      <ClassRequestModal
+        isOpen={!!requestingClass}
+        initial={requestingClass ?? undefined}
+        onClose={() => setRequestingClass(null)}
+        onSent={() => classRequests.reload()}
+      />
+
       <AddEquipmentModal
+        onRequestClass={(prefill) => setRequestingClass(prefill)}
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEquipment(null); }}
         onSave={handleCreate}

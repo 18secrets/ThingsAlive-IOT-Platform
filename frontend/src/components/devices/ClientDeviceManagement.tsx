@@ -12,7 +12,7 @@ import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { sortRows, useSort } from '../../lib/useSort';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 import { Skeleton } from '../common/Skeleton';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
@@ -228,8 +228,8 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
               {/* The end's date too when the window crosses midnight (test report COS-4). */}
-              {new Date(w.windowStart).toLocaleString(appLocale())} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
-                ? new Date(w.windowEnd).toLocaleTimeString(appLocale()) : new Date(w.windowEnd).toLocaleString(appLocale())}
+              {new Date(w.windowStart).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString(appLocale(), { timeZone: appTimeZone() }) : new Date(w.windowEnd).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>

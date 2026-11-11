@@ -21,7 +21,7 @@ import {
   apiGetDeviceHealthFleet, apiGetServiceForecast, apiGetWorkOrderHistory, apiListEquipment, apiListPlants,
   apiListWorkOrderPeople, apiListWorkOrders, apiRaiseWorkOrder,
 } from '../lib/api';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'emerald'> = {
   overdue: 'rose', due: 'amber', approaching: 'sky', ok: 'emerald',
@@ -400,7 +400,7 @@ export const WorkOrdersPage: React.FC = () => {
               </Chip>,
               o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
               <span className="capitalize">{t(`priority.${o.priority}`, { defaultValue: o.priority })}</span>,
-              o.dueAt ? new Date(o.dueAt).toLocaleDateString(appLocale()) : '—',
+              o.dueAt ? new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) : '—',
               <div className="flex flex-wrap items-center gap-1.5">{renderActions(o)}</div>,
             ]}
           />
@@ -430,8 +430,8 @@ export const WorkOrdersPage: React.FC = () => {
                   {' · '}<Trans t={t} i18nKey="card.priority" values={{ priority: t(`priority.${o.priority}`, { defaultValue: o.priority }) }} components={{ cap: <span className="capitalize" /> }} />
                 </p>
                 <small className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 pt-1">
-                  <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString(appLocale())}
-                  {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}
+                  <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
+                  {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}` : ''}
                 </small>
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   {renderActions(o)}
@@ -718,7 +718,7 @@ const WorkOrderHistory: React.FC<{
         <li key={e.id} className="border-l-2 border-sky-200 dark:border-sky-800 pl-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t(`event.${e.kind}`, { defaultValue: e.kind })}</span>
-            <span className="text-xs text-slate-400">{new Date(e.at).toLocaleString(appLocale())}</span>
+            <span className="text-xs text-slate-400">{new Date(e.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('history.by', { name: personName(e.actorUserId) })}

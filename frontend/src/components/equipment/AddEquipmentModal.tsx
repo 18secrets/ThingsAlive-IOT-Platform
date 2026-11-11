@@ -24,6 +24,8 @@ interface AddEquipmentModalProps {
   existingEquipment?: EquipmentProfile | null;
   /** Every machine in the account, to say before saving that a code is already taken. */
   allEquipment?: EquipmentProfile[];
+  /** Opens the class request form with this machine's make and model (OB-6). */
+  onRequestClass?: (prefill: { manufacturer?: string; model?: string }) => void;
 }
 
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
@@ -38,6 +40,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   plants,
   existingEquipment,
   allEquipment = [],
+  onRequestClass,
 }) => {
   const { t } = useTranslation('equipment');
   const tierOptions = TIERS.map((tier) => ({ label: t(`tier.${tier}`), value: tier }));
@@ -287,6 +290,16 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
               {!equipmentClassSlug && (
                 <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
                   {t('equipmentForm.noLibraryClass')}
+                  {/* The hint said to ask Things Alive, with nowhere to ask (OB-6). */}
+                  {onRequestClass && (
+                    <button
+                      type="button"
+                      onClick={() => onRequestClass({ manufacturer: manufacturer.trim() || undefined, model: modelNumber.trim() || undefined })}
+                      className="block mt-1 font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"
+                    >
+                      {t('equipmentForm.requestClass')}
+                    </button>
+                  )}
                 </p>
               )}
             </div>
