@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls, Html, useGLTF } from '@react-three/drei';
 import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
-import type { SiteTwin, SiteTwinActivity, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
+import type { SiteTwin, SiteTwinActivity, SiteTwinMachineKpis, SiteTwinStatus, SiteTwinZone, SiteZoneKind } from '../../lib/api';
 import { AREA_KINDS, Structure } from './SiteStructures';
 import SiteLife from './SiteLife';
 
@@ -43,6 +43,7 @@ export interface SceneMachine {
   /** Label of the zone it is engaged at. */
   engagedLabel: string | null;
   breakdown: boolean;
+  kpis?: SiteTwinMachineKpis | null;
 }
 
 export interface SceneFocus { x: number; z: number; widthM: number; depthM: number }
@@ -521,6 +522,40 @@ export const Machine: React.FC<{
                   {m.breakdown
                     ? t('siteTwin.breakdown', { defaultValue: 'Breakdown' })
                     : t(`siteTwin.activity.${m.activity}`, { defaultValue: ACTIVITY_LABEL[m.activity] })}{m.engagedLabel ? ` · ${m.engagedLabel}` : ''}
+                </div>
+              )}
+              {/* Telemetry KPI chips on hover or selection */}
+              {(selected || hovered) && m.kpis && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'nowrap', fontSize: '0.5625rem', fontFamily: 'monospace' }}>
+                  {m.kpis.engineLoad != null && (
+                    <span style={{ background: selected ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '1px 3px', borderRadius: 3 }}>
+                      ⚡{m.kpis.engineLoad.toFixed(0)}%
+                    </span>
+                  )}
+                  {m.kpis.fuelLevel != null && (
+                    <span style={{ background: selected ? 'rgba(255,255,255,0.2)' : '#fef3c7', padding: '1px 3px', borderRadius: 3, color: selected ? '#fff' : '#b45309' }}>
+                      ⛽{m.kpis.fuelLevel.toFixed(0)}%
+                    </span>
+                  )}
+                  {m.kpis.fuelRate != null && (
+                    <span style={{ background: selected ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '1px 3px', borderRadius: 3 }}>
+                      🔥{m.kpis.fuelRate.toFixed(1)}L/h
+                    </span>
+                  )}
+                  {m.kpis.coolantTemp != null && (
+                    <span style={{
+                      background: selected ? 'rgba(255,255,255,0.2)' : m.kpis.coolantTemp > 98 ? '#ffe4e6' : '#f1f5f9',
+                      padding: '1px 3px', borderRadius: 3,
+                      color: selected ? '#fff' : m.kpis.coolantTemp > 98 ? '#e11d48' : 'inherit',
+                    }}>
+                      🌡️{m.kpis.coolantTemp.toFixed(0)}°C
+                    </span>
+                  )}
+                  {m.kpis.oilPressure != null && (
+                    <span style={{ background: selected ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '1px 3px', borderRadius: 3 }}>
+                      🛢️{m.kpis.oilPressure.toFixed(0)}kPa
+                    </span>
+                  )}
                 </div>
               )}
             </div>

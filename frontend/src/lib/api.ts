@@ -2325,6 +2325,7 @@ export interface PageWidget {
   widgetKey: string;
   widgetType: PageWidgetType;
   title: string | null;
+  boundTo?: string | null;
   position: number;
   size: string;
   /** Always null unless readiness is 'ready' — never 0, never [] standing in for nothing. */
@@ -2394,6 +2395,15 @@ export interface SiteTwinZone {
   progressReportedBy?: string | null;
 }
 
+export interface SiteTwinMachineKpis {
+  engineLoad?: number;
+  fuelLevel?: number;
+  fuelRate?: number;
+  coolantTemp?: number;
+  oilPressure?: number;
+  hydraulicTemp?: number;
+}
+
 export interface SiteTwinMachine {
   sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
   placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
@@ -2403,6 +2413,7 @@ export interface SiteTwinMachine {
   engagedAt: string | null;
   /** A breakdown has started and not ended. */
   breakdown: boolean;
+  kpis?: SiteTwinMachineKpis | null;
 }
 
 /** A site's digital twin (`GET /sites/:plantId/twin`, `catalog.read`). */

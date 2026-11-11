@@ -142,6 +142,7 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
         path: stops.length ? [[x, z] as [number, number], ...stops.map((zn) => [zn.x, zn.z] as [number, number])] : [],
         engagedLabel: m.engagedAt ? byKey.get(m.engagedAt)?.label ?? null : null,
         breakdown: m.breakdown,
+        kpis: m.kpis,
       };
     });
   }, [twin, draft, extent.depthM, zones]);
@@ -535,6 +536,69 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
                 {sel.breakdown ? t('siteTwin.breakdown', { defaultValue: 'Breakdown' }) : activityLabel(sel.activity)}
                 {sel.engagedAt && <span>· {t('siteTwin.engagedAt', { defaultValue: 'at {{zone}}', zone: zones.find((z) => z.key === sel.engagedAt)?.label ?? sel.engagedAt })}</span>}
               </div>
+              {sel.kpis && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                    {t('siteTwin.liveKpis', { defaultValue: 'Live KPIs & Telemetry' })}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {sel.kpis.engineLoad != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                          <span>{t('siteTwin.load', { defaultValue: 'Engine Load' })}</span>
+                          <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{sel.kpis.engineLoad.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-1 overflow-hidden">
+                          <div className="bg-sky-500 h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, sel.kpis.engineLoad))}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {sel.kpis.fuelLevel != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                          <span>{t('siteTwin.fuelLevel', { defaultValue: 'Fuel Level' })}</span>
+                          <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{sel.kpis.fuelLevel.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-1 overflow-hidden">
+                          <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, sel.kpis.fuelLevel))}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {sel.kpis.fuelRate != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500">{t('siteTwin.fuelRate', { defaultValue: 'Fuel Burn Rate' })}</div>
+                        <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100">
+                          {sel.kpis.fuelRate.toFixed(1)} <span className="text-[10px] font-normal text-slate-400">L/h</span>
+                        </div>
+                      </div>
+                    )}
+                    {sel.kpis.coolantTemp != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500">{t('siteTwin.coolant', { defaultValue: 'Coolant Temp' })}</div>
+                        <div className={`text-xs font-mono font-bold ${sel.kpis.coolantTemp > 98 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                          {sel.kpis.coolantTemp.toFixed(1)} <span className="text-[10px] font-normal text-slate-400">°C</span>
+                        </div>
+                      </div>
+                    )}
+                    {sel.kpis.oilPressure != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500">{t('siteTwin.oilPressure', { defaultValue: 'Oil Pressure' })}</div>
+                        <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100">
+                          {sel.kpis.oilPressure.toFixed(0)} <span className="text-[10px] font-normal text-slate-400">kPa</span>
+                        </div>
+                      </div>
+                    )}
+                    {sel.kpis.hydraulicTemp != null && (
+                      <div className="p-1.5 rounded bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60">
+                        <div className="text-[10px] text-slate-500">{t('siteTwin.hydraulicTemp', { defaultValue: 'Hydraulic Temp' })}</div>
+                        <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100">
+                          {sel.kpis.hydraulicTemp.toFixed(1)} <span className="text-[10px] font-normal text-slate-400">°C</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               {draft && selPlaced && (() => {
                 const route = draft.positions.get(mkey(sel))!.route;
                 return (

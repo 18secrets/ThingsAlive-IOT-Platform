@@ -402,8 +402,8 @@ async function main() {
         mfr: 'Kobelco',
         model: 'CKL-1000i',
         serial: 'KOBCKL10007621',
-        desc: '100 MT lattice-boom crawler crane stationed at Talegaon Depot for scheduled boom overhaul.',
-        plantId: yardPlantId,
+        desc: '100 MT lattice-boom crawler crane stationed at Pune Metro Expressway for lifting and assembly.',
+        plantId: mainPlantId,
         category: 'Lifting & Cranes',
       },
       {
