@@ -107,7 +107,9 @@
     "nominalFromLibrary": "मानक {{rate}} {{unit}}, लाइब्रेरी श्रेणी {{className}} (संस्करण {{version}}) से",
     "nominalCitation": "स्रोत: {{citation}}",
     "nominalNoCitation": "लाइब्रेरी में इस आँकड़े का कोई डेटाशीट दर्ज नहीं है।",
-    "nominalFromParameter": "मानक {{rate}} {{unit}}, लागत प्रशासन में {{source}} द्वारा तय"
+    "nominalFromParameter": "मानक {{rate}} {{unit}}, लागत प्रशासन में {{source}} द्वारा तय",
+    "formulaRange": "उपलब्धता × प्रदर्शन × गुणवत्ता · चुनी गई तारीखें, पूरे दिन",
+    "pickDates": "या तारीखें चुनें (92 दिन तक)"
   },
   "detail": {
     "availabilityNotAvailable": "उपलब्धता की जानकारी उपलब्ध नहीं",

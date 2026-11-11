@@ -332,7 +332,8 @@
     "scenarioCount_one": "{{count}} scenario",
     "scenarioCount_other": "{{count}} scenarios",
     "noScenarios": "no scenarios",
-    "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios."
+    "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios.",
+    "requestClass": "Request this class from Things Alive →"
   },
   "bindings": {
     "title": "Signal Bindings",

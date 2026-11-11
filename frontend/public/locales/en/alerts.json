@@ -93,7 +93,8 @@
     "cancel": "Cancel",
     "save": "Save changes",
     "notANumber": "Has to be a number.",
-    "minBelowMax": "Has to be above the minimum, or the rule can never fire."
+    "minBelowMax": "Has to be above the minimum, or the rule can never fire.",
+    "negativeAllowed": "Negative values are allowed: some signals go below zero, such as a temperature or a pressure difference."
   },
   "agent": {
     "assistantTitle": "AI Assistant",
