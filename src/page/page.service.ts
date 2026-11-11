@@ -38,6 +38,7 @@ import { WorkOrderService } from '../work/services/work-order.service';
 import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
 import { DEMO_WORKFORCE, SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
 import { Draft } from '../site-twin/compose';
+import { eventWindow, MachineEvents, readMachineEvents } from './machine-events';
 import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
@@ -173,6 +174,21 @@ export class PageService {
   ) {}
 
   // ================================================================ machine page
+
+  /** A pump's starts, trips and voltage events over a window (Crompton U6): see machine-events.ts. */
+  async machineEvents(scope: RequestScope, ref: EquipmentRef, from: Date | undefined, to: Date | undefined, now: Date = new Date()): Promise<MachineEvents> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    const window = eventWindow(from, to, now);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineEvents(m, this.reader, scope.tenantId, profile, window);
+    });
+  }
 
   async machinePage(scope: RequestScope, ref: EquipmentRef, at: Date = new Date()): Promise<MachinePage> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {

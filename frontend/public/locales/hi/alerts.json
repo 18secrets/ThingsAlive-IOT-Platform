@@ -308,5 +308,11 @@
         "blocked": "रुका हुआ"
       }
     }
+  },
+  "tier": {
+    "title": "Crompton का अलर्ट स्तर",
+    "critical": "गंभीर",
+    "warning": "चेतावनी",
+    "normal": "सामान्य"
   }
 }

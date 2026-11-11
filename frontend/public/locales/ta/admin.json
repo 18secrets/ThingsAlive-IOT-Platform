@@ -9,7 +9,9 @@
     "signalAliases": "சிக்னல் மாற்றுப்பெயர்கள்",
     "signalStates": "சிக்னல் நிலைகள்",
     "telemetryArchive": "டெலிமெட்ரி காப்பகம்",
-    "fuelForecastAccuracy": "எரிபொருள் முன்கணிப்புத் துல்லியம்"
+    "fuelForecastAccuracy": "எரிபொருள் முன்கணிப்புத் துல்லியம்",
+    "models": "மாடல்கள்",
+    "serviceRoster": "சேவைப் பட்டியல்"
   },
   "archive": {
     "loadFailed": "டெலிமெட்ரி காப்பகத்தை ஏற்ற முடியவில்லை.",

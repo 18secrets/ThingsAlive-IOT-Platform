@@ -9,7 +9,9 @@
     "signalAliases": "సిగ్నల్ మారుపేర్లు",
     "signalStates": "సిగ్నల్ స్థితులు",
     "telemetryArchive": "టెలిమెట్రీ ఆర్కైవ్",
-    "fuelForecastAccuracy": "ఇంధన అంచనా ఖచ్చితత్వం"
+    "fuelForecastAccuracy": "ఇంధన అంచనా ఖచ్చితత్వం",
+    "models": "మోడల్‌లు",
+    "serviceRoster": "సర్వీస్ రోస్టర్"
   },
   "archive": {
     "loadFailed": "టెలిమెట్రీ ఆర్కైవ్‌ను లోడ్ చేయలేకపోయాం.",

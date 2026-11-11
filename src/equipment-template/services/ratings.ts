@@ -24,6 +24,18 @@ const RATINGS = new Map(
   OPERATIONAL_PARAMETERS.filter((p) => p.compilesWithUnit).map((p) => [p.name, p.unit]),
 );
 
+export interface RatingName { name: string; unit: string | null; description: string | null }
+
+/**
+ * The ratings a model may carry, for a form to offer: the same list `validateRatings`
+ * refuses against, so a screen cannot offer a name the server would turn away, nor
+ * miss one it accepts.
+ */
+export function ratingNames(): RatingName[] {
+  return OPERATIONAL_PARAMETERS.filter((p) => p.compilesWithUnit)
+    .map((p) => ({ name: p.name, unit: p.unit, description: p.description ?? null }));
+}
+
 export function ratingUnit(name: string): string | null {
   return RATINGS.get(name) ?? null;
 }

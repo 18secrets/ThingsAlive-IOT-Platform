@@ -333,7 +333,10 @@
     "scenarioCount_other": "{{count}} scenarios",
     "noScenarios": "no scenarios",
     "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios.",
-    "requestClass": "Request this class from Things Alive →"
+    "requestClass": "Request this class from Things Alive →",
+    "model": "Model",
+    "modelPlaceholder": "Choose the machine’s model",
+    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models."
   },
   "bindings": {
     "title": "Signal Bindings",
@@ -650,5 +653,65 @@
     "loadFailed": "The 3-D model could not be loaded.",
     "notForRole": "The 3-D model is not available for your role.",
     "noCurrentReading": "no current reading"
+  },
+  "rated": {
+    "title": "Rated alerts on this machine",
+    "hint": "Each is a multiple of one of the machine’s ratings, read from its nameplate or its model. Without the rating, the alert cannot fire.",
+    "idleCount_one": "1 cannot fire",
+    "idleCount_other": "{{count}} cannot fire",
+    "allLive": "All can fire",
+    "above": "above {{multiple}} × {{rating}} = {{value}} {{unit}}",
+    "below": "below {{multiple}} × {{rating}} = {{value}} {{unit}}",
+    "missing": "Cannot fire: {{rating}} is not set on this machine or its model. Set it under Administration → Models.",
+    "live": "Can fire",
+    "idle": "Waiting for a rating",
+    "from": {
+      "equipment": "from the nameplate",
+      "model": "from the model",
+      "equipment_class": "set for the class",
+      "site": "set for the site",
+      "client": "set for the account"
+    }
+  },
+  "events": {
+    "title": "Events: starts, trips and supply",
+    "lastDay": "Last 24 hours",
+    "none": "No events in this period.",
+    "truncated": "Showing the newest 500.",
+    "filter": {
+      "all": "All",
+      "trips": "Trips",
+      "starts": "Starts",
+      "voltage": "Supply"
+    },
+    "kind": {
+      "start_one": "Started",
+      "start_other": "Started {{count}} times in the minute",
+      "trip_overload_one": "Tripped on overload (current above 1.2 × rated)",
+      "trip_overload_other": "Tripped on overload, {{count}} times",
+      "trip_supply_one": "Stopped on supply loss",
+      "trip_supply_other": "Stopped on supply loss, {{count}} times",
+      "trip_overtemp_one": "Tripped on over-temperature",
+      "trip_overtemp_other": "Tripped on over-temperature, {{count}} times",
+      "voltage_low": "Supply dipped to {{value}} V (warning line {{limit}} V)",
+      "voltage_high": "Supply rose to {{value}} V (warning line {{limit}} V)"
+    },
+    "tag": {
+      "trip": "Trip",
+      "voltage": "Supply",
+      "start": "Start"
+    },
+    "unavailable": {
+      "starts": {
+        "unbound": "Starts are not reported by this machine’s logger."
+      },
+      "trips": {
+        "unbound": "Trips are not reported by this machine’s logger."
+      },
+      "voltage": {
+        "unbound": "Supply voltage is not reported by this machine’s logger.",
+        "no_voltage_band": "Supply events need the voltage warning lines on the machine or its model (voltage_warn_low, voltage_warn_high)."
+      }
+    }
   }
 }

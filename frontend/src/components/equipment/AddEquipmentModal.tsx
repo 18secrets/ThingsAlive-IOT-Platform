@@ -4,7 +4,7 @@ import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption, ShiftTemplate,
-  apiApplyShiftTemplate, apiListMyCatalogScenarios, apiListShiftTemplates,
+  apiApplyShiftTemplate, apiListMyCatalogScenarios, apiListShiftTemplates, EquipmentModel, apiGetMachineModel, apiListModels, apiSetMachineModel,
 } from '../../lib/api';
 
 interface AddEquipmentModalProps {
@@ -48,6 +48,11 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [equipmentClassSlug, setEquipmentClassSlug] = useState('');
+  // The machine's model (D57): where its rated current, voltage band and duty curve come
+  // from. One of the account's own models, of the machine's class (Crompton POC, 11 Nov).
+  const [models, setModels] = useState<EquipmentModel[]>([]);
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [initialModelId, setInitialModelId] = useState<string | null>(null);
   const [plantId, setPlantId] = useState('');
   const [manufacturer, setManufacturer] = useState('');
   const [modelNumber, setModelNumber] = useState('');
@@ -68,6 +73,9 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
 
   const equipmentClassOptions = equipmentClasses.map((ec) => ({ label: ec.name, value: ec.slug }));
   const scenarioCountOf = (slug: string) => (scenarioCounts ? scenarioCounts[slug] ?? 0 : null);
+  useEffect(() => {
+    if (modelId && !models.some((m) => m.id === modelId && m.equipmentClassSlug === equipmentClassSlug)) setModelId(null);
+  }, [equipmentClassSlug]); // eslint-disable-line react-hooks/exhaustive-deps
   const selectedHasNoScenarios = !!equipmentClassSlug && scenarioCountOf(equipmentClassSlug) === 0;
   const plantOptions = plants.map((p) => ({ label: p.name, value: p.id }));
 
@@ -84,6 +92,16 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     setShiftTemplate('');
     setError(undefined);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    apiListModels('account').then(setModels).catch(() => setModels([]));
+    setModelId(null); setInitialModelId(null);
+    if (existingEquipment) {
+      apiGetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId)
+        .then((r) => { setModelId(r.modelId); setInitialModelId(r.modelId); }).catch(() => {});
+    }
+  }, [isOpen, existingEquipment]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -155,6 +173,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           tier,
         });
         if (shiftTemplate) await apiApplyShiftTemplate(existingEquipment.sourceSystem, existingEquipment.externalId, shiftTemplate);
+        if (modelId !== initialModelId) await apiSetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId, modelId);
       } else {
         const created = await onSave({
           code: finalCode,
@@ -168,6 +187,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           tier,
         });
         if (shiftTemplate && created) await apiApplyShiftTemplate(created.sourceSystem, created.externalId, shiftTemplate);
+        if (modelId && created) await apiSetMachineModel(created.sourceSystem, created.externalId, modelId);
       }
       reset();
       onClose();
@@ -303,6 +323,21 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                 </p>
               )}
             </div>
+
+            {equipmentClassSlug && (
+              <div>
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('equipmentForm.model')}</span>
+                <SelectPicker
+                  data={models.filter((m) => m.equipmentClassSlug === equipmentClassSlug)
+                    .map((m) => ({ label: [m.manufacturer, m.name].filter(Boolean).join(' '), value: m.id }))}
+                  value={modelId}
+                  onChange={setModelId}
+                  placeholder={t('equipmentForm.modelPlaceholder')}
+                  block
+                />
+                <p className="text-xs text-slate-400 mt-1">{t('equipmentForm.modelHint')}</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">

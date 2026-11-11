@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { MachineEventsPanel, RatedAlertsPanel } from '../components/equipment/MotorPanels';
 import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
@@ -597,6 +598,12 @@ export const EquipmentPagePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {lists.map((w) => <Widget key={w.widgetKey} widget={w} />)}
       </div>
+
+      {/* Motors and pumps (Crompton POC): which rated alerts can fire, and the event log.
+          Both stay out of the way on a machine that has neither. */}
+      <RatedAlertsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId}
+        classSlug={page.equipment.classSlug} plantId={page.equipment.plantId} />
+      <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />

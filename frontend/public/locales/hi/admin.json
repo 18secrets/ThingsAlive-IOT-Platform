@@ -9,7 +9,9 @@
     "signalAliases": "सिग्नल उपनाम",
     "signalStates": "सिग्नल स्टेट",
     "telemetryArchive": "टेलीमेट्री आर्काइव",
-    "fuelForecastAccuracy": "ईंधन पूर्वानुमान की सटीकता"
+    "fuelForecastAccuracy": "ईंधन पूर्वानुमान की सटीकता",
+    "models": "मॉडल",
+    "serviceRoster": "सर्विस रोस्टर"
   },
   "archive": {
     "loadFailed": "टेलीमेट्री आर्काइव लोड नहीं हो सका।",

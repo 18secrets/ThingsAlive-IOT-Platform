@@ -23,6 +23,11 @@ const STAFF_ADMIN_CAPABILITY: Record<AdminSubTab | 'catalog-import', string | nu
   // read alone (Platform Support) every call came back refused (TC_149, 30 Oct).
   category: 'catalog.write',
   'named-formula': 'catalog.write',
+  // Models and their ratings and duty curves (D57, D58): read with equipment-template.read,
+  // edited with .write, both Master Admin's.
+  model: 'equipment-template.read',
+  // An account's own engineers and sites: nothing for an account-less staff login.
+  'service-roster': null,
   'tool-mapping': 'device-catalog.read',
   'signal-alias': 'catalog.write',
   'signal-state': 'device-catalog.read',
@@ -123,7 +128,7 @@ export function canOpenTab(user: AuthUser, tab: NavigationTab): boolean {
 
 /** Administration's tab bar order, per side — the first one the person may open. */
 const STAFF_ADMIN_ORDER: AdminSubTab[] = [
-  'industry', 'category', 'named-formula', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
+  'industry', 'category', 'named-formula', 'model', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
 ];
 
 export function firstAllowedAdminSubTab(user: AuthUser): AdminSubTab | null {
