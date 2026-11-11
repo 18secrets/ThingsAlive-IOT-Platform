@@ -10,7 +10,7 @@ import {
   GeofenceZoneRecord, apiGeofenceFleetStatus, apiListEquipment, apiListGeofences,
 } from '../lib/api';
 import { DrawZonePanel, ZoneDraft, draftShape } from '../components/geofence/DrawZonePanel';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 /** Positions arrive at the loggers' cadence; polling faster shows nothing new. */
 const REFRESH_MS = 60_000;
@@ -212,7 +212,7 @@ export const GeofenceMapPage: React.FC = () => {
         </button>
         {status && (
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {t('geofence.updated', { time: new Date(status.asOf).toLocaleTimeString(appLocale()) })}
+            {t('geofence.updated', { time: new Date(status.asOf).toLocaleTimeString(appLocale(), { timeZone: appTimeZone() }) })}
           </span>
         )}
       </div>

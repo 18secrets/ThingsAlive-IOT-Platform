@@ -122,6 +122,7 @@ function accountToClient(a: Account): ClientAccount {
     mustChangePassword: a.superAdmin?.status === 'invited',
     status: a.status === 'active' ? 'Active' : 'Inactive',
     createdAt: new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    timeZone: a.timeZone,
   };
 }
 
@@ -539,11 +540,12 @@ function AppData() {
   // invent here: the modal shows that token so it can be handed to the
   // client, who sets their own via POST /auth/accept-invitation.
   const handleCreateAccount = async (
-    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string },
+    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => {
     const result = await apiCreateAccount({
       tenantId: input.tenantId,
       name: input.name,
+      timeZone: input.timeZone,
       superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
     });
     // Re-read from the server rather than trust the create response to be
@@ -558,10 +560,11 @@ function AppData() {
   // a different person; see ProvisioningService.update's own comment on why.
   const handleUpdateAccount = async (
     tenantId: string,
-    input: { name: string; email: string; fullName: string; phone?: string },
+    input: { name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => {
     const updated = await apiUpdateAccount(tenantId, {
       name: input.name,
+      timeZone: input.timeZone,
       superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
     });
     await refreshAccounts();

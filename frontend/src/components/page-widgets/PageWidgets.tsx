@@ -14,7 +14,7 @@ import { Chip } from '../common/Chip';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
 import { severityTone } from '../common/statusTone';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /** Every widget a composed page (machine or site) can render, shared because the
  *  shape — `PageWidget[]` with a `readiness`/`reason` a widget can't fill — is the
@@ -80,11 +80,11 @@ function WindowNote({ window }: { window: { from: string; to: string } | null })
   const to = Date.parse(window.to);
   const hours = Math.round((to - from) / 3_600_000);
   const endsNow = Math.abs(Date.now() - to) < 2 * 3_600_000;
-  const day = (ms: number) => new Date(ms).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
+  const day = (ms: number) => new Date(ms).toLocaleDateString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short' });
   const label = !endsNow ? t('widgets.windowRange', { from: day(from), to: day(to) })
     : hours < 48 ? t('widgets.windowLastHours', { count: hours })
       : t('widgets.windowLastDays', { count: Math.round(hours / 24) });
-  const exact = `${new Date(from).toLocaleString(appLocale())} – ${new Date(to).toLocaleString(appLocale())}`;
+  const exact = `${new Date(from).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – ${new Date(to).toLocaleString(appLocale(), { timeZone: appTimeZone() })}`;
   return <p className="text-xs text-slate-500" title={exact}>{label}</p>;
 }
 
@@ -202,7 +202,7 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
         )}
       </div>
       <p className="text-xs text-slate-400">
-        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(appLocale()), model: data.model.key })}
+        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }), model: data.model.key })}
       </p>
     </WidgetShell>
   );
@@ -243,7 +243,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
             <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-xs text-slate-500">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale())}</p>
+                <p className="text-xs text-slate-500">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</p>
               </div>
               <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
@@ -270,7 +270,7 @@ function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
               <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-xs text-slate-500">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}</p>
+                <p className="text-xs text-slate-500">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}` : ''}</p>
               </div>
             </div>
           ))}
@@ -292,7 +292,7 @@ function ServiceDueWidget({ widget }: { widget: PageWidget }) {
         {data.hoursRemaining != null ? t('widgets.hoursRemaining', { hours: data.hoursRemaining.toFixed(0) }) : '—'}
       </div>
       <p className="text-xs text-slate-400">
-        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString(appLocale()) }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
+        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
       </p>
     </WidgetShell>
   );

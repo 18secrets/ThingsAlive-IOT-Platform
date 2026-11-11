@@ -12,6 +12,7 @@ import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { RiskTrend } from '../components/care/RiskTrend';
+import { DateRangePicker } from 'rsuite';
 import { SignalDrilldown } from '../components/care/SignalDrilldown';
 import {
   ApiError, EquipmentProfile, Prediction, PredictionBaseline, PredictionSeverity, WorkOrder,
@@ -21,7 +22,7 @@ import {
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
@@ -131,7 +132,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
                       <td className="py-1.5 pr-3">{b.sampleCount ?? '—'}</td>
                       <td className="py-1.5 pr-3">{typeof b.coverageRatio === 'number' ? `${(b.coverageRatio * 100).toFixed(0)}%` : '—'}</td>
                       <td className="py-1.5 pr-3 font-sans">{b.source ?? '—'}</td>
-                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString(appLocale()) : '—'}</td>
+                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -144,6 +145,11 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
   );
 }
 
+/** A month of scores every few minutes is thousands; the trend is a 168px line. */
+const HISTORY_CAP = 500;
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
@@ -155,6 +161,9 @@ export const ThingsCareDetailPage: React.FC = () => {
   const [chainsUnconfirmed, setChainsUnconfirmed] = useState(false);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [history, setHistory] = useState<Map<string, Prediction[]>>(new Map());
+  // The risk trend's period (test report P3-D4). None: the last 20 scores, as before; a
+  // range: every score in it, up to HISTORY_CAP, the whole days from the first to the last.
+  const [historyRange, setHistoryRange] = useState<[Date, Date] | null>(null);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -171,13 +180,19 @@ export const ThingsCareDetailPage: React.FC = () => {
     onBack: goBack,
   });
 
+  const loadHistory = async (preds: Prediction[], range: [Date, Date] | null) => {
+    if (!sourceSystem || !externalId) return;
+    const bounds = range ? { from: startOfDay(range[0]), to: endOfDay(range[1]) } : undefined;
+    const histEntries = await Promise.all(preds.map(async (p): Promise<[string, Prediction[]]> =>
+      [p.clientScenarioSlug, await apiGetPredictionHistory(sourceSystem, externalId, p.clientScenarioSlug, range ? HISTORY_CAP : 20, bounds).catch(() => [])]));
+    setHistory(new Map(histEntries));
+  };
+
   const load = async () => {
     if (!sourceSystem || !externalId) return;
     const preds = await apiGetLatestPredictions(sourceSystem, externalId);
     setPredictions(preds);
-    const histEntries = await Promise.all(preds.map(async (p): Promise<[string, Prediction[]]> =>
-      [p.clientScenarioSlug, await apiGetPredictionHistory(sourceSystem, externalId, p.clientScenarioSlug, 20).catch(() => [])]));
-    setHistory(new Map(histEntries));
+    await loadHistory(preds, historyRange);
   };
 
   useEffect(() => {
@@ -287,7 +302,28 @@ export const ThingsCareDetailPage: React.FC = () => {
       )}
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">{t('detail.activeScenarios')}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('detail.activeScenarios')}</h3>
+          {predictions.length > 0 && (
+            <div className="flex items-center gap-2 w-full sm:w-auto text-sm">
+              <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{t('trend.period')}</span>
+              <DateRangePicker
+                format="yyyy-MM-dd"
+                value={historyRange}
+                onChange={(v) => {
+                  const next = (v as [Date, Date] | null) ?? null;
+                  setHistoryRange(next);
+                  void loadHistory(predictions, next);
+                }}
+                shouldDisableDate={(date) => date.getTime() > Date.now()}
+                placeholder={t('trend.lastScores', { count: 20 })}
+                cleanable
+                block
+                className="sm:w-auto! sm:min-w-[230px]"
+              />
+            </div>
+          )}
+        </div>
         {predictions.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
             {t('detail.noPrediction')}
@@ -296,7 +332,7 @@ export const ThingsCareDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {predictions.map((p) => {
               const occurred = p.occurredAt ? new Date(p.occurredAt) : null;
-              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString(appLocale()) : '—';
+              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—';
               const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE(p.severity) : 'slate';
               const signals = (p.signals ?? []).slice().sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9));
               const healthy = signals.filter((s) => s.state === 'normal').length;

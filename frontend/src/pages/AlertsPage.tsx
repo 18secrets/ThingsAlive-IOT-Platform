@@ -19,7 +19,7 @@ import {
   apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 import { sortRows, useSort } from '../lib/useSort';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
@@ -324,7 +324,7 @@ export const AlertsPage: React.FC = () => {
                 <span className="font-medium">{e.ruleName}</span>,
                 machineName(e),
                 e.summary,
-                new Date(e.firedAt).toLocaleString(appLocale()),
+                new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }),
                 <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
               ]}
             />
@@ -339,7 +339,7 @@ export const AlertsPage: React.FC = () => {
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString(appLocale())}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {eventActions(e)}
                   </div>
@@ -486,6 +486,9 @@ const AlertRuleForm: React.FC<{
             <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
             {maxError && <span className="text-xs text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
+          {/* Negative bounds are kept on purpose (test report MAJ-4a, decided 11 Nov): a
+              temperature or a pressure difference goes below zero. Said, so it reads as meant. */}
+          <p className="col-span-full text-xs text-slate-400 dark:text-slate-500">{t('form.negativeAllowed')}</p>
         </div>
       )}
 

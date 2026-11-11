@@ -58,6 +58,8 @@ export interface ClientAccount {
   mustChangePassword?: boolean;
   status: 'Active' | 'Inactive';
   createdAt: string;
+  /** IANA zone the account's dates are shown in (MIN-12). */
+  timeZone?: string;
 }
 
 // A named set of page permissions a client's Super Admin (or Master Admin,

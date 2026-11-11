@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   Plus,
@@ -10,10 +10,12 @@ import {
   Archive,
   Activity,
   RotateCcw,
+  Inbox,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { EquipmentClass, EquipmentClassInput } from '../../lib/api';
+import { EquipmentClass, EquipmentClassInput, apiListClassRequestQueue } from '../../lib/api';
+import { ClassRequestQueue } from '../catalog/ClassRequests';
 import { useAuth } from '../../lib/AuthProvider';
 import { staffMay } from '../../lib/pageAccess';
 import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
@@ -65,6 +67,17 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
   // and the button says who publishes rather than answering with an error (TC_141).
   const { authUser } = useAuth();
   const canPublish = staffMay(authUser, 'catalog.publish');
+  // Accounts ask for classes the library lacks (OB-6); the queue is answered from here,
+  // beside the classes a request is answered with. The count is the open ones.
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [openRequests, setOpenRequests] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    apiListClassRequestQueue()
+      .then((r) => { if (live) setOpenRequests(r.filter((x) => x.status === 'new' || x.status === 'in_progress').length); })
+      .catch(() => { if (live) setOpenRequests(null); });
+    return () => { live = false; };
+  }, []);
   const [viewMode, setViewMode] = useViewMode('admin-classes');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | EquipmentClass['status']>('all');
@@ -204,6 +217,24 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+          <button
+            id="class-requests-btn"
+            onClick={() => setQueueOpen(true)}
+            className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Inbox className="w-4 h-4" />
+            <span>{t('classRequests.queueButton')}</span>
+            {!!openRequests && (
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-sky-600 text-white text-[0.6875rem] font-bold inline-flex items-center justify-center">{openRequests}</span>
+            )}
+          </button>
+          <ClassRequestQueue
+            isOpen={queueOpen}
+            onClose={() => setQueueOpen(false)}
+            classes={classes}
+            canAnswer={staffMay(authUser, 'catalog.write')}
+            onChanged={setOpenRequests}
+          />
           <button
             onClick={onOpenBulkImport}
             className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center gap-2"

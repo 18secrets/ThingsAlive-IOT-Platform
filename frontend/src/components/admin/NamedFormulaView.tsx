@@ -8,7 +8,7 @@ import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagin
 import { ListTable } from '../common/ListTable';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 import { useAuth } from '../../lib/AuthProvider';
 import { staffMay } from '../../lib/pageAccess';
 import { Skeleton } from '../common/Skeleton';
@@ -329,7 +329,7 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
               </span>
             </div>
             <span className="text-xs text-slate-400">
-              {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString(appLocale()) }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString(appLocale()) })}
+              {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
             </span>
           </div>
           {v.name !== versions[0].name && <p className="text-xs text-slate-600 dark:text-slate-300">{v.name}</p>}
