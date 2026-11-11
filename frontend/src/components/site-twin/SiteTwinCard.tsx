@@ -164,6 +164,14 @@ export const SiteTwinCard: React.FC<{ plantId: string }> = ({ plantId }) => {
       classSlug: 'rock-tipper-truck', status: 'live' as SiteTwinStatus, placed: true,
       x: gate.x, z: gate.z, headingDeg: 0, activity: 'productive' as SiteTwinActivity,
       path, engagedLabel: null, breakdown: false,
+      kpis: {
+        engineLoad: 64.5 + i * 4.2,
+        fuelLevel: 78.0 - i * 5.5,
+        fuelRate: 14.8 + i * 1.6,
+        coolantTemp: 86.2 + i * 2.3,
+        oilPressure: 395 - i * 8,
+        hydraulicTemp: 63.8 + i * 1.9,
+      },
     }))];
   }, [machines, twin?.simulated, draft, zones, t]);
 
