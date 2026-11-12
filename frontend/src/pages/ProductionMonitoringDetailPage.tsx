@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, Clock3, Plus } from 'lucide-react';
 import { DateRangePicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
@@ -252,6 +253,7 @@ function periodLastNDays(days: number): { from: string; to: string } {
 export const ProductionMonitoringDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const goBack = useGoBack('/production-monitoring');
   const { t } = useTranslation('production');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
@@ -313,7 +315,10 @@ export const ProductionMonitoringDetailPage: React.FC = () => {
             )}
             {sourceSystem && externalId && <MachineLinks sourceSystem={sourceSystem} externalId={externalId} current="production" />}
           </div>
-          <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer shrink-0">
+          <button onClick={() => raiseWorkOrder({
+            machine: { sourceSystem: sourceSystem!, externalId: externalId!, name: profile?.name }, from: 'production',
+            downtime: availability?.readiness === 'ready' ? { hours: availability.downtimeHours ?? 0, days: DAYS } : null,
+          })} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer shrink-0">
             <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
           </button>
         </div>

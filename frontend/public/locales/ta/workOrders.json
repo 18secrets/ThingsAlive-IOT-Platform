@@ -177,5 +177,20 @@
     "planRegion": "{{code}} · {{name}}: {{sites}} தளங்கள், {{engineers}} பொறியாளர்கள்",
     "row": "வரிசை {{row}}",
     "replace": "பட்டியலை மாற்று"
+  },
+  "prefill": {
+    "from": {
+      "predictions": "நேரடி கணிப்புகள்",
+      "thingsCare": "திங்ஸ்கேர்",
+      "production": "உற்பத்தி கண்காணிப்பு",
+      "machine": "இயந்திரச் சுருக்கம்"
+    },
+    "titleFromPrediction": "{{machine}} சரிபார்க்கவும்: {{scenario}}",
+    "titleFromDowntime": "{{machine}} இயக்கமின்மை",
+    "titleInspect": "{{machine}} ஆய்வு செய்யவும்",
+    "noteFromPrediction": "{{from}} இலிருந்து உருவாக்கப்பட்டது: {{scenario}}, {{severity}}, அபாயம் {{risk}}/100.",
+    "noteFromDowntime_one": "{{from}} இலிருந்து உருவாக்கப்பட்டது: கடந்த {{count}} நாளில் {{hours}} மணி நேரம் நின்றது.",
+    "noteFromDowntime_other": "{{from}} இலிருந்து உருவாக்கப்பட்டது: கடந்த {{count}} நாட்களில் {{hours}} மணி நேரம் நின்றது.",
+    "noteFrom": "{{from}} இலிருந்து உருவாக்கப்பட்டது."
   }
 }

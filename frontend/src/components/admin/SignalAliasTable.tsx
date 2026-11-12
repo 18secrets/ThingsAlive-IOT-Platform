@@ -69,7 +69,9 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
                         {a.canonical}
                       </span></>,
       <span className="text-slate-500 dark:text-slate-400">{a.unit ?? '—'}</span>,
-      <span className="text-slate-500 dark:text-slate-400 max-w-xs truncate">{a.note ?? '—'}</span>,
+      // A block that wraps, two lines at most, the whole note on hover: `truncate` on an
+      // inline span never clipped, and a long note ran out of its card (TC_177).
+      <span title={a.note ?? undefined} className="block max-w-xs text-slate-500 dark:text-slate-400 break-words line-clamp-2">{a.note ?? '—'}</span>,
       <><div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => { setEditingAlias(a); setIsModalOpen(true); }}

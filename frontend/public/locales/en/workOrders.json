@@ -177,5 +177,20 @@
     "planRegion": "{{code}} · {{name}}: {{sites}} sites, {{engineers}} engineers",
     "row": "Row {{row}}",
     "replace": "Replace the roster"
+  },
+  "prefill": {
+    "from": {
+      "predictions": "Live Predictions",
+      "thingsCare": "ThingsCare",
+      "production": "Production Monitoring",
+      "machine": "Machine summary"
+    },
+    "titleFromPrediction": "Check {{machine}}: {{scenario}}",
+    "titleFromDowntime": "Downtime on {{machine}}",
+    "titleInspect": "Inspect {{machine}}",
+    "noteFromPrediction": "Raised from {{from}}: {{scenario}}, {{severity}}, risk {{risk}}/100.",
+    "noteFromDowntime_one": "Raised from {{from}}: {{hours}} h down over the last {{count}} day.",
+    "noteFromDowntime_other": "Raised from {{from}}: {{hours}} h down over the last {{count}} days.",
+    "noteFrom": "Raised from {{from}}."
   }
 }

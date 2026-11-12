@@ -6,6 +6,8 @@ import {
   AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Gauge, Plus, RefreshCw, Wrench,
 } from 'lucide-react';
 import { useGoBack } from '../lib/useGoBack';
+import { worstPrediction } from '../lib/worstPrediction';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
@@ -153,6 +155,7 @@ const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const goBack = useGoBack('/things-care');
   const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
@@ -264,7 +267,7 @@ export const ThingsCareDetailPage: React.FC = () => {
             <button onClick={scoreNow} disabled={scoring} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
               <RefreshCw className={`w-4 h-4 ${scoring ? 'animate-spin' : ''}`} /> {t('detail.scoreNow')}
             </button>
-            <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
+            <button onClick={() => raiseWorkOrder({ machine: { sourceSystem, externalId, name: profile?.name }, from: 'thingsCare', worst: worstPrediction(predictions) })} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
               <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
             </button>
           </div>

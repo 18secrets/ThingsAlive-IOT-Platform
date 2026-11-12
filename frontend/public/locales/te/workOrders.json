@@ -177,5 +177,20 @@
     "planRegion": "{{code}} · {{name}}: {{sites}} సైట్‌లు, {{engineers}} ఇంజనీర్లు",
     "row": "వరుస {{row}}",
     "replace": "రోస్టర్‌ను మార్చండి"
+  },
+  "prefill": {
+    "from": {
+      "predictions": "ప్రత్యక్ష అంచనాలు",
+      "thingsCare": "థింగ్స్‌కేర్",
+      "production": "ఉత్పత్తి పర్యవేక్షణ",
+      "machine": "యంత్ర సారాంశం"
+    },
+    "titleFromPrediction": "{{machine}} తనిఖీ చేయండి: {{scenario}}",
+    "titleFromDowntime": "{{machine}} పై నిలిచిన సమయం",
+    "titleInspect": "{{machine}} పరిశీలించండి",
+    "noteFromPrediction": "{{from}} నుండి సృష్టించబడింది: {{scenario}}, {{severity}}, ప్రమాదం {{risk}}/100.",
+    "noteFromDowntime_one": "{{from}} నుండి సృష్టించబడింది: గత {{count}} రోజులో {{hours}} గంటలు నిలిచింది.",
+    "noteFromDowntime_other": "{{from}} నుండి సృష్టించబడింది: గత {{count}} రోజుల్లో {{hours}} గంటలు నిలిచింది.",
+    "noteFrom": "{{from}} నుండి సృష్టించబడింది."
   }
 }
