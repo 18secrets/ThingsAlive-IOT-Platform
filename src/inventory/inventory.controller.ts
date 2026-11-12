@@ -43,6 +43,10 @@ export class RegisterBatchDto {
 
 /** Every field optional; one left out is kept. `toolMappingId: null` clears it. */
 export class UpdateDeviceDto {
+  /** A corrected IMEI, while the device has never left stock (TC_152). */
+  @IsOptional() @IsString()
+  imei?: string;
+
   @IsOptional() @IsString()
   model?: string | null;
 
@@ -146,7 +150,7 @@ export class InventoryController {
 
   @Patch('devices/:imei')
   @Requires('device.manage')
-  @ApiOperation({ summary: 'Correct a device\'s model, tool profile (in stock only), batch or notes' })
+  @ApiOperation({ summary: 'Correct a device\'s IMEI (never left stock), model, tool profile (in stock only), batch or notes' })
   updateDevice(@CurrentScope() scope: RequestScope, @Param('imei') imei: string, @Body() body: UpdateDeviceDto) {
     return this.inventory.updateDevice(scope, imei, body);
   }

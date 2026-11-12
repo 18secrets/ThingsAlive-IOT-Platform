@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { InventoryState } from '../entities/device-inventory.entity';
 
-export type InventoryAction = 'register' | 'assign' | 'release' | 'retire' | 'return-to-stock' | 'claim' | 'unclaim';
+export type InventoryAction = 'register' | 'assign' | 'release' | 'retire' | 'return-to-stock' | 'claim' | 'unclaim' | 'correct-imei';
 
 /**
  * Where a device can go from where it is, in one table (task P1-19).
@@ -32,6 +32,9 @@ const TRANSITIONS: Record<InventoryAction, { from: InventoryState[]; to: Invento
   'return-to-stock': { from: ['retired'], to: 'in-stock' },
   claim: { from: ['assigned'], to: 'same' },
   unclaim: { from: ['assigned'], to: 'same' },
+  // A typo at registration put right (TC_152). Only from stock, and the database narrows
+  // it further: never once the device has moved or been bound (ImeiCorrection).
+  'correct-imei': { from: ['in-stock'], to: 'same' },
 };
 
 /**

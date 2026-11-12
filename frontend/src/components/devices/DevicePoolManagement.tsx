@@ -34,7 +34,7 @@ interface DevicePoolManagementProps {
   onUpdate: (imei: string, input: DeviceEdit) => Promise<void>;
 }
 
-type DeviceEdit = { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null };
+type DeviceEdit = { imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null };
 
 const STATE_STYLE: Record<PooledDevice['state'], string> = {
   'in-stock': 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700',
@@ -315,6 +315,7 @@ const EditDeviceModal: React.FC<{
   onClose: () => void; onSave: (input: DeviceEdit) => Promise<void>;
 }> = ({ device, toolMappings, onClose, onSave }) => {
   const { t } = useTranslation(['devices', 'shared']);
+  const [imei, setImei] = useState(device.imei);
   const [model, setModel] = useState(device.model ?? '');
   const [toolMappingId, setToolMappingId] = useState<string | null>(device.toolMappingId);
   const [batchRef, setBatchRef] = useState(device.batchRef ?? '');
@@ -322,10 +323,14 @@ const EditDeviceModal: React.FC<{
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const inStock = device.state === 'in-stock';
+  // A typo at registration can be put right while the device is still nobody's (TC_152).
+  // The server also refuses one that has been out and come back: its readings name it.
+  const imeiEditable = inStock && !device.tenantId;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const input: DeviceEdit = {};
+    if (imeiEditable && imei.trim() !== device.imei) input.imei = imei.trim();
     if (model.trim() !== (device.model ?? '')) input.model = model;
     if (batchRef.trim() !== (device.batchRef ?? '')) input.batchRef = batchRef;
     if (notes.trim() !== (device.notes ?? '')) input.notes = notes;
@@ -346,6 +351,11 @@ const EditDeviceModal: React.FC<{
   return (
     <Modal isOpen onClose={onClose} title={t('edit.title')} subtitle={`IMEI ${device.imei}`}>
       <form onSubmit={submit} className="px-6 py-5 space-y-4">
+        <div>
+          <label className={field}>IMEI</label>
+          <Input size="sm" value={imei} onChange={setImei} disabled={!imeiEditable} className="font-mono" />
+          <p className="text-xs text-slate-400 mt-1">{imeiEditable ? t('edit.imeiHint') : t('edit.imeiLocked')}</p>
+        </div>
         <div>
           <label className={field}>{t('edit.model')}</label>
           <Input size="sm" value={model} onChange={setModel} placeholder={t('edit.modelPlaceholder')} />
