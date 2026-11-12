@@ -355,6 +355,15 @@ const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ 
                   {t('progress.fix')}
                 </button>
               )}
+              {/* A blocked step had nothing to press, so onboarding read as stuck (testing
+                  sheet TC_131). It leads to the step it waits on — most often the
+                  bindings, on the machine's page. */}
+              {s.state === 'blocked' && s.blockedBy && (
+                <button type="button" onClick={() => navigate(FIX_ROUTE[s.blockedBy!](machinePage))}
+                  className="text-xs font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer text-right">
+                  {t('progress.goTo', { step: t(`step.${s.blockedBy}`) })}
+                </button>
+              )}
               <Chip tone={STATE_TONE[s.state]}>{t(`stepState.${s.state}`)}</Chip>
             </span>
           </li>

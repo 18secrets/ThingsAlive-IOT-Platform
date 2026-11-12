@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
+import { FILTER_PICKER } from '../../lib/filterPicker';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, ClipboardPaste, Copy, Edit2, Gauge, Plus, Search, Trash2, X } from 'lucide-react';
 import {
@@ -86,7 +87,7 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
                 value={copyFrom}
                 onChange={setCopyFrom}
                 placeholder={t('models.copyPick')}
-                className="w-full sm:w-64"
+                className={`w-full sm:w-64 ${FILTER_PICKER}`}
               />
               <button
                 disabled={!copyFrom}
