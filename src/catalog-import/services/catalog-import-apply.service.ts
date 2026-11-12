@@ -18,6 +18,7 @@ import {
   ClassDiffWarning, ThresholdEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass, str, strOrNull,
 } from './class-content';
 import { EMPTY_SENSOR_CAPABILITY_ANALYSIS, analyzeSensorCapability } from './sensor-review';
+import { RuleApplySummary, applyRuleRows, isRuleSheet } from './rule-content';
 
 const SOURCE = 'excel-import' as const;
 
@@ -36,9 +37,13 @@ export interface ClassApplyResult {
 export interface ApplySummary {
   classes: Record<string, ClassApplyResult>;
   sensorCapabilities: { created: number; skipped: number; parametersAdded: number };
+  /** Only when the batch carried a rule sheet (TC_126), so a batch without one keeps its keys. */
+  rules?: RuleApplySummary;
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
+  // Rule rows name a class but are not part of its versioned body (rule-content.ts).
+  if (isRuleSheet(row.sheet)) return undefined;
   const v = row.sheet === 'equipment_class' ? row.payload.slug : row.payload.class_slug;
   return typeof v === 'string' && v ? v : undefined;
 };
@@ -150,6 +155,11 @@ export class CatalogImportApplyService {
         classSummaries[slug] = await this.applyClass(m, batch, slug, slugRows);
       }
 
+      // After the classes: a scenario's required signals were checked against the
+      // signals this batch declares, and those are written now.
+      const ruleRows = validRows.filter((r) => isRuleSheet(r.sheet));
+      const rules = ruleRows.length ? await applyRuleRows(m, ruleRows, batch.uploadedBy) : undefined;
+
       // sensor_capability: class-agnostic, resolved by slug then name (task QIMP5).
       // Not versioned like a class, so re-applying an unchanged row has to be
       // idempotent by lookup rather than by never reaching this code —
@@ -222,6 +232,7 @@ export class CatalogImportApplyService {
           skipped: invalidRows.filter((r) => r.sheet === 'sensor_capability').length,
           parametersAdded,
         },
+        ...(rules ? { rules } : {}),
       };
 
       batch.status = 'applied';
@@ -382,8 +393,13 @@ export class CatalogImportApplyService {
       created.sensor_requirement = proposed.sensorRequirements.length;
       created.default_threshold = Object.keys(proposed.defaultThresholds).length;
       created.formula = bySheetCount('formula');
-      drafted = await draftThresholdAlerts(m, slug, proposed.defaultThresholds, batch.uploadedBy);
     }
+
+    // Outside `if (!identical)` (TC_116): a class uploaded before limits became drafts,
+    // or whose draft was discarded, re-uploaded unchanged drafted nothing, and the
+    // limits in the sheet still produced no alert. It only ever adds a slug that does
+    // not exist, so an unchanged re-upload after the first drafts nothing again.
+    drafted = await draftThresholdAlerts(m, slug, proposed.defaultThresholds, batch.uploadedBy);
 
     for (const r of rows) {
       r.status = 'applied';

@@ -68,6 +68,11 @@ describeDb('catalog import: signal limits draft alert templates', () => {
       const cols = columnsOf('signal');
       wb.getWorksheet('signal')!.getRow(2).getCell(cols.indexOf(column) + 1).value = value;
     }
+    // The signal limits alone: the template's example alert rule (TC_126) is its own
+    // draft on this class, tested in catalog-import-rules.spec.ts.
+    for (const sheet of ['prediction_scenario', 'alert_rule', 'causal_chain', 'causal_chain_stage']) {
+      wb.removeWorksheet(wb.getWorksheet(sheet)!.id);
+    }
     const buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
     const parsed = await parser.parse(buffer, 'wb.xlsx', 'deepak');
     await validator.validate(parsed.id);

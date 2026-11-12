@@ -562,7 +562,15 @@
     },
     "ackWarnings": "I have read these warnings — apply anyway",
     "draftedAlerts_one": "{{count}} draft alert rule was made from the signal limits of #{{slug}}. Review and publish it on the class's Alert Rules tab.",
-    "draftedAlerts_other": "{{count}} draft alert rules were made from the signal limits of #{{slug}}. Review and publish them on the class's Alert Rules tab."
+    "draftedAlerts_other": "{{count}} draft alert rules were made from the signal limits of #{{slug}}. Review and publish them on the class's Alert Rules tab.",
+    "rulesKind": {
+      "scenario": "Prediction scenarios",
+      "alertRule": "Alert rules",
+      "causalChain": "Causal chains"
+    },
+    "rulesLine": "{{kind}}: {{created}} new, {{newVersions}} new version(s), {{unchanged}} unchanged",
+    "rulesConflict": "Not written, each already has a draft that may hold edits: {{slugs}}",
+    "rulesHint": "Rules are written as drafts: review and publish them on the class's tabs."
   },
   "model": {
     "title": "3-D model",

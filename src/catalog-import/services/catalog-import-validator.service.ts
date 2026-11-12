@@ -16,6 +16,7 @@ import {
   FORMULA_KIND_VALUES, predates, SEVERITY_VALUES, TARGET_DIRECTION_VALUES, URGENCY_VALUES,
 } from '../template-schema';
 import { analyzeSensorCapability } from './sensor-review';
+import { validateRuleRows } from './rule-content';
 import { oemFigureProblems } from '../../catalog/services/content-validation';
 import { oemFiguresFromRow, oemFiguresOf } from './class-content';
 
@@ -671,6 +672,11 @@ export class CatalogImportValidatorService {
           if (problem) invalidate(r, `signal row ${r.rowNumber}: ${problem}`);
         }
       }
+
+      // ------------------------------------------------- rule sheets (TC_126)
+      // Prediction scenarios, alert rules and causal chains, checked against the
+      // signals the class will declare once this batch applies.
+      await validateRuleRows(m, candidates, { live, invalidate, declaredSignals: expectedSignalsFor });
 
       // Anything still 'parsed' survived every rule above — shape-checked at parse
       // time (QIMP1) and now semantically checked too, which 'valid' is for.

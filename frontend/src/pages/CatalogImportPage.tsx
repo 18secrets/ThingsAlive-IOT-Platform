@@ -6,7 +6,7 @@ import {
   UploadCloud, Layers, Radio, Trash2, Check, X,
 } from 'lucide-react';
 import {
-  ApiError, CatalogImportApplySummary, CatalogImportBatch, CatalogImportDiff, SensorReviewSelection,
+  ApiError, CatalogImportApplySummary, CatalogImportBatch, CatalogImportDiff, CatalogImportRules, SensorReviewSelection,
 } from '../lib/api';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { TablePagination, usePagination } from '../components/common/TablePagination';
@@ -354,9 +354,10 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                       </div>
                     </div>
                   ))}
-                  {diff.classes.length === 0 && (
+                  {diff.classes.length === 0 && !diff.rules && (
                     <p className="text-xs text-slate-400 italic">{t('import.noClasses')}</p>
                   )}
+                  {diff.rules && <RuleLines rules={diff.rules} />}
                 </div>
 
                 {/* Rejected rows */}
@@ -519,6 +520,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                         {t('import.draftedAlerts', { count: r.draftedAlertTemplates, slug })}
                       </p>
                     ))}
+                    {applySummary.rules && <RuleLines rules={applySummary.rules} />}
                   </div>
                   <p className="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {applySummary.sensorCapabilities.parametersAdded
@@ -561,5 +563,34 @@ const ReviewToggle: React.FC<{ value: ReviewDecision; onChange: (value: ReviewDe
       <X className="w-3 h-3" /> {t('import.dismiss')}
     </button>
   </div>
+  );
+};
+
+/**
+ * The rule sheets' outcome (TC_126), the same lines before apply and after: what is
+ * new, what becomes a new version, and — named — what was not written because a
+ * draft of it already exists.
+ */
+const RuleLines: React.FC<{ rules: CatalogImportRules }> = ({ rules }) => {
+  const { t } = useTranslation('catalog');
+  const kinds = (['scenario', 'alertRule', 'causalChain'] as const).filter((k) => {
+    const c = rules[k];
+    return c.created + c.newVersions + c.unchanged + c.conflicts.length > 0;
+  });
+  if (!kinds.length) return null;
+  return (
+    <div className="space-y-1 text-xs">
+      {kinds.map((k) => (
+        <div key={k}>
+          <p className="text-slate-600 dark:text-slate-300">
+            {t('import.rulesLine', { kind: t(`import.rulesKind.${k}`), created: rules[k].created, newVersions: rules[k].newVersions, unchanged: rules[k].unchanged })}
+          </p>
+          {rules[k].conflicts.length > 0 && (
+            <p className="text-amber-700 dark:text-amber-400 break-words">{t('import.rulesConflict', { slugs: rules[k].conflicts.join(', ') })}</p>
+          )}
+        </div>
+      ))}
+      <p className="text-sky-700 dark:text-sky-400">{t('import.rulesHint')}</p>
+    </div>
   );
 };

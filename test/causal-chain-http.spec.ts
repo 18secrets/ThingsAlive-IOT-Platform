@@ -97,6 +97,8 @@ describeDb('causal chains written over HTTP', () => {
       equipmentClassSlug: CLASS_SLUG, name: 'Broken', nodes: [{ ...stage, colour: 'red' }],
     });
     expect(stray.status).toBe(400);
-    expect(Number((await owner.query(`SELECT count(*) AS n FROM causal_chain`))[0].n)).toBe(0);
+    // Only the chain this test tried to write: the template workbook the class is
+    // imported from carries an example chain of its own (TC_126).
+    expect(Number((await owner.query(`SELECT count(*) AS n FROM causal_chain WHERE slug = 'broken'`))[0].n)).toBe(0);
   });
 });

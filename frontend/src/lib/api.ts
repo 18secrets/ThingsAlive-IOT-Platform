@@ -1607,7 +1607,12 @@ export interface CatalogImportDiff {
   partialApplyNote: string;
   proposedSensors: ProposedSensor[];
   proposedCategories: ProposedCategory[];
+  /** What the rule sheets would write (TC_126); null when the workbook has none. */
+  rules?: CatalogImportRules | null;
 }
+
+export interface CatalogImportRuleCounts { created: number; newVersions: number; unchanged: number; conflicts: string[] }
+export type CatalogImportRules = Record<'scenario' | 'alertRule' | 'causalChain', CatalogImportRuleCounts>;
 
 export interface ClassApplyResult {
   action: ClassDiffAction;
@@ -1620,6 +1625,7 @@ export interface ClassApplyResult {
 export interface CatalogImportApplySummary {
   classes: Record<string, ClassApplyResult>;
   sensorCapabilities: { created: number; skipped: number; parametersAdded?: number };
+  rules?: CatalogImportRules;
 }
 
 /** Uploaded, parsed and validated in one step. Rejects outright on a malformed workbook. */
