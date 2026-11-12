@@ -4974,7 +4974,8 @@ export interface FleetImportPlan {
   /** False while any row has an error; apply refuses the whole workbook until it is true. */
   canApply: boolean;
   equipment: {
-    create: { row: number; code: string; name: string; siteCode: string | null; equipmentClassSlug: string | null }[];
+    /** `modelName`: the account's model the row names (D57), set on the machine as it is made. */
+    create: { row: number; code: string; name: string; siteCode: string | null; equipmentClassSlug: string | null; modelName?: string | null }[];
     /** Already in the register with exactly these values. */
     unchanged: number;
     /** Already in the register with different values: listed, never overwritten. */

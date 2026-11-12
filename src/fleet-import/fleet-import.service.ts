@@ -6,6 +6,9 @@ import { EquipmentPlacementEvent } from '../equipment/entities/equipment-placeme
 import { Plant } from '../equipment/entities/plant.entity';
 import { CLIENT_SOURCE_SYSTEM, EquipmentProfile } from '../equipment/equipment-profile.entity';
 import { CODE_PATTERN, pinnedClassVersion } from '../equipment/services/equipment.service';
+import { EquipmentModel } from '../equipment/entities/equipment-model.entity';
+import { ClientEquipmentTemplate } from '../equipment-template/entities/client-equipment-template.entity';
+import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { DeviceInventoryEvent } from '../inventory/entities/device-inventory-event.entity';
 import { DeviceInventory } from '../inventory/entities/device-inventory.entity';
 import { withTenantId } from '../scope/tenant-session';
@@ -24,6 +27,9 @@ export interface EquipmentToCreate {
   description: string | null;
   commissionedAt: string | null;
   serviceIntervalHours: number | null;
+  /** The account's model (D57) the row names, resolved; null when the row names none. */
+  modelId: string | null;
+  modelName: string | null;
 }
 
 export type DeviceConflictReason = 'not_in_this_account' | 'not_assigned' | 'claimed_to_another_machine';
@@ -118,6 +124,11 @@ export class FleetImportService {
         }));
         // A placement is what a site manager's view is derived from, so a machine that
         // arrives at a site arrives with the record of it, as one created by hand does.
+        // The machine's model (D57), as the machine form names it: one row per machine.
+        if (e.modelId) {
+          const created = await profiles.findOneOrFail({ where: { tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: e.code } });
+          await m.getRepository(EquipmentModel).insert({ tenantId, equipmentId: created.id, modelId: e.modelId, assignedBy: scope.userId });
+        }
         if (e.plantId) {
           await placements.insert(placements.create({
             tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: e.code,
@@ -158,10 +169,18 @@ export class FleetImportService {
       devices: { claim: [], alreadyClaimed: 0, conflicts: [], errors: [] },
     };
 
-    const [plants, profiles] = await Promise.all([
+    const [plants, profiles, models, classes, named] = await Promise.all([
       m.getRepository(Plant).find({ where: { tenantId } }),
       m.getRepository(EquipmentProfile).find({ where: { tenantId } }),
+      m.getRepository(ClientEquipmentTemplate).find({ where: { tenantId } }),
+      m.getRepository(ClientEquipmentClass).find({ where: { tenantId } }),
+      m.getRepository(EquipmentModel).find({ where: { tenantId } }),
     ]);
+    // Models by name, in any case: the database holds a name to one model per account
+    // regardless of case (uq_client_equipment_template_name), so a name is never two.
+    const modelByName = new Map(models.map((t) => [t.name.trim().toLowerCase(), t]));
+    const libraryClassOf = new Map(classes.map((c) => [c.slug, c.templateSlug ?? c.slug]));
+    const modelOfEquipment = new Map(named.map((n) => [n.equipmentId, n.modelId]));
     const plantByCode = new Map(plants.map((p) => [p.code.toLowerCase(), p]));
     const key = (sourceSystem: string, externalId: string) => `${sourceSystem}/${externalId}`;
     const profileByKey = new Map(profiles.map((p) => [key(p.sourceSystem, p.externalId), p]));
@@ -205,17 +224,38 @@ export class FleetImportService {
         serviceIntervalHours = n;
       }
 
+      // The model by name (D57), under the machine form's own rule: it exists in this
+      // account and it is a model of the row's class. Without a class there is nothing to
+      // hold it to, so a model needs one.
+      let model: ClientEquipmentTemplate | null = null;
+      if (v.model) {
+        model = modelByName.get(v.model.trim().toLowerCase()) ?? null;
+        if (!model) { fail(`No model "${v.model}" in this account. Copy or add it under Administration → Models first.`); continue; }
+        if (model.equipmentClassSlug) {
+          if (!v.classSlug) { fail(`Model "${model.name}" is of class "${model.equipmentClassSlug}"; give the row its Class slug.`); continue; }
+          const machineClass = libraryClassOf.get(v.classSlug) ?? v.classSlug;
+          if (model.equipmentClassSlug !== machineClass && model.equipmentClassSlug !== v.classSlug) {
+            fail(`Model "${model.name}" is of class "${model.equipmentClassSlug}", and this row is "${v.classSlug}". Its rated figures would describe a different machine.`);
+            continue;
+          }
+        }
+      }
+
       const wanted: EquipmentToCreate = {
         row, code: v.code, name: v.name, plantId: plant?.id ?? null, siteCode: plant?.code ?? null,
         equipmentClassSlug: v.classSlug || null, manufacturer: v.manufacturer || null,
         modelNumber: v.modelNumber || null, serialNumber: v.serialNumber || null,
         description: v.description || null, commissionedAt, serviceIntervalHours,
+        modelId: model?.id ?? null, modelName: model?.name ?? null,
       };
       const existing = profileByKey.get(key(CLIENT_SOURCE_SYSTEM, v.code));
       willExist.add(key(CLIENT_SOURCE_SYSTEM, v.code));
       if (!existing) { plan.equipment.create.push(wanted); continue; }
 
       const fields = differingFields(existing, wanted);
+      // A machine already naming another model is a conflict like any other field: the
+      // import adds, it does not re-point a machine's ratings from a spreadsheet.
+      if (wanted.modelId && modelOfEquipment.get(existing.id) !== wanted.modelId) fields.push('model');
       if (existing.status === 'retired') {
         plan.equipment.conflicts.push({
           row, code: v.code, fields, detail: 'Retired in the register. Bringing it back is a decision, not an import.',
