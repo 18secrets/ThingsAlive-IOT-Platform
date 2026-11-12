@@ -177,5 +177,20 @@
     "planRegion": "{{code}} · {{name}}: {{sites}} साइटें, {{engineers}} इंजीनियर",
     "row": "पंक्ति {{row}}",
     "replace": "रोस्टर बदलें"
+  },
+  "prefill": {
+    "from": {
+      "predictions": "लाइव पूर्वानुमान",
+      "thingsCare": "थिंग्सकेयर",
+      "production": "उत्पादन निगरानी",
+      "machine": "मशीन सारांश"
+    },
+    "titleFromPrediction": "{{machine}} जाँचें: {{scenario}}",
+    "titleFromDowntime": "{{machine}} पर डाउनटाइम",
+    "titleInspect": "{{machine}} का निरीक्षण करें",
+    "noteFromPrediction": "{{from}} से बनाया गया: {{scenario}}, {{severity}}, जोखिम {{risk}}/100।",
+    "noteFromDowntime_one": "{{from}} से बनाया गया: पिछले {{count}} दिन में {{hours}} घंटे बंद।",
+    "noteFromDowntime_other": "{{from}} से बनाया गया: पिछले {{count}} दिनों में {{hours}} घंटे बंद।",
+    "noteFrom": "{{from}} से बनाया गया।"
   }
 }

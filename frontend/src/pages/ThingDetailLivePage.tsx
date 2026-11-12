@@ -4,6 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Activity, Bell, ClipboardList, Gauge, Plus, ShieldCheck, Wrench } from 'lucide-react';
 import { useGoBack } from '../lib/useGoBack';
+import { worstPrediction } from '../lib/worstPrediction';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Slot, useSlot } from '../lib/useSlot';
 import { Chip } from '../components/common/Chip';
@@ -34,6 +36,7 @@ const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 export const ThingDetailLivePage: React.FC = () => {
   const { sourceSystem = '', externalId = '' } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const goBack = useGoBack('/dashboard');
   const { t } = useTranslation('dashboard');
   const key = [sourceSystem, externalId];
@@ -130,7 +133,10 @@ export const ThingDetailLivePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div className="flex flex-col gap-3">
           <Panel title={t('thingLive.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} slot={orders} empty={t('thingLive.openWorkOrdersEmpty')}
-            action={<button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
+            action={<button onClick={() => raiseWorkOrder({
+              machine: { sourceSystem, externalId, name: p?.name }, from: 'machine',
+              worst: predictions.state === 'ok' ? worstPrediction(predictions.data) : null,
+            })} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"><Plus className="w-3.5 h-3.5" /> {t('thingLive.create')}</button>}
             render={(d) => d.map((o) => (
               <PanelRow key={o.id} title={o.title}
                 detail={`${o.reference} · ${t(`priority.${o.priority}`, { defaultValue: o.priority })}${o.dueAt ? ` · ${t('thingLive.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}` : ''}`}

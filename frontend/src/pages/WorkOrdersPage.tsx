@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -65,7 +65,18 @@ export const WorkOrdersPage: React.FC = () => {
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
-  const [prefill, setPrefill] = useState<{ equipmentKey: string; title: string } | null>(null);
+  const [prefill, setPrefill] = useState<WorkOrderPrefill | null>(null);
+  // Arriving from a prediction (Live Predictions' Create work order, TC_181): open the form
+  // filled, once, and take the request off the history entry so a reload does not reopen it.
+  const location = useLocation();
+  useEffect(() => {
+    const ask = (location.state as { createWorkOrder?: { sourceSystem: string; externalId: string; title: string; description?: string; predictionId?: string } } | null)?.createWorkOrder;
+    if (!ask) return;
+    setPrefill({ equipmentKey: `${ask.sourceSystem}|${ask.externalId}`, title: ask.title, description: ask.description, predictionId: ask.predictionId });
+    setCreating(true);
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [people, setPeople] = useState<{ id: string; fullName: string }[]>([]);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
@@ -483,9 +494,12 @@ const TitleCounter: React.FC<{ title: string }> = ({ title }) => (
   </span>
 );
 
+/** What the create form can start from: the service-due list, or a prediction (TC_181). */
+interface WorkOrderPrefill { equipmentKey: string; title: string; description?: string; predictionId?: string }
+
 const CreateWorkOrderForm: React.FC<{
   equipment: EquipmentProfile[];
-  initial?: { equipmentKey: string; title: string } | null;
+  initial?: WorkOrderPrefill | null;
   onCancel: () => void;
   onCreate: (input: RaiseWorkOrderInput) => void;
 }> = ({ equipment, initial, onCancel, onCreate }) => {
@@ -493,7 +507,7 @@ const CreateWorkOrderForm: React.FC<{
   const [title, setTitle] = useState(initial?.title ?? '');
   const [equipmentKey, setEquipmentKey] = useState<string | null>(initial?.equipmentKey ?? null);
   const [priority, setPriority] = useState<WorkOrderPriority>('normal');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initial?.description ?? '');
   const [dueAt, setDueAt] = useState('');
   const pastDue = !!dueAt && dueAt < todayLocal();
   const canCreate = !!title.trim() && title.trim().length <= MAX_TITLE && !!equipmentKey && !pastDue;
@@ -508,6 +522,8 @@ const CreateWorkOrderForm: React.FC<{
         onCreate({
           sourceSystem, externalId, title: title.trim(), priority,
           description: description.trim() || undefined,
+          // Linked to the prediction it came from, while the machine is still the one it was raised on.
+          predictionId: initial?.predictionId && equipmentKey === initial.equipmentKey ? initial.predictionId : undefined,
           dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
         });
       }}

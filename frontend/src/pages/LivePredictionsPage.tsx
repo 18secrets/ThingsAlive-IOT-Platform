@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, ChevronRight, Info, Search, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { sortRows, useSort } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
 import { Input } from 'rsuite';
@@ -42,6 +43,7 @@ export const LivePredictionsPage: React.FC = () => {
   const [viewMode, setViewMode] = useViewMode('predictions');
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   // "No machines match" before the list arrived read as a filter that matched nothing.
   const [equipmentLoaded, setEquipmentLoaded] = useState(false);
@@ -125,6 +127,15 @@ export const LivePredictionsPage: React.FC = () => {
     if (!worst) return t('kpis.notScored');
     return `${worst.clientScenarioSlug} · ${t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · ${t('kpis.scenariosScored', { count: (p as Prediction[]).length })}`;
   };
+  // The form opens with this machine chosen and the task written from its worst
+  // prediction, linked to it (testing sheet TC_181, TC_182).
+  const raiseFor = (m: EquipmentProfile) => {
+    const { worst } = scoreOf(m);
+    raiseWorkOrder({
+      machine: m, from: 'predictions', worst,
+      scenarioName: worst ? scenarios?.find((s) => s.slug === worst.clientScenarioSlug)?.name : null,
+    });
+  };
   const machineActions = (m: EquipmentProfile) => (
     <div className="flex items-center gap-3">
       <button
@@ -133,7 +144,7 @@ export const LivePredictionsPage: React.FC = () => {
       >
         {t('common.details')} <ChevronRight className="w-3.5 h-3.5" />
       </button>
-      <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+      <button onClick={() => raiseFor(m)} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
         <Sparkles className="w-3.5 h-3.5" /> {t('common.createWorkOrder')}
       </button>
     </div>

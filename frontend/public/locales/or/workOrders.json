@@ -177,5 +177,20 @@
     "planRegion": "{{code}} · {{name}}: {{sites}} ସାଇଟ୍, {{engineers}} ଇଞ୍ଜିନିୟର",
     "row": "ଧାଡ଼ି {{row}}",
     "replace": "ରୋଷ୍ଟର ବଦଳାନ୍ତୁ"
+  },
+  "prefill": {
+    "from": {
+      "predictions": "ଲାଇଭ୍ ପୂର୍ବାନୁମାନ",
+      "thingsCare": "ଥିଙ୍ଗସ୍‌କେୟାର",
+      "production": "ଉତ୍ପାଦନ ତଦାରଖ",
+      "machine": "ମେସିନ୍ ସାରାଂଶ"
+    },
+    "titleFromPrediction": "{{machine}} ଯାଞ୍ଚ କରନ୍ତୁ: {{scenario}}",
+    "titleFromDowntime": "{{machine}} ରେ ବନ୍ଦ ସମୟ",
+    "titleInspect": "{{machine}} ନିରୀକ୍ଷଣ କରନ୍ତୁ",
+    "noteFromPrediction": "{{from}} ରୁ ସୃଷ୍ଟି: {{scenario}}, {{severity}}, ବିପଦ {{risk}}/100।",
+    "noteFromDowntime_one": "{{from}} ରୁ ସୃଷ୍ଟି: ଗତ {{count}} ଦିନରେ {{hours}} ଘଣ୍ଟା ବନ୍ଦ।",
+    "noteFromDowntime_other": "{{from}} ରୁ ସୃଷ୍ଟି: ଗତ {{count}} ଦିନରେ {{hours}} ଘଣ୍ଟା ବନ୍ଦ।",
+    "noteFrom": "{{from}} ରୁ ସୃଷ୍ଟି।"
   }
 }
