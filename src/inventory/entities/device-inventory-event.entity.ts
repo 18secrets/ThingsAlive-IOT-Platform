@@ -46,6 +46,10 @@ export class DeviceInventoryEvent {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
+  /** On a `correct-imei` event, the IMEI it replaced; the device's history follows it back. */
+  @Column({ name: 'previous_imei', type: 'text', nullable: true })
+  previousImei: string | null;
+
   @Column({ name: 'actor_user_id', type: 'text' })
   actorUserId: string;
 

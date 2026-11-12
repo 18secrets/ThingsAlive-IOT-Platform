@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, IsNull, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -316,12 +316,17 @@ export class InventoryService {
   /** Where this device has been, across every account that has held it. */
   async historyFor(scope: RequestScope, imei: string): Promise<DeviceInventoryEvent[]> {
     this.requirePlatform(scope, "read a device's full history");
-    return runTenantSpanning(this.ds, `inventory history read by ${scope.userId}`, (m) =>
-      m.getRepository(DeviceInventoryEvent).find({
-        where: { imei: imei.trim() },
-        order: { at: 'ASC' },
-      }),
-    );
+    return runTenantSpanning(this.ds, `inventory history read by ${scope.userId}`, async (m) => {
+      const repo = m.getRepository(DeviceInventoryEvent);
+      // A corrected IMEI keeps its registration under the number it was typed as: the
+      // log is append-only. Each correction names the IMEI before it, so walk back.
+      const imeis = [imei.trim()];
+      for (let i = 0; i < imeis.length; i += 1) {
+        const corrections = await repo.find({ where: { imei: imeis[i], action: 'correct-imei' } });
+        for (const c of corrections) if (c.previousImei && !imeis.includes(c.previousImei)) imeis.push(c.previousImei);
+      }
+      return repo.find({ where: { imei: In(imeis) }, order: { at: 'ASC' } });
+    });
   }
 
   // ----------------------------------------------------------------------- shared
@@ -334,16 +339,31 @@ export class InventoryService {
    * The tool profile is fixed once the device leaves stock: a client's machine may
    * already be bound to signals that profile declared, and changing it underneath
    * them is a different act from correcting a delivery note.
+   *
+   * The IMEI itself can be corrected while the device has never been anywhere
+   * (TC_152); the database holds that rule (ImeiCorrection), and the correction is the
+   * one edit that is recorded, because the device is now known by another number.
    */
   async updateDevice(
     scope: RequestScope, imei: string,
-    patch: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+    patch: { imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
   ): Promise<DeviceInventory> {
     this.requirePlatform(scope, 'edit devices');
     return runTenantSpanning(this.ds, `inventory edit by ${scope.userId}`, async (m) => {
       const repo = m.getRepository(DeviceInventory);
-      const device = await repo.findOne({ where: { imei: imei.trim() } });
+      // Locked: an assign arriving at the same moment waits, then the database judges
+      // the correction against the state it left.
+      const device = await repo.findOne({ where: { imei: imei.trim() }, lock: { mode: 'pessimistic_write' } });
       if (!device) throw new NotFoundException(`No device with IMEI "${imei}".`);
+      const newImei = patch.imei?.trim();
+      const correcting = newImei !== undefined && newImei !== device.imei;
+      if (correcting && !newImei) throw new BadRequestException('An IMEI cannot be blank.');
+      if (correcting && (device.state !== 'in-stock' || device.tenantId !== null)) {
+        throw new BadRequestException(
+          `Device ${device.imei} is ${device.tenantId ? 'assigned to a client' : device.state}; its IMEI can only be corrected while it has never left stock.`,
+        );
+      }
+      const previousImei = device.imei;
       if (patch.toolMappingId !== undefined && patch.toolMappingId !== device.toolMappingId && device.state !== 'in-stock') {
         throw new BadRequestException(
           `Device ${device.imei} is ${device.state}; its tool profile can only change while it is in stock.`,
@@ -355,11 +375,24 @@ export class InventoryService {
       if (batchRef !== undefined) device.batchRef = batchRef;
       if (notes !== undefined) device.notes = notes;
       if (patch.toolMappingId !== undefined) device.toolMappingId = patch.toolMappingId;
+      if (correcting) device.imei = newImei;
       try {
-        return await repo.save(device);
+        const saved = await repo.save(device);
+        if (correcting) {
+          await this.record(m, scope, saved.imei, 'correct-imei', 'in-stock', 'in-stock',
+            { tenantId: null, previousImei, reason: `IMEI corrected from ${previousImei}` });
+        }
+        return saved;
       } catch (err) {
-        if (err instanceof QueryFailedError && (err as QueryFailedError & { code?: string }).code === '23503') {
+        const e = err as QueryFailedError & { code?: string; constraint?: string; driverError?: { message?: string } };
+        if (err instanceof QueryFailedError && e.code === '23503') {
           throw new BadRequestException(`No tool mapping "${patch.toolMappingId}".`);
+        }
+        if (err instanceof QueryFailedError && e.code === '23505') {
+          throw new BadRequestException(`IMEI "${newImei}" is already in the inventory.`);
+        }
+        if (err instanceof QueryFailedError && e.code === '23514' && e.constraint === 'ck_imei_fixed_once_used') {
+          throw new BadRequestException(e.driverError?.message ?? err.message);
         }
         throw err;
       }
@@ -379,7 +412,7 @@ export class InventoryService {
     action: InventoryAction,
     fromState: InventoryState | null,
     toState: InventoryState,
-    extra: { tenantId: string | null; equipmentExternalId?: string | null; reason?: string | null },
+    extra: { tenantId: string | null; equipmentExternalId?: string | null; reason?: string | null; previousImei?: string | null },
   ): Promise<void> {
     const repo = m.getRepository(DeviceInventoryEvent);
     await repo.save(repo.create({
@@ -387,6 +420,7 @@ export class InventoryService {
       tenantId: extra.tenantId,
       equipmentExternalId: extra.equipmentExternalId ?? null,
       reason: extra.reason ?? null,
+      previousImei: extra.previousImei ?? null,
       actorUserId: scope.userId,
       actorRoles: [...scope.roles],
     }));

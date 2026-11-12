@@ -73,10 +73,11 @@ describeDb('catalog import: workbook template and parser', () => {
 
     expect(result.status).toBe('parsed');
     expect(result.invalidRowCount).toBe(0);
-    // recommendation: template v4 (QREC0a); layout: added inside v4 (QREC0b). Each is a
-    // new sheet with its own example row.
+    // recommendation: template v4 (QREC0a); layout: added inside v4 (QREC0b); the four
+    // rule sheets inside v5 (TC_126). Each is a new sheet with its own example row.
     expect(result.countsBySheet).toEqual({
       equipment_class: 1, signal: 1, failure_mode: 1, recommendation: 1, layout: 1, sensor_capability: 1, formula: 1,
+      prediction_scenario: 1, alert_rule: 1, causal_chain: 1, causal_chain_stage: 1,
     });
   });
 
@@ -98,9 +99,9 @@ describeDb('catalog import: workbook template and parser', () => {
     expect(result.countsBySheet.signal).toBe(2);
 
     const rows = await ds.getRepository(CatalogImportRow).find({ where: { batchId: result.id } });
-    // 7 example rows from the template (v4 added recommendation, then layout in QREC0b),
-    // plus the 2 just added.
-    expect(rows).toHaveLength(9);
+    // 11 example rows from the template (v4 added recommendation, then layout in QREC0b;
+    // v5 the four rule sheets, TC_126), plus the 2 just added.
+    expect(rows).toHaveLength(13);
   });
 
   it('splits a comma-separated multi-value cell and parses the boolean column', async () => {
@@ -281,8 +282,9 @@ describeDb('catalog import: workbook template and parser', () => {
       const wb = new Workbook();
       await loadWorkbook(wb, await templates.build());
       expect(wb.worksheets.map((s) => s.name)).toEqual([
-        // layout: added inside v4 by QREC0b.
+        // layout: added inside v4 by QREC0b. The rule sheets: inside v5, TC_126.
         '_meta', 'equipment_class', 'signal', 'failure_mode', 'recommendation', 'layout', 'sensor_capability', 'formula',
+        'prediction_scenario', 'alert_rule', 'causal_chain', 'causal_chain_stage',
         '_enums',
       ]);
     });

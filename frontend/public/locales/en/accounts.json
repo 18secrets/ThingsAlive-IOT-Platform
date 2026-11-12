@@ -139,7 +139,8 @@
     "resendHint": "Issue a new invitation token. The old one stops working.",
     "resendInvitation": "Resend invitation",
     "deleteHint": "Delete (never signed in)",
-    "empty": "No staff found."
+    "empty": "No staff found.",
+    "deleteBlocked": "Has signed in, so they can be suspended but not deleted."
   },
   "invite": {
     "failed": "Could not invite this person.",

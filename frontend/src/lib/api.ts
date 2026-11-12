@@ -1607,7 +1607,12 @@ export interface CatalogImportDiff {
   partialApplyNote: string;
   proposedSensors: ProposedSensor[];
   proposedCategories: ProposedCategory[];
+  /** What the rule sheets would write (TC_126); null when the workbook has none. */
+  rules?: CatalogImportRules | null;
 }
+
+export interface CatalogImportRuleCounts { created: number; newVersions: number; unchanged: number; conflicts: string[] }
+export type CatalogImportRules = Record<'scenario' | 'alertRule' | 'causalChain', CatalogImportRuleCounts>;
 
 export interface ClassApplyResult {
   action: ClassDiffAction;
@@ -1620,6 +1625,7 @@ export interface ClassApplyResult {
 export interface CatalogImportApplySummary {
   classes: Record<string, ClassApplyResult>;
   sensorCapabilities: { created: number; skipped: number; parametersAdded?: number };
+  rules?: CatalogImportRules;
 }
 
 /** Uploaded, parsed and validated in one step. Rejects outright on a malformed workbook. */
@@ -2007,7 +2013,7 @@ export function apiListDevicePool(
   return authFetch(`/inventory/pool${query ? `?${query}` : ""}`);
 }
 
-export type InventoryAction = "register" | "assign" | "release" | "retire" | "return-to-stock" | "claim" | "unclaim";
+export type InventoryAction = "register" | "assign" | "release" | "retire" | "return-to-stock" | "claim" | "unclaim" | "correct-imei";
 
 /** One move in a device's life, across every account it has been in. */
 export interface DeviceInventoryEvent {
@@ -2070,7 +2076,7 @@ export function apiReleaseDevices(
  *  A field left out is kept; `toolMappingId: null` clears it. */
 export function apiUpdateDevice(
   imei: string,
-  input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+  input: { imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
 ): Promise<PooledDevice> {
   return authFetch(`/inventory/devices/${encodeURIComponent(imei)}`, {
     method: "PATCH",

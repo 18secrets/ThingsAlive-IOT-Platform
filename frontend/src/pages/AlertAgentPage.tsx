@@ -26,30 +26,40 @@ export const AlertAgentPage: React.FC = () => {
   const backTo = navState?.backTo;
   const [view, setView] = useState<View>(navState?.view ?? 'list');
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowDraft | null>(null);
+  // Whether the open workflow came from the assistant: its back arrow then returns to the
+  // assistant with the class, failure mode and prompt still filled in (testing sheet
+  // TC_189). It went to where the flow began, and the assistant had been unmounted, so
+  // everything typed was lost.
+  const [fromAssistant, setFromAssistant] = useState(false);
+  const leaveAssistant = () => (backTo ? navigate(backTo) : setView('list'));
 
   usePageHeader(
     view === 'assistant'
-      ? { title: t('agent.assistantTitle'), aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('list') }
+      ? { title: t('agent.assistantTitle'), aiIndicator: true, onBack: leaveAssistant }
       : view === 'workflow'
-        ? { title: t('agent.workflowTitle'), aiIndicator: true, onBack: backTo ? () => navigate(backTo) : () => setView('assistant') }
+        ? { title: t('agent.workflowTitle'), aiIndicator: true, onBack: fromAssistant ? () => setView('assistant') : leaveAssistant }
         : { title: t('translation:pages.alertAgent.title'), subtitle: t('translation:pages.alertAgent.subtitle') },
   );
 
-  if (view === 'assistant') {
-    return <AlertAIAssistant onGenerate={(draft) => { setActiveWorkflow(draft); setView('workflow'); }} />;
-  }
-  if (view === 'workflow' && activeWorkflow) {
+  const editing = view === 'workflow' && activeWorkflow;
+  // Kept mounted, only hidden, while its workflow is open, so coming back finds it as it was.
+  const assistant = (view === 'assistant' || (editing && fromAssistant)) && (
+    <div className={view === 'assistant' ? undefined : 'hidden'}>
+      <AlertAIAssistant onGenerate={(draft) => { setActiveWorkflow(draft); setFromAssistant(true); setView('workflow'); }} />
+    </div>
+  );
+  if (view === 'assistant' || editing) {
     return (
-      <WorkflowEditor
-        draft={activeWorkflow}
-        onDone={() => (backTo ? navigate(backTo) : setView('list'))}
-      />
+      <>
+        {assistant}
+        {editing && <WorkflowEditor draft={activeWorkflow} onDone={leaveAssistant} />}
+      </>
     );
   }
   return (
     <AlertAgentView
       onAddAlert={() => setView('assistant')}
-      onOpen={(draft) => { setActiveWorkflow(draft); setView('workflow'); }}
+      onOpen={(draft) => { setActiveWorkflow(draft); setFromAssistant(false); setView('workflow'); }}
     />
   );
 };

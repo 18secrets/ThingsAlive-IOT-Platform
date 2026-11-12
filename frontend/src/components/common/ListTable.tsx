@@ -13,6 +13,9 @@ export interface ListColumn {
   width?: number;
   /** Narrowest a shared-width column may get; past it the table scrolls sideways instead. */
   minWidth?: number;
+  /** A shared-width column's share of the rest (default 1): more for the columns that
+   *  carry the most text, so a short one is not given the same room as a long one. */
+  grow?: number;
   /** Makes the header a sort control for that key; the page sorts its full set. */
   sortKey?: string;
 }
@@ -67,7 +70,7 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
         {columns.map((c, i) => (
           <Column
             key={c.label}
-            {...(c.width ? { width: c.width } : { flexGrow: 1, minWidth: c.minWidth ?? 100 })}
+            {...(c.width ? { width: c.width } : { flexGrow: c.grow ?? 1, minWidth: c.minWidth ?? 100 })}
             align={c.align ?? 'left'}
             verticalAlign="middle"
             fullText={false}

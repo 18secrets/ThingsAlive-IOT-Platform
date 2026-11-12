@@ -4,10 +4,12 @@ import { ArrowDownUp } from 'lucide-react';
 import type { SortDir, SortState } from '../../lib/useSort';
 
 /** The card view's sort control; the list view's headers set the same state. */
-export function SortSelect<K extends string>({ options, sort, onChange }: {
+export function SortSelect<K extends string>({ options, sort, onChange, disabled }: {
   options: { key: K; dir: SortDir; label: string }[];
   sort: SortState<K>;
   onChange: (next: SortState<K>) => void;
+  /** Nothing to sort: an empty list offered a choice that changed nothing (TC_188). */
+  disabled?: boolean;
 }) {
   const value = `${sort.key}:${sort.dir}`;
   const data = options.map((o) => ({ label: o.label, value: `${o.key}:${o.dir}` }));
@@ -18,7 +20,7 @@ export function SortSelect<K extends string>({ options, sort, onChange }: {
   const known = data.some((d) => d.value === value);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <ArrowDownUp className="w-3.5 h-3.5 text-slate-400" />
+      <ArrowDownUp className={`w-3.5 h-3.5 text-slate-400 ${disabled ? 'opacity-50' : ''}`} />
       <SelectPicker
         size="sm"
         data={known ? data : [...data, { label: value, value }]}
@@ -30,6 +32,7 @@ export function SortSelect<K extends string>({ options, sort, onChange }: {
         }}
         searchable={false}
         cleanable={false}
+        disabled={disabled}
       />
     </span>
   );
