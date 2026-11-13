@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
 import { MachineEventsPanel, RatedAlertsPanel } from '../components/equipment/MotorPanels';
-import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
+import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench, Edit2 } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -140,9 +140,11 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
                 <button
                   disabled={busyId === s.id}
                   onClick={() => setEditing(s)}
-                  className="px-2 py-1 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                  title={t('common.edit')}
+                  aria-label={t('common.edit')}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
                 >
-                  {t('common.edit')}
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   disabled={busyId === s.id}

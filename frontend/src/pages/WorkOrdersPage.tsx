@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, AlertCircle, Clock3, Wrench } from 'lucide-react';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, Edit2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -256,8 +256,8 @@ export const WorkOrdersPage: React.FC = () => {
       )}
       {(o.status === 'created' || o.status === 'in-progress') && (
         <>
-          <button disabled={busyId === o.id} onClick={() => setEditing(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-            {t('actions.edit')}
+          <button disabled={busyId === o.id} onClick={() => setEditing(o)} title={t('actions.edit')} aria-label={t('actions.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+            <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
             {o.assignedToUserId ? t('actions.reassign') : t('actions.assign')}

@@ -78,8 +78,22 @@ Before building, open the nearest existing page of the same kind and match it.
 - [ ] **Cards**: `bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800
       rounded-xl p-4 shadow-xs`. Section labels: `text-xs font-semibold uppercase
       tracking-wide text-slate-500`.
+- [ ] **Tables (`ListTable`) are sized to their content**, never equal columns by default
+      (Scenarios, Live Predictions, Alerts, AI Onboarding all had it, 12 Nov):
+      - a toggle, a count, a chip, a time or a set of buttons gets a fixed `width`;
+      - the text columns share the rest with `grow` (more for the longest: details,
+        summary, needs) and a `minWidth`;
+      - Actions is the last column, narrow and `align: 'right'`; its buttons sit right
+        (`justify-end`) and wrap whole (`whitespace-nowrap` on each), never mid-word;
+      - Edit in a table is the pencil (`Edit2`, the Models button style) with the word as
+        its `title` and `aria-label`, not the word "Edit";
+      - chips in a narrow column wrap their text instead of being cut off; a cell never
+        sets its own `min-w-[…]` wider than its column.
 - [ ] **Controls on one row are one height** (`h-8` beside rsuite `size="sm"`), and a
-      picker keeps one width whatever is selected (wrap it in a fixed-width box, `block`).
+      picker keeps one width whatever is selected: give it `FILTER_PICKER`
+      (`lib/filterPicker.ts`) with its width, so a long choice ends in "…" instead of running
+      over the next control and a short one leaves no gap (TC_187, 12 Nov). Filters line up
+      from the left.
 - [ ] Gaps stay constant whatever the content; nothing shifts when a value or label changes.
 - [ ] Cards in a row keep their own height; do not stretch them to match (team decision).
 - [ ] Each value appears once on a screen; no duplicated figures or headings.
@@ -114,3 +128,12 @@ Run all of these before saying the change is done:
    - no page errors in the console, no sideways scroll (`main.scrollWidth <= main.clientWidth`).
 4. Put the old and new screen side by side with its neighbour page and look at the
    alignment, not only at whether it works.
+5. Every table on a changed screen, at 1440 px and 768 px, in English and Tamil (the
+   longest labels), run in the page:
+
+   ```
+   [...document.querySelectorAll('.rs-table')].map(t=>({row:t.querySelector('.rs-table-body-row-wrapper .rs-table-row')?.scrollWidth,box:t.clientWidth,cut:[...t.querySelectorAll('.rs-table-cell-content')].filter(c=>c.scrollWidth>c.clientWidth+1).length}))
+   ```
+
+   `row` equal to `box` and `cut: 0`: it fits and nothing is cut off. A table of seven or
+   more columns may scroll inside its box at 768 px; nothing in it may be cut off.

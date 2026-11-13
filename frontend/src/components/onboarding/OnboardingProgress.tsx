@@ -100,13 +100,15 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
 
   // Paged, and one definition for both views (cards or list on every list page).
   const { pageItems: pagedSites, ...pager } = usePagination(filtered);
+  // Sized to content, as the other lists are: a count, a status chip and one button
+  // are narrow and fixed; the step chips, the widest cell, get the most room.
   const viewColumns: ListColumn[] = [
-    { label: t('progress.col.site') },
-    { label: t('progress.col.equipment') },
-    { label: t('progress.col.onboarded') },
-    { label: t('progress.col.steps') },
-    { label: t('progress.col.status') },
-    { label: t('progress.col.view') },
+    { label: t('progress.col.site'), grow: 2, minWidth: 120 },
+    { label: t('progress.col.equipment'), width: 110 },
+    { label: t('progress.col.onboarded'), width: 170 },
+    { label: t('progress.col.steps'), grow: 3, minWidth: 180 },
+    { label: t('progress.col.status'), width: 130 },
+    { label: t('progress.col.view'), width: 70, align: 'right' },
   ];
   const viewCells = (s: (typeof filtered)[number]) => {
     const pctDone = s.machines.total ? Math.round((s.machines.done / s.machines.total) * 100) : 0;
@@ -121,13 +123,13 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
                           </div>
                         </div></>,
       <span className="text-slate-600 dark:text-slate-400"><span className="flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5 text-slate-400" />{s.machines.total}</span></span>,
-      <><div className="flex items-center gap-2 min-w-[140px]">
+      <><div className="flex items-center gap-2 w-[140px]">
                           <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                             <div className="h-full bg-emerald-500" style={{ width: `${pctDone}%` }} />
                           </div>
                           <span className="text-xs text-slate-500">{s.machines.done}/{s.machines.total}</span>
                         </div></>,
-      <><div className="flex flex-wrap gap-1 min-w-[220px] max-w-[360px]">
+      <><div className="flex flex-wrap gap-1 min-w-0">
                           {ONBOARDING_STEPS.map((step) => {
                             const c = s.steps[step];
                             const allDone = s.machines.total > 0 && c.done === s.machines.total;
