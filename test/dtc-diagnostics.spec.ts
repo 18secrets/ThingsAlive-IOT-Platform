@@ -3,6 +3,10 @@ import { DtcEpisodeService, CONSECUTIVE_MISSING_THRESHOLD, ACTIVE_ABSENT_WINDOW_
 import { ALERT_TRIGGERS, evaluateRule, validateParams } from '../src/alert/services/alert-rules';
 import { RULE_CLAUSES } from '../src/alert/services/alert-rule-render';
 import { Severity } from '../src/common/severity';
+import { RequestScope } from '../src/auth/types/request-scope';
+import { createTestDataSource, describeDb } from './db';
+import { DataSource } from 'typeorm';
+import { withTenantSession, runTenantSpanning, APP_ROLE } from '../src/scope/tenant-session';
 
 describe('DTC Diagnostics & Packet Ingestion', () => {
   describe('DtcPacketDecoder', () => {
@@ -24,7 +28,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(dtc.spn).toBe(100);
       expect(dtc.fmi).toBe(1);
       expect(dtc.lampStatus).toBe('red_stop');
-      expect(dtc.severity).toBe('critical');
+      expect(dtc.severity).toBe(Severity.Critical);
       expect(dtc.occurrenceCount).toBe(5);
     });
 
@@ -39,7 +43,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(dtc.spn).toBe(110);
       expect(dtc.fmi).toBe(0);
       expect(dtc.lampStatus).toBe('amber_warning');
-      expect(dtc.severity).toBe('high');
+      expect(dtc.severity).toBe(Severity.High);
     });
 
     it('ignores SPN 0 (normal / no fault)', () => {
@@ -53,7 +57,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(decoded.dtcs).toHaveLength(2);
       expect(decoded.dtcs[0].code).toBe('P0115');
       expect(decoded.dtcs[1].code).toBe('P0300');
-      expect(decoded.dtcs[1].severity).toBe('critical'); // P0300 engine misfire is critical
+      expect(decoded.dtcs[1].severity).toBe(Severity.Critical); // P0300 engine misfire is critical
     });
 
     it('decodes generic JSON payload with faults list and engine status', () => {
@@ -130,7 +134,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       const mockEntityManager: any = {
         query: jest.fn(async (sql: string, params: any[]) => {
           if (sql.includes('SELECT * FROM "device_dtc_episode"')) {
-            const externalId = params[1];
+            const externalId = params[2];
             return [...episodesStore.values()].filter(
               (ep) => ep.external_id === externalId && ep.status === 'active',
             );
@@ -193,7 +197,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
         dtcs: [{ protocol: 'j1939' as const, code: 'SPN:100:FMI:1', spn: 100, fmi: 1, lampStatus: 'amber_warning' as const, severity: Severity.High }],
       };
 
-      await service.processPacket('tenant-1', 'BEML-EX-01', p1);
+      await service.processPacket('tenant-1', 'BEML-EX-01', p1, '1.0');
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(0);
 
@@ -205,7 +209,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
         engineRunning: true,
         dtcs: [],
       };
-      await service.processPacket('tenant-1', 'BEML-EX-01', p2);
+      await service.processPacket('tenant-1', 'BEML-EX-01', p2, '1.0');
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(1);
 
@@ -217,7 +221,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
         engineRunning: true,
         dtcs: [],
       };
-      await service.processPacket('tenant-1', 'BEML-EX-01', p3);
+      await service.processPacket('tenant-1', 'BEML-EX-01', p3, '1.0');
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(2);
 
@@ -229,7 +233,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
         engineRunning: true,
         dtcs: [],
       };
-      await service.processPacket('tenant-1', 'BEML-EX-01', p4);
+      await service.processPacket('tenant-1', 'BEML-EX-01', p4, '1.0');
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('cleared');
     });
 
@@ -268,7 +272,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
         dtcs: [],
       };
 
-      await service.processPacket('tenant-1', 'BEML-EX-01', packetEngineOff);
+      await service.processPacket('tenant-1', 'BEML-EX-01', packetEngineOff, '1.0');
 
       // Episode must remain ACTIVE and consecutive_missing_count should NOT increment
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
@@ -277,8 +281,16 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
   });
 
   describe('Route 4: GET /equipment/:sourceSystem/:externalId/faults', () => {
+    const scope: RequestScope = {
+      tenantId: 'tenant-1',
+      userId: 'u-1',
+      roles: ['admin'],
+      isPlatformRole: false,
+    };
+
     it('returns reportsFaults: false and empty arrays when device has never sent DTC field', async () => {
       const mockDs: any = {
+        transaction: jest.fn(async (fn: any) => fn(mockDs)),
         query: jest.fn(async (sql: string) => {
           if (sql.includes('EXISTS')) {
             return [{ has_episodes: false, has_watermark: false }];
@@ -288,7 +300,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       };
 
       const service = new DtcEpisodeService(mockDs);
-      const res = await service.getEquipmentFaults('tenant-1', '1.0', 'SIMPLE-PUMP-01');
+      const res = await service.getEquipmentFaults(scope, '1.0', 'SIMPLE-PUMP-01');
 
       expect(res.reportsFaults).toBe(false);
       expect(res.active).toEqual([]);
@@ -297,6 +309,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
 
     it('returns reportsFaults: true, active list, and history with description and remedies', async () => {
       const mockDs: any = {
+        transaction: jest.fn(async (fn: any) => fn(mockDs)),
         query: jest.fn(async (sql: string) => {
           if (sql.includes('EXISTS')) {
             return [{ has_episodes: true, has_watermark: true }];
@@ -310,7 +323,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
                 spn: 100,
                 fmi: 1,
                 lamp: 'red_stop',
-                severity: 'critical',
+                severity: Severity.Critical,
                 status: 'active',
                 firstSeenAt: new Date('2026-11-13T09:00:00Z'),
                 lastSeenAt: new Date('2026-11-13T10:00:00Z'),
@@ -327,7 +340,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
                 spn: 110,
                 fmi: 0,
                 lamp: 'amber_warning',
-                severity: 'high',
+                severity: Severity.High,
                 status: 'cleared',
                 firstSeenAt: new Date('2026-11-13T07:00:00Z'),
                 lastSeenAt: new Date('2026-11-13T08:00:00Z'),
@@ -344,7 +357,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       };
 
       const service = new DtcEpisodeService(mockDs);
-      const res = await service.getEquipmentFaults('tenant-1', '1.0', 'BEML-EX-01');
+      const res = await service.getEquipmentFaults(scope, '1.0', 'BEML-EX-01');
 
       expect(res.reportsFaults).toBe(true);
       expect(res.active).toHaveLength(1);
@@ -356,6 +369,81 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(res.history).toHaveLength(1);
       expect(res.history[0].code).toBe('SPN:110:FMI:0');
       expect(res.history[0].clearedAt).toBeDefined();
+    });
+  });
+
+  describeDb('Database integration & Row-Level Security', () => {
+    let ds: DataSource;
+
+    beforeAll(async () => {
+      ds = await createTestDataSource();
+      await ds.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
+      await ds.runMigrations({ transaction: 'all' });
+    }, 30_000);
+
+    afterAll(async () => {
+      await ds?.destroy();
+    });
+
+    it('enforces tenant isolation and prevents cross-account code reads', async () => {
+      const scopeA: RequestScope = { tenantId: 'tenant-a', userId: 'u-a', roles: ['admin'], isPlatformRole: false };
+      const scopeB: RequestScope = { tenantId: 'tenant-b', userId: 'u-b', roles: ['admin'], isPlatformRole: false };
+
+      const service = new DtcEpisodeService(ds);
+
+      // Ingest fault for tenant-a machine
+      const packet = {
+        imei: '862211074240870',
+        timestamp: new Date('2026-11-13T10:00:00Z'),
+        engineRunning: true,
+        dtcs: [{ protocol: 'j1939' as const, code: 'SPN:100:FMI:1', spn: 100, fmi: 1, lampStatus: 'red_stop' as const, severity: Severity.Critical }],
+      };
+
+      await service.processPacket('tenant-a', 'MACHINE-A', packet, '1.0');
+
+      // Tenant A queries its machine faults -> returns fault
+      const resA = await service.getEquipmentFaults(scopeA, '1.0', 'MACHINE-A');
+      expect(resA.reportsFaults).toBe(true);
+      expect(resA.active).toHaveLength(1);
+      expect(resA.active[0].code).toBe('SPN:100:FMI:1');
+
+      // Tenant B queries the same machine -> RLS evaluates to false, returns 0 active faults
+      const resB = await service.getEquipmentFaults(scopeB, '1.0', 'MACHINE-A');
+      expect(resB.reportsFaults).toBe(false);
+      expect(resB.active).toHaveLength(0);
+    });
+
+    it('enforces partial unique index against duplicate active episodes', async () => {
+      const service = new DtcEpisodeService(ds);
+
+      const packet1 = {
+        imei: '862211074240871',
+        timestamp: new Date('2026-11-13T10:00:00Z'),
+        engineRunning: true,
+        dtcs: [{ protocol: 'j1939' as const, code: 'SPN:110:FMI:0', spn: 110, fmi: 0, lampStatus: 'amber_warning' as const, severity: Severity.High }],
+      };
+
+      // Ingest packet 1
+      await service.processPacket('tenant-a', 'MACHINE-X', packet1, '1.0');
+
+      // Ingest packet 2 with the same active DTC 5 seconds later
+      const packet2 = {
+        imei: '862211074240871',
+        timestamp: new Date('2026-11-13T10:00:05Z'),
+        engineRunning: true,
+        dtcs: [{ protocol: 'j1939' as const, code: 'SPN:110:FMI:0', spn: 110, fmi: 0, lampStatus: 'amber_warning' as const, severity: Severity.High }],
+      };
+      await service.processPacket('tenant-a', 'MACHINE-X', packet2, '1.0');
+
+      // Verify that there is exactly ONE active episode with occurrences = 2
+      await runTenantSpanning(ds, 'verify-count', async (m) => {
+        const rows = await m.query(
+          `SELECT occurrences FROM "device_dtc_episode"
+            WHERE "tenant_id" = 'tenant-a' AND "external_id" = 'MACHINE-X' AND "code" = 'SPN:110:FMI:0' AND "status" = 'active'`,
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].occurrences).toBe(2);
+      });
     });
   });
 });

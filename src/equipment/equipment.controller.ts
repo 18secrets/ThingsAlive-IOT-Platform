@@ -258,7 +258,7 @@ export class EquipmentController {
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
   ) {
-    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId);
+    return this.dtcService.getEquipmentFaults(scope, sourceSystem, externalId);
   }
 
   @Post(':sourceSystem/:externalId/retire')
