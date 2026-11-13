@@ -4,17 +4,19 @@ import { LEGACY_DATA_SOURCE } from './legacy-source';
 import { DtcLamp, DtcProtocol } from '../diagnostics/entities/dtc-master.entity';
 import { Severity } from '../common/severity';
 
+/** A row of 1.0's `dtc_master` (`iot_platform_backend/src/dtcc-error/entity/dtc-error.entity.ts`).
+ * spn and fmi are text there; a J1939 code has them, a P-code has `p_code`. */
 export interface LegacyDtcMasterRow {
-  protocol?: string;
-  dtc_code?: string;
-  code?: string;
-  spn?: number | string;
-  fmi?: number | string;
-  description?: string;
-  lamp?: string;
-  severity?: string;
-  causes?: string;
-  remedies?: string;
+  source_type?: string;
+  dtc_code?: string | null;
+  p_code?: string | null;
+  spn?: string | number | null;
+  fmi?: string | number | null;
+  description?: string | null;
+  category?: string | null;
+  lamp?: string | null;
+  causes?: string | null;
+  remedies?: string | null;
 }
 
 export interface NormalizedDtcDefinition {
@@ -43,38 +45,30 @@ export class LegacyDtcMasterReader {
   async syncMasterCatalog(localDs: DataSource, schema = 'public'): Promise<number> {
     if (!this.legacy?.isInitialized) return 0;
 
-    let rows: LegacyDtcMasterRow[] = [];
-
-    // Attempt read from dtc_master first
-    try {
-      rows = await this.legacy.query(`
-        SELECT "code", "spn", "fmi", "protocol", "description", "lamp", "severity", "causes", "remedies"
-          FROM "${schema}"."dtc_master"
-      `);
-    } catch {
-      // Fallback: check dtcc_error_code / dtcc_error_code_above125kva
-      try {
-        rows = await this.legacy.query(`
-          SELECT "dtc_code" AS "code", NULL AS "spn", NULL AS "fmi", 'obd2' AS "protocol",
-                 "description", "lamp", 'high' AS "severity", "causes", "remedies"
-            FROM "${schema}"."dtcc_error_code"
-        `);
-      } catch (err: any) {
-        this.logger.warn(`Could not read 1.0 dtc_master or dtcc_error_code: ${err.message}`);
-        return 0;
-      }
-    }
+    // 1.0's real columns. The first cut asked for "code", "protocol" and "severity",
+    // which dtc_master does not have, so the read failed and the mirror stayed empty.
+    // A failure now throws rather than reading as "no codes defined".
+    const rows: LegacyDtcMasterRow[] = await this.legacy.query(`
+      SELECT "source_type", "dtc_code", "p_code", "spn", "fmi",
+             COALESCE(NULLIF("description_simp", ''), "description") AS "description",
+             "category", "lamp", "causes", "remedies"
+        FROM "${schema}"."dtc_master"
+    `);
 
     if (rows.length === 0) return 0;
 
     let syncedCount = 0;
     for (const r of rows) {
-      const code = (r.code || r.dtc_code || '').trim();
-      if (!code) continue;
-
-      const protocol: DtcProtocol = (r.protocol?.toLowerCase() === 'j1939' || r.spn != null) ? 'j1939' : 'obd2';
-      const spn = r.spn != null ? Number(r.spn) : null;
-      const fmi = r.fmi != null ? Number(r.fmi) : null;
+      // Keyed as the packet decoder keys what a machine sends, so a code and its meaning
+      // meet one to one: J1939 as SPN:<spn>:FMI:<fmi>, a P-code by its own text.
+      const spn = r.spn != null && `${r.spn}`.trim() !== '' && Number.isFinite(Number(r.spn)) ? Number(r.spn) : null;
+      const fmi = r.fmi != null && `${r.fmi}`.trim() !== '' && Number.isFinite(Number(r.fmi)) ? Number(r.fmi) : null;
+      const pCode = (r.p_code ?? '').trim().toUpperCase();
+      let protocol: DtcProtocol;
+      let code: string;
+      if (spn !== null && fmi !== null) { protocol = 'j1939'; code = `SPN:${spn}:FMI:${fmi}`; }
+      else if (pCode) { protocol = 'obd2'; code = pCode; }
+      else continue;
       const lampLower = (r.lamp || '').toLowerCase();
       let lamp: DtcLamp = 'none';
       if (lampLower.includes('red') || lampLower.includes('stop')) lamp = 'red_stop';
@@ -82,7 +76,7 @@ export class LegacyDtcMasterReader {
       else if (lampLower.includes('amber') || lampLower.includes('warning')) lamp = 'amber_warning';
       else if (lampLower.includes('mil')) lamp = 'mil';
 
-      const sevLower = (r.severity || '').toLowerCase();
+      const sevLower = (r.category || '').toLowerCase();
       let severity: Severity = Severity.Medium;
       if (lamp === 'red_stop' || lamp === 'protect' || sevLower === 'critical') severity = Severity.Critical;
       else if (lamp === 'amber_warning' || sevLower === 'high') severity = Severity.High;

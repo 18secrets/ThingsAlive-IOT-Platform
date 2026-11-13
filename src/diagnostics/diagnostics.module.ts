@@ -8,11 +8,13 @@ import { DtcSyncService } from './services/dtc-sync.service';
 import { DtcSyncScheduler } from './services/dtc-sync.scheduler';
 import { DiagnosticsController } from './diagnostics.controller';
 import { LegacyModule } from '../legacy/legacy.module';
+import { AlertModule } from '../alert/alert.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([DtcMasterCatalog, DeviceDtcEpisode, DtcPullWatermark]),
     LegacyModule,
+    AlertModule,
   ],
   controllers: [DiagnosticsController],
   providers: [DtcEpisodeService, DtcSyncService, DtcSyncScheduler],

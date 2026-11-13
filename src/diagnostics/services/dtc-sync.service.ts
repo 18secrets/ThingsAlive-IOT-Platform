@@ -4,6 +4,8 @@ import { LegacyPacketReader } from '../../legacy/legacy-packet.reader';
 import { LegacyDtcMasterReader } from '../../legacy/legacy-dtc-master.reader';
 import { DtcEpisodeService } from './dtc-episode.service';
 import { tryTakePassLock } from '../../shift/services/pass-lock';
+import { runTenantSpanning } from '../../scope/tenant-session';
+import { AlertService } from '../../alert/services/alert.service';
 
 export const DTC_PULL_LOCK_KEY = 8_742_310_002;
 export const DEFAULT_LOOKBACK_HOURS = 24;
@@ -12,6 +14,10 @@ export interface DtcSyncResult {
   locked: boolean;
   devicesPolled: number;
   packetsIngested: number;
+  /** Episodes cleared because the machine ran ten minutes without the code. */
+  cleared?: number;
+  /** Fault-code alerts raised this pass. */
+  alertsRaised?: number;
   masterCodesSynced?: number;
 }
 
@@ -33,6 +39,7 @@ export class DtcSyncService {
     private readonly packetReader: LegacyPacketReader,
     private readonly masterReader: LegacyDtcMasterReader,
     private readonly episodeService: DtcEpisodeService,
+    private readonly alerts: AlertService,
   ) {}
 
   /**
@@ -46,74 +53,55 @@ export class DtcSyncService {
     }
 
     try {
-      // 1. Discover all distinct IMEIs known to 2.0 with their tenant & equipment mapping
-      const knownDevices: Array<{ tenant_id: string; source_system: string; external_id: string; imei: string }> =
-        await this.ds.query(
-          `SELECT DISTINCT s.tenant_id, s.source_system, s.external_id, s.imei
-             FROM "sensor_map_projection" s
-            WHERE s.imei IS NOT NULL AND s.imei <> ''`,
-        );
+      // 1. Every device fitted to a machine, with its account and machine. A machine
+      // reaches its devices through `device_projection.equipment_external_id`; the first
+      // cut read `sensor_map_projection.external_id`, which is a 1.0 measurement id, and
+      // would have filed every fault under one. Tenant-spanning on purpose: the pull
+      // produces every account's fault codes, and the projection forces row security.
+      const knownDevices: Array<{ tenant_id: string; source_system: string; external_id: string; imei: string; time_zone: string }> =
+        await runTenantSpanning(this.ds, 'dtc pull: device discovery', (m) => m.query(
+          `SELECT DISTINCT d.tenant_id, d.source_system, d.equipment_external_id AS external_id, d.imei,
+                  coalesce(t.time_zone, 'Asia/Kolkata') AS time_zone
+             FROM "device_projection" d
+             LEFT JOIN "tenant" t ON t.tenant_id = d.tenant_id
+            WHERE d.imei IS NOT NULL AND d.imei <> '' AND d.equipment_external_id IS NOT NULL`,
+        ));
 
       if (knownDevices.length === 0) {
         return { locked: false, devicesPolled: 0, packetsIngested: 0 };
       }
 
-      // Group devices by IMEI
-      const imeiMap = new Map<string, { tenantId: string; sourceSystem: string; externalId: string }>();
+      const imeiMap = new Map<string, { tenantId: string; sourceSystem: string; externalId: string; timeZone: string }>();
       for (const d of knownDevices) {
-        imeiMap.set(d.imei, {
-          tenantId: d.tenant_id,
-          sourceSystem: d.source_system,
-          externalId: d.external_id,
-        });
+        imeiMap.set(d.imei, { tenantId: d.tenant_id, sourceSystem: d.source_system, externalId: d.external_id, timeZone: d.time_zone });
       }
-
       const imeis = Array.from(imeiMap.keys());
 
-      // 2. Load watermarks per IMEI
-      const watermarks: Array<{ imei: string; last_packet_time: Date; last_packet_id: string | null }> =
-        await this.ds.query(
-          `SELECT "imei", "last_packet_time", "last_packet_id"
-             FROM "dtc_pull_watermark"
-            WHERE "imei" = ANY($1::text[])`,
-          [imeis],
-        );
-
-      const watermarkMap = new Map<string, Date>(
-        watermarks.map((w) => [w.imei, new Date(w.last_packet_time)]),
+      // 2. Where each device's pull got to (platform-owned table, no tenant column).
+      const watermarks: Array<{ imei: string; last_packet_time: Date }> = await this.ds.query(
+        `SELECT "imei", "last_packet_time" FROM "dtc_pull_watermark" WHERE "imei" = ANY($1::text[])`,
+        [imeis],
       );
+      const watermarkMap = new Map<string, Date>(watermarks.map((w) => [w.imei, new Date(w.last_packet_time)]));
 
       const fallbackFrom = new Date(now.getTime() - DEFAULT_LOOKBACK_HOURS * 3600_000);
       let totalPackets = 0;
+      let cleared = 0;
+      let alertsRaised = 0;
+      const opened = new Set<string>();
 
-      // 3. Pull packets per device / batch
-      // Pull each imei from its specific watermark
+      // 3. Coded packets per device, from its watermark.
       for (const imei of imeis) {
         const from = watermarkMap.get(imei) ?? fallbackFrom;
         const target = imeiMap.get(imei)!;
-
-        const packets = await this.packetReader.pullPackets({
-          tenantId: target.tenantId,
-          sourceSystem: target.sourceSystem,
-          imeis: [imei],
-          from,
-          to: now,
-          limit: 1000,
-        });
-
+        const packets = await this.packetReader.pullPackets({ imeis: [imei], from, to: now, limit: 1000 });
         if (packets.length === 0) continue;
 
         let newestTime = from;
         let newestPacketId: string | null = null;
-
         for (const packet of packets) {
-          await this.episodeService.processPacket(
-            target.tenantId,
-            target.externalId,
-            packet,
-            target.sourceSystem,
-          );
-
+          const { active } = await this.episodeService.processPacket(target.tenantId, target.externalId, packet, target.sourceSystem);
+          if (active.some((e) => Number((e as unknown as { occurrences: number }).occurrences) === 1)) opened.add(imei);
           if (packet.timestamp > newestTime) {
             newestTime = packet.timestamp;
             newestPacketId = packet.packetId;
@@ -121,7 +109,6 @@ export class DtcSyncService {
           totalPackets++;
         }
 
-        // Upsert watermark
         await this.ds.query(
           `INSERT INTO "dtc_pull_watermark" ("imei", "last_packet_id", "last_packet_time", "updated_at")
            VALUES ($1, $2, $3, now())
@@ -133,10 +120,38 @@ export class DtcSyncService {
         );
       }
 
+      // 4. Clear what each machine has run ten minutes without. Its codeless packets are
+      // never pulled, so its newest running packet of any kind is asked for separately.
+      const latest = await this.packetReader.latestRunningPackets(imeis, fallbackFrom);
+      for (const { imei, at } of latest) {
+        const target = imeiMap.get(imei);
+        if (!target) continue;
+        cleared += (await this.episodeService.sweepClears(target.tenantId, target.sourceSystem, target.externalId, at)).length;
+      }
+
+      // 5. A newly opened code is judged by the account's fault-code rules now, not at the
+      // shift's close: a red lamp is the alert somebody needs while the machine is running.
+      for (const imei of opened) {
+        const target = imeiMap.get(imei)!;
+        try {
+          const fired = await this.alerts.evaluateWindow({
+            tenantId: target.tenantId, sourceSystem: target.sourceSystem, externalId: target.externalId,
+            shiftLocalDate: new Intl.DateTimeFormat('en-CA', { timeZone: target.timeZone }).format(now),
+            windowStart: watermarkMap.get(imei) ?? fallbackFrom, windowEnd: now,
+            readings: [], predictions: [], onlyTriggers: ['dtc'],
+          });
+          alertsRaised += fired.length;
+        } catch (error) {
+          this.logger.warn(`Fault-code alerts not judged for ${target.externalId} this pass: ${(error as Error).message}`);
+        }
+      }
+
       return {
         locked: false,
         devicesPolled: imeis.length,
         packetsIngested: totalPackets,
+        cleared,
+        alertsRaised,
       };
     } finally {
       await lock.release();
