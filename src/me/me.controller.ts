@@ -77,6 +77,9 @@ export class MeController {
       // Which pages this caller's own role grants — empty for a platform role
       // (no page-access system yet) or when the app has no database at all.
       allowedTabs: (await this.roles?.myAllowedTabs(scope)) ?? [],
+      // The caller's own role: the screens tell the account's CEO / Manager from an Admin
+      // by it, not by the two management rights an Admin can also hold (TC_193).
+      roles: scope.roles,
     };
   }
 

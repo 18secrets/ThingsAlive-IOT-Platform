@@ -37,7 +37,7 @@ export type NavigationTab =
 // stay inside their Administration sub-tabs, under the 'admin' tab, never
 // these.
 export const CLIENT_ASSIGNABLE_TABS: NavigationTab[] = [
-  'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
+  'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding', 'alerts', 'geofence', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin', 'settings',
 ];
 
 export type UserRole = 'master-admin' | 'client';
@@ -70,7 +70,7 @@ export interface RoleDefinition {
   id: string;
   clientId: string;
   name: string;
-  allowedTabs: NavigationTab[];
+  allowedTabs: RolePageGrant[];
   isSuperAdminRole?: boolean;
   createdAt: string;
 }
@@ -100,7 +100,7 @@ export interface AuthUser {
   /** RoleDefinition.id — set for the 'client' role only. */
   roleId?: string;
   /** Resolved from the user's RoleDefinition at login; drives Sidebar visibility. */
-  allowedTabs?: NavigationTab[];
+  allowedTabs?: RolePageGrant[];
   /** Whether this client user holds the built-in Super Admin role. */
   isSuperAdmin?: boolean;
   /** Things Alive staff only: their own platform role (master-admin, catalog-author, platform-support). */
@@ -138,6 +138,27 @@ export type AdminSubTab =
   | 'staff'
   | 'telemetry-archive'
   | 'fuel-forecast-accuracy';
+
+/**
+ * Administration's tabs a client sees, each granted to a role on its own as
+ * `admin-<tab>` (13 Nov 2026) — before, "admin" opened all of them at once and an owner
+ * could not give Models without Devices. "admin" is still stored beside them: it is the
+ * sidebar entry, and the role form keeps it whenever any tab is ticked.
+ *
+ * A new page or tab goes here or in CLIENT_ASSIGNABLE_TABS, and into the backend's
+ * TENANT_ASSIGNABLE_PAGES; `npm run lint` fails until all three agree.
+ */
+export const CLIENT_ADMIN_SUBTABS = [
+  'plant', 'devices', 'equipment', 'model', 'service-roster', 'fuel-forecast-accuracy',
+] as const satisfies readonly AdminSubTab[];
+export type ClientAdminSubTab = (typeof CLIENT_ADMIN_SUBTABS)[number];
+export type AdminTabGrant = `admin-${ClientAdminSubTab}`;
+/** Everything a client role can be granted: a sidebar page or one Administration tab. */
+export type RolePageGrant = NavigationTab | AdminTabGrant;
+export const adminTabGrant = (tab: ClientAdminSubTab): AdminTabGrant => `admin-${tab}`;
+export const CLIENT_ADMIN_TAB_GRANTS: AdminTabGrant[] = CLIENT_ADMIN_SUBTABS.map(adminTabGrant);
+export const isClientAdminSubTab = (tab: string): tab is ClientAdminSubTab =>
+  (CLIENT_ADMIN_SUBTABS as readonly string[]).includes(tab);
 
 /**
  * The tab Administration opens on: the first one in each role's tab bar

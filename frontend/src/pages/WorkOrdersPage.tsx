@@ -182,6 +182,12 @@ export const WorkOrdersPage: React.FC = () => {
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
+    // Nobody can start a job nobody is doing (TC_191): said here, before the confirm,
+    // rather than as the server's refusal after it. The server holds the same rule.
+    if (action === 'start' && !order.assignedToUserId) {
+      window.alert(t('prompts.assignFirst', { reference: order.reference }));
+      return;
+    }
     // Start has no note to ask for, which made it the one transition a single click committed.
     if (action === 'start' && !window.confirm(t('prompts.start', { reference: order.reference }))) return;
     if (action !== 'start') {
@@ -256,9 +262,12 @@ export const WorkOrdersPage: React.FC = () => {
       )}
       {(o.status === 'created' || o.status === 'in-progress') && (
         <>
-          <button disabled={busyId === o.id} onClick={() => setEditing(o)} title={t('actions.edit')} aria-label={t('actions.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
+          {/* Editable only before it is started (TC_192); the server refuses it after. */}
+          {o.status === 'created' && (
+            <button disabled={busyId === o.id} onClick={() => setEditing(o)} title={t('actions.edit')} aria-label={t('actions.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
             {o.assignedToUserId ? t('actions.reassign') : t('actions.assign')}
           </button>

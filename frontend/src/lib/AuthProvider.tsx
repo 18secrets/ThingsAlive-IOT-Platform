@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthUser, NavigationTab } from '../types';
+import { AuthUser, NavigationTab, RolePageGrant } from '../types';
 import {
   ApiError, apiAcceptInvitation, apiGetMe, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
   hasStoredSession, setSessionDeadHandler, shareSessionWithNewTabs, SignedInUser, takeSessionEndReason,
@@ -54,8 +54,12 @@ async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
     clientName: user.tenantId,
     userId: user.id,
     roleId: user.roleSlug,
-    allowedTabs: allowedTabs as NavigationTab[],
-    isSuperAdmin: !!(capabilities['user.manage'] && capabilities['role.manage']),
+    allowedTabs: allowedTabs as RolePageGrant[],
+    // The account's owner is its CEO / Manager, by role — not whoever holds user.manage
+    // and role.manage, which a custom "Admin" role can hold too and was then shown every
+    // page as if it owned the account (testing sheet TC_193).
+    isSuperAdmin: user.roleSlug === 'ceo-manager',
+    capabilities,
   };
 }
 

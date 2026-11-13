@@ -43,7 +43,9 @@
     "deleteTitle": "Delete (never signed in)",
     "suspendPrompt": "Why is {{name}} being suspended?",
     "cantSuspendSuperAdmin": "The Super Admin can't be suspended",
-    "empty": "No users found."
+    "empty": "No users found.",
+    "ownRole": "You cannot change your own role.",
+    "ownerOnlyRole": "Only a CEO / Manager can change roles."
   },
   "invite": {
     "title": "Invite User",
@@ -74,7 +76,11 @@
   },
   "roles": {
     "adminTab": "Administration (Sites, Devices, Equipment)",
-    "intro": "A role decides which pages its users can open; that is what this editor changes. What they can do on those pages comes with the role a custom role is based on. Anyone who manages both users and roles is a Super Admin and opens every page, whatever their role lists.",
+    "adminGroup": "Administration",
+    "pagesGroup": "Pages",
+    "everyPage": "Every page",
+    "ownerEveryPage": "The CEO / Manager opens every page, so this role's page list cannot be changed. Make a separate role to give someone fewer pages.",
+    "intro": "A role decides which pages its users can open; that is what this editor changes. What they can do on those pages comes with the role a custom role is based on. The CEO / Manager opens every page, whatever their role lists.",
     "add": "Add Role",
     "edit": "Edit Role",
     "create": "Create Role",
@@ -95,7 +101,8 @@
     "namePlaceholder": "e.g. Plant Manager",
     "basedOn": "Based on",
     "basedOnHint": "What this role can do (not just which pages) starts as a copy of the role you pick here.",
-    "pages": "Pages this role can open"
+    "pages": "Pages this role can open",
+    "ownerOnly": "Only a CEO / Manager can edit a role that manages people or roles."
   },
   "platformRole": {
     "Operational": "Operational",

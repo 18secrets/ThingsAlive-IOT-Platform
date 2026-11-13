@@ -44,7 +44,7 @@ export const fromControl = (event: React.MouseEvent) =>
  * moving to. Every row opens what its card opens, so switching view never changes what
  * a click does; the buttons in an actions column act on their own.
  */
-export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort, onSort }: {
+export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort, onSort, maxHeight }: {
   columns: ListColumn[];
   rows: T[];
   rowKey: (row: T) => string;
@@ -54,6 +54,12 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
   bare?: boolean;
   sort?: SortState<string>;
   onSort?: (key: string) => void;
+  /**
+   * Tallest the table grows before its rows scroll inside it. For a table wider than its
+   * box: its horizontal scrollbar then sits at the visible bottom, beside the pagination,
+   * instead of under the last row a page further down (TC_190). Unset, it grows to fit.
+   */
+  maxHeight?: number;
 }) {
   const data: Row<T>[] = rows.map((row) => ({ key: rowKey(row), row }));
   return (
@@ -62,6 +68,7 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
         data={data}
         rowKey="key"
         autoHeight
+        maxHeight={maxHeight}
         wordWrap="break-word"
         hover={!!onOpen}
         onRowClick={onOpen ? (r, event) => { if (!fromControl(event)) onOpen(r.row); } : undefined}

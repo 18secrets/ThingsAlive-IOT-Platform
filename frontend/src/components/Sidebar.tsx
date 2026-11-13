@@ -22,7 +22,7 @@ import {
   Wrench,
   MapPinned
 } from 'lucide-react';
-import { NavigationTab, UserRole } from '../types';
+import { NavigationTab, RolePageGrant, UserRole } from '../types';
 import logoFull from '../../assets/logo-icon.png';
 import logoStacked from '../../assets/logo.png';
 
@@ -32,7 +32,7 @@ interface SidebarProps {
   role: UserRole;
   clientName?: string;
   /** Client role only — resolved from the signed-in user's RoleDefinition at login. */
-  allowedTabs?: NavigationTab[];
+  allowedTabs?: RolePageGrant[];
   /** Client role only — a Super Admin sees every client page, regardless of allowedTabs. */
   isSuperAdmin?: boolean;
   /** Whether this person may open a page at all (lib/pageAccess.ts); absent = no further limit. */
@@ -92,9 +92,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (canOpen && !canOpen(item.id)) return false;
     if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
     if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
-    // A Super Admin gets every client page unconditionally, regardless of
-    // what allowedTabs (from the real backend) happens to list.
+    // The account's CEO / Manager gets every client page. Anyone else sees their role's
+    // pages and nothing more (TC_193), plus Client Users and Roles when page access (the
+    // `canOpen` above) allows them by the right to manage people or roles.
     if (isSuperAdmin) return true;
+    if ((item.id === 'client-users' || item.id === 'roles') && canOpen) return true;
     return allowed.includes(item.id);
   });
 

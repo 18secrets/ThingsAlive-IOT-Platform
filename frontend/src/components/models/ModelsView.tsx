@@ -16,6 +16,8 @@ import { Modal } from '../common/Modal';
 import { ListTable } from '../common/ListTable';
 import { Skeleton } from '../common/Skeleton';
 import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { RecordCards } from '../common/RecordCards';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
 /**
  * Models: a machine's make and model, the class it belongs to, and since D57/D58 the rated
@@ -37,6 +39,8 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<EquipmentModel | 'new' | null>(null);
   const [copyFrom, setCopyFrom] = useState<string | null>(null);
+  // List or cards, like every other Administration tab beside it.
+  const [viewMode, setViewMode] = useViewMode('models');
 
   const load = () => apiListModels(scope)
     .then((m) => { setModels(m); setError(undefined); })
@@ -57,6 +61,28 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
   }, [models, query]);
   const { pageItems, ...pager } = usePagination(visible);
 
+  const columns = [
+    { label: ts('listCol.name'), grow: 2 }, { label: t('models.class') }, { label: t('models.manufacturer') },
+    { label: ts('listCol.actions'), width: 120 },
+  ];
+  const cells = (m: EquipmentModel) => [
+    <span className="font-medium">{m.name}</span>,
+    <span className="text-slate-600 dark:text-slate-300">{className(m.equipmentClassSlug)}</span>,
+    <span className="text-slate-600 dark:text-slate-300">{m.manufacturer ?? '—'}</span>,
+    <div className="flex items-center gap-1.5">
+      <button onClick={() => setEditing(m)} title={canEdit ? t('models.edit') : t('models.view')}
+        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 cursor-pointer">
+        {canEdit ? <Edit2 className="w-3.5 h-3.5" /> : <Gauge className="w-3.5 h-3.5" />}
+      </button>
+      {scope === 'account' && canEdit && (
+        <button onClick={() => void remove(m)} title={t('models.delete')}
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 cursor-pointer">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>,
+  ];
+
   const copy = async () => {
     if (!copyFrom) return;
     try {
@@ -73,12 +99,14 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
 
   return (
     <div className="space-y-3">
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative w-full sm:max-w-sm">
+      {/* The bar, the box and the footer are the Sites tab's, so the two tabs side by side read as one page. */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
           <Input size="sm" value={query} onChange={(v) => { setQuery(v); pager.setPage(1); }} placeholder={t('models.search')} className="w-full pl-9!" />
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           {scope === 'account' && canEdit && (
             <>
               <SelectPicker
@@ -92,7 +120,7 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
               <button
                 disabled={!copyFrom}
                 onClick={() => void copy()}
-                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2.5 border border-[#0B7285] text-[#0B7285] dark:text-sky-400 dark:border-sky-700 enabled:hover:bg-[#0B7285]/5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <Copy className="w-4 h-4" /> {t('models.copy')}
               </button>
@@ -102,7 +130,7 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
             <button
               id="new-model-btn"
               onClick={() => setEditing('new')}
-              className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
+              className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" /> {t('models.new')}
             </button>
@@ -116,39 +144,17 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs">
-        <div className={LIST_PANEL}>
-          {models === null ? <Skeleton lines={4} className="p-4" /> : visible.length === 0 ? (
-            <p className="p-6 text-center text-sm text-slate-400">{scope === 'account' ? t('models.emptyAccount') : t('models.empty')}</p>
+      <div className={LIST_PANEL}>
+        {models === null ? <Skeleton lines={4} className="p-4" /> : visible.length === 0 ? (
+          <p className="p-6 text-center text-sm text-slate-400">{scope === 'account' ? t('models.emptyAccount') : t('models.empty')}</p>
+        ) : (
+          viewMode === 'list' ? (
+            <ListTable bare columns={columns} rows={pageItems} rowKey={(m) => m.id} cells={cells} />
           ) : (
-            <ListTable bare
-              columns={[
-                { label: ts('listCol.name') }, { label: t('models.class') }, { label: t('models.manufacturer') },
-                { label: ts('listCol.actions') },
-              ]}
-              rows={pageItems}
-              rowKey={(m) => m.id}
-              cells={(m) => [
-                <span className="font-medium">{m.name}</span>,
-                <span className="text-slate-600 dark:text-slate-300">{className(m.equipmentClassSlug)}</span>,
-                <span className="text-slate-600 dark:text-slate-300">{m.manufacturer ?? '—'}</span>,
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => setEditing(m)} title={canEdit ? t('models.edit') : t('models.view')}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 cursor-pointer">
-                    {canEdit ? <Edit2 className="w-3.5 h-3.5" /> : <Gauge className="w-3.5 h-3.5" />}
-                  </button>
-                  {scope === 'account' && canEdit && (
-                    <button onClick={() => void remove(m)} title={t('models.delete')}
-                      className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 cursor-pointer">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>,
-              ]}
-            />
-          )}
-          {visible.length > 0 && <TablePagination {...pager} />}
-        </div>
+            <div className="p-4"><RecordCards columns={columns} rows={pageItems} rowKey={(m) => m.id} cells={cells} actionsIndex={3} /></div>
+          )
+        )}
+        {visible.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
 
       {editing && (

@@ -178,11 +178,13 @@ describeDb('rec frame: templates, critic, model seam', () => {
 
   const seedWork = async (externalId: string, alertId: string, status: string) => {
     const [w] = await owner.query(
-      `INSERT INTO work_order (tenant_id, reference, source_system, external_id, title, status, priority, origin, raised_by, alert_id, started_at, ended_at, resolution)
-       VALUES ('acme', $1, $2, $3, 'Job', $4, 'normal', 'manual', 'u', $5, $6, $7, $8) RETURNING id`,
+      `INSERT INTO work_order (tenant_id, reference, source_system, external_id, title, status, priority, origin, raised_by, alert_id, started_at, ended_at, resolution, assigned_to_user_id)
+       VALUES ('acme', $1, $2, $3, 'Job', $4, 'normal', 'manual', 'u', $5, $6, $7, $8, $9) RETURNING id`,
       [`WO-${Math.random().toString(36).slice(2, 8)}`, SS, externalId, status, alertId,
         status === 'created' ? null : new Date(NOW.getTime() - 5 * HOUR),
-        status === 'completed' ? new Date(NOW.getTime() - 2.5 * HOUR) : null, status === 'completed' ? 'done' : null]);
+        status === 'completed' ? new Date(NOW.getTime() - 2.5 * HOUR) : null, status === 'completed' ? 'done' : null,
+        // A job in progress has somebody doing it (TC_191, ck_work_order_in_progress_assigned).
+        status === 'in-progress' ? '00000000-0000-4000-8000-000000000001' : null]);
     return w.id as string;
   };
 

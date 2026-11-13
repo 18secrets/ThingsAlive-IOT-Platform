@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, X, Check, Shield, Info } from 'lucide-react';
+import { useAuth } from '../../lib/AuthProvider';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
 import { ListTable } from '../common/ListTable';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
-import { NavigationTab, CLIENT_ASSIGNABLE_TABS } from '../../types';
+import { CLIENT_ADMIN_SUBTABS, CLIENT_ADMIN_TAB_GRANTS, CLIENT_ASSIGNABLE_TABS, ClientAdminSubTab, NavigationTab, RolePageGrant, adminTabGrant } from '../../types';
 import { ApiError, RoleInput, RolePatchInput, TenantRole, TenantUser } from '../../lib/api';
 
 // Translation keys, not labels: the sidebar's own names (translation namespace) so a
@@ -19,8 +20,6 @@ const TAB_LABEL_KEYS: Record<NavigationTab, string> = {
   'ai-onboarding': 'translation:sidebar.aiOnboarding',
   'alert-agent': 'translation:pages.alertAgent.title',
   alerts: 'translation:sidebar.alerts',
-  // Not grantable yet (not in CLIENT_ASSIGNABLE_TABS or the backend's page list): super
-  // admins see the geofence map; the label is here because this record covers every tab.
   geofence: 'translation:sidebar.geofence',
   predictions: 'translation:sidebar.livePredictions',
   scenarios: 'translation:sidebar.scenarios',
@@ -40,6 +39,39 @@ const TAB_LABEL_KEYS: Record<NavigationTab, string> = {
   equipment: 'translation:sidebar.equipment',
 };
 
+// Administration's own tab names, as its tab bar shows them.
+const ADMIN_TAB_LABEL_KEYS: Record<ClientAdminSubTab, string> = {
+  plant: 'admin:tabs.plant',
+  devices: 'translation:sidebar.devices',
+  equipment: 'translation:sidebar.equipment',
+  model: 'admin:tabs.models',
+  'service-roster': 'admin:tabs.serviceRoster',
+  'fuel-forecast-accuracy': 'admin:tabs.fuelForecastAccuracy',
+};
+
+/**
+ * What the form offers: every sidebar page, then each Administration tab on its own
+ * (13 Nov 2026). "admin" itself is not offered — the role holds it exactly when one of
+ * its tabs is ticked, so the two can never disagree.
+ */
+const OFFERED_GRANTS: RolePageGrant[] = [...CLIENT_ASSIGNABLE_TABS.filter((tab) => tab !== 'admin'), ...CLIENT_ADMIN_TAB_GRANTS];
+const isOffered = (grant: string): grant is RolePageGrant => (OFFERED_GRANTS as string[]).includes(grant);
+const isAdminTabGrant = (grant: string) => (CLIENT_ADMIN_TAB_GRANTS as string[]).includes(grant);
+
+function grantLabel(t: (key: string) => string, grant: RolePageGrant): string {
+  const tab = CLIENT_ADMIN_SUBTABS.find((sub) => adminTabGrant(sub) === grant);
+  return tab ? `${t('users:roles.adminGroup')} · ${t(ADMIN_TAB_LABEL_KEYS[tab])}` : t(TAB_LABEL_KEYS[grant as NavigationTab]);
+}
+
+/** The pages as saved: the Administration entry held whenever any of its tabs is. */
+const withAdminEntry = (grants: RolePageGrant[]): RolePageGrant[] => {
+  const pages = grants.filter((g) => g !== 'admin');
+  return pages.some(isAdminTabGrant) ? [...pages, 'admin'] : pages;
+};
+
+/** The account's owner opens every page; its list is not theirs to narrow (the API refuses it). */
+const OWNER_ROLE = 'ceo-manager';
+
 interface RoleManagementProps {
   roles: TenantRole[];
   users: TenantUser[];
@@ -52,7 +84,7 @@ interface RoleManagementProps {
 export const RoleManagement: React.FC<RoleManagementProps> = ({
   roles, users, error, onCreateRole, onUpdateRole, onDeleteRole,
 }) => {
-  const { t } = useTranslation('users');
+  const { t } = useTranslation(['users', 'admin']);
   const { t: ts } = useTranslation('shared');
   const [viewMode, setViewMode] = useViewMode('roles');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,15 +103,25 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
 
   type Role = (typeof pagedRows)[number];
   // The card's controls, shared with the list row.
+  // A role that manages people or roles is the CEO / Manager's to edit or copy (TC_193–196),
+  // as the server rules it; an Admin is offered only what it may do.
+  const { authUser } = useAuth();
+  const isOwner = !!authUser?.isSuperAdmin;
+  const managesPeople = (r: Role) =>
+    r.slug === 'ceo-manager' || r.capabilities.includes('user.manage') || r.capabilities.includes('role.manage');
   const actions = (role: Role, holders: number) => (
                 <div className="flex items-center gap-1.5">
+                  {/* The reason sits on a wrapper: a disabled button shows no tooltip. */}
+                  <span className="inline-flex" title={!isOwner && managesPeople(role) ? t('roles.ownerOnly') : t('roles.editTitle')}>
                   <button
                     onClick={() => { setEditingRole(role); setIsModalOpen(true); }}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
-                    title={t('roles.editTitle')}
+                    disabled={!isOwner && managesPeople(role)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 enabled:hover:text-sky-600 enabled:hover:border-sky-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    aria-label={t('roles.editTitle')}
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
+                  </span>
                   <button
                     onClick={() => !role.isBuiltIn && holders === 0 && handleDelete(role.slug)}
                     disabled={role.isBuiltIn || holders > 0 || busySlug === role.slug}
@@ -97,14 +139,18 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
                     its sidebar entry) can still have it sitting in its stored
                     allowedTabs; this keeps that stale grant from showing as if it
                     still meant something. */}
-                {role.allowedTabs.filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab)).length === 0 ? (
+                {role.slug === OWNER_ROLE ? (
+                  <span className="px-2 py-0.5 text-xs bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
+                    {t('roles.everyPage')}
+                  </span>
+                ) : role.allowedTabs.filter(isOffered).length === 0 ? (
                   <span className="text-xs text-slate-400 italic">{t('roles.noPages')}</span>
                 ) : (
-                  role.allowedTabs
-                    .filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab as NavigationTab))
+                  OFFERED_GRANTS
+                    .filter((tab) => role.allowedTabs.includes(tab))
                     .map((tab) => (
                       <span key={tab} className="px-2 py-0.5 text-xs bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 rounded border border-sky-200 dark:border-sky-800">
-                        {TAB_LABEL_KEYS[tab as NavigationTab] ? t(TAB_LABEL_KEYS[tab as NavigationTab]) : tab}
+                        {grantLabel(t, tab)}
                       </span>
                     ))
                 )}
@@ -199,7 +245,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
         onCreate={onCreateRole}
         onUpdate={onUpdateRole}
         existingRole={editingRole}
-        roles={roles}
+        roles={isOwner ? roles : roles.filter((r) => !managesPeople(r))}
       />
     </div>
   );
@@ -220,12 +266,13 @@ interface AddRoleModalProps {
 const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, onUpdate, existingRole, roles }) => {
   const [name, setName] = useState('');
   const [basedOnSlug, setBasedOnSlug] = useState('');
-  const [allowedTabs, setAllowedTabs] = useState<NavigationTab[]>([]);
+  const [allowedTabs, setAllowedTabs] = useState<RolePageGrant[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const isEditing = !!existingRole;
-  const { t } = useTranslation('users');
+  const isOwnerRole = existingRole?.slug === OWNER_ROLE;
+  const { t } = useTranslation(['users', 'admin']);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -235,7 +282,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     // (e.g. 'alert-agent') — the checklist below only ever offers
     // CLIENT_ASSIGNABLE_TABS, so an un-rendered stale tab would otherwise
     // silently survive every future save of this role.
-    setAllowedTabs(((existingRole?.allowedTabs ?? []) as NavigationTab[]).filter((tab) => CLIENT_ASSIGNABLE_TABS.includes(tab)));
+    setAllowedTabs((existingRole?.allowedTabs ?? []).filter(isOffered));
     setError(undefined);
   }, [isOpen, existingRole, roles]);
 
@@ -245,7 +292,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     e.preventDefault();
     const finalName = name.trim();
     if (!finalName) return;
-    if (allowedTabs.length === 0) {
+    if (!isOwnerRole && allowedTabs.length === 0) {
       setError(t('roles.needPage'));
       return;
     }
@@ -254,7 +301,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
     setError(undefined);
     try {
       if (isEditing) {
-        await onUpdate(existingRole!.slug, { name: finalName, allowedTabs });
+        await onUpdate(existingRole!.slug, isOwnerRole ? { name: finalName } : { name: finalName, allowedTabs: withAdminEntry(allowedTabs) });
       } else {
         const basedOn = roles.find((r) => r.slug === basedOnSlug);
         if (!basedOn) { setError(t('roles.needBase')); setBusy(false); return; }
@@ -263,7 +310,7 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
           name: finalName,
           capabilities: basedOn.capabilities,
           scopeShape: basedOn.scopeShape,
-          allowedTabs,
+          allowedTabs: withAdminEntry(allowedTabs),
         });
       }
       onClose();
@@ -317,14 +364,25 @@ const AddRoleModal: React.FC<AddRoleModalProps> = ({ isOpen, onClose, onCreate, 
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('roles.pages')} <span className="text-rose-500">*</span></label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('roles.pages')} {!isOwnerRole && <span className="text-rose-500">*</span>}</label>
+            {isOwnerRole ? (
+              <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                <Info className="w-4 h-4 mt-0.5 shrink-0 text-sky-600" />
+                <span>{t('roles.ownerEveryPage')}</span>
+              </p>
+            ) : (
             <CheckPicker
-              data={CLIENT_ASSIGNABLE_TABS.map((tab) => ({ label: t(TAB_LABEL_KEYS[tab]), value: tab }))}
+              data={OFFERED_GRANTS.map((tab) => ({
+                label: grantLabel(t, tab), value: tab,
+                group: isAdminTabGrant(tab) ? t('roles.adminGroup') : t('roles.pagesGroup'),
+              }))}
+              groupBy="group"
               value={allowedTabs}
               onChange={(values) => setAllowedTabs(values ?? [])}
               block
-              searchable={CLIENT_ASSIGNABLE_TABS.length > 6}
+              searchable
             />
+            )}
           </div>
 
           {error && (

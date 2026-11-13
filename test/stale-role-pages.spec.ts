@@ -67,12 +67,16 @@ describeDb('stored role pages and the page vocabulary', () => {
 
       await owner.runMigrations({ transaction: 'all' });
 
+      // Every later migration runs too: SeparateRolePages (13 Nov 2026) appends the map
+      // and Administration's tabs to the roles that could open them through
+      // "dashboard" and "admin". The order of what was there before is unchanged.
+      const adminTabs = ['admin-plant', 'admin-devices', 'admin-equipment', 'admin-model', 'admin-service-roster', 'admin-fuel-forecast-accuracy'];
       for (const tenant of ['acme', 'globex']) {
-        expect(await tabsOf(tenant, 'ceo-manager')).toEqual(['dashboard', 'ai-onboarding', 'admin', 'settings']);
-        expect(await tabsOf(tenant, 'site-manager')).toEqual(['dashboard', 'ai-onboarding', 'admin', 'settings']);
-        expect(await tabsOf(tenant, 'operator')).toEqual(['dashboard', 'settings']);
+        expect(await tabsOf(tenant, 'ceo-manager')).toEqual(['dashboard', 'ai-onboarding', 'admin', 'settings', 'geofence', ...adminTabs]);
+        expect(await tabsOf(tenant, 'site-manager')).toEqual(['dashboard', 'ai-onboarding', 'admin', 'settings', 'geofence', ...adminTabs]);
+        expect(await tabsOf(tenant, 'operator')).toEqual(['dashboard', 'settings', 'geofence']);
       }
-      expect(await tabsOf('acme', 'clean')).toEqual(['alerts', 'dashboard']);
+      expect(await tabsOf('acme', 'clean')).toEqual(['alerts', 'dashboard', 'geofence']);
       expect(await owner.query(`SELECT updated_at FROM tenant_role WHERE slug = 'clean'`)).toEqual(before);
     } finally {
       await owner.runMigrations({ transaction: 'all' });
