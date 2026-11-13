@@ -24,7 +24,7 @@ import { detectFuelLoss, FuelLossParams, validateFuelLoss } from './fuel-loss';
  *    rule kind with no graph to read it back from, and the database refuses one.
  */
 export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-telemetry'
-  | 'fuel-loss' | 'chain-origin' | 'composite';
+  | 'fuel-loss' | 'chain-origin' | 'composite' | 'dtc';
 
 /**
  * Every trigger kind, as a value. A `Record` over the union, so adding a kind to
@@ -34,7 +34,7 @@ export type AlertTrigger = 'prediction-severity' | 'signal-threshold' | 'no-tele
  */
 const ALERT_TRIGGER_SET: Record<AlertTrigger, true> = {
   'prediction-severity': true, 'signal-threshold': true, 'no-telemetry': true,
-  'fuel-loss': true, 'chain-origin': true, composite: true,
+  'fuel-loss': true, 'chain-origin': true, composite: true, dtc: true,
 };
 export const ALERT_TRIGGERS = Object.keys(ALERT_TRIGGER_SET) as AlertTrigger[];
 
@@ -191,12 +191,19 @@ export type CompositeTerm = CompositeLeaf | CompositeGroup;
  * same M of N readings. A combined window would need readings aligned across signals
  * that arrive on different clocks, and nobody has decided how to align them.
  */
+export interface DtcAlertParams {
+  protocol?: 'j1939' | 'obd2' | null;
+  code?: string | null;
+  spn?: number | null;
+  lamp?: string | null;
+}
+
 export interface CompositeParams {
   condition: CompositeGroup;
 }
 
 export type AlertParams = PredictionSeverityParams | SignalThresholdParams
-  | NoTelemetryParams | FuelLossParams | ChainOriginParams | CompositeParams;
+  | NoTelemetryParams | FuelLossParams | ChainOriginParams | CompositeParams | DtcAlertParams;
 
 export const isCompositeLeaf = (t: CompositeTerm): t is CompositeLeaf =>
   typeof (t as CompositeLeaf)?.trigger === 'string';
@@ -257,6 +264,8 @@ export interface EvaluationInput {
   predictions: WindowPrediction[];
   /** Absent on the paths that do not run chains; a chain rule then simply does not fire. */
   chains?: WindowChain[];
+  /** Diagnostic trouble codes active on the machine during the window */
+  dtcs?: { code: string; protocol: string; spn?: number | null; fmi?: number | null; lampStatus: string; severity: Severity }[];
 }
 
 export interface Firing {
@@ -503,6 +512,29 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       };
     }
 
+    case 'dtc': {
+      const params = input.params as DtcAlertParams;
+      const activeDtcs = input.dtcs ?? [];
+      const matched = activeDtcs.find((d) => {
+        if (params.protocol && d.protocol !== params.protocol) return false;
+        if (params.code && d.code.toUpperCase() !== params.code.toUpperCase()) return false;
+        if (params.spn != null && d.spn !== params.spn) return false;
+        if (params.lamp && d.lampStatus !== params.lamp) return false;
+        return true;
+      });
+      if (!matched) return null;
+      return {
+        summary: `Diagnostic trouble code ${matched.code} active with ${matched.lampStatus} lamp`,
+        evidence: {
+          code: matched.code,
+          spn: matched.spn,
+          fmi: matched.fmi,
+          lampStatus: matched.lampStatus,
+          severity: matched.severity,
+        },
+      };
+    }
+
     case 'composite':
       return evaluateGroup((input.params as CompositeParams).condition, input);
 
@@ -649,6 +681,14 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     )) {
       return `required_breaches has to be a whole number from ${MIN_REQUIRED_BREACHES} `
         + `to this rule's lookback_readings (${effectiveLookback}).`;
+    }
+    return null;
+  }
+  if (trigger === 'dtc') {
+    const p = params as DtcAlertParams;
+    if (!p) return 'A DTC rule needs parameters.';
+    if (p.lamp && !['red_stop', 'amber_warning', 'protect', 'mil', 'none'].includes(p.lamp)) {
+      return 'DTC lamp must be one of: red_stop, amber_warning, protect, mil, none.';
     }
     return null;
   }

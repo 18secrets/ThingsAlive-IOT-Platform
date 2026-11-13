@@ -100,6 +100,8 @@ import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
 import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
 import { SHIFT_FUEL_ENTITIES } from '../shift-fuel/shift-fuel.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
+import { DtcMasterCatalog } from '../diagnostics/entities/dtc-master.entity';
+import { DeviceDtcEpisode } from '../diagnostics/entities/device-dtc-episode.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -209,6 +211,8 @@ export const ENTITIES = [
   ArtifactProposal,
   ReplayRun,
   ProposalRuleEnablement,
+  DtcMasterCatalog,
+  DeviceDtcEpisode,
   ...FORECAST_ENTITIES,
   ...EMBEDDING_ENTITIES,
   ...EVALUATION_ENTITIES,

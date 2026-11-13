@@ -1,6 +1,6 @@
 import {
   AlertParams, AlertTrigger, ChainOriginParams, CompositeGroup, CompositeParams, describeSignalThresholdRule,
-  isCompositeLeaf, PredictionSeverityParams, SignalDisplayInfo, SignalThresholdParams,
+  DtcAlertParams, isCompositeLeaf, PredictionSeverityParams, SignalDisplayInfo, SignalThresholdParams,
 } from './alert-rules';
 import { FuelLossParams } from './fuel-loss';
 
@@ -41,6 +41,13 @@ export const RULE_CLAUSES: Record<AlertTrigger, (params: AlertParams, name: Sign
     const p = params as ChainOriginParams;
     return `${p.chainSlug ? `the "${p.chainSlug}" chain` : 'any chain'} places a fault's origin`
       + `${p.stageSignal ? ` at ${name(p.stageSignal).displayName}` : ''} at ${p.atLeast} or worse`;
+  },
+  dtc: (params) => {
+    const p = params as DtcAlertParams;
+    if (p?.spn) return `SPN ${p.spn} is active`;
+    if (p?.code) return `trouble code ${p.code} is active`;
+    if (p?.lamp) return `a diagnostic trouble code with lamp "${p.lamp}" is active`;
+    return 'any diagnostic trouble code is active';
   },
   composite: (params, name) => groupClause((params as CompositeParams).condition, name, false),
 };

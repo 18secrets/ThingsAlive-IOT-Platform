@@ -5,6 +5,8 @@ import { LegacyFleetSyncController } from './legacy-fleet-sync.controller';
 import { LegacyFleetSyncScheduler } from './legacy-fleet-sync.scheduler';
 import { LegacyFleetSyncService } from './legacy-fleet-sync.service';
 import { LegacyTelemetryReader } from './legacy-telemetry.reader';
+import { LegacyPacketReader } from './legacy-packet.reader';
+import { LegacyDtcMasterReader } from './legacy-dtc-master.reader';
 import { initLegacyDataSource, LEGACY_DATA_SOURCE, legacyConfigFrom } from './legacy-source';
 
 /**
@@ -24,10 +26,12 @@ import { initLegacyDataSource, LEGACY_DATA_SOURCE, legacyConfigFrom } from './le
       useFactory: () => initLegacyDataSource(legacyConfigFrom(process.env)),
     },
     LegacyTelemetryReader,
+    LegacyPacketReader,
+    LegacyDtcMasterReader,
     LegacyFleetSyncService,
     LegacyFleetSyncScheduler,
   ],
-  exports: [LegacyTelemetryReader, LEGACY_DATA_SOURCE],
+  exports: [LegacyTelemetryReader, LegacyPacketReader, LegacyDtcMasterReader, LEGACY_DATA_SOURCE],
 })
 export class LegacyModule {
   constructor() {}

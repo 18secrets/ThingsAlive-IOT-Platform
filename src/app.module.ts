@@ -51,6 +51,7 @@ import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { MailModule } from './mail/mail.module';
@@ -139,6 +140,7 @@ export class AppModule {
               ServiceModule,
               DeviceHealthModule,
               IntelligenceModule,
+              DiagnosticsModule,
               LegacyModule,
               AlertModule,
               WorkflowModule,
