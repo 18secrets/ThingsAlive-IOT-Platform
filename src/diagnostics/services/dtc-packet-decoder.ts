@@ -194,7 +194,9 @@ export class DtcPacketDecoder {
             const fmi = item.fmi !== undefined ? Number(item.fmi) : undefined;
             const lamp: DtcLamp = item.lamp || (item.red_stop ? 'red_stop' : (item.amber ? 'amber_warning' : 'none'));
             const code = item.code || (spn !== undefined ? `SPN:${spn}:FMI:${fmi ?? 0}` : 'UNKNOWN');
-            const severity: Severity = lamp === 'red_stop' || lamp === 'protect' ? 'critical' : (item.severity || 'high');
+            const severity: Severity = lamp === 'red_stop' || lamp === 'protect'
+              ? Severity.Critical
+              : (item.severity === 'critical' ? Severity.Critical : (item.severity === 'medium' ? Severity.Medium : Severity.High));
 
             dtcs.push({
               protocol: spn !== undefined ? 'j1939' : 'obd2',
