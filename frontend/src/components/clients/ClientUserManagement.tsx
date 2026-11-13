@@ -3,6 +3,7 @@ import {
   Search, Plus, AlertCircle, X, Check, Copy, CheckCheck, Crown, Ban, RotateCcw, RotateCw, MapPin, Trash2,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
+import { useAuth } from '../../lib/AuthProvider';
 import { Trans, useTranslation } from 'react-i18next';
 import {
   ApiError, EquipmentProfile, InviteUserInput, InviteUserResult, Plant, ResendInvitationResult, SetUserAccessInput,
@@ -55,10 +56,17 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
     return (slug: string) => byId.get(slug) ?? slug;
   }, [roles]);
 
-  const isSuperAdminUser = (user: TenantUser) => {
-    const role = roles.find((r) => r.slug === user.roleSlug);
-    return !!(role?.capabilities.includes('user.manage') && role?.capabilities.includes('role.manage'));
-  };
+  // The account's owner is its CEO / Manager (TC_193): a custom Admin holding the same
+  // two rights is not crowned.
+  const isSuperAdminUser = (user: TenantUser) => user.roleSlug === 'ceo-manager';
+
+  // Who may hand out which role, as the server rules it (TC_194–196): only the CEO /
+  // Manager changes roles or grants one that manages people; nobody changes their own.
+  const { authUser } = useAuth();
+  const isOwner = !!authUser?.isSuperAdmin;
+  const managesPeople = (r: { slug: string; capabilities: string[] }) =>
+    r.slug === 'ceo-manager' || r.capabilities.includes('user.manage') || r.capabilities.includes('role.manage');
+  const grantableRoles = isOwner ? roles : roles.filter((r) => !managesPeople(r));
 
   // Mirrors the backend's own invariant exactly (ck_app_user_ceo_manager_retained,
   // SuperAdminRetention migration) — keyed on the literal 'ceo-manager' slug, not on
@@ -110,11 +118,13 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
                         {superAdmin && <span title={t('common.superAdmin')}><Crown className="w-4 h-4 text-amber-500" /></span>}
                       </span></span>,
       <span className="font-mono text-slate-600 dark:text-slate-300">{u.email}</span>,
-      <><span title={lastCeoManager ? t('clientUsers.lastCeoManager') : undefined}>
+      <><span title={u.id === authUser?.userId ? t('clientUsers.ownRole')
+                        : !isOwner ? t('clientUsers.ownerOnlyRole')
+                        : lastCeoManager ? t('clientUsers.lastCeoManager') : undefined}>
                         <SelectPicker
                           data={roles.map((r) => ({ label: r.name, value: r.slug }))}
                           value={u.roleSlug}
-                          disabled={busy || lastCeoManager}
+                          disabled={busy || lastCeoManager || !isOwner || u.id === authUser?.userId}
                           onChange={(value) => runAction(u.id, () => onSetUserRole(u.id, value ?? u.roleSlug))}
                           searchable={false}
                           cleanable={false}
@@ -235,7 +245,7 @@ export const ClientUserManagement: React.FC<ClientUserManagementProps> = ({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onInvite={onInviteUser}
-        roles={roles}
+        roles={grantableRoles}
       />
 
       <EditUserAccessModal

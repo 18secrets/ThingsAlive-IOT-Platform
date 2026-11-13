@@ -228,7 +228,8 @@ describeDb('KPI runtime evaluator', () => {
       await m.getRepository(WorkOrder).save({
         tenantId: 'acme', reference: 'WO-1', sourceSystem: EQUIPMENT.sourceSystem, externalId: EQUIPMENT.externalId,
         title: 'repair', description: null, status: 'in-progress', priority: 'normal',
-        assignedToUserId: null, predictionId: null, origin: 'manual', raisedForScenario: null,
+        // A job in progress has somebody doing it (TC_191, ck_work_order_in_progress_assigned).
+        assignedToUserId: '00000000-0000-4000-8000-000000000001', predictionId: null, origin: 'manual', raisedForScenario: null,
         dueAt: null, startedAt: new Date(NOW.getTime() - 25 * DAY), endedAt: null, resolution: null,
         raisedBy: 'u-master',
       });

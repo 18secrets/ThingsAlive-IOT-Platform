@@ -27,7 +27,8 @@
     "complete": "What was done?",
     "cancel": "Why is this being cancelled?",
     "reopen": "Why is this being reopened?",
-    "start": "Start {{reference}}? Its clock starts now."
+    "start": "Start {{reference}}? Its clock starts now.",
+    "assignFirst": "Assign {{reference}} to someone before starting it."
   },
   "service": {
     "heading": "Service due",

@@ -14,7 +14,7 @@ import {
   FunctionSquare,
   Fuel
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
+import { AdminSubTab, CLIENT_ADMIN_SUBTABS, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
@@ -212,7 +212,8 @@ interface AdminManagementProps {
 // it reads; Administration is where an account's people already go to see that fleet.
 // Models: the account's own copies, which its machines name for their ratings (D57).
 // Service roster (Crompton U5): which engineer a job on each site goes to.
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment', 'model', 'service-roster', 'fuel-forecast-accuracy'];
+// Each is granted to a role on its own (types.ts, CLIENT_ADMIN_SUBTABS).
+const CLIENT_VISIBLE_ADMIN_SUBTABS: readonly AdminSubTab[] = CLIENT_ADMIN_SUBTABS;
 
 // Master Admin only (task: move to the sidebar, 2026-10-10) — see Shell.tsx's
 // ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
@@ -372,7 +373,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   // own Devices/Equipment are untouched by this — CLIENT_VISIBLE_ADMIN_SUBTABS
   // is a separate list that still names them.
   const subTabs = restrictToClientAdmin
-    ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
+    ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true))
     : allSubTabs.filter((tab) => (
       !['plant', ...PROMOTED_SUBTABS].includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true)
     ));

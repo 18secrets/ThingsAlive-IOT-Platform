@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ACCOUNT_OWNER_ROLE, assertMayGrant } from './account-owner';
 import { DataSource, EntityManager } from 'typeorm';
 import { ALL_CAPABILITIES, Capability } from '../../auth/capabilities';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AppUser } from '../entities/app-user.entity';
 import { ScopeShape, TenantRole } from '../entities/tenant-role.entity';
-import { TENANT_ASSIGNABLE_PAGES } from '../pages';
+import { ADMIN_TAB_PAGES, TENANT_ASSIGNABLE_PAGES } from '../pages';
 import { ROLE_TEMPLATES } from '../role-templates';
 
 export interface RoleInput {
@@ -77,6 +78,8 @@ export class RoleService {
 
   async create(scope: RequestScope, input: RoleInput): Promise<TenantRole> {
     const capabilities = this.validate(input);
+    // A role that manages people or roles is the CEO / Manager's to make (TC_193–196).
+    assertMayGrant(scope, { slug: input.slug, name: input.name, capabilities });
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(TenantRole);
       if (await repo.findOne({ where: { tenantId: scope.tenantId, slug: input.slug } })) {
@@ -110,12 +113,21 @@ export class RoleService {
       const repo = m.getRepository(TenantRole);
       const role = await repo.findOne({ where: { tenantId: scope.tenantId, slug } });
       if (!role) throw new NotFoundException(`No role "${slug}" in this account.`);
+      // Neither an Admin role nor any role an edit would turn into one is an Admin's to change.
+      assertMayGrant(scope, role);
+      if (input.capabilities) assertMayGrant(scope, { ...role, capabilities: this.validateCapabilities(input.capabilities) });
 
       // Each field checked only when it is being changed. Validating the whole shape
       // on a partial edit is how "rename this role" came to fail for not restating a
       // scope shape nobody was touching.
       if (input.capabilities) role.capabilities = this.validateCapabilities(input.capabilities);
       if (input.scopeShape) role.scopeShape = this.validateScopeShape(input.scopeShape);
+      // The account's owner opens every page whatever its list says (the console treats
+      // them as Super Admin). An edit here would save and change nothing, which is how a
+      // tester unticked Fuel forecast for the CEO and still saw it (13 Nov 2026).
+      if (input.allowedTabs && role.slug === ACCOUNT_OWNER_ROLE) {
+        throw new BadRequestException('The CEO / Manager opens every page; its page list cannot be changed.');
+      }
       if (input.allowedTabs) role.allowedTabs = this.validateAllowedTabs(input.allowedTabs);
       if (input.name !== undefined) role.name = input.name;
       if (input.description !== undefined) role.description = input.description ?? null;
@@ -197,7 +209,10 @@ export class RoleService {
         + 'A role can only be granted a page the console actually has.',
       );
     }
-    return [...new Set(pages)];
+    // A tab of Administration is reached through Administration: holding one without the
+    // entry would be a grant the sidebar never shows.
+    const withEntry = pages.some((p) => (ADMIN_TAB_PAGES as readonly string[]).includes(p)) ? [...pages, 'admin'] : pages;
+    return [...new Set(withEntry)];
   }
 
   /**

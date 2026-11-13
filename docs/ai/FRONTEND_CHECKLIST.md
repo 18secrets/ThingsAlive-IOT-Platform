@@ -71,6 +71,12 @@ Before building, open the nearest existing page of the same kind and match it.
       `ListTable` / `RecordCards`, `TablePagination` with `usePagination(items)`
       (10 per page; 10 / 20 / 50 / 100), `pinToBottom`. The switch and sort sit before the
       page's buttons.
+- [ ] **Every list shown as a table also has the card view**, including a new
+      Administration tab beside ones that have it: Models arrived with a table only
+      (13 Nov 2026). `RecordCards` takes the same `columns` and `cells` as `ListTable`, so
+      the card view is a few lines. `npm run lint` (`scripts/check-list-views.js`) fails
+      on a table without `ViewModeToggle`, unless that script lists it with the reason it
+      is not a list (a panel inside a machine's page, a modal, a report table).
 - [ ] **Page top**: a heading-only banner, then one card holding the main data and links
       (Machine summary, Production detail, ThingsCare follow this).
 - [ ] **Panels with lists** use `PanelRow` / `PanelRows`: title on one line, detail on the
@@ -105,6 +111,16 @@ Before building, open the nearest existing page of the same kind and match it.
       none shows a raw code, `undefined`, or a wrong zero while data loads.
 - [ ] A button the user cannot use is hidden (or disabled with the reason), not shown to
       fail. Pages a role cannot open are not in its sidebar (`pageAccess`).
+- [ ] **A new page, or a new Administration tab, is on the Roles page** so the account's
+      owner decides who sees it. Never let it ride on another page's grant: the geofence
+      map rode on Dashboard, and Models, Service roster and Fuel forecast on
+      Administration, so nobody could give one without the other (13 Nov 2026). Add it to
+      `CLIENT_ASSIGNABLE_TABS` (or `CLIENT_ADMIN_SUBTABS`) in `frontend/src/types.ts`, to
+      `TENANT_ASSIGNABLE_PAGES` in `src/identity/pages.ts`, a `case` in `pageAccess.ts`,
+      its label in `RoleManagement.tsx`, and a migration that grants it to the roles that
+      can open it today (`1765100000000-SeparateRolePages` is the pattern). `npm run lint`
+      (`scripts/check-page-grants.js`) fails until it is on both sides, or listed there
+      with the reason it is not a granted page.
 - [ ] Destructive actions confirm; actions that need a reason refuse an empty one.
 - [ ] A figure says its source and unit when it could be read two ways.
 

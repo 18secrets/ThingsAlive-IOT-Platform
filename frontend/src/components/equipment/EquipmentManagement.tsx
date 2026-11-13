@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download, Send } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
@@ -155,17 +155,31 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   // One definition for both views (cards or list on every list page).
   const viewColumns: ListColumn[] = [
     // Ten columns: past these widths the list scrolls sideways, as the table before it did.
-    { label: t('equipmentList.col.code'), sortKey: 'code', minWidth: 110 },
-    { label: t('equipmentList.col.name'), sortKey: 'name', minWidth: 170 },
-    { label: t('equipmentList.col.class'), sortKey: 'class', minWidth: 190 },
-    { label: t('equipmentList.col.plant'), sortKey: 'plant', minWidth: 170 },
-    { label: t('equipmentList.col.manufacturer'), minWidth: 130 },
-    { label: t('equipmentList.col.model'), minWidth: 110 },
-    { label: t('equipmentList.col.serial'), minWidth: 120 },
-    { label: t('equipmentList.col.tier') },
-    { label: t('equipmentList.col.status'), sortKey: 'status' },
-    { label: ts('listCol.actions'), width: 130 },
+    // Sized to fit a desktop without scrolling sideways (TC_190): eleven columns whose
+    // minimums summed past the panel meant the scrollbar sat under the last row, a page
+    // below the pagination's reach. Only the three names share the room: a minimum on a
+    // flexible column is raised without the excess being taken back from the others, so
+    // the short columns are fixed rather than flexible.
+    { label: t('equipmentList.col.code'), sortKey: 'code', width: 90 },
+    { label: t('equipmentList.col.name'), sortKey: 'name', grow: 2, minWidth: 130 },
+    { label: t('equipmentList.col.class'), sortKey: 'class', grow: 2, minWidth: 130 },
+    { label: t('equipmentList.col.plant'), sortKey: 'plant', grow: 2, minWidth: 120 },
+    { label: t('equipmentList.col.manufacturer'), width: 110 },
+    { label: t('equipmentList.col.model'), width: 90 },
+    { label: t('equipmentList.col.serial'), width: 120 },
+    { label: t('equipmentList.col.tier'), width: 90 },
+    { label: t('equipmentList.col.status'), sortKey: 'status', width: 100 },
+    { label: ts('listCol.actions'), width: 110, align: 'right' },
   ];
+  // The table's tallest, from the screen's height (TC_190): on a screen too narrow for its
+  // eleven columns it scrolls sideways, and that scrollbar has to be on screen with the
+  // pagination, not under the tenth row. The header, toolbar and pagination take ~320 px.
+  const [tableMaxHeight, setTableMaxHeight] = useState(() => Math.max(360, window.innerHeight - 320));
+  useEffect(() => {
+    const onResize = () => setTableMaxHeight(Math.max(360, window.innerHeight - 320));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const viewCells = (item: EquipmentProfile) => [
     <span className="font-mono text-slate-500 dark:text-slate-400">{item.externalId}</span>,
     <span className="font-semibold text-slate-900 dark:text-white">{item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}</span>,
@@ -188,7 +202,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                       }`}>
                         {t(`status.${item.status}`, { defaultValue: item.status })}
                       </span></>,
-    <><div className="flex items-center gap-1.5">
+    <><div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -367,7 +381,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         {filteredList.length === 0 ? (
           loading ? <Skeleton lines={4} className="py-4" /> : <div className="py-8 text-center text-slate-400 text-sm">{t('equipmentList.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} />
+          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} maxHeight={tableMaxHeight} />
         ) : (
           <div className="p-4"><RecordCards columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} actionsIndex={9} onOpen={openPage} /></div>
         )}

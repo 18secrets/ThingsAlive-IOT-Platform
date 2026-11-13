@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { assertMayGrant, isAccountOwner } from './account-owner';
 import { DataSource, IsNull, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
@@ -89,6 +90,8 @@ export class UserService {
         where: { tenantId: scope.tenantId, slug: input.roleSlug },
       });
       if (!role) throw new NotFoundException(`No role "${input.roleSlug}" in this account.`);
+      // An Admin invites people below itself, not other Admins or a CEO / Manager (TC_195, TC_196).
+      assertMayGrant(scope, role);
 
       const repo = m.getRepository(AppUser);
       const user = await repo.save(repo.create({
@@ -136,6 +139,10 @@ export class UserService {
    * the record of what somebody used to run.
    */
   async setRole(scope: RequestScope, userId: string, roleSlug: string): Promise<UserView> {
+    // Only the account's CEO / Manager moves people between roles, and nobody moves
+    // themselves (TC_194): an Admin could otherwise make itself the owner.
+    if (userId === scope.userId) throw new ForbiddenException('You cannot change your own role.');
+    if (!isAccountOwner(scope)) throw new ForbiddenException('Only a CEO / Manager can change someone\'s role.');
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(AppUser);
       const user = await repo.findOne({ where: { tenantId: scope.tenantId, id: userId } });
