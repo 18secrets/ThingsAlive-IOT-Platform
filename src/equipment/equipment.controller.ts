@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, NotFoundException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsDefined, IsIn, IsISO8601, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
@@ -258,6 +258,10 @@ export class EquipmentController {
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
   ) {
+    // A user limited to some machines is refused the rest, as on every machine route.
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
     return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId);
   }
 

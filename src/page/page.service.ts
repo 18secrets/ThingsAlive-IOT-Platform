@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ASSET_STORAGE, AssetStorage } from '../assets/asset-storage';
 import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual.entity';
 import { unplacedSignals } from '../catalog/visual/anchor-rules';
@@ -28,6 +28,8 @@ import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
+import { LegacyTelemetryReader } from '../legacy/legacy-telemetry.reader';
+import { MachineLive, readMachineLive } from './live-machine';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { forecastDeclarations } from '../forecast/forecast-inputs';
 import { ForecastReader } from '../forecast/forecast-reader';
@@ -171,7 +173,24 @@ export class PageService {
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
     private readonly forecasts: ForecastReader,
     private readonly twins: SiteTwinService,
+    // Optional: the Live view asks 1.0 directly when a legacy connection exists, and
+    // answers from 2.0's own readings when it does not.
+    @Optional() private readonly legacyTelemetry?: LegacyTelemetryReader,
   ) {}
+
+  /** One machine as it is now: see live-machine.ts. */
+  async machineLive(scope: RequestScope, ref: EquipmentRef, now: Date = new Date()): Promise<MachineLive> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineLive(m, this.legacyTelemetry, scope.tenantId, ref, now);
+    });
+  }
 
   // ================================================================ machine page
 

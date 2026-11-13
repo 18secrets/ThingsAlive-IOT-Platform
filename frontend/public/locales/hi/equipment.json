@@ -171,7 +171,8 @@
     "loadFailed": "यह मशीन पेज लोड नहीं हो सका।",
     "notClassified": "वर्गीकृत नहीं",
     "exploreKpis": "KPI देखें",
-    "noWidgets": "इस मशीन की क्लास के लिए अभी कोई विजेट कॉन्फ़िगर नहीं है।"
+    "noWidgets": "इस मशीन की क्लास के लिए अभी कोई विजेट कॉन्फ़िगर नहीं है।",
+    "historyAndSettings": "इतिहास और सेटिंग्स"
   },
   "days": {
     "0": "रवि",
@@ -712,6 +713,61 @@
         "unbound": "इस मशीन का लॉगर सप्लाई वोल्टेज नहीं भेजता।",
         "no_voltage_band": "सप्लाई घटनाओं के लिए मशीन या मॉडल पर वोल्टेज चेतावनी रेखाएँ चाहिए (voltage_warn_low, voltage_warn_high)।"
       }
+    }
+  },
+  "live": {
+    "title": "अभी लाइव",
+    "updates": "हर 20 सेकंड में अपडेट",
+    "loadFailed": "लाइव मान लोड नहीं हो सके।",
+    "connectionTitle": "नवीनतम रीडिंग की उम्र से: 5 मिनट के भीतर ऑनलाइन, 30 के भीतर विलंबित, उसके बाद ऑफ़लाइन।",
+    "connection": {
+      "online": "ऑनलाइन",
+      "delayed": "विलंबित",
+      "offline": "ऑफ़लाइन",
+      "no-device": "कोई डिवाइस नहीं लगा"
+    },
+    "lastReading": "अंतिम रीडिंग {{age}} पहले",
+    "noReading": "पिछले 24 घंटों में कोई रीडिंग नहीं",
+    "running": "चल रही है",
+    "stopped": "रुकी हुई",
+    "viewOnMap": "मानचित्र पर देखें",
+    "noLocation": "कोई स्थिति नहीं मिली",
+    "parameters": "पैरामीटर",
+    "noSignals": "पिछले 24 घंटों में कोई रीडिंग नहीं।",
+    "col": {
+      "signal": "सिग्नल",
+      "value": "मान",
+      "updated": "अपडेट"
+    },
+    "staleTitle": "15 मिनट से अधिक समय से अपडेट नहीं",
+    "age": {
+      "s": "{{n}} से.",
+      "min": "{{n}} मिनट",
+      "h": "{{n}} घंटे"
+    }
+  },
+  "faults": {
+    "title": "फ़ॉल्ट कोड",
+    "activeCount_one": "{{count}} सक्रिय",
+    "activeCount_other": "{{count}} सक्रिय",
+    "none": "कोई सक्रिय फ़ॉल्ट कोड नहीं।",
+    "lastSeen": "अंतिम बार {{when}}",
+    "firstSeen": "पहली बार {{when}}",
+    "clearedAt": "{{when}} को साफ़",
+    "occurrences_one": "{{count}} बार देखा",
+    "occurrences_other": "{{count}} बार देखा",
+    "causes": "संभावित कारण",
+    "remedies": "क्या करें",
+    "noGuidance": "इस कोड के लिए कोई कारण या उपाय दर्ज नहीं।",
+    "showHistory_one": "हाल में साफ़ हुए {{count}} दिखाएँ",
+    "showHistory_other": "हाल में साफ़ हुए {{count}} दिखाएँ",
+    "hideHistory": "साफ़ हुए कोड छिपाएँ",
+    "lamp": {
+      "red_stop": "लाल स्टॉप",
+      "protect": "प्रोटेक्ट",
+      "amber_warning": "एम्बर चेतावनी",
+      "mil": "इंजन जाँचें",
+      "none": "कोई लैंप नहीं"
     }
   }
 }

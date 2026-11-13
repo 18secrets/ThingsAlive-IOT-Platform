@@ -12,8 +12,10 @@ import {
   RuntimeUnit, ServiceKind, ShiftInput, ShiftRun, TenantModel, Weekday, apiCreateShift, apiGetMachinePage,
   apiGetMyClassModel, apiGetServiceHistory, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRecordService,
   apiRetireShift, apiUpdateShift,
+  MachineLive,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
+import { LivePanel } from '../components/equipment/LivePanel';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
@@ -460,7 +462,7 @@ function readinessBySignal(widgets: PageWidget[]): Map<string, PageReadinessRow[
 /** The machine's digital twin: its class's 3-D model, read only, with each marker labelled
  *  by its signal's latest value. Markers waiting for a recheck are left off — the geometry
  *  moved under them, so where they would be drawn is not known to be right. */
-function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageWidget[] }) {
+function DigitalTwin({ classSlug, widgets, live }: { classSlug: string; widgets: PageWidget[]; live?: MachineLive | null }) {
   const { t } = useTranslation('equipment');
   const [model, setModel] = useState<TenantModel | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -480,18 +482,25 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
   }, [classSlug]);
 
   const markers = useMemo<SceneMarker[]>(() => {
-    const values = latestBySignal(widgets);
+    // The Live view's values when it has them (refreshed every 20 s); the page's 24 h
+    // charts' last points otherwise, as before.
+    const liveBySignal = new Map((live?.signals ?? []).map((s) => [s.signal, s]));
+    const values = live
+      ? new Map(live.signals.map((s) => [s.signal, `${typeof s.value === 'number' ? s.value.toFixed(2) : s.value}${s.unit ? ` ${s.unit}` : ''}`]))
+      : latestBySignal(widgets);
     const readiness = readinessBySignal(widgets);
     return (model?.anchors ?? []).filter((a) => !a.needsRecheck).map((a) => {
       const name = a.label || a.signal;
       // A stale or unbound signal looked the same as a live one; it is grey and says so,
       // and its last value is not shown as if it were current.
-      const notCurrent = readiness.has(a.signal) && readiness.get(a.signal) !== 'ready';
+      const notCurrent = live
+        ? !liveBySignal.has(a.signal) || liveBySignal.get(a.signal)!.stale
+        : readiness.has(a.signal) && readiness.get(a.signal) !== 'ready';
       const value = notCurrent ? undefined : values.get(a.signal);
       const label = notCurrent ? `${name} · ${t('twin.noCurrentReading')}` : value ? `${name} · ${value}` : name;
       return { signal: a.signal, x: a.x, y: a.y, z: a.z, label, tone: notCurrent ? 'stale' : 'normal' };
     });
-  }, [model, widgets]);
+  }, [model, widgets, live]);
 
   // A machine whose class has no model shows nothing rather than an empty frame.
   if (!error && (!model || model.state !== 'ready' || !model.modelUrl)) return null;
@@ -514,6 +523,9 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
   );
 }
 
+/** Widget kinds Machine summary already shows for this machine. */
+const DUPLICATED_ON_SUMMARY = ['alert_list', 'work_order_list'];
+
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
@@ -524,6 +536,7 @@ export const EquipmentPagePage: React.FC = () => {
   // undefined = closed; null = open on the first KPI; a key = open on that KPI.
   const [exploring, setExploring] = useState<string | null | undefined>(undefined);
   const [proposing, setProposing] = useState(false);
+  const [live, setLive] = useState<MachineLive | null>(null);
   // drafts: for the Propose a KPI button and modal title, which live with the drafts page.
   const { t } = useTranslation(['equipment', 'drafts']);
 
@@ -556,7 +569,9 @@ export const EquipmentPagePage: React.FC = () => {
   if (!page) return null;
 
   const gauges = page.widgets.filter((w) => GAUGE_WIDGET_TYPES.includes(w.widgetType));
-  const lists = page.widgets.filter((w) => !gauges.includes(w));
+  // Open alerts and work orders are on Machine summary; shown here too, one machine had
+  // the same lists on two pages, neither of them live.
+  const lists = page.widgets.filter((w) => !gauges.includes(w) && !DUPLICATED_ON_SUMMARY.includes(w.widgetType));
 
   return (
     <div className="space-y-4">
@@ -588,7 +603,13 @@ export const EquipmentPagePage: React.FC = () => {
         </div>
       </div>
 
-      {page.equipment.classSlug && <DigitalTwin classSlug={page.equipment.classSlug} widgets={page.widgets} />}
+      {/* What the machine is doing now, refreshed every 20 s; everything below it is
+          history over a window or settings. */}
+      <LivePanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} onLive={setLive} />
+
+      {page.equipment.classSlug && <DigitalTwin classSlug={page.equipment.classSlug} widgets={page.widgets} live={live} />}
+
+      <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('equipmentPage.historyAndSettings')}</h3>
 
       {page.widgets.length === 0 && (
         <p className="text-sm text-slate-400">{t('equipmentPage.noWidgets')}</p>

@@ -171,7 +171,8 @@
     "loadFailed": "Could not load this machine page.",
     "notClassified": "Not classified",
     "exploreKpis": "Explore KPIs",
-    "noWidgets": "No widgets configured for this machine's class yet."
+    "noWidgets": "No widgets configured for this machine's class yet.",
+    "historyAndSettings": "History and settings"
   },
   "days": {
     "0": "Sun",
@@ -712,6 +713,61 @@
         "unbound": "Supply voltage is not reported by this machine’s logger.",
         "no_voltage_band": "Supply events need the voltage warning lines on the machine or its model (voltage_warn_low, voltage_warn_high)."
       }
+    }
+  },
+  "live": {
+    "title": "Live now",
+    "updates": "Updates every 20 s",
+    "loadFailed": "Live values could not be loaded.",
+    "connectionTitle": "From the newest reading's age: online within 5 minutes, delayed within 30, offline after.",
+    "connection": {
+      "online": "Online",
+      "delayed": "Delayed",
+      "offline": "Offline",
+      "no-device": "No device fitted"
+    },
+    "lastReading": "Last reading {{age}} ago",
+    "noReading": "No reading in the last 24 hours",
+    "running": "Running",
+    "stopped": "Stopped",
+    "viewOnMap": "View on map",
+    "noLocation": "No position reported",
+    "parameters": "Parameters",
+    "noSignals": "No readings in the last 24 hours.",
+    "col": {
+      "signal": "Signal",
+      "value": "Value",
+      "updated": "Updated"
+    },
+    "staleTitle": "Not updated for over 15 minutes",
+    "age": {
+      "s": "{{n}} s",
+      "min": "{{n}} min",
+      "h": "{{n}} h"
+    }
+  },
+  "faults": {
+    "title": "Fault codes",
+    "activeCount_one": "{{count}} active",
+    "activeCount_other": "{{count}} active",
+    "none": "No active fault codes.",
+    "lastSeen": "Last seen {{when}}",
+    "firstSeen": "First seen {{when}}",
+    "clearedAt": "Cleared {{when}}",
+    "occurrences_one": "seen {{count}} time",
+    "occurrences_other": "seen {{count}} times",
+    "causes": "Likely causes",
+    "remedies": "What to do",
+    "noGuidance": "No causes or remedies recorded for this code.",
+    "showHistory_one": "Show {{count}} cleared recently",
+    "showHistory_other": "Show {{count}} cleared recently",
+    "hideHistory": "Hide cleared codes",
+    "lamp": {
+      "red_stop": "Red stop",
+      "protect": "Protect",
+      "amber_warning": "Amber warning",
+      "mil": "Check engine",
+      "none": "No lamp"
     }
   }
 }
