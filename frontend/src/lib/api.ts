@@ -2487,6 +2487,55 @@ export function apiGetMachineEvents(sourceSystem: string, externalId: string, ra
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/events${qs}`);
 }
 
+/** One machine as it is now (`GET /equipment/:ss/:id/live`): each signal's newest value
+ *  and its age, read from 1.0 at the moment asked when connected. Connection is the newest
+ *  reading's age: online within 5 min, delayed within 30, offline after. */
+export type LiveConnection = "online" | "delayed" | "offline" | "no-device";
+export interface LiveSignal {
+  signal: string;
+  value: number | string;
+  unit: string | null;
+  at: string;
+  ageSeconds: number;
+  stale: boolean;
+  source: "1.0" | "2.0";
+}
+export interface MachineLive {
+  asOf: string;
+  connection: LiveConnection;
+  lastReadingAt: string | null;
+  running: boolean | null;
+  location: { lat: number; lng: number; at: string; ageSeconds: number } | null;
+  signals: LiveSignal[];
+  legacyAsked: boolean;
+}
+export function apiGetMachineLive(sourceSystem: string, externalId: string): Promise<MachineLive> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/live`);
+}
+
+/** A machine's fault codes (`GET /equipment/:ss/:id/faults`), from the device's DTCs in 1.0.
+ *  `reportsFaults: false` = the device never sent a code field: no panel at all. */
+export interface FaultCode {
+  id: string;
+  code: string;
+  protocol: string;
+  spn: number | null;
+  fmi: number | null;
+  lamp: string;
+  severity: string;
+  description: string;
+  causes: string | null;
+  remedies: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  clearedAt?: string | null;
+  occurrences: number;
+}
+export interface EquipmentFaults { reportsFaults: boolean; active: FaultCode[]; history: FaultCode[] }
+export function apiGetEquipmentFaults(sourceSystem: string, externalId: string): Promise<EquipmentFaults> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/faults`);
+}
+
 /** The composed dashboard for one site (`GET /sites/:plantId/page`) — every machine
  *  on it in one read, aggregated the same way a machine page is, just one level up. */
 export interface SitePage {
