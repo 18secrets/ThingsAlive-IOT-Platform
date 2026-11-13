@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings, Edit2 } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -129,8 +129,8 @@ export const ScenariosPage: React.FC = () => {
     </>
   );
   const editButton = (s: Scenario) => (
-                <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                  {t('page.edit')}
+                <button onClick={() => setEditing(s)} title={t('page.edit')} aria-label={t('page.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
   );
 

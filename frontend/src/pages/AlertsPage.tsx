@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles, Edit2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -177,8 +177,9 @@ export const AlertsPage: React.FC = () => {
     </>
   );
   const ruleEdit = (r: Rule) => CREATABLE_TRIGGERS.includes(r.trigger) ? (
-    <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-      {t('rules.edit')}
+    // The pencil, as on every other table (Models, devices); the word is its tooltip.
+    <button onClick={() => setEditingRule(r)} title={t('rules.edit')} aria-label={t('rules.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+      <Edit2 className="w-3.5 h-3.5" />
     </button>
   ) : null;
   const machineName = (e: Event) =>
@@ -254,9 +255,14 @@ export const AlertsPage: React.FC = () => {
             <p className="p-4 text-sm text-slate-400">{t('rules.empty')}</p>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              // As on Scenarios: the toggle and the pencil are narrow and fixed, the edit
+              // right-aligned; the rest goes to the rule, its chips and what it covers.
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.scope') },
-                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+                { label: ts('listCol.name'), grow: 2, minWidth: 130 },
+                { label: ts('listCol.details'), grow: 3, minWidth: 180 },
+                { label: ts('listCol.scope'), grow: 2, minWidth: 130 },
+                { label: ts('listCol.enabled'), width: 100 },
+                { label: ts('listCol.actions'), width: 80, align: 'right' },
               ]}
               rows={rulePage.pageItems}
               rowKey={(r) => r.id}
@@ -326,10 +332,16 @@ export const AlertsPage: React.FC = () => {
             <ListTable bare
               sort={eventSort}
               onSort={(key) => { toggleEventSort(key as typeof eventSort.key, key === 'fired' || key === 'severity' ? 'desc' : 'asc'); eventPager.setPage(1); }}
+              // Chips and the time need little room; the summary, the longest text, gets the
+              // most, so it no longer wraps to six lines beside two half-empty chip columns.
               columns={[
-                { label: ts('listCol.severity'), sortKey: 'severity' }, { label: ts('listCol.state'), sortKey: 'state' }, { label: ts('listCol.name'), sortKey: 'name' },
-                { label: ts('listCol.machine'), sortKey: 'machine' }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt'), sortKey: 'fired' },
-                { label: ts('listCol.actions'), width: 310 },
+                { label: ts('listCol.severity'), sortKey: 'severity', width: 120 },
+                { label: ts('listCol.state'), sortKey: 'state', width: 130 },
+                { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 110 },
+                { label: ts('listCol.machine'), sortKey: 'machine', grow: 2, minWidth: 100 },
+                { label: ts('listCol.summary'), grow: 4, minWidth: 160 },
+                { label: ts('listCol.firedAt'), sortKey: 'fired', width: 160 },
+                { label: ts('listCol.actions'), width: 220, align: 'right' },
               ]}
               rows={eventPage.pageItems}
               rowKey={(e) => e.id}
@@ -340,7 +352,9 @@ export const AlertsPage: React.FC = () => {
                 machineName(e),
                 e.summary,
                 new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }),
-                <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
+                // A button never breaks inside its label; when they do not all fit they wrap,
+                // right-aligned like the column.
+                <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">{eventActions(e)}</div>,
               ]}
             />
           ) : (

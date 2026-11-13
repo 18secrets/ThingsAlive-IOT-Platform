@@ -139,9 +139,13 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
       <div className={LIST_PANEL}>
         {viewMode === 'list' && roles.length > 0 ? (
           <ListTable bare
+            // Sized to content, as the other lists are: the page chips get the room, a
+            // count and two icons are narrow, and the actions sit right.
             columns={[
-              { label: ts('listCol.name') }, { label: ts('listCol.pages') }, { label: ts('listCol.users'), align: 'right' },
-              { label: ts('listCol.actions') },
+              { label: ts('listCol.name'), grow: 2, minWidth: 140 },
+              { label: ts('listCol.pages'), grow: 5, minWidth: 220 },
+              { label: ts('listCol.users'), align: 'right', width: 90 },
+              { label: ts('listCol.actions'), align: 'right', width: 100 },
             ]}
             rows={pagedRows}
             rowKey={(role) => role.id}
@@ -152,7 +156,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({
               </span>,
               <div className="flex flex-wrap gap-1.5">{pageChips(role)}</div>,
               usersInRole(role.slug),
-              actions(role, usersInRole(role.slug)),
+              <div className="flex justify-end">{actions(role, usersInRole(role.slug))}</div>,
             ]}
           />
         ) : (

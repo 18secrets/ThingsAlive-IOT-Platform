@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
 import { TablePagination, usePagination } from '../common/TablePagination';
-import { ListTable } from '../common/ListTable';
+import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { appLocale, appTimeZone } from '../../lib/dateLocale';
@@ -61,13 +61,15 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
 
 
   // One definition for both views (tester request: cards or list on every list page).
-  const viewColumns = [
-    { label: t('toolMappings.toolProfile') },
-    { label: t('toolMappings.industryType') },
-    { label: t('toolMappings.mappedSensors') },
-    { label: t('sensors.parameters') },
-    { label: t('sensors.updatedAt') },
-    { label: t('common.action') },
+  const viewColumns: ListColumn[] = [
+    // Sized to content: the sensor chips get the room; a count, a date and two icons
+    // are narrow, and the icons sit right.
+    { label: t('toolMappings.toolProfile'), grow: 2, minWidth: 110 },
+    { label: t('toolMappings.industryType'), grow: 2, minWidth: 90 },
+    { label: t('toolMappings.mappedSensors'), grow: 4, minWidth: 150 },
+    { label: t('sensors.parameters'), width: 110 },
+    { label: t('sensors.updatedAt'), width: 110 },
+    { label: t('common.action'), width: 90, align: 'right' },
   ];
   const viewCells = (item: (typeof pagedRows)[number]) => {
 
@@ -79,7 +81,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
                           {item.industryTypeLegacy} <span className="text-[0.6875rem]">{t('toolMappings.unmatched')}</span>
                         </span>
                       ) : '—')}</span>,
-      <><div className="flex flex-wrap gap-1.5 max-w-sm">
+      <><div className="flex flex-wrap gap-1.5 min-w-0">
                         {item.mappedSensors.map((sensor) => (
                           <span
                             key={sensor.sensorId}
@@ -94,7 +96,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
                         {t('toolMappings.channelsShort', { count: activeParametersCount })}
                       </span></>,
       <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(item.updatedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}</span>,
-      <><div className="flex items-center justify-center gap-2">
+      <><div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => { setEditingMapping(item); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
