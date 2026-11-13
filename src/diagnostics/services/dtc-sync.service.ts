@@ -53,17 +53,18 @@ export class DtcSyncService {
     }
 
     try {
-      // 1. Every device 2.0 knows, with its account and machine. Tenant-spanning on
-      // purpose: the pull is the producer of every account's fault codes, and
-      // `sensor_map_projection` forces row security — read from the pool directly, as the
-      // first cut did, it returned no devices at all.
+      // 1. Every device fitted to a machine, with its account and machine. A machine
+      // reaches its devices through `device_projection.equipment_external_id`; the first
+      // cut read `sensor_map_projection.external_id`, which is a 1.0 measurement id, and
+      // would have filed every fault under one. Tenant-spanning on purpose: the pull
+      // produces every account's fault codes, and the projection forces row security.
       const knownDevices: Array<{ tenant_id: string; source_system: string; external_id: string; imei: string; time_zone: string }> =
         await runTenantSpanning(this.ds, 'dtc pull: device discovery', (m) => m.query(
-          `SELECT DISTINCT s.tenant_id, s.source_system, s.external_id, s.imei,
+          `SELECT DISTINCT d.tenant_id, d.source_system, d.equipment_external_id AS external_id, d.imei,
                   coalesce(t.time_zone, 'Asia/Kolkata') AS time_zone
-             FROM "sensor_map_projection" s
-             LEFT JOIN "tenant" t ON t.tenant_id = s.tenant_id
-            WHERE s.imei IS NOT NULL AND s.imei <> ''`,
+             FROM "device_projection" d
+             LEFT JOIN "tenant" t ON t.tenant_id = d.tenant_id
+            WHERE d.imei IS NOT NULL AND d.imei <> '' AND d.equipment_external_id IS NOT NULL`,
         ));
 
       if (knownDevices.length === 0) {

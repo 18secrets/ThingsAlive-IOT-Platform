@@ -183,9 +183,9 @@ export class DtcEpisodeService {
             WHERE "tenant_id" = $1 AND "source_system" = $2 AND "external_id" = $3
          ) AS has_episodes,
          EXISTS (
-           SELECT 1 FROM "sensor_map_projection" s
-             JOIN "dtc_pull_watermark" w ON w.imei = s.imei
-            WHERE s.tenant_id = $1 AND s.source_system = $2 AND s.external_id = $3
+           SELECT 1 FROM "device_projection" d
+             JOIN "dtc_pull_watermark" w ON w.imei = d.imei
+            WHERE d.tenant_id = $1 AND d.source_system = $2 AND d.equipment_external_id = $3
          ) AS has_watermark`,
         [tenantId, sourceSystem, externalId],
       );

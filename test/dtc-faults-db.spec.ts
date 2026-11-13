@@ -53,10 +53,12 @@ describeDb('fault codes (DTC) against the database', () => {
 
   beforeEach(async () => {
     await owner.query(`TRUNCATE "device_dtc_episode", "dtc_pull_watermark", "dtc_master_catalog", "alert_event", "alert_rule",
-      "sensor_map_projection", "device_telemetry_packets", "dtc_master" RESTART IDENTITY CASCADE`);
+      "device_projection", "device_telemetry_packets", "dtc_master" RESTART IDENTITY CASCADE`);
+    // A machine reaches its device the way the fleet sync records it: the device is
+    // `dev-EX-01`, fitted to machine `EX-01`.
     await owner.query(
-      `INSERT INTO "sensor_map_projection" (source_system, external_id, tenant_id, checksum, imei, signal)
-       VALUES ($1, 'EX-01', 'acme', 'x', $2, 'engine_rpm')`, [SS, IMEI],
+      `INSERT INTO "device_projection" (source_system, external_id, tenant_id, checksum, imei, equipment_external_id)
+       VALUES ($1, 'dev-EX-01', 'acme', 'x', $2, 'EX-01')`, [SS, IMEI],
     );
     await owner.query(
       `INSERT INTO "dtc_master" (source_type, spn, fmi, description, lamp, causes, remedies)
