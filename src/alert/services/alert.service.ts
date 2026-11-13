@@ -13,7 +13,7 @@ import {
   alertRuleContentChecksum, describeProvenance, Provenance,
 } from '../../client-catalog/services/provenance';
 import {
-  AlertParams, AlertTrigger, evaluateRule, RatingValue, SignalThresholdParams, validateParams, WindowPrediction,
+  AlertParams, AlertTrigger, evaluateRule, EvaluationInput, RatingValue, SignalThresholdParams, validateParams, WindowPrediction,
   WindowReading, WindowChain,
 } from './alert-rules';
 
@@ -307,6 +307,9 @@ export class AlertService {
 
       const applicable = await this.applicableTo(m, context, rules);
       const ratings = await this.ratingsFor(m, context, applicable);
+      // The machine's open fault codes, for a `dtc` rule. Nothing passed them before, so
+      // such a rule could be saved and could never fire.
+      const dtcs = applicable.some((r) => r.trigger === 'dtc') ? await this.activeDtcs(m, context) : undefined;
       const fired: AlertEvent[] = [];
 
       for (const rule of applicable) {
@@ -328,6 +331,7 @@ export class AlertService {
           predictions: context.predictions,
           chains: context.chains,
           ratings,
+          dtcs,
         });
         if (!firing) continue;
 
@@ -415,6 +419,20 @@ export class AlertService {
       plantId: profile?.plantId ?? null, equipmentClassSlug: profile?.equipmentClassSlug ?? null,
     };
     return rules.filter((rule) => ruleCoversMachine(rule, machine));
+  }
+
+  /** The machine's active fault codes, lamp and severity from the 1.0 code list when it has the code. */
+  private async activeDtcs(m: EntityManager, context: WindowContext): Promise<NonNullable<EvaluationInput['dtcs']>> {
+    const rows: { code: string; protocol: string; spn: number | null; fmi: number | null; lampStatus: string; severity: Severity }[] = await m.query(
+      `SELECT e.code, e.protocol, e.spn, e.fmi,
+              COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status) AS "lampStatus",
+              COALESCE(mc.severity, e.severity) AS severity
+         FROM "device_dtc_episode" e
+         LEFT JOIN "dtc_master_catalog" mc ON mc.protocol = e.protocol AND mc.code = e.code
+        WHERE e.tenant_id = $1 AND e.source_system = $2 AND e.external_id = $3 AND e.status = 'active'`,
+      [context.tenantId, context.sourceSystem, context.externalId],
+    );
+    return rows;
   }
 
   private async validate(scope: RequestScope, input: RuleInput): Promise<void> {

@@ -14,15 +14,22 @@ export interface PacketPullRequest {
 
 export const MAX_PACKETS_PER_PULL = 10_000;
 
+/** A row of 1.0's `device_telemetry_packets`, under the column names 1.0's own receiver
+ * writes (`beml_data_receive_packet_modified.py`): `imei_number`, `packet_timestamp`,
+ * `engine_running_status`; `dtc_errors` is `[{"spn": 177, "fmi": 16}, …]`. */
 export interface LegacyPacketRow {
   id: number | string;
   imei: string;
-  timestamp: Date;
+  ts: Date;
   dtc_count?: number;
-  dtc_data?: string | Buffer | null;
   dtc_errors?: unknown;
-  packet_data?: unknown;
-  engine_running?: boolean;
+  engine_running_status?: number | null;
+}
+
+/** The newest packet each device sent with its engine running, codes or not. */
+export interface LatestRunningPacket {
+  imei: string;
+  at: Date;
 }
 
 export interface DecodedDtcPacket extends DecodedTelemetryPacket {
@@ -47,50 +54,60 @@ export class LegacyPacketReader {
     return !!this.legacy?.isInitialized;
   }
 
+  /**
+   * Packets that carry codes (`dtc_count > 0`), oldest first, after `from`.
+   *
+   * Under 1.0's real column names: the first cut asked for `imei`, `timestamp` and
+   * `packet_data`, which that table does not have, so every pull failed, was caught, and
+   * returned nothing without a word beyond a log line. A failure now throws: an empty
+   * pull and a broken one must not look the same.
+   */
   async pullPackets(request: PacketPullRequest, schema = 'public'): Promise<DecodedDtcPacket[]> {
     if (!this.legacy?.isInitialized) return [];
     if (!request.imeis || request.imeis.length === 0) return [];
-
     const limit = request.limit ?? MAX_PACKETS_PER_PULL;
-
-    try {
-      // 1.0 device_telemetry_packets: query only packets where dtc_count > 0
-      const rows: LegacyPacketRow[] = await this.legacy.query(
-        `SELECT "id", "imei", "timestamp", "dtc_count", "dtc_data", "dtc_errors", "packet_data"
-           FROM "${schema}"."device_telemetry_packets"
-          WHERE "imei" = ANY($1::text[])
-            AND "dtc_count" > 0
-            AND "timestamp" > $2
-            ${request.to ? 'AND "timestamp" <= $3' : ''}
-          ORDER BY "timestamp" ASC
-          LIMIT ${limit}`,
-        request.to ? [request.imeis, request.from, request.to] : [request.imeis, request.from],
-      );
-
-      if (rows.length === limit) {
-        this.logger.warn(`Packet pull hit limit of ${limit} records for ${request.imeis.length} devices`);
-      }
-
-      return rows.map((row) => {
-        const ts = new Date(row.timestamp);
-        // Prioritize decoded dtc_errors if present from 1.0, otherwise raw hex dtc_data, otherwise packet_data
-        let decoded: DecodedTelemetryPacket;
-        if (row.dtc_errors) {
-          decoded = DtcPacketDecoder.decodeGeneric({ dtcs: row.dtc_errors, engine_running: row.engine_running }, row.imei, ts);
-        } else if (row.dtc_data) {
-          decoded = DtcPacketDecoder.decodeGeneric(row.dtc_data, row.imei, ts, row.engine_running ?? true);
-        } else {
-          decoded = DtcPacketDecoder.decodeGeneric(row.packet_data, row.imei, ts, row.engine_running ?? true);
-        }
-
-        return {
-          ...decoded,
-          packetId: String(row.id),
-        };
-      });
-    } catch (err: any) {
-      this.logger.error(`Failed to pull packets from 1.0 device_telemetry_packets: ${err.message}`, err.stack);
-      return [];
+    const rows: LegacyPacketRow[] = await this.legacy.query(
+      `SELECT "id", "imei_number" AS "imei", "packet_timestamp" AS "ts",
+              "dtc_count", "dtc_errors", "engine_running_status"
+         FROM "${schema}"."device_telemetry_packets"
+        WHERE "imei_number" = ANY($1::text[])
+          AND "dtc_count" > 0
+          AND "packet_timestamp" > $2
+          ${request.to ? 'AND "packet_timestamp" <= $3' : ''}
+        ORDER BY "packet_timestamp" ASC
+        LIMIT ${limit}`,
+      request.to ? [request.imeis, request.from, request.to] : [request.imeis, request.from],
+    );
+    if (rows.length === limit) {
+      this.logger.warn(`Packet pull hit limit of ${limit} records for ${request.imeis.length} devices`);
     }
+    return rows.map((row) => {
+      const ts = new Date(row.ts);
+      // 1.0 stores engine_running_status as 0/1; null means it did not say.
+      const running = row.engine_running_status == null ? true : Number(row.engine_running_status) !== 0;
+      const decoded = DtcPacketDecoder.decodeGeneric({ dtcs: row.dtc_errors ?? [], engine_running: running }, row.imei, ts, running);
+      return { ...decoded, imei: row.imei, timestamp: ts, packetId: String(row.id) };
+    });
+  }
+
+  /**
+   * Each device's newest packet with the engine running, whether it carried codes or not.
+   *
+   * The pull above reads only packets with codes, so once a machine's codes all go away
+   * its packets are never read again, and its last codes would stay "active" for ever.
+   * This is how the sync learns the machine has been running without them.
+   */
+  async latestRunningPackets(imeis: string[], since: Date, schema = 'public'): Promise<LatestRunningPacket[]> {
+    if (!this.legacy?.isInitialized || imeis.length === 0) return [];
+    const rows: { imei: string; at: Date }[] = await this.legacy.query(
+      `SELECT "imei_number" AS "imei", max("packet_timestamp") AS "at"
+         FROM "${schema}"."device_telemetry_packets"
+        WHERE "imei_number" = ANY($1::text[])
+          AND "packet_timestamp" > $2
+          AND COALESCE("engine_running_status", 1) <> 0
+        GROUP BY "imei_number"`,
+      [imeis, since],
+    );
+    return rows.filter((r) => r.at).map((r) => ({ imei: r.imei, at: new Date(r.at) }));
   }
 }

@@ -66,7 +66,7 @@ export class DtcPacketDecoder {
       }
 
       const code = `SPN:${spn}:FMI:${fmi}`;
-      const severity: Severity = redStop || protectLamp ? 'critical' : (amberWarning ? 'high' : 'medium');
+      const severity: Severity = redStop || protectLamp ? Severity.Critical : (amberWarning ? Severity.High : Severity.Medium);
 
       dtcs.push({
         protocol: 'j1939',
@@ -100,7 +100,7 @@ export class DtcPacketDecoder {
       // Critical powertrain misfires or safety codes
       const isCritical = /^P030[0-9]/.test(normalized) || /^P0217/.test(normalized) || /^P0524/.test(normalized);
       const lampStatus: DtcLamp = isCritical ? 'red_stop' : 'amber_warning';
-      const severity: Severity = isCritical ? 'critical' : 'high';
+      const severity: Severity = isCritical ? Severity.Critical : Severity.High;
 
       dtcs.push({
         protocol: 'obd2',
@@ -174,7 +174,7 @@ export class DtcPacketDecoder {
                 protocol: 'obd2',
                 code: item.toUpperCase(),
                 lampStatus: 'amber_warning',
-                severity: 'high',
+                severity: Severity.High,
               });
             } else if (item.startsWith('SPN:')) {
               const parts = item.split(':');
@@ -186,7 +186,7 @@ export class DtcPacketDecoder {
                 spn,
                 fmi,
                 lampStatus: 'amber_warning',
-                severity: 'high',
+                severity: Severity.High,
               });
             }
           } else if (item && typeof item === 'object') {
