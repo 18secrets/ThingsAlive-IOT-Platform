@@ -27,6 +27,17 @@ export class PageController {
     return this.pages.machinePage(scope, { sourceSystem, externalId });
   }
 
+  @Get('equipment/:sourceSystem/:externalId/live')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: "One machine as it is now: each signal's newest value and age, connection, running and position (read from 1.0 at request time when connected)" })
+  machineLive(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+  ) {
+    return this.pages.machineLive(scope, { sourceSystem, externalId });
+  }
+
   @Get('equipment/:sourceSystem/:externalId/events')
   @Requires('catalog.read')
   @ApiOperation({ summary: "One machine's starts, trips and voltage events over a window (default the last day, at most 7 days), newest first" })
