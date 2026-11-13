@@ -123,8 +123,10 @@ export class DtcEpisodeService {
       if (isEngineRunning) {
         for (const [code, episode] of activeMap.entries()) {
           if (!incomingCodes.has(code)) {
-            const newMissingCount = Number(episode.consecutiveMissingCount ?? 0) + 1;
-            const msSinceLastSeen = packet.timestamp.getTime() - new Date(episode.lastSeenAt).getTime();
+            const currentMissing = episode.consecutiveMissingCount ?? (episode as any).consecutive_missing_count ?? 0;
+            const newMissingCount = Number(currentMissing) + 1;
+            const lastSeen = episode.lastSeenAt ?? (episode as any).last_seen_at;
+            const msSinceLastSeen = packet.timestamp.getTime() - new Date(lastSeen).getTime();
 
             if (newMissingCount >= CONSECUTIVE_MISSING_THRESHOLD && msSinceLastSeen >= ACTIVE_ABSENT_WINDOW_MS) {
               // Code confirmed cleared after 10 minutes of absent telemetry packets
