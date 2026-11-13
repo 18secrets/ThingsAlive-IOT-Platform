@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertEvent, apiListAlerts } from '../lib/api';
+import { AlertEvent, apiGetMe, apiListAlerts } from '../lib/api';
+import { useAuth } from '../lib/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from './common/LanguageSelector';
 import {
@@ -10,7 +11,6 @@ import {
   LogOut,
   ArrowLeft,
   Menu,
-  User,
   Sparkles
 } from 'lucide-react';
 import { TextSizeSelector } from './common/TextSizeSelector';
@@ -48,6 +48,18 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // The person's initial, as on Settings: their own name from /me, else the same
+  // fallbacks Settings uses. One call per sign-in, not per page — the header stays mounted.
+  const { authUser } = useAuth();
+  const [fullName, setFullName] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    apiGetMe().then((m) => { if (live) setFullName(m.fullName ?? null); }).catch(() => {});
+    return () => { live = false; };
+  }, [authUser?.username]);
+  const displayName = fullName
+    || (authUser?.role === 'master-admin' ? t('settings.masterAdmin') : (authUser?.clientName || authUser?.username || ''));
+  const initial = displayName.trim().charAt(0).toUpperCase() || '?';
   const zone = viewerZone();
   const [showNotifications, setShowNotifications] = useState(false);
   // The account's own open alerts, newest first. This was three fixed placeholders
@@ -205,10 +217,11 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             id="profile-btn"
             onClick={() => navigate('/settings')}
-            className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:border-sky-400 transition-colors cursor-pointer"
-            title={t('header.profile')}
+            className="w-7 h-7 rounded-full bg-sky-600 text-white text-xs font-semibold flex items-center justify-center ring-2 ring-transparent hover:ring-sky-300 dark:hover:ring-sky-700 transition-colors cursor-pointer"
+            title={displayName ? `${displayName} · ${t('header.profile')}` : t('header.profile')}
+            aria-label={t('header.profile')}
           >
-            <User className="w-3.5 h-3.5" />
+            {initial}
           </button>
           <button
             id="logout-btn"
