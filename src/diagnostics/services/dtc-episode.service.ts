@@ -1,14 +1,35 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
-import { DeviceDtcEpisode, DtcEpisodeStatus } from '../entities/device-dtc-episode.entity';
-import { DecodedTelemetryPacket, DecodedDtc } from './dtc-packet-decoder';
-import { AlertEvent } from '../../alert/entities/alert-event.entity';
-import { absorbAlerts } from '../../incident/incident-absorb';
+import { DataSource, EntityManager } from 'typeorm';
+import { DeviceDtcEpisode } from '../entities/device-dtc-episode.entity';
+import { DecodedTelemetryPacket } from './dtc-packet-decoder';
 import { Severity } from '../../common/severity';
 
 export const CONSECUTIVE_MISSING_THRESHOLD = 3;
-export const ACTIVE_ABSENT_WINDOW_MS = 60_000; // 60 seconds
-export const DEFAULT_RETENTION_DAYS = 90;
+export const ACTIVE_ABSENT_WINDOW_MS = 10 * 60_000; // 10 minutes (Deepak decision #4)
+export const DEFAULT_RETENTION_DAYS = 90; // 90 days (Deepak decision #5)
+
+export interface EquipmentFaultItem {
+  id: string;
+  code: string;
+  protocol: string;
+  spn: number | null;
+  fmi: number | null;
+  lamp: string;
+  severity: Severity;
+  description: string;
+  causes: string | null;
+  remedies: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  clearedAt?: string | null;
+  occurrences: number;
+}
+
+export interface EquipmentFaultsResponse {
+  reportsFaults: boolean;
+  active: EquipmentFaultItem[];
+  history: EquipmentFaultItem[];
+}
 
 @Injectable()
 export class DtcEpisodeService {
@@ -21,16 +42,16 @@ export class DtcEpisodeService {
    *
    * Enforces debouncing rules:
    * - Absence from a single packet does NOT clear the code (prevents flapping on packet drops).
-   * - Transitions to 'cleared' only after 3 consecutive absences or 60 seconds of active telemetry.
+   * - Transitions to 'cleared' after 10 minutes of packets where the code is absent (Deepak decision #4).
    * - Key-off / engine-off: pauses clearing rather than falsely resolving active faults.
-   * - Auto-raises Critical incidents for Red Stop Lamp / Protect Lamp.
+   * - Alert generation is deferred to user-configured alert rules in Phase 2 (Deepak decision #6).
    */
   async processPacket(
     tenantId: string,
     externalId: string,
     packet: DecodedTelemetryPacket,
     sourceSystem = 'ta-2.0',
-  ): Promise<{ active: DeviceDtcEpisode[]; cleared: DeviceDtcEpisode[]; alertsRaised: number }> {
+  ): Promise<{ active: DeviceDtcEpisode[]; cleared: DeviceDtcEpisode[] }> {
     return this.ds.transaction(async (m: EntityManager) => {
       // 1. Load current active episodes for this machine
       const existingActive: DeviceDtcEpisode[] = await m.query(
@@ -45,7 +66,6 @@ export class DtcEpisodeService {
       );
 
       const incomingCodes = new Set<string>();
-      const alertsToRaise: AlertEvent[] = [];
       const updatedEpisodes: DeviceDtcEpisode[] = [];
       const clearedEpisodes: DeviceDtcEpisode[] = [];
 
@@ -93,41 +113,6 @@ export class DtcEpisodeService {
             ],
           );
           if (created) updatedEpisodes.push(created);
-
-          // Automatic safety alert for Red Stop Lamp / Protect Lamp or critical severity
-          if (dtc.lampStatus === 'red_stop' || dtc.lampStatus === 'protect' || dtc.severity === 'critical') {
-            const alert = new AlertEvent();
-            alert.tenantId = tenantId;
-            alert.ruleId = '00000000-0000-0000-0000-000000000001';
-            alert.ruleName = 'OEM Diagnostic Safety Stop (Red Lamp)';
-            alert.sourceSystem = sourceSystem;
-            alert.externalId = externalId;
-            alert.severity = Severity.Critical;
-            alert.summary = `Active diagnostic fault ${dtc.code} triggered ${dtc.lampStatus} lamp shutdown`;
-            alert.evidence = {
-              code: dtc.code,
-              spn: dtc.spn,
-              fmi: dtc.fmi,
-              lampStatus: dtc.lampStatus,
-              firstSeenAt: packet.timestamp.toISOString(),
-            };
-            alert.firedAt = packet.timestamp;
-            alert.state = 'open';
-
-            const [savedAlert] = await m.query(
-              `INSERT INTO "alert_event" (
-                  "tenant_id", "rule_id", "rule_name", "source_system", "external_id",
-                  "severity", "summary", "evidence", "state", "fired_at"
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
-                RETURNING *`,
-              [
-                alert.tenantId, alert.ruleId, alert.ruleName, alert.sourceSystem,
-                alert.externalId, alert.severity, alert.summary, JSON.stringify(alert.evidence),
-                alert.state, alert.firedAt,
-              ],
-            );
-            if (savedAlert) alertsToRaise.push(savedAlert);
-          }
         }
       }
 
@@ -138,11 +123,11 @@ export class DtcEpisodeService {
       if (isEngineRunning) {
         for (const [code, episode] of activeMap.entries()) {
           if (!incomingCodes.has(code)) {
-            const newMissingCount = episode.consecutiveMissingCount + 1;
+            const newMissingCount = Number(episode.consecutiveMissingCount ?? 0) + 1;
             const msSinceLastSeen = packet.timestamp.getTime() - new Date(episode.lastSeenAt).getTime();
 
-            if (newMissingCount >= CONSECUTIVE_MISSING_THRESHOLD || msSinceLastSeen >= ACTIVE_ABSENT_WINDOW_MS) {
-              // Code confirmed cleared
+            if (newMissingCount >= CONSECUTIVE_MISSING_THRESHOLD && msSinceLastSeen >= ACTIVE_ABSENT_WINDOW_MS) {
+              // Code confirmed cleared after 10 minutes of absent telemetry packets
               const [cleared] = await m.query(
                 `UPDATE "device_dtc_episode"
                     SET "status" = 'cleared',
@@ -168,17 +153,119 @@ export class DtcEpisodeService {
         }
       }
 
-      // 4. If any critical safety alerts were raised, absorb into incidents
-      if (alertsToRaise.length > 0) {
-        await absorbAlerts(m, tenantId, alertsToRaise);
-      }
-
       return {
         active: updatedEpisodes,
         cleared: clearedEpisodes,
-        alertsRaised: alertsToRaise.length,
       };
     });
+  }
+
+  /**
+   * Retrieves unified equipment faults payload matching Premchand's Route 4 spec:
+   * GET /equipment/:ss/:id/faults
+   *
+   * Returns whether this device reports fault codes at all, its active codes and their history,
+   * enriched with the description, lamp, causes and remedies from dtc_master_catalog.
+   */
+  async getEquipmentFaults(
+    tenantId: string,
+    sourceSystem: string,
+    externalId: string,
+  ): Promise<EquipmentFaultsResponse> {
+    // 1. Determine whether this machine's device reports fault codes at all
+    // Check if any episode (active or historical) exists, or if device's watermark is registered
+    const [presence] = await this.ds.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM "device_dtc_episode"
+          WHERE "tenant_id" = $1 AND "external_id" = $2
+       ) AS has_episodes,
+       EXISTS (
+         SELECT 1 FROM "sensor_map_projection" s
+          JOIN "dtc_pull_watermark" w ON w.imei = s.imei
+          WHERE s.tenant_id = $1 AND s.external_id = $2
+       ) AS has_watermark`,
+      [tenantId, externalId],
+    );
+
+    const reportsFaults = Boolean(presence?.has_episodes || presence?.has_watermark);
+
+    // If the machine's device has never sent DTCs, no panel should be shown (no empty box)
+    if (!reportsFaults) {
+      return {
+        reportsFaults: false,
+        active: [],
+        history: [],
+      };
+    }
+
+    // 2. Query episodes joined with dtc_master_catalog
+    const rows = await this.ds.query(
+      `SELECT e.id,
+              e.code,
+              e.protocol,
+              e.spn,
+              e.fmi,
+              e.lamp_status AS lamp,
+              e.severity,
+              e.status,
+              e.first_seen_at AS "firstSeenAt",
+              e.last_seen_at AS "lastSeenAt",
+              e.cleared_at AS "clearedAt",
+              e.occurrences,
+              COALESCE(m.description, e.code) AS description,
+              m.causes,
+              m.remedies
+         FROM "device_dtc_episode" e
+         LEFT JOIN "dtc_master_catalog" m
+           ON (e.protocol = m.protocol AND e.code = m.code)
+           OR (e.spn IS NOT NULL AND e.spn = m.spn AND e.fmi IS NOT NULL AND e.fmi = m.fmi)
+        WHERE e.tenant_id = $1
+          AND e.external_id = $2
+        ORDER BY
+          CASE WHEN e.status = 'active' THEN 0 ELSE 1 END,
+          CASE WHEN e.lamp_status = 'red_stop' THEN 0
+               WHEN e.lamp_status = 'protect' THEN 1
+               WHEN e.lamp_status = 'amber_warning' THEN 2
+               ELSE 3 END,
+          e.last_seen_at DESC`,
+      [tenantId, externalId],
+    );
+
+    const active: EquipmentFaultItem[] = [];
+    const history: EquipmentFaultItem[] = [];
+
+    for (const r of rows) {
+      const item: EquipmentFaultItem = {
+        id: r.id,
+        code: r.code,
+        protocol: r.protocol,
+        spn: r.spn ?? null,
+        fmi: r.fmi ?? null,
+        lamp: r.lamp,
+        severity: r.severity,
+        description: r.description,
+        causes: r.causes ?? null,
+        remedies: r.remedies ?? null,
+        firstSeenAt: new Date(r.firstSeenAt).toISOString(),
+        lastSeenAt: new Date(r.lastSeenAt).toISOString(),
+        clearedAt: r.clearedAt ? new Date(r.clearedAt).toISOString() : null,
+        occurrences: Number(r.occurrences ?? 1),
+      };
+
+      if (r.status === 'active') {
+        active.push(item);
+      } else {
+        if (history.length < 20) {
+          history.push(item);
+        }
+      }
+    }
+
+    return {
+      reportsFaults: true,
+      active,
+      history,
+    };
   }
 
   /**
@@ -219,7 +306,7 @@ export class DtcEpisodeService {
   }
 
   /**
-   * Prunes cleared episodes older than retention window (default 90 days).
+   * Prunes cleared episodes older than retention window (90 days).
    */
   async pruneHistory(olderThanDays = DEFAULT_RETENTION_DAYS): Promise<number> {
     const cutoff = new Date(Date.now() - olderThanDays * 86_400_000);

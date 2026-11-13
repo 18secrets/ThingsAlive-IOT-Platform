@@ -7,9 +7,14 @@ import { EquipmentProfile } from './equipment-profile.entity';
 import { EquipmentController } from './equipment.controller';
 import { EquipmentService } from './services/equipment.service';
 import { PlantService } from './services/plant.service';
+import { DiagnosticsModule } from '../diagnostics/diagnostics.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([EquipmentProfile, Plant, EquipmentPlacementEvent]), ActivationModule],
+  imports: [
+    TypeOrmModule.forFeature([EquipmentProfile, Plant, EquipmentPlacementEvent]),
+    ActivationModule,
+    DiagnosticsModule,
+  ],
   controllers: [EquipmentController],
   providers: [EquipmentService, PlantService],
   exports: [EquipmentService, PlantService],

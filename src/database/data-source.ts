@@ -102,6 +102,7 @@ import { SHIFT_FUEL_ENTITIES } from '../shift-fuel/shift-fuel.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 import { DtcMasterCatalog } from '../diagnostics/entities/dtc-master.entity';
 import { DeviceDtcEpisode } from '../diagnostics/entities/device-dtc-episode.entity';
+import { DtcPullWatermark } from '../diagnostics/entities/dtc-pull-watermark.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -213,6 +214,7 @@ export const ENTITIES = [
   ProposalRuleEnablement,
   DtcMasterCatalog,
   DeviceDtcEpisode,
+  DtcPullWatermark,
   ...FORECAST_ENTITIES,
   ...EMBEDDING_ENTITIES,
   ...EVALUATION_ENTITIES,

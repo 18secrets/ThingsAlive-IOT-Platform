@@ -7,6 +7,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { ServiceTier } from './equipment-profile.entity';
 import { EquipmentService } from './services/equipment.service';
 import { PlantService } from './services/plant.service';
+import { DtcEpisodeService } from '../diagnostics/services/dtc-episode.service';
 
 export class PlantDto {
   @IsString() @IsNotEmpty() code: string;
@@ -104,6 +105,7 @@ export class EquipmentController {
   constructor(
     private readonly equipment: EquipmentService,
     private readonly plants: PlantService,
+    private readonly dtcService: DtcEpisodeService,
   ) {}
 
   @Get('plants')
@@ -246,6 +248,17 @@ export class EquipmentController {
     @Query('tenantId') tenantId?: string,
   ) {
     return this.equipment.placementHistory(scope, { sourceSystem, externalId }, tenantId);
+  }
+
+  @Get(':sourceSystem/:externalId/faults')
+  @Requires('prediction.read')
+  @ApiOperation({ summary: 'DTC fault codes (active and history) for an equipment' })
+  getFaults(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+  ) {
+    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId);
   }
 
   @Post(':sourceSystem/:externalId/retire')

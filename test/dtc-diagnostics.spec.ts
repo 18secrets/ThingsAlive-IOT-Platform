@@ -1,5 +1,5 @@
 import { DtcPacketDecoder } from '../src/diagnostics/services/dtc-packet-decoder';
-import { DtcEpisodeService, CONSECUTIVE_MISSING_THRESHOLD } from '../src/diagnostics/services/dtc-episode.service';
+import { DtcEpisodeService, CONSECUTIVE_MISSING_THRESHOLD, ACTIVE_ABSENT_WINDOW_MS } from '../src/diagnostics/services/dtc-episode.service';
 import { ALERT_TRIGGERS, evaluateRule, validateParams } from '../src/alert/services/alert-rules';
 import { RULE_CLAUSES } from '../src/alert/services/alert-rule-render';
 import { Severity } from '../src/common/severity';
@@ -10,8 +10,6 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       // Byte 0: 0x10 -> bits 4-5 = 01 (Red Stop Lamp active)
       // Byte 1: 0xFF
       // Bytes 2-5: SPN 100 (0x64), FMI 1 (0x01), occurrence count 5
-      // SPN 100: b0=0x64, b1=0x00, b2=0x01 (FMI 1, top SPN bits 0)
-      // b3: occurrence count 5
       const buf = Buffer.from([0x10, 0xff, 0x64, 0x00, 0x01, 0x05]);
       const now = new Date('2026-11-12T10:00:00Z');
       const decoded = DtcPacketDecoder.decodeJ1939Dm1(buf, '862211074240870', now, true);
@@ -74,7 +72,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
     });
   });
 
-  describe('AlertTrigger coverage & rules', () => {
+  describe('AlertTrigger coverage & rules (Phase 2 readiness)', () => {
     it('covers dtc trigger in ALERT_TRIGGERS and RULE_CLAUSES', () => {
       expect(ALERT_TRIGGERS).toContain('dtc');
       expect(typeof RULE_CLAUSES.dtc).toBe('function');
@@ -125,11 +123,9 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
     });
   });
 
-  describe('Debounce & State Transitions', () => {
-    it('requires consecutive absent packets threshold to clear an active fault', async () => {
-      // Mock data source with transaction runner
+  describe('Debounce & 10-Minute Clearing Window', () => {
+    it('clears code only after 10-minute absence window and consecutive missing threshold', async () => {
       const episodesStore = new Map<string, any>();
-      const alertsStore: any[] = [];
 
       const mockEntityManager: any = {
         query: jest.fn(async (sql: string, params: any[]) => {
@@ -177,10 +173,6 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
               return [ep];
             }
           }
-          if (sql.includes('INSERT INTO "alert_event"')) {
-            alertsStore.push(params);
-            return [{ id: 'alert-1', severity: 'critical', firedAt: new Date() }];
-          }
           return [];
         }),
       };
@@ -192,8 +184,8 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
 
       const service = new DtcEpisodeService(mockDs);
 
-      // Packet 1: Fault arrives -> becomes active
-      const t1 = new Date('2026-11-12T10:00:00Z');
+      // Packet 1: Fault arrives at 10:00:00 -> becomes active
+      const t1 = new Date('2026-11-13T10:00:00Z');
       const p1 = {
         imei: '862211074240870',
         timestamp: t1,
@@ -205,8 +197,8 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(0);
 
-      // Packet 2: Code absent from 1st subsequent packet -> STILL active (debouncing, missing_count = 1)
-      const t2 = new Date('2026-11-12T10:00:10Z');
+      // Packet 2: Code absent 2 minutes later -> STILL active (10 minutes haven't passed)
+      const t2 = new Date('2026-11-13T10:02:00Z');
       const p2 = {
         imei: '862211074240870',
         timestamp: t2,
@@ -217,8 +209,8 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(1);
 
-      // Packet 3: Code absent from 2nd subsequent packet -> STILL active (missing_count = 2)
-      const t3 = new Date('2026-11-12T10:00:20Z');
+      // Packet 3: Code absent 5 minutes later -> STILL active
+      const t3 = new Date('2026-11-13T10:05:00Z');
       const p3 = {
         imei: '862211074240870',
         timestamp: t3,
@@ -229,8 +221,8 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(2);
 
-      // Packet 4: Code absent from 3rd consecutive packet -> Transitions to CLEARED!
-      const t4 = new Date('2026-11-12T10:00:30Z');
+      // Packet 4: Code absent 11 minutes later (> ACTIVE_ABSENT_WINDOW_MS and >= 3 missing count) -> CLEARED!
+      const t4 = new Date('2026-11-13T10:11:00Z');
       const p4 = {
         imei: '862211074240870',
         timestamp: t4,
@@ -249,7 +241,7 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
           code: 'SPN:100:FMI:1',
           status: 'active',
           consecutive_missing_count: 0,
-          last_seen_at: new Date('2026-11-12T10:00:00Z'),
+          last_seen_at: new Date('2026-11-13T10:00:00Z'),
         }],
       ]);
 
@@ -268,10 +260,10 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
 
       const service = new DtcEpisodeService(mockDs);
 
-      // Packet arrives with engineRunning: false (engine keyed off)
+      // Packet arrives with engineRunning: false (engine keyed off) even after 20 minutes
       const packetEngineOff = {
         imei: '862211074240870',
-        timestamp: new Date('2026-11-12T10:05:00Z'),
+        timestamp: new Date('2026-11-13T10:20:00Z'),
         engineRunning: false,
         dtcs: [],
       };
@@ -281,6 +273,89 @@ describe('DTC Diagnostics & Packet Ingestion', () => {
       // Episode must remain ACTIVE and consecutive_missing_count should NOT increment
       expect(episodesStore.get('SPN:100:FMI:1').status).toBe('active');
       expect(episodesStore.get('SPN:100:FMI:1').consecutive_missing_count).toBe(0);
+    });
+  });
+
+  describe('Route 4: GET /equipment/:sourceSystem/:externalId/faults', () => {
+    it('returns reportsFaults: false and empty arrays when device has never sent DTC field', async () => {
+      const mockDs: any = {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes('EXISTS')) {
+            return [{ has_episodes: false, has_watermark: false }];
+          }
+          return [];
+        }),
+      };
+
+      const service = new DtcEpisodeService(mockDs);
+      const res = await service.getEquipmentFaults('tenant-1', '1.0', 'SIMPLE-PUMP-01');
+
+      expect(res.reportsFaults).toBe(false);
+      expect(res.active).toEqual([]);
+      expect(res.history).toEqual([]);
+    });
+
+    it('returns reportsFaults: true, active list, and history with description and remedies', async () => {
+      const mockDs: any = {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes('EXISTS')) {
+            return [{ has_episodes: true, has_watermark: true }];
+          }
+          if (sql.includes('FROM "device_dtc_episode" e')) {
+            return [
+              {
+                id: 'ep-active-1',
+                code: 'SPN:100:FMI:1',
+                protocol: 'j1939',
+                spn: 100,
+                fmi: 1,
+                lamp: 'red_stop',
+                severity: 'critical',
+                status: 'active',
+                firstSeenAt: new Date('2026-11-13T09:00:00Z'),
+                lastSeenAt: new Date('2026-11-13T10:00:00Z'),
+                clearedAt: null,
+                occurrences: 4,
+                description: 'Engine Oil Pressure Extremely Low',
+                causes: 'Clogged oil filter, oil level low',
+                remedies: 'Check dipstick, replace oil filter',
+              },
+              {
+                id: 'ep-cleared-1',
+                code: 'SPN:110:FMI:0',
+                protocol: 'j1939',
+                spn: 110,
+                fmi: 0,
+                lamp: 'amber_warning',
+                severity: 'high',
+                status: 'cleared',
+                firstSeenAt: new Date('2026-11-13T07:00:00Z'),
+                lastSeenAt: new Date('2026-11-13T08:00:00Z'),
+                clearedAt: new Date('2026-11-13T08:15:00Z'),
+                occurrences: 1,
+                description: 'Engine Coolant High Temperature',
+                causes: 'Coolant leak, radiator fan malfunction',
+                remedies: 'Inspect coolant level, check radiator fan',
+              },
+            ];
+          }
+          return [];
+        }),
+      };
+
+      const service = new DtcEpisodeService(mockDs);
+      const res = await service.getEquipmentFaults('tenant-1', '1.0', 'BEML-EX-01');
+
+      expect(res.reportsFaults).toBe(true);
+      expect(res.active).toHaveLength(1);
+      expect(res.active[0].code).toBe('SPN:100:FMI:1');
+      expect(res.active[0].lamp).toBe('red_stop');
+      expect(res.active[0].description).toBe('Engine Oil Pressure Extremely Low');
+      expect(res.active[0].remedies).toContain('replace oil filter');
+
+      expect(res.history).toHaveLength(1);
+      expect(res.history[0].code).toBe('SPN:110:FMI:0');
+      expect(res.history[0].clearedAt).toBeDefined();
     });
   });
 });
