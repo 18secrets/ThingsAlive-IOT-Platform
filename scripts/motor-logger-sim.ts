@@ -11,7 +11,7 @@
  *   --device     device_id (default MOTOR_001)
  *   --key        optional X-Device-Key header (or MOTOR_DEVICE_KEY); the receiver,
  *                motor_logger_http_server.py, does not check one yet
- *   --scenario   normal | overload | low-voltage | high-voltage | dry-run | cycling
+ *   --scenario   normal | overload | low-voltage | high-voltage | dry-run | cycling | locked-rotor
  *   --backfill N generate the last N minutes and send them now (default 10)
  *   --end-ago M  end that history M minutes ago instead of now: to place a scenario inside
  *                a shift window that has already closed (the shift runner scores closed
@@ -22,6 +22,11 @@
  *   --lost-total N  report this lost_total (records overwritten when flash was full), to
  *                exercise the logger-health signal and alert; default 0
  *   --print      print the first batch instead of sending anything
+ *
+ * Every run also prints the fault codes (P-codes) the real logger would raise over these
+ * readings, by its own rules (motor-fault-codes.ts), judged against the model's rated
+ * current: what the machine page's Fault codes panel should come to show, if the
+ * machine's rated current is the same.
  *
  * The wire format is the logger contract's: ≤ 50 records a POST, one reading a second,
  * single-line JSON, plain decimals at the contract's precision, `device_now` (the clock at
@@ -35,7 +40,8 @@
  *   F4  N = N_sync × (1 − s_rated × λ), N_sync = 120 f / p
  *   F5  T → T_amb + ΔT_rated × λ², first order with time constant τ
  * Scenarios are the POC test plan's (T3 dry run, T6 voltage band, T7 overload, T8
- * cycling) with the RCA matrix's signatures.
+ * cycling) with the RCA matrix's signatures, plus a locked rotor (P708: a jam a third of
+ * the way in, the motor humming at over three times rated current and not turning).
  *
  * Simulated data, never a measurement: every number here is a model of a motor, and
  * the slip, power-factor curve and time constant below are illustrative, not datasheet
@@ -64,7 +70,7 @@ export const MINI_1HP: MotorModel = {
   ratedPf: 0.85, tempRise: 40, ambient: 30, timeConstant: 900,
 };
 
-export const SCENARIOS = ['normal', 'overload', 'low-voltage', 'high-voltage', 'dry-run', 'cycling'] as const;
+export const SCENARIOS = ['normal', 'overload', 'low-voltage', 'high-voltage', 'dry-run', 'cycling', 'locked-rotor'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
 export interface SimRecord {
@@ -87,7 +93,7 @@ const round = (v: number, dp: number) => Math.round(v * 10 ** dp) / 10 ** dp;
  * What the motor is doing at fraction `p` (0 → 1) of the run: supply voltage and the
  * load ratio λ it would draw at rated voltage, plus whether it is switched on.
  */
-interface OperatingPoint { v: number; lambda: number; on: boolean; pfFactor: number; constantPower?: boolean }
+interface OperatingPoint { v: number; lambda: number; on: boolean; pfFactor: number; constantPower?: boolean; locked?: boolean }
 
 function operatingPoint(scenario: Scenario, p: number, secondOfRun: number): OperatingPoint {
   const nominalV = 230;
@@ -104,6 +110,10 @@ function operatingPoint(scenario: Scenario, p: number, secondOfRun: number): Ope
         : { v: nominalV, lambda: 0.85 * 0.65, on: true, pfFactor: 0.65 };
     case 'cycling': // T8 / RCA 10: 90 s on, 30 s off — dozens of starts an hour
       return { v: nominalV, lambda: 0.85, on: secondOfRun % 120 < 90, pfFactor: 1 };
+    case 'locked-rotor': // P708: jammed after a third of the run; ~3.3 × rated, poor PF, no speed
+      return p < 1 / 3
+        ? { v: nominalV, lambda: 0.85, on: true, pfFactor: 1 }
+        : { v: nominalV - 6, lambda: 3.3, on: true, pfFactor: 0.5, locked: true };
     default:
       return { v: nominalV, lambda: 0.85, on: true, pfFactor: 1 };
   }
@@ -134,7 +144,7 @@ export function simulate(
     const target = m.ambient + m.tempRise * lambda * lambda;
     temperature += (target - temperature) * (1 / m.timeConstant);
     // F4: slip grows with load; stopped is 0.
-    const rpm = !op.on ? 0 : Math.min(nSync, nSync * (1 - m.ratedSlip * lambda));
+    const rpm = !op.on || op.locked ? 0 : Math.min(nSync, nSync * (1 - m.ratedSlip * lambda));
     const record: SimRecord = {
       seq: unix, timestamp: unix - bootUnix,
       voltage: round(Math.max(0, voltage), 1), current: round(Math.max(0, current), 2),
@@ -187,6 +197,59 @@ export function batches(deviceId: string, records: SimRecord[], deviceNow: numbe
     i += n;
   }
   return out;
+}
+
+/** What this script needs of src/motor-ingest/p-code-rules, said here rather than imported. */
+interface PCodeRules {
+  P_CODES: readonly { code: string; title: string }[];
+  deviceFaults(samples: { at: Date; voltage: number; current: number; temperature: number }[], rated: number | null):
+    { at: Date; active: Set<string> }[];
+}
+
+/**
+ * The platform's P-code rules, where src/ is beside this script, else null. Required at
+ * run time, not imported: the demo service compiles this one file on its own
+ * (deploy/README.md), and an import — even a type-only one — pulls the rules into that
+ * build and moves its output to scripts/motor-logger-sim.js, where its start command
+ * does not look.
+ */
+function pCodeRules(): PCodeRules | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('../src/motor-ingest/p-code-rules') as PCodeRules;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The P-codes the real logger would raise over these readings, as episodes: when each
+ * became active and when it cleared (null while still active at the end of the run).
+ * Null where the rules are not available (the demo service).
+ */
+export function expectedFaults(records: SimRecord[], ratedCurrent: number) {
+  const rules = pCodeRules();
+  if (!rules) return null;
+  const { P_CODES, deviceFaults } = rules;
+  const timeline = deviceFaults(records.map((r) => ({
+    at: new Date(r.seq * 1000), voltage: r.voltage, current: r.current, temperature: r.temperature,
+  })), ratedCurrent);
+  const episodes: { code: string; title: string; from: Date; to: Date | null }[] = [];
+  const open = new Map<string, (typeof episodes)[number]>();
+  for (const { at, active } of timeline) {
+    for (const p of P_CODES) {
+      const episode = open.get(p.code);
+      if (active.has(p.code) && !episode) {
+        const e = { code: p.code, title: p.title, from: at, to: null };
+        episodes.push(e);
+        open.set(p.code, e);
+      } else if (!active.has(p.code) && episode) {
+        episode.to = at;
+        open.delete(p.code);
+      }
+    }
+  }
+  return episodes;
 }
 
 // ------------------------------------------------------------------------------ CLI
@@ -257,6 +320,12 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     // its boots; two runs both saying boot 1 had their clocks anchored together, and the
     // second run's readings landed a day early.
     const list = batches(device, records, now() - bootUnix, 50, lostTotal, bootUnix % 1_000_000);
+    const faults = expectedFaults(records, MINI_1HP.ratedCurrent);
+    const clock = (d: Date) => d.toLocaleTimeString('en-GB', { hour12: false });
+    if (faults) console.log(faults.length
+      ? `The device would raise (rated ${MINI_1HP.ratedCurrent} A): ${faults.map((f) =>
+        `${f.code} ${f.title} ${clock(f.from)}–${f.to ? clock(f.to) : 'still active'}`).join('; ')}`
+      : `The device would raise no fault codes over these readings (rated ${MINI_1HP.ratedCurrent} A).`);
     if (argv.includes('--print')) {
       console.log(JSON.stringify(list[0]));
       return;

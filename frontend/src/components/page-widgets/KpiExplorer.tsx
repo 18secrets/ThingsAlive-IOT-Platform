@@ -8,6 +8,7 @@ import { Chip } from '../common/Chip';
 import { Sparkline } from '../dashboard/Sparkline';
 import { reasonText } from './PageWidgets';
 import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { FILTER_PICKER } from '../../lib/filterPicker';
 
 type Preset = 'declared' | '24h' | '7d' | '30d' | 'custom';
 
@@ -15,7 +16,16 @@ type Preset = 'declared' | '24h' | '7d' | '30d' | 'custom';
 const PRESETS: Preset[] = ['declared', '24h', '7d', '30d', 'custom'];
 const HOURS: Partial<Record<Preset, number>> = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
-const fmt = (v: number | null) => (v == null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: 3 }));
+// The card's own format (PageWidgets' KpiWidget), so the explorer opened from a card shows
+// the card's number, not 84.3 beside its 84.30.
+const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(2));
+
+/** The page's tiles (LivePanel's Parameters): one look for a figure across the machine page. */
+const TILE = 'min-w-0 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3';
+const MUTED = 'text-slate-500 dark:text-slate-400';
+
+/** A key read as words when the page has no title for it ("health_score" -> "Health score"). */
+const asWords = (key: string) => { const w = key.replace(/[_-]+/g, ' ').trim(); return w.charAt(0).toUpperCase() + w.slice(1); };
 
 /** An un-windowed request for a formula whose own window can't be resolved comes back
  *  with no window at all; that is "pick a range", not "Invalid Date". */
@@ -28,8 +38,12 @@ const windowText = (w: { from: string; to: string } | null, t: TFunction) =>
  * month?". The answer carries the same readiness envelope — a window with no readings
  * says so rather than drawing a zero.
  */
-export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; initialFormulaKey?: string }> = ({
-  sourceSystem, externalId, initialFormulaKey,
+export const KpiExplorer: React.FC<{
+  sourceSystem: string; externalId: string; initialFormulaKey?: string;
+  /** The cards' titles by formula key, so the picker names a KPI as its card does. */
+  titles?: Record<string, string>;
+}> = ({
+  sourceSystem, externalId, initialFormulaKey, titles = {},
 }) => {
   const { t } = useTranslation('equipment');
   const [formulas, setFormulas] = useState<string[]>(initialFormulaKey ? [initialFormulaKey] : []);
@@ -91,13 +105,13 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
       <div className="flex items-center gap-2 flex-wrap">
         <SelectPicker
           size="sm"
-          data={formulas.map((k) => ({ label: k, value: k }))}
+          data={formulas.map((k) => ({ label: titles[k] ?? asWords(k), value: k }))}
           value={formulaKey}
           onChange={(v) => setFormulaKey(v ?? null)}
           searchable={formulas.length > 8}
           cleanable={false}
           placeholder={t('kpiExplorer.chooseKpi')}
-          className="min-w-[220px]"
+          className={`w-full sm:w-72 ${FILTER_PICKER}`}
         />
         <SelectPicker
           size="sm"
@@ -106,7 +120,7 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
           onChange={(v) => setPreset((v ?? 'declared') as Preset)}
           searchable={false}
           cleanable={false}
-          className="min-w-[180px]"
+          className={`w-full sm:w-52 ${FILTER_PICKER}`}
         />
         {preset === 'custom' && (
           <DateRangePicker
@@ -116,6 +130,7 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
             onChange={(v) => setRange(v as [Date, Date] | null)}
             shouldDisableDate={(date) => date.getTime() > Date.now()}
             placeholder={t('kpiExplorer.fromTo')}
+            className="w-full sm:w-auto"
           />
         )}
       </div>
@@ -125,44 +140,54 @@ export const KpiExplorer: React.FC<{ sourceSystem: string; externalId: string; i
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span>{error}</span>
         </div>
       )}
-      {!formulaKey && <p className="text-slate-400">{t('kpiExplorer.noKpis')}</p>}
-      {preset === 'custom' && !range && <p className="text-slate-400">{t('kpiExplorer.pickRange')}</p>}
-      {loading && <p className="text-slate-500">{t('kpiExplorer.evaluating')}</p>}
+      {!formulaKey && <p className={MUTED}>{t('kpiExplorer.noKpis')}</p>}
+      {preset === 'custom' && !range && <p className={MUTED}>{t('kpiExplorer.pickRange')}</p>}
+      {loading && <p className={MUTED}>{t('kpiExplorer.evaluating')}</p>}
 
       {result && !loading && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Chip tone={result.readiness === 'ready' ? 'emerald' : result.readiness === 'blocked' ? 'rose' : 'amber'}>
-              {result.readiness === 'ready' ? t('readiness.ready') : result.reason ? reasonText(result.reason, t) : t(`readiness.${result.readiness}`, { defaultValue: result.readiness })}
-            </Chip>
-            <span className="text-slate-400">{windowText(result.window, t)}</span>
-            <span className="text-slate-400">
-              · {t('kpiExplorer.coverage', { actual: result.coverage.actual, expected: result.coverage.expected, percent: (result.coverage.ratio * 100).toFixed(0) })}
-            </span>
+        <div className="space-y-2">
+          <div className={`${TILE} space-y-1.5`}>
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              {result.readiness === 'ready' && result.resultKind === 'scalar' ? (
+                <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100 break-words">
+                  {fmt(result.value as number | null)} <span className={`text-sm font-normal ${MUTED}`}>{result.unit}</span>
+                </p>
+              ) : <span />}
+              <Chip tone={result.readiness === 'ready' ? 'emerald' : result.readiness === 'blocked' ? 'rose' : 'amber'}>
+                {result.readiness === 'ready' ? t('readiness.ready') : result.reason ? reasonText(result.reason, t) : t(`readiness.${result.readiness}`, { defaultValue: result.readiness })}
+              </Chip>
+            </div>
+            <p className={`${MUTED} break-words`}>{windowText(result.window, t)}</p>
+            <p className={MUTED}>{t('kpiExplorer.coverage', { actual: result.coverage.actual, expected: result.coverage.expected, percent: (result.coverage.ratio * 100).toFixed(0) })}</p>
+            {result.missingParameters?.length ? (
+              <p className="text-amber-700 dark:text-amber-400 break-words">{t('kpiExplorer.parametersNotSet', { list: result.missingParameters.join(', ') })}</p>
+            ) : null}
           </div>
-          {result.missingParameters?.length ? (
-            <p className="text-amber-600 dark:text-amber-400">{t('kpiExplorer.parametersNotSet', { list: result.missingParameters.join(', ') })}</p>
-          ) : null}
-
-          {result.readiness === 'ready' && result.resultKind === 'scalar' && (
-            <p className="text-3xl font-bold font-mono text-slate-800 dark:text-slate-100">
-              {fmt(result.value as number | null)} <span className="text-base font-normal text-slate-400">{result.unit}</span>
-            </p>
-          )}
 
           {result.readiness === 'ready' && result.resultKind === 'series' && (
-            <div className="space-y-2">
-              <div className="flex items-end gap-6 flex-wrap">
-                <div>
-                  <p className="text-xs text-slate-400">{t('kpiExplorer.latest')}</p>
-                  <p className="text-2xl font-bold font-mono text-slate-800 dark:text-slate-100">{fmt(values[values.length - 1] ?? null)} <span className="text-sm font-normal text-slate-400">{result.unit}</span></p>
+            <>
+              <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-start">
+                {([
+                  ['latest', fmt(values[values.length - 1] ?? null), result.unit],
+                  ['min', fmt(values.length ? Math.min(...values) : null), result.unit],
+                  ['max', fmt(values.length ? Math.max(...values) : null), result.unit],
+                  ['points', String(series.length), null],
+                ] as const).map(([key, v, unit]) => (
+                  <li key={key} className={`${TILE} space-y-1`}>
+                    <p className={MUTED}>{t(`kpiExplorer.${key}`)}</p>
+                    <p className="text-lg font-semibold font-mono tabular-nums leading-tight text-slate-900 dark:text-white break-words">
+                      {v}{unit ? <span className={`ml-1 text-xs font-normal ${MUTED}`}>{unit}</span> : null}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              {/* Drawn at 560 and scaled to the box: a fixed 560 px ran off a phone. */}
+              {values.length >= 2 && (
+                <div className={`${TILE} [&_svg]:w-full [&_svg]:h-auto`}>
+                  <Sparkline values={values} width={560} height={80} colorClass="text-sky-600 dark:text-sky-400" />
                 </div>
-                <div><p className="text-xs text-slate-400">{t('kpiExplorer.min')}</p><p className="font-mono">{fmt(values.length ? Math.min(...values) : null)}</p></div>
-                <div><p className="text-xs text-slate-400">{t('kpiExplorer.max')}</p><p className="font-mono">{fmt(values.length ? Math.max(...values) : null)}</p></div>
-                <div><p className="text-xs text-slate-400">{t('kpiExplorer.points')}</p><p className="font-mono">{series.length}</p></div>
-              </div>
-              {values.length >= 2 && <Sparkline values={values} width={560} height={80} colorClass="text-sky-600 dark:text-sky-400" />}
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

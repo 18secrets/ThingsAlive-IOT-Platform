@@ -3,7 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
-import { DtcEpisodeService, EquipmentFaultsResponse } from './services/dtc-episode.service';
+import { DtcEpisodeService, EquipmentFaultsResponse, faultPeriod } from './services/dtc-episode.service';
 
 @ApiTags('Diagnostics')
 @Controller('diagnostics')
@@ -12,13 +12,15 @@ export class DiagnosticsController {
 
   @Get('equipment/:sourceSystem/:externalId/faults')
   @Requires('prediction.read')
-  @ApiOperation({ summary: 'Equipment diagnostic fault codes (active and history) enriched with master catalog' })
+  @ApiOperation({ summary: 'Equipment fault codes enriched with master catalog: every active one, and those cleared in from–to (else the 20 most recent)' })
   async getFaults(
     @CurrentScope() scope: RequestScope,
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ): Promise<EquipmentFaultsResponse> {
-    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId);
+    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId, faultPeriod(from, to));
   }
 
   @Get('equipment/:externalId/active')

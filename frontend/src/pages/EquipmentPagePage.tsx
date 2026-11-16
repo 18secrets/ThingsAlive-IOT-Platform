@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
@@ -15,6 +15,7 @@ import {
   MachineLive,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
+import { PanelRow, PanelRows } from '../components/common/PanelRow';
 import { LivePanel } from '../components/equipment/LivePanel';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { Modal } from '../components/common/Modal';
@@ -112,8 +113,10 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('shifts.title')}</h3>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+          <Clock3 className="w-4 h-4 text-slate-400" /> {t('shifts.title')}
+        </h3>
         <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
           <Plus className="w-3.5 h-3.5" /> {t('shifts.add')}
         </button>
@@ -123,48 +126,49 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       {loading ? (
         <Skeleton lines={2} />
       ) : shifts.length === 0 ? (
-        <p className="text-xs text-slate-400">{t('shifts.empty')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('shifts.empty')}</p>
       ) : (
-        <div className="space-y-2">
+        <PanelRows>
           {shifts.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
-                <p className="text-xs text-slate-400">
-                  {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
-                    // 0–1440, or an end at its own start the next day, is round the clock;
-                    // both printed "00:00–00:00", which read as no shift at all (MIN-14).
-                    ? t('shifts.allDay', { from: minutesToClock(s.startMinute) })
-                    : `${minutesToClock(s.startMinute)}–${minutesToClock(s.endMinute)}`} ({s.timeZone})
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => setEditing(s)}
-                  title={t('common.edit')}
-                  aria-label={t('common.edit')}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => toggle(s)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                  title={s.status === 'active' ? t('shifts.retire') : t('shifts.reinstate')}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                </button>
-              </div>
-            </div>
+            <PanelRow
+              key={s.id}
+              title={s.name}
+              detail={<>
+                {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
+                  // 0–1440, or an end at its own start the next day, is round the clock;
+                  // both printed "00:00–00:00", which read as no shift at all (MIN-14).
+                  ? t('shifts.allDay', { from: minutesToClock(s.startMinute) })
+                  : `${minutesToClock(s.startMinute)}–${minutesToClock(s.endMinute)}`} ({s.timeZone})
+              </>}
+              right={(
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    disabled={busyId === s.id}
+                    onClick={() => setEditing(s)}
+                    title={t('common.edit')}
+                    aria-label={t('common.edit')}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    disabled={busyId === s.id}
+                    onClick={() => toggle(s)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    title={s.status === 'active' ? t('shifts.retire') : t('shifts.reinstate')}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              )}
+            />
           ))}
-        </div>
+        </PanelRows>
       )}
 
       {runs.length > 0 && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
           {runs.slice(0, 5).map((r) => (
             <div key={r.id} className="flex items-center justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock3 className="w-3 h-3" />{r.localDate} · {r.shiftName}</span>
@@ -308,8 +312,10 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('service.title')}</h3>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+          <Wrench className="w-4 h-4 text-slate-400" /> {t('service.title')}
+        </h3>
         <button onClick={() => setRecording(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
           <Wrench className="w-3.5 h-3.5" /> {t('service.record')}
         </button>
@@ -319,24 +325,23 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
       {loading ? (
         <Skeleton lines={2} />
       ) : records.length === 0 ? (
-        <p className="text-xs text-slate-400">{t('service.empty')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('service.empty')}</p>
       ) : (
-        <div className="space-y-2">
+        <PanelRows>
           {records.map((r) => (
-            <div key={r.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  {new Date(r.performedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}
-                  {r.meterReading != null && r.meterUnit && (
-                    <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
-                  )}
-                </p>
-                {r.notes && <p className="text-xs text-slate-400 mt-0.5">{r.notes}</p>}
-              </div>
-              <Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>
-            </div>
+            <PanelRow
+              key={r.id}
+              title={<>
+                {new Date(r.performedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}
+                {r.meterReading != null && r.meterUnit && (
+                  <span className="font-normal text-slate-500 dark:text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
+                )}
+              </>}
+              detail={r.notes || undefined}
+              right={<Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>}
+            />
           ))}
-        </div>
+        </PanelRows>
       )}
 
       <Modal isOpen={recording} onClose={() => setRecording(false)} title={t('service.record')} subtitle={t('service.title')} maxWidth="max-w-md">
@@ -523,6 +528,10 @@ function DigitalTwin({ classSlug, widgets, live }: { classSlug: string; widgets:
   );
 }
 
+/** How often the KPIs below Live are asked again. They are 24 h and shift figures, and
+ *  the call evaluates every one of them, so a minute is as current as they get. */
+const PAGE_REFRESH_MS = 60_000;
+
 /** Widget kinds Machine summary already shows for this machine. */
 const DUPLICATED_ON_SUMMARY = ['alert_list', 'work_order_list'];
 
@@ -537,6 +546,8 @@ export const EquipmentPagePage: React.FC = () => {
   const [exploring, setExploring] = useState<string | null | undefined>(undefined);
   const [proposing, setProposing] = useState(false);
   const [live, setLive] = useState<MachineLive | null>(null);
+  // Bumped on each quiet refresh, so the panels that fetch their own data ask again too.
+  const [refreshKey, setRefreshKey] = useState(0);
   // drafts: for the Propose a KPI button and modal title, which live with the drafts page.
   const { t } = useTranslation(['equipment', 'drafts']);
 
@@ -558,6 +569,35 @@ export const EquipmentPagePage: React.FC = () => {
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
+  // Everything below Live is asked again quietly while the device is sending (16 Nov):
+  // no skeleton, and a failed refresh keeps the figures already shown. Only then, because
+  // a device that is offline or not fitted sends nothing that could change them; Live
+  // itself keeps asking regardless, which is how the page sees the device come back.
+  // Delayed counts as sending: a logger posts its buffer every five minutes, so its
+  // newest reading crosses the five-minute "online" line between posts all the time.
+  const connection = live?.connection;
+  const sending = connection === 'online' || connection === 'delayed';
+  // Seen offline (or with no device) since the page opened: coming back is news, and is
+  // caught up at once rather than a minute later. Not set by the first Live answer, which
+  // arrives just after the page itself and would only fetch it twice.
+  const wasQuiet = useRef(false);
+  const refreshPage = useCallback(() => {
+    if (!sourceSystem || !externalId || document.visibilityState === 'hidden') return;
+    apiGetMachinePage(sourceSystem, externalId)
+      .then((result) => { setPage(result); setRefreshKey((k) => k + 1); })
+      .catch(() => {});
+  }, [sourceSystem, externalId]);
+  useEffect(() => {
+    if (!sending) {
+      if (connection) wasQuiet.current = true;
+      return;
+    }
+    if (wasQuiet.current) { wasQuiet.current = false; refreshPage(); }
+    const timer = window.setInterval(refreshPage, PAGE_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshPage);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshPage); };
+  }, [sending, connection, refreshPage]);
+
   if (loading) return <Skeleton />;
   if (error) {
     return (
@@ -569,6 +609,9 @@ export const EquipmentPagePage: React.FC = () => {
   if (!page) return null;
 
   const gauges = page.widgets.filter((w) => GAUGE_WIDGET_TYPES.includes(w.widgetType));
+  // Each KPI's card title, so the explorer's picker names it the way its card does.
+  const kpiTitles: Record<string, string> = Object.fromEntries(
+    page.widgets.filter((w) => w.boundTo && w.title).map((w) => [w.boundTo as string, w.title as string]));
   // Open alerts and work orders are on Machine summary; shown here too, one machine had
   // the same lists on two pages, neither of them live.
   const lists = page.widgets.filter((w) => !gauges.includes(w) && !DUPLICATED_ON_SUMMARY.includes(w.widgetType));
@@ -618,19 +661,26 @@ export const EquipmentPagePage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {gauges.map((w) => <Widget key={w.widgetKey} widget={w} onExploreKpi={(key) => setExploring(key)} />)}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* Two columns from desktop width: one full-width card each left most of a wide
+          screen empty (16 Nov). The class's list widgets share it with the panels: on
+          their own, Signals and readiness sat alone in a two-column row with nothing
+          beside it. The two cards in a row are one height (asked for, 16 Nov), the
+          shorter one ending in white space; a panel that does not apply (no rated alerts,
+          no fuel) renders nothing, so the rest close up, and a last card with no partner
+          takes the whole row rather than half of it beside nothing. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 [&>*]:h-full lg:[&>*:last-child:nth-child(odd)]:col-span-2">
+        {/* Rows as agreed (16 Nov): what the machine reports beside what it burns; what
+            can alert beside what happened; when it works beside what was done to it. */}
         {lists.map((w) => <Widget key={w.widgetKey} widget={w} />)}
+        <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+        {/* Motors and pumps (Crompton POC): which rated alerts can fire, and the event log.
+            Both stay out of the way on a machine that has neither. */}
+        <RatedAlertsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId}
+          classSlug={page.equipment.classSlug} plantId={page.equipment.plantId} />
+        <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} refreshKey={refreshKey} />
+        <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+        <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       </div>
-
-      {/* Motors and pumps (Crompton POC): which rated alerts can fire, and the event log.
-          Both stay out of the way on a machine that has neither. */}
-      <RatedAlertsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId}
-        classSlug={page.equipment.classSlug} plantId={page.equipment.plantId} />
-      <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
-
-      <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
-      <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
-      <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
 
       <Modal isOpen={proposing} onClose={() => setProposing(false)} title={t('drafts:propose.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-xl">
         {proposing && page.equipment.classSlug && (
@@ -645,6 +695,7 @@ export const EquipmentPagePage: React.FC = () => {
             sourceSystem={page.equipment.sourceSystem}
             externalId={page.equipment.externalId}
             initialFormulaKey={exploring ?? undefined}
+            titles={kpiTitles}
           />
         )}
       </Modal>

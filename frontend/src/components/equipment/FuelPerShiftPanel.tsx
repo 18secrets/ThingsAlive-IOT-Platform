@@ -84,9 +84,9 @@ export function FuelPerShiftPanel({ sourceSystem, externalId }: { sourceSystem: 
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
-        <Fuel className="w-4 h-4" />{t('fuelPerShift.title')}
-      </p>
+      <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+        <Fuel className="w-4 h-4 text-slate-400" /> {t('fuelPerShift.title')}
+      </h3>
       {loading ? (
         <Skeleton lines={2} />
       ) : !expected && !history ? (

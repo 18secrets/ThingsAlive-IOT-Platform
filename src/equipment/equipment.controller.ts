@@ -7,7 +7,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { ServiceTier } from './equipment-profile.entity';
 import { EquipmentService } from './services/equipment.service';
 import { PlantService } from './services/plant.service';
-import { DtcEpisodeService } from '../diagnostics/services/dtc-episode.service';
+import { DtcEpisodeService, faultPeriod } from '../diagnostics/services/dtc-episode.service';
 
 export class PlantDto {
   @IsString() @IsNotEmpty() code: string;
@@ -252,17 +252,19 @@ export class EquipmentController {
 
   @Get(':sourceSystem/:externalId/faults')
   @Requires('prediction.read')
-  @ApiOperation({ summary: 'DTC fault codes (active and history) for an equipment' })
+  @ApiOperation({ summary: 'Fault codes for an equipment: every active one, and those cleared in from–to (else the 20 most recent)' })
   getFaults(
     @CurrentScope() scope: RequestScope,
     @Param('sourceSystem') sourceSystem: string,
     @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     // A user limited to some machines is refused the rest, as on every machine route.
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(externalId)) {
       throw new NotFoundException('No such equipment in this account.');
     }
-    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId);
+    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId, faultPeriod(from, to));
   }
 
   @Post(':sourceSystem/:externalId/retire')

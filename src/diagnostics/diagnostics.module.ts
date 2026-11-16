@@ -6,6 +6,7 @@ import { DtcPullWatermark } from './entities/dtc-pull-watermark.entity';
 import { DtcEpisodeService } from './services/dtc-episode.service';
 import { DtcSyncService } from './services/dtc-sync.service';
 import { DtcSyncScheduler } from './services/dtc-sync.scheduler';
+import { FaultHistoryPruneScheduler } from './services/fault-history-prune.scheduler';
 import { DiagnosticsController } from './diagnostics.controller';
 import { LegacyModule } from '../legacy/legacy.module';
 import { AlertModule } from '../alert/alert.module';
@@ -17,7 +18,7 @@ import { AlertModule } from '../alert/alert.module';
     AlertModule,
   ],
   controllers: [DiagnosticsController],
-  providers: [DtcEpisodeService, DtcSyncService, DtcSyncScheduler],
+  providers: [DtcEpisodeService, DtcSyncService, DtcSyncScheduler, FaultHistoryPruneScheduler],
   exports: [DtcEpisodeService, DtcSyncService],
 })
 export class DiagnosticsModule {}
