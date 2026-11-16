@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { LEGACY_DATA_SOURCE } from './legacy-source';
 import { DtcLamp, DtcProtocol } from '../diagnostics/entities/dtc-master.entity';
 import { Severity } from '../common/severity';
+import { upsertMasterDefinitions } from '../diagnostics/services/dtc-master-catalog';
 
 /** A row of 1.0's `dtc_master` (`iot_platform_backend/src/dtcc-error/entity/dtc-error.entity.ts`).
  * spn and fmi are text there; a J1939 code has them, a P-code has `p_code`. */
@@ -57,7 +58,7 @@ export class LegacyDtcMasterReader {
 
     if (rows.length === 0) return 0;
 
-    let syncedCount = 0;
+    const definitions: NormalizedDtcDefinition[] = [];
     for (const r of rows) {
       // Keyed as the packet decoder keys what a machine sends, so a code and its meaning
       // meet one to one: J1939 as SPN:<spn>:FMI:<fmi>, a P-code by its own text.
@@ -82,21 +83,14 @@ export class LegacyDtcMasterReader {
       else if (lamp === 'amber_warning' || sevLower === 'high') severity = Severity.High;
       else if (sevLower === 'low') severity = Severity.Low;
 
-      await localDs.query(
-        `INSERT INTO "dtc_master_catalog" (
-            "protocol", "code", "spn", "fmi", "description", "lamp", "severity", "causes", "remedies", "source_system", "updated_at"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '1.0', now())
-          ON CONFLICT ("protocol", "code") DO UPDATE
-            SET "description" = EXCLUDED."description",
-                "lamp" = EXCLUDED."lamp",
-                "severity" = EXCLUDED."severity",
-                "causes" = EXCLUDED."causes",
-                "remedies" = EXCLUDED."remedies",
-                "updated_at" = now()`,
-        [protocol, code, spn, fmi, r.description || code, lamp, severity, r.causes ?? null, r.remedies ?? null],
-      );
-      syncedCount++;
+      definitions.push({
+        protocol, code, spn, fmi, description: r.description || code, lamp, severity,
+        causes: r.causes ?? null, remedies: r.remedies ?? null,
+      });
     }
+
+    // The write is 2.0's and lives outside src/legacy/ (dtc-master-catalog.ts says why).
+    const syncedCount = await upsertMasterDefinitions(localDs, definitions);
 
     this.logger.log(`Synced ${syncedCount} DTC definitions from 1.0`);
     return syncedCount;
