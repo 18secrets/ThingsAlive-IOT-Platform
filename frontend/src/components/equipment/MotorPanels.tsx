@@ -182,17 +182,17 @@ export const MachineEventsPanel: React.FC<{
         </div>
       </div>
       {data?.unavailable.map((u) => (
-        <p key={u.kind} className="text-xs text-slate-400">{t(`events.unavailable.${u.kind}.${u.reason}`)}</p>
+        <p key={u.kind} className="text-xs text-slate-500 dark:text-slate-400">{t(`events.unavailable.${u.kind}.${u.reason}`)}</p>
       ))}
       {!data ? <Skeleton lines={3} /> : shown.length === 0 ? (
-        <p className="text-sm text-slate-400">{t('events.none')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('events.none')}</p>
       ) : (
         <ul className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
           {shown.map((e, i) => {
             const Icon = EVENT_ICON[e.kind];
             return (
               <li key={`${e.at}-${e.kind}-${i}`} className="py-1.5 flex items-center gap-3 text-sm">
-                <span className="text-xs text-slate-400 w-28 shrink-0 tabular-nums">{when(e.at)}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 w-28 shrink-0 tabular-nums">{when(e.at)}</span>
                 <Icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span className="flex-1 min-w-0 text-slate-700 dark:text-slate-200 break-words">
                   {t(`events.kind.${e.kind}`, { count: e.value, value: fmt(e.value), limit: e.limit !== undefined ? fmt(e.limit) : '' })}
@@ -203,7 +203,7 @@ export const MachineEventsPanel: React.FC<{
           })}
         </ul>
       )}
-      {data?.truncated && <p className="text-xs text-slate-400">{t('events.truncated')}</p>}
+      {data?.truncated && <p className="text-xs text-slate-500 dark:text-slate-400">{t('events.truncated')}</p>}
     </div>
   );
 };

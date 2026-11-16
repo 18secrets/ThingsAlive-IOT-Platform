@@ -4,13 +4,14 @@ import { ScrollRows } from '../common/ScrollRows';
 import { useNavigate } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import i18n from '../../i18n';
-import { AlertTriangle, Bell, CheckCircle2, Wrench } from 'lucide-react';
+import { AlertTriangle, Bell, CheckCircle2, ListChecks, Wrench } from 'lucide-react';
 import {
   PageWidget, PageKpiWidgetData, PageSignalChartData, PageForecastChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
   PageServiceDueData, PageFailureModeRow, PageRecommendationRow, PageMachineRow, PageSchematicData,
   PageParameterRow, ParameterScope,
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
+import { PanelRow, PanelRows } from '../common/PanelRow';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
 import { severityTone } from '../common/statusTone';
@@ -37,12 +38,17 @@ const Unfilled: React.FC<{ reason?: string }> = ({ reason }) => {
   return <p className="text-xs text-slate-400 dark:text-slate-500">{reasonText(reason, t)}</p>;
 };
 
-const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode; count?: number }> = ({ title, children, count }) => (
+const WidgetShell: React.FC<{
+  title: string | null; children: React.ReactNode; count?: number;
+  /** A panel-style widget's icon, so it heads like the machine page's panels beside it. */
+  icon?: React.FC<{ className?: string }>;
+}> = ({ title, children, count, icon: Icon }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
     {/* The count with the title: a list that scrolls past ten rows still says how long it is. */}
     {title && (
-      <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-        {title}{count != null && count > 0 && <span className="ml-1.5 font-normal text-slate-500">({count})</span>}
+      <h3 className={`font-semibold text-slate-900 dark:text-white text-sm ${Icon ? 'flex items-center gap-2' : ''}`}>
+        {Icon && <Icon className="w-4 h-4 text-slate-400 shrink-0" />}
+        <span>{title}{count != null && count > 0 && <span className="ml-1.5 font-normal text-slate-500">({count})</span>}</span>
       </h3>
     )}
     {children}
@@ -211,19 +217,20 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
 function ReadinessListWidget({ widget }: { widget: PageWidget }) {
   const { t } = useTranslation('equipment');
   if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? t('widgets.signalReadiness')}><Unfilled reason={widget.reason} /></WidgetShell>;
+    return <WidgetShell title={widget.title ?? t('widgets.signalReadiness')} icon={ListChecks}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const rows = widget.data as PageReadinessRow[];
   return (
-    <WidgetShell title={widget.title ?? t('widgets.signalReadiness')}>
-      <div className="space-y-1.5">
+    <WidgetShell title={widget.title ?? t('widgets.signalReadiness')} icon={ListChecks}>
+      <PanelRows>
         {rows.map((r, i) => (
-          <div key={`${r.signal}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300 truncate">{r.signal}</span>
-            <Chip tone={READINESS_TONE[r.readiness]}>{r.readiness === 'ready' ? t('readiness.ready') : reasonText(r.reason, t)}</Chip>
-          </div>
+          <PanelRow
+            key={`${r.signal}-${i}`}
+            title={<span className="font-mono text-xs">{r.signal}</span>}
+            right={<Chip tone={READINESS_TONE[r.readiness]}>{r.readiness === 'ready' ? t('readiness.ready') : reasonText(r.reason, t)}</Chip>}
+          />
         ))}
-      </div>
+      </PanelRows>
     </WidgetShell>
   );
 }
