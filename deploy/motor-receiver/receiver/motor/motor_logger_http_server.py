@@ -249,7 +249,8 @@ def _ensure_schema(cur):
             ADD COLUMN IF NOT EXISTS ambient_c       NUMERIC(6,1),
             ADD COLUMN IF NOT EXISTS vibration_mm_s  NUMERIC(7,2),
             ADD COLUMN IF NOT EXISTS load_pct        NUMERIC(6,1),
-            ADD COLUMN IF NOT EXISTS water_air_gap   NUMERIC(10,2);
+            ADD COLUMN IF NOT EXISTS water_air_gap   NUMERIC(10,2),
+            ADD COLUMN IF NOT EXISTS load_loss       NUMERIC(10,2);
         """
     )
     cur.execute(
@@ -312,8 +313,8 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                     INSERT INTO motor_sensor_records
                         (device_id, seq, device_ts, voltage_v, current_a,
                          power_factor, temperature_c, rpm, batch_id, received_at,
-                         ambient_c, vibration_mm_s, load_pct, water_air_gap)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         ambient_c, vibration_mm_s, load_pct, water_air_gap, load_loss)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (device_id, seq) DO NOTHING
                     """,
                     (
@@ -327,10 +328,11 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                         rec["rpm"],
                         batch_id,
                         received_at,
-                        rec.get("ambient_c"),
-                        rec.get("vibration_mm_s"),
-                        rec.get("load_pct"),
-                        rec.get("water_air_gap"),
+                        _sensor(rec, "ambient_c"),
+                        _sensor(rec, "vibration_mm_s"),
+                        _sensor(rec, "load_pct"),
+                        _sensor(rec, "water_air_gap"),
+                        _sensor(rec, "load_loss"),
                     ),
                 )
                 stored += cur.rowcount
@@ -393,7 +395,24 @@ def _store_bulk(body: dict, received_at: datetime):
 _REQUIRED_BATCH_FIELDS = ("device_id", "batch_id", "first_seq", "last_seq", "count")
 _REQUIRED_RECORD_FIELDS = ("seq", "timestamp", "voltage", "current", "power_factor", "temperature", "rpm")
 # Optional per-record sensors: absent or null means the logger has no such sensor.
-_OPTIONAL_NUMERIC_FIELDS = ("ambient_c", "vibration_mm_s", "load_pct", "water_air_gap")
+_OPTIONAL_NUMERIC_FIELDS = ("ambient_c", "vibration_mm_s", "load_pct", "water_air_gap", "load_loss")
+
+# The names the firmware actually sends (16 Nov 2026), against the columns they land in.
+# The firmware's names are accepted as they are rather than asking the devices to change:
+# a logger in the field is reflashed by hand. load_loss is not an alias of load_pct — one
+# is the load as % of rated, the other a loss — so it has a column of its own.
+_SENSOR_ALIASES = {
+    "vibration_mm_s": ("vibration",),
+    "water_air_gap": ("air_gap",),
+}
+
+
+def _sensor(rec: dict, column: str):
+    """The record's value for a sensor column, under its own name or the firmware's."""
+    for name in (column, *_SENSOR_ALIASES.get(column, ())):
+        if rec.get(name) is not None:
+            return rec[name]
+    return None
 
 
 def _validate(body: dict) -> str | None:
@@ -425,7 +444,7 @@ def _validate(body: dict) -> str | None:
             if field not in rec:
                 return f"records[{i}] missing field: {field}"
 
-        for field in _OPTIONAL_NUMERIC_FIELDS:
+        for field in (*_OPTIONAL_NUMERIC_FIELDS, *(a for names in _SENSOR_ALIASES.values() for a in names)):
             value = rec.get(field)
             # bool is an int in Python; true is not a temperature.
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
@@ -1055,9 +1074,10 @@ h3{font-size:.88rem;font-weight:700;color:#1e293b;margin:18px 0 8px}
       <tr><td class="fname">temperature</td><td class="ftype">number</td><td>°C</td><td>−3276.8 – 3276.7</td><td>1 decimal place</td></tr>
       <tr><td class="fname">rpm</td><td class="ftype">integer</td><td>rev/min</td><td>0 – 65535</td><td></td></tr>
       <tr><td class="fname">ambient_c</td><td class="ftype">number | null</td><td>°C</td><td>—</td><td>Optional. Environment (air) temperature at the pump, 1 decimal place</td></tr>
-      <tr><td class="fname">vibration_mm_s</td><td class="ftype">number | null</td><td>mm/s RMS</td><td>—</td><td>Optional. Vibration velocity from the sensor on the pump/motor body, 2 decimal places</td></tr>
+      <tr><td class="fname">vibration_mm_s</td><td class="ftype">number | null</td><td>mm/s RMS</td><td>—</td><td>Optional. Vibration velocity from the sensor on the pump/motor body, 2 decimal places. Also accepted as <code>vibration</code></td></tr>
       <tr><td class="fname">load_pct</td><td class="ftype">number | null</td><td>% of rated</td><td>—</td><td>Optional. The device's load figure, 1 decimal place</td></tr>
-      <tr><td class="fname">water_air_gap</td><td class="ftype">number | null</td><td>to confirm</td><td>—</td><td>Optional. Water / air-gap sensor reading, stored as sent</td></tr>
+      <tr><td class="fname">water_air_gap</td><td class="ftype">number | null</td><td>to confirm</td><td>—</td><td>Optional. Water / air-gap sensor reading, stored as sent. Also accepted as <code>air_gap</code></td></tr>
+      <tr><td class="fname">load_loss</td><td class="ftype">number | null</td><td>to confirm</td><td>—</td><td>Optional. The device's load-loss figure, stored as sent</td></tr>
     </tbody>
   </table>
   <div class="warn-note">&#9888; &nbsp;Numbers are always plain decimal (e.g. <code>230.0</code>, <code>-5.2</code>). Never exponent notation. Stored as <code>NUMERIC</code> in PostgreSQL, not <code>FLOAT</code>, to avoid rounding errors.</div>
