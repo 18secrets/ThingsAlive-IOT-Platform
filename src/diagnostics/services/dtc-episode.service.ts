@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { DeviceDtcEpisode } from '../entities/device-dtc-episode.entity';
 import { DecodedTelemetryPacket } from './dtc-packet-decoder';
@@ -10,6 +10,15 @@ export const CONSECUTIVE_MISSING_THRESHOLD = 3;
 export const ACTIVE_ABSENT_WINDOW_MS = 10 * 60_000;
 /** Cleared episodes older than this are pruned (plan decision 5, suggested 90 days). */
 export const DEFAULT_RETENTION_DAYS = 90;
+/** Cleared codes in an answer that names no period: the most recent, as before periods. */
+export const DEFAULT_HISTORY_ITEMS = 20;
+/**
+ * The most cleared codes one answer for a period carries. A pump's codes flicker at a
+ * threshold (P702 opened ten times in seven minutes in the POC run), so ninety days of one
+ * can run to thousands; past this the answer says it was cut and the page asks for a
+ * shorter period.
+ */
+export const MAX_HISTORY_ITEMS = 500;
 
 export interface EquipmentFaultItem {
   id: string;
@@ -31,7 +40,27 @@ export interface EquipmentFaultItem {
 export interface EquipmentFaultsResponse {
   reportsFaults: boolean;
   active: EquipmentFaultItem[];
+  /** Cleared codes, newest first: those in the period asked for, else the 20 most recent. */
   history: EquipmentFaultItem[];
+  /** Only when a period was asked for: the period `history` covers. */
+  historyWindow?: { from: string; to: string };
+  /** Only when a period was asked for: more than MAX_HISTORY_ITEMS were cleared in it, and the oldest are left out. */
+  historyTruncated?: boolean;
+}
+
+/**
+ * The period a faults request names, for both routes that serve them: both ends or
+ * neither, each a real date, in order. Neither is the answer without a period.
+ */
+export function faultPeriod(from?: string, to?: string): { from: Date; to: Date } | undefined {
+  if (!from && !to) return undefined;
+  if (!from || !to) throw new BadRequestException('Give both from and to, or neither.');
+  const period = { from: new Date(from), to: new Date(to) };
+  if (Number.isNaN(period.from.getTime()) || Number.isNaN(period.to.getTime())) {
+    throw new BadRequestException('from and to must be ISO dates.');
+  }
+  if (period.from > period.to) throw new BadRequestException('from must not be after to.');
+  return period;
 }
 
 /** The rows an UPDATE … RETURNING gave back: TypeORM's Postgres driver answers an UPDATE with
@@ -78,6 +107,9 @@ export class DtcEpisodeService {
         `SELECT "id", "code", "last_seen_at" AS "lastSeenAt", "consecutive_missing_count" AS "missing"
            FROM "device_dtc_episode"
           WHERE "tenant_id" = $1 AND "source_system" = $2 AND "external_id" = $3 AND "status" = 'active'
+            -- A pump logger's P-codes are cleared by its own readings, never by a 1.0
+            -- packet that cannot know about them.
+            AND "protocol" <> 'pcode'
           FOR UPDATE`,
         [tenantId, sourceSystem, externalId],
       );
@@ -158,7 +190,7 @@ export class DtcEpisodeService {
       `UPDATE "device_dtc_episode"
           SET "status" = 'cleared', "cleared_at" = $4, "updated_at" = now()
         WHERE "tenant_id" = $1 AND "source_system" = $2 AND "external_id" = $3
-          AND "status" = 'active'
+          AND "status" = 'active' AND "protocol" <> 'pcode'
           AND "last_seen_at" <= $4::timestamptz - make_interval(secs => $5)
         RETURNING *`,
       [tenantId, sourceSystem, externalId, latestRunningAt, ACTIVE_ABSENT_WINDOW_MS / 1000],
@@ -166,16 +198,24 @@ export class DtcEpisodeService {
   }
 
   /**
-   * The machine's fault codes for its page: whether its device reports codes at all, the
-   * active ones (red lamp first) and the 20 most recent cleared, each with its meaning,
-   * lamp, causes and remedies from the mirrored 1.0 list. A device never pulled and never
-   * coded reads `reportsFaults: false`, and the page shows no panel.
+   * The machine's fault codes for its page: whether its device reports codes at all, every
+   * active one (red lamp first), and cleared ones — in the period asked for, else the 20
+   * most recent — each with its meaning, lamp, causes and remedies. A device never pulled
+   * and never coded reads `reportsFaults: false`, and the page shows no panel.
+   *
+   * The machine page asks for a period (the last seven days, or the reader's range):
+   * "the last 20" said "recently" of codes that could be months old, and hid everything
+   * before them. Without a period the answer is what it always was, so a caller that
+   * names none is unchanged. How far back a period can reach is retention's
+   * (pruneHistory), not this method's.
    */
   async getEquipmentFaults(
     tenantId: string,
     sourceSystem: string,
     externalId: string,
+    period?: { from: Date; to: Date },
   ): Promise<EquipmentFaultsResponse> {
+    const windowed = period ? { historyWindow: { from: period.from.toISOString(), to: period.to.toISOString() } } : {};
     return withTenantId(this.ds, tenantId, async (m) => {
       const [presence] = await m.query(
         `SELECT EXISTS (
@@ -186,13 +226,21 @@ export class DtcEpisodeService {
            SELECT 1 FROM "device_projection" d
              JOIN "dtc_pull_watermark" w ON w.imei = d.imei
             WHERE d.tenant_id = $1 AND d.source_system = $2 AND d.equipment_external_id = $3
-         ) AS has_watermark`,
+         ) AS has_watermark,
+         -- A pump logger that has uploaded is judged for P-codes on every pass, so a
+         -- machine with one and no codes is healthy, not silent.
+         EXISTS (
+           SELECT 1 FROM "device_inventory" i
+             JOIN "motor_upload_log" u ON u.device_id = i.imei
+            WHERE i.tenant_id = $1 AND i.equipment_external_id = $3 AND i.state = 'assigned'
+         ) AS has_motor_logger`,
         [tenantId, sourceSystem, externalId],
       );
-      if (!presence?.has_episodes && !presence?.has_watermark) {
-        return { reportsFaults: false, active: [], history: [] };
+      if (!presence?.has_episodes && !presence?.has_watermark && !presence?.has_motor_logger) {
+        return { reportsFaults: false, active: [], history: [], ...(period ? { ...windowed, historyTruncated: false } : {}) };
       }
 
+      // Every active code, and the cleared ones (in the period, when there is one).
       const rows = await m.query(
         `SELECT e.id, e.code, e.protocol, e.spn, e.fmi, e.status,
                 COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status) AS lamp,
@@ -203,11 +251,14 @@ export class DtcEpisodeService {
            FROM "device_dtc_episode" e
            LEFT JOIN "dtc_master_catalog" mc ON mc.protocol = e.protocol AND mc.code = e.code
           WHERE e.tenant_id = $1 AND e.source_system = $2 AND e.external_id = $3
+            AND (e.status = 'active' OR $4::timestamptz IS NULL OR (e.cleared_at >= $4 AND e.cleared_at <= $5))
           ORDER BY CASE WHEN e.status = 'active' THEN 0 ELSE 1 END,
-                   CASE COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status)
-                     WHEN 'red_stop' THEN 0 WHEN 'protect' THEN 1 WHEN 'amber_warning' THEN 2 ELSE 3 END,
-                   e.last_seen_at DESC`,
-        [tenantId, sourceSystem, externalId],
+                   CASE WHEN e.status = 'active' THEN
+                     CASE COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status)
+                       WHEN 'red_stop' THEN 0 WHEN 'protect' THEN 1 WHEN 'amber_warning' THEN 2 ELSE 3 END
+                   ELSE 0 END,
+                   coalesce(e.cleared_at, e.last_seen_at) DESC`,
+        [tenantId, sourceSystem, externalId, period?.from ?? null, period?.to ?? null],
       );
 
       const active: EquipmentFaultItem[] = [];
@@ -223,9 +274,13 @@ export class DtcEpisodeService {
           occurrences: Number(r.occurrences ?? 1),
         };
         if (r.status === 'active') active.push(item);
-        else if (history.length < 20) history.push(item);
+        else history.push(item);
       }
-      return { reportsFaults: true, active, history };
+      if (!period) return { reportsFaults: true, active, history: history.slice(0, DEFAULT_HISTORY_ITEMS) };
+      return {
+        reportsFaults: true, active, history: history.slice(0, MAX_HISTORY_ITEMS),
+        ...windowed, historyTruncated: history.length > MAX_HISTORY_ITEMS,
+      };
     });
   }
 

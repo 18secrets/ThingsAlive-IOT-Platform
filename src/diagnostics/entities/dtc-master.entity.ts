@@ -1,7 +1,8 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Severity } from '../../common/severity';
 
-export type DtcProtocol = 'j1939' | 'obd2';
+/** `pcode` is the pump logger's own P-codes (P101, P401 …), never OBD-II's (P0101). */
+export type DtcProtocol = 'j1939' | 'obd2' | 'pcode';
 export type DtcLamp = 'red_stop' | 'amber_warning' | 'protect' | 'mil' | 'none';
 
 @Entity('dtc_master_catalog')

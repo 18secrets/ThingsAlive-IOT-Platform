@@ -6,6 +6,7 @@ import { runTenantSpanning } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import { RUNNING_SIGNAL } from '../shift/services/running-status';
 import { AlertService } from '../alert/services/alert.service';
+import { recordMotorFaults } from './motor-fault-codes';
 
 /** Its own lock, not the shift runner's: the two may run side by side. */
 export const MOTOR_TELEMETRY_LOCK_KEY = 7_315_009;
@@ -58,6 +59,8 @@ export interface PassSummary {
   uploads: number;
   /** Alerts the live pass raised (threshold rules judged as readings landed). */
   alerts?: number;
+  /** Fault-code (P-code) episodes opened and cleared from these readings. */
+  faults?: { opened: number; cleared: number };
 }
 
 interface Owner { tenant_id: string; equipmentExternalId: string | null }
@@ -100,7 +103,7 @@ export class MotorIngestService {
    * it marks, and a reading it has placed is not placed again.
    */
   async processPending(now = new Date(), maxReadings = MAX_READINGS_PER_PASS): Promise<PassSummary> {
-    const touched = new Map<string, { tenantId: string; deviceId: string; externalId: string }>();
+    const touched = new Map<string, { tenantId: string; deviceId: string; externalId: string; from: Date; to: Date }>();
     const summary = await runTenantSpanning(this.ds, 'motor telemetry: readings the receiver stored', async (m) => {
       // The reading's wall-clock time. The device's timestamp is its own clock (seconds,
       // continuous within one boot); the receiver keeps no device clock at send time. So,
@@ -161,7 +164,11 @@ export class MotorIngestService {
         }
         await this.writeMinutes(m, deviceId, readingAts, now, owner);
         if (owner.equipmentExternalId) {
-          touched.set(deviceId, { tenantId: owner.tenant_id, deviceId, externalId: owner.equipmentExternalId });
+          const times = readingAts.map((t) => t.getTime());
+          touched.set(deviceId, {
+            tenantId: owner.tenant_id, deviceId, externalId: owner.equipmentExternalId,
+            from: new Date(Math.min(...times)), to: new Date(Math.max(...times)),
+          });
         }
       }
 
@@ -173,7 +180,30 @@ export class MotorIngestService {
     });
     // After the commit, so the minutes just written are what the rules read.
     const alerts = await this.liveAlerts([...touched.values()], now);
-    return alerts ? { ...summary, alerts } : summary;
+    const faults = await this.faultCodes([...touched.values()]);
+    return { ...summary, ...(alerts ? { alerts } : {}), ...(faults.opened || faults.cleared ? { faults } : {}) };
+  }
+
+  /**
+   * The pump's fault codes from the readings just placed (motor-fault-codes.ts). Never
+   * fatal, like the live alerts: the readings and their telemetry are stored either way.
+   * A pass that fails here leaves that stretch unjudged — the next pass judges only its
+   * own readings — and says so in the log; the minute signals and the threshold alerts
+   * still cover the same conditions.
+   */
+  private async faultCodes(machines: { tenantId: string; deviceId: string; externalId: string; from: Date; to: Date }[]) {
+    const total = { opened: 0, cleared: 0 };
+    for (const machine of machines) {
+      try {
+        const r = await recordMotorFaults(this.ds, machine);
+        total.opened += r.opened;
+        total.cleared += r.cleared;
+        if (r.opened || r.cleared) this.logger.log(`Fault codes on ${machine.externalId}: ${r.opened} opened, ${r.cleared} cleared.`);
+      } catch (error) {
+        this.logger.warn(`Fault codes not judged for ${machine.externalId} this pass: ${(error as Error).message}`);
+      }
+    }
+    return total;
   }
 
   /**
