@@ -18,7 +18,6 @@ const ROOT = path.join(__dirname, '..', 'frontend', 'src');
 
 /** Tables that are not a list page's list, and why. Paths from frontend/src. */
 const NOT_A_LIST = {
-  'components/equipment/LivePanel.tsx': 'one machine\'s live readings inside its page, not a list of records',
   'components/production/FleetFuelPanel.tsx': 'a shift-by-shift summary panel, not a list of records',
   'pages/FuelForecastAccuracyPage.tsx': 'a report table; the owner decided it needs no card view (13 Nov 2026)',
   'components/admin/SensorDetailModal.tsx': 'a table inside one sensor\'s detail modal',

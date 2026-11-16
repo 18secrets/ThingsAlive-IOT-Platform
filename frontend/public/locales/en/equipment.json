@@ -768,6 +768,19 @@
       "amber_warning": "Amber warning",
       "mil": "Check engine",
       "none": "No lamp"
-    }
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "Warning",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "showCleared_one": "Show {{count}} cleared",
+    "showCleared_other": "Show {{count}} cleared",
+    "last7Days": "Last 7 days",
+    "clearedPeriod": "Cleared between",
+    "noneCleared": "No codes cleared in this period.",
+    "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest."
   }
 }

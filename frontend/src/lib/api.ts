@@ -2513,8 +2513,9 @@ export function apiGetMachineLive(sourceSystem: string, externalId: string): Pro
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/live`);
 }
 
-/** A machine's fault codes (`GET /equipment/:ss/:id/faults`), from the device's DTCs in 1.0.
- *  `reportsFaults: false` = the device never sent a code field: no panel at all. */
+/** A machine's fault codes (`GET /equipment/:ss/:id/faults`): the device's DTCs from 1.0,
+ *  or a pump logger's P-codes. `reportsFaults: false` = the device reports no codes at
+ *  all: no panel. Every active code; cleared ones in the period asked for. */
 export interface FaultCode {
   id: string;
   code: string;
@@ -2531,9 +2532,19 @@ export interface FaultCode {
   clearedAt?: string | null;
   occurrences: number;
 }
-export interface EquipmentFaults { reportsFaults: boolean; active: FaultCode[]; history: FaultCode[] }
-export function apiGetEquipmentFaults(sourceSystem: string, externalId: string): Promise<EquipmentFaults> {
-  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/faults`);
+export interface EquipmentFaults {
+  reportsFaults: boolean;
+  active: FaultCode[];
+  history: FaultCode[];
+  /** With a period: the period `history` covers, and whether it held more than one answer carries. */
+  historyWindow?: { from: string; to: string };
+  historyTruncated?: boolean;
+}
+export function apiGetEquipmentFaults(
+  sourceSystem: string, externalId: string, period?: { from: Date; to: Date },
+): Promise<EquipmentFaults> {
+  const qs = period ? `?from=${encodeURIComponent(period.from.toISOString())}&to=${encodeURIComponent(period.to.toISOString())}` : '';
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/faults${qs}`);
 }
 
 /** The composed dashboard for one site (`GET /sites/:plantId/page`) — every machine

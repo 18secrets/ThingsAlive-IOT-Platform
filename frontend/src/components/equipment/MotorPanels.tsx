@@ -116,23 +116,42 @@ const EVENT_ICON: Record<MachineEventKind, React.FC<{ className?: string }>> = {
   start: Power, trip_overload: AlertTriangle, trip_overtemp: AlertTriangle, trip_supply: Zap, voltage_low: Zap, voltage_high: Zap,
 };
 
-export const MachineEventsPanel: React.FC<{ sourceSystem: string; externalId: string }> = ({ sourceSystem, externalId }) => {
+export const MachineEventsPanel: React.FC<{
+  sourceSystem: string; externalId: string;
+  /** Changes when the page refreshes while the device is sending: ask again, quietly. */
+  refreshKey?: number;
+}> = ({ sourceSystem, externalId, refreshKey }) => {
   const { t } = useTranslation('equipment');
   const [data, setData] = useState<MachineEvents | null>(null);
   const [failed, setFailed] = useState(false);
   const [range, setRange] = useState<[Date, Date] | null>(null);
   const [kind, setKind] = useState<'all' | 'trips' | 'starts' | 'voltage'>('all');
 
+  const span = useMemo(() => (range ? {
+    from: new Date(range[0].getFullYear(), range[0].getMonth(), range[0].getDate()),
+    to: new Date(range[1].getFullYear(), range[1].getMonth(), range[1].getDate() + 1),
+  } : undefined), [range]);
+
   useEffect(() => {
     let live = true;
     setData(null); setFailed(false);
-    const window = range ? { from: new Date(range[0].getFullYear(), range[0].getMonth(), range[0].getDate()),
-      to: new Date(range[1].getFullYear(), range[1].getMonth(), range[1].getDate() + 1) } : undefined;
-    apiGetMachineEvents(sourceSystem, externalId, window)
+    apiGetMachineEvents(sourceSystem, externalId, span)
       .then((d) => { if (live) setData(d); })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
-  }, [sourceSystem, externalId, range]);
+  }, [sourceSystem, externalId, span]);
+
+  // A refresh keeps the list on screen while it asks, and keeps it if the ask fails.
+  useEffect(() => {
+    if (!refreshKey) return;
+    let live = true;
+    apiGetMachineEvents(sourceSystem, externalId, span)
+      .then((d) => { if (live) setData(d); })
+      .catch(() => {});
+    return () => { live = false; };
+    // Only a new refreshKey asks again; the range and machine have their own effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   // A machine whose logger writes none of these signals is not a motor: no panel at all.
   if (data && ['starts', 'trips', 'voltage'].every((k) => data.unavailable.some((u) => u.kind === k && u.reason === 'unbound'))) return null;
@@ -159,7 +178,7 @@ export const MachineEventsPanel: React.FC<{ sourceSystem: string; externalId: st
             ))}
           </div>
           <DateRangePicker size="sm" format="yyyy-MM-dd" value={range} onChange={(v) => setRange((v as [Date, Date] | null) ?? null)}
-            shouldDisableDate={(d) => d.getTime() > Date.now()} placeholder={t('events.lastDay')} cleanable className="w-full sm:w-auto! sm:min-w-[210px]" />
+            shouldDisableDate={(d) => d.getTime() > Date.now()} placeholder={t('events.lastDay')} cleanable showOneCalendar placement="autoVerticalEnd" className="w-full sm:w-auto! sm:min-w-[210px]" />
         </div>
       </div>
       {data?.unavailable.map((u) => (

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
@@ -523,6 +523,10 @@ function DigitalTwin({ classSlug, widgets, live }: { classSlug: string; widgets:
   );
 }
 
+/** How often the KPIs below Live are asked again. They are 24 h and shift figures, and
+ *  the call evaluates every one of them, so a minute is as current as they get. */
+const PAGE_REFRESH_MS = 60_000;
+
 /** Widget kinds Machine summary already shows for this machine. */
 const DUPLICATED_ON_SUMMARY = ['alert_list', 'work_order_list'];
 
@@ -537,6 +541,8 @@ export const EquipmentPagePage: React.FC = () => {
   const [exploring, setExploring] = useState<string | null | undefined>(undefined);
   const [proposing, setProposing] = useState(false);
   const [live, setLive] = useState<MachineLive | null>(null);
+  // Bumped on each quiet refresh, so the panels that fetch their own data ask again too.
+  const [refreshKey, setRefreshKey] = useState(0);
   // drafts: for the Propose a KPI button and modal title, which live with the drafts page.
   const { t } = useTranslation(['equipment', 'drafts']);
 
@@ -558,6 +564,35 @@ export const EquipmentPagePage: React.FC = () => {
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
+  // Everything below Live is asked again quietly while the device is sending (16 Nov):
+  // no skeleton, and a failed refresh keeps the figures already shown. Only then, because
+  // a device that is offline or not fitted sends nothing that could change them; Live
+  // itself keeps asking regardless, which is how the page sees the device come back.
+  // Delayed counts as sending: a logger posts its buffer every five minutes, so its
+  // newest reading crosses the five-minute "online" line between posts all the time.
+  const connection = live?.connection;
+  const sending = connection === 'online' || connection === 'delayed';
+  // Seen offline (or with no device) since the page opened: coming back is news, and is
+  // caught up at once rather than a minute later. Not set by the first Live answer, which
+  // arrives just after the page itself and would only fetch it twice.
+  const wasQuiet = useRef(false);
+  const refreshPage = useCallback(() => {
+    if (!sourceSystem || !externalId || document.visibilityState === 'hidden') return;
+    apiGetMachinePage(sourceSystem, externalId)
+      .then((result) => { setPage(result); setRefreshKey((k) => k + 1); })
+      .catch(() => {});
+  }, [sourceSystem, externalId]);
+  useEffect(() => {
+    if (!sending) {
+      if (connection) wasQuiet.current = true;
+      return;
+    }
+    if (wasQuiet.current) { wasQuiet.current = false; refreshPage(); }
+    const timer = window.setInterval(refreshPage, PAGE_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshPage);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshPage); };
+  }, [sending, connection, refreshPage]);
+
   if (loading) return <Skeleton />;
   if (error) {
     return (
@@ -569,6 +604,9 @@ export const EquipmentPagePage: React.FC = () => {
   if (!page) return null;
 
   const gauges = page.widgets.filter((w) => GAUGE_WIDGET_TYPES.includes(w.widgetType));
+  // Each KPI's card title, so the explorer's picker names it the way its card does.
+  const kpiTitles: Record<string, string> = Object.fromEntries(
+    page.widgets.filter((w) => w.boundTo && w.title).map((w) => [w.boundTo as string, w.title as string]));
   // Open alerts and work orders are on Machine summary; shown here too, one machine had
   // the same lists on two pages, neither of them live.
   const lists = page.widgets.filter((w) => !gauges.includes(w) && !DUPLICATED_ON_SUMMARY.includes(w.widgetType));
@@ -626,7 +664,7 @@ export const EquipmentPagePage: React.FC = () => {
           Both stay out of the way on a machine that has neither. */}
       <RatedAlertsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId}
         classSlug={page.equipment.classSlug} plantId={page.equipment.plantId} />
-      <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+      <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} refreshKey={refreshKey} />
 
       <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
@@ -645,6 +683,7 @@ export const EquipmentPagePage: React.FC = () => {
             sourceSystem={page.equipment.sourceSystem}
             externalId={page.equipment.externalId}
             initialFormulaKey={exploring ?? undefined}
+            titles={kpiTitles}
           />
         )}
       </Modal>
