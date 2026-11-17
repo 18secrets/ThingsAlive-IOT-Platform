@@ -58,7 +58,8 @@ export class CopyOnGrantService {
    * **Never overwrites an existing copy.** If the client already has this class, the
    * copy is theirs and may have been edited; silently replacing it would be Things
    * Alive editing a client's settings through the side door. Re-granting a class the
-   * client already has is a no-op that says so.
+   * client already has leaves their copy alone and adds only the scenarios and alert
+   * rules published since, by slug.
    */
   async copyForTenant(
     tenantId: string,
@@ -104,14 +105,22 @@ export class CopyOnGrantService {
               + "that is QUPGRADE1's job. Nothing was changed.",
           );
         }
+        // Their copy is left alone, but scenarios and alert rules published for the class
+        // since they got it are added (Crompton POC: the dry-run and cycling rules came
+        // after the motors account held the class, and nothing else could deliver them).
+        // Add-only, by slug: a scenario or rule the account already has, edited or not,
+        // is never touched, which is the same promise the first copy makes.
+        const scenariosAdded = await this.copyScenarios(m, tenantId, template.slug, scenarios, copiedBy, now);
+        const rulesAdded = await this.copyAlertRules(m, tenantId, template.slug, alertTemplates, copiedBy, now);
         this.logger.log(
-          `Tenant ${tenantId} already has "${template.slug}" v${existing.templateVersion}; leaving their copy alone.`,
+          `Tenant ${tenantId} already has "${template.slug}" v${existing.templateVersion}; leaving their copy alone`
+            + (scenariosAdded || rulesAdded ? `, added ${scenariosAdded} new scenario(s) and ${rulesAdded} new alert rule(s).` : '.'),
         );
         return {
           classSlug: existing.slug,
           templateVersion: existing.templateVersion ?? template.version,
-          scenariosCopied: 0,
-          alertRulesCopied: 0,
+          scenariosCopied: scenariosAdded,
+          alertRulesCopied: rulesAdded,
           formulasCopied: 0,
           failureModesCopied: 0,
           recommendationsCopied: 0,
@@ -145,66 +154,11 @@ export class CopyOnGrantService {
         updatedBy: copiedBy,
       }));
 
-      const clientScenarios = m.getRepository(ClientScenario);
-      let copied = 0;
-      for (const s of scenarios) {
-        const already = await clientScenarios.findOne({ where: { tenantId, slug: s.slug } });
-        if (already) continue;
-        await clientScenarios.save(clientScenarios.create({
-          tenantId,
-          slug: s.slug,
-          clientEquipmentClassSlug: template.slug,
-          name: s.name,
-          description: s.description,
-          severity: s.severity,
-          tier: s.tier,
-          requiredSignals: s.requiredSignals,
-          minimumHistoryDays: s.minimumHistoryDays,
-          parameters: s.parameters,
-          enabled: true,
-          templateSlug: s.slug,
-          templateVersion: s.version,
-          templateChecksum: scenarioContentChecksum(s),
-          copiedAt: now,
-          status: 'active',
-          updatedBy: copiedBy,
-        }));
-        copied += 1;
-      }
-
+      const copied = await this.copyScenarios(m, tenantId, template.slug, scenarios, copiedBy, now);
       // Alert rules, the fourth kind of catalog content (task P1-128). They copy last
       // because a rule can name a scenario, and a rule pointing at a scenario that is
       // not there yet is a rule that looks configured and never fires.
-      const rules = m.getRepository(AlertRule);
-      let rulesCopied = 0;
-      for (const t of alertTemplates) {
-        const already = await rules.findOne({ where: { tenantId, slug: t.slug } });
-        if (already) continue;
-        await rules.save(rules.create({
-          tenantId,
-          slug: t.slug,
-          name: t.name,
-          description: t.description,
-          trigger: t.trigger,
-          params: t.params,
-          // Scoped to the class it came from, not to the account. A rule authored about
-          // generators watching the account would fire on the air compressors too.
-          appliesTo: 'equipment-class',
-          equipmentClassSlug: template.slug,
-          plantId: null,
-          sourceSystem: null,
-          externalId: null,
-          severity: t.severity,
-          enabled: t.enabledOnCopy,
-          templateSlug: t.slug,
-          templateVersion: t.version,
-          templateChecksum: alertRuleContentChecksum({ ...t, enabled: t.enabledOnCopy }),
-          copiedAt: now,
-          createdBy: copiedBy,
-          updatedBy: copiedBy,
-        }));
-        rulesCopied += 1;
-      }
+      const rulesCopied = await this.copyAlertRules(m, tenantId, template.slug, alertTemplates, copiedBy, now);
 
       // Formulas (task QGRANT0) — copied as data, the same way `compiled_plan`
       // already lived on the platform row: nothing here is a reference the
@@ -357,6 +311,76 @@ export class CopyOnGrantService {
       .andWhere('f.class_version = :classVersion', { classVersion })
       .andWhere('f.compiled_plan IS NOT NULL')
       .getMany();
+  }
+
+  /** The account's own scenarios for a class, from the published templates it lacks (by slug). */
+  private async copyScenarios(
+    m: EntityManager, tenantId: string, classSlug: string, scenarios: ScenarioDefinition[], copiedBy: string, now: Date,
+  ): Promise<number> {
+    const clientScenarios = m.getRepository(ClientScenario);
+    let copied = 0;
+    for (const s of scenarios) {
+      const already = await clientScenarios.findOne({ where: { tenantId, slug: s.slug } });
+      if (already) continue;
+      await clientScenarios.save(clientScenarios.create({
+        tenantId,
+        slug: s.slug,
+        clientEquipmentClassSlug: classSlug,
+        name: s.name,
+        description: s.description,
+        severity: s.severity,
+        tier: s.tier,
+        requiredSignals: s.requiredSignals,
+        minimumHistoryDays: s.minimumHistoryDays,
+        parameters: s.parameters,
+        enabled: true,
+        templateSlug: s.slug,
+        templateVersion: s.version,
+        templateChecksum: scenarioContentChecksum(s),
+        copiedAt: now,
+        status: 'active',
+        updatedBy: copiedBy,
+      }));
+      copied += 1;
+    }
+    return copied;
+  }
+
+  /** The account's own alert rules for a class, from the published templates it lacks (by slug). */
+  private async copyAlertRules(
+    m: EntityManager, tenantId: string, classSlug: string, alertTemplates: AlertRuleTemplate[], copiedBy: string, now: Date,
+  ): Promise<number> {
+    const rules = m.getRepository(AlertRule);
+    let rulesCopied = 0;
+    for (const t of alertTemplates) {
+      const already = await rules.findOne({ where: { tenantId, slug: t.slug } });
+      if (already) continue;
+      await rules.save(rules.create({
+        tenantId,
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        trigger: t.trigger,
+        params: t.params,
+        // Scoped to the class it came from, not to the account. A rule authored about
+        // generators watching the account would fire on the air compressors too.
+        appliesTo: 'equipment-class',
+        equipmentClassSlug: classSlug,
+        plantId: null,
+        sourceSystem: null,
+        externalId: null,
+        severity: t.severity,
+        enabled: t.enabledOnCopy,
+        templateSlug: t.slug,
+        templateVersion: t.version,
+        templateChecksum: alertRuleContentChecksum({ ...t, enabled: t.enabledOnCopy }),
+        copiedAt: now,
+        createdBy: copiedBy,
+        updatedBy: copiedBy,
+      }));
+      rulesCopied += 1;
+    }
+    return rulesCopied;
   }
 
   private async latestPublishedAlertTemplates(classSlug: string): Promise<AlertRuleTemplate[]> {

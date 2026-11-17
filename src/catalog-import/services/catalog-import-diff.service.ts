@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CatalogImportBatch } from '../entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../entities/catalog-import-row.entity';
 import { capabilitiesAfter, TEMPLATE_VERSION } from '../template-schema';
+import { RuleApplySummary, isRuleSheet, planRuleRows, summarizeRulePlan } from './rule-content';
 import {
   ClassDiffEntry, buildProposedClass, classesIdentical, computeClassDiffEntry, loadCurrentClass,
 } from './class-content';
@@ -39,9 +40,12 @@ export interface CatalogImportDiff {
   /** Set for a workbook on an older template (task QREC0a): which capabilities of the
    * current one it is not using. A note, not a refusal — v3 work in flight must load. */
   templateVersionNote: string | null;
+  /** What the rule sheets would write (TC_126), by the same plan apply follows; null without one. */
+  rules: RuleApplySummary | null;
 }
 
 const classSlugOf = (row: CatalogImportRow): string | undefined => {
+  if (isRuleSheet(row.sheet)) return undefined;
   const v = row.sheet === 'equipment_class' ? row.payload.slug : row.payload.class_slug;
   return typeof v === 'string' && v ? v : undefined;
 };
@@ -78,15 +82,24 @@ export class CatalogImportDiffService {
    * would leave that reference dangling.
    */
   async discard(batchId: string): Promise<void> {
-    const batches = this.ds.getRepository(CatalogImportBatch);
-    const batch = await batches.findOneOrFail({ where: { id: batchId } });
-    if (batch.status === 'applied') {
-      throw new BadRequestException(
-        `Batch ${batchId} has already been applied and cannot be discarded — its content is now the `
-          + 'catalog\'s own provenance record.',
-      );
-    }
-    await batches.remove(batch);
+    // Under the batch row lock, as every mutation of a batch is (CLAUDE.md): unlocked,
+    // a discard racing an apply could read "validated", wait out the apply, and then
+    // delete a batch that had just become the provenance record of what it wrote.
+    await this.ds.transaction(async (m) => {
+      const batches = m.getRepository(CatalogImportBatch);
+      const batch = await batches.createQueryBuilder('batch')
+        .setLock('pessimistic_write')
+        .where('batch.id = :batchId', { batchId })
+        .getOne();
+      if (!batch) throw new NotFoundException(`No import batch "${batchId}".`);
+      if (batch.status === 'applied') {
+        throw new BadRequestException(
+          `Batch ${batchId} has already been applied and cannot be discarded — its content is now the `
+            + 'catalog\'s own provenance record.',
+        );
+      }
+      await batches.remove(batch);
+    });
   }
 
   async buildDiff(batchId: string): Promise<CatalogImportDiff> {
@@ -154,10 +167,14 @@ export class CatalogImportDiffService {
         + 'every other row would still be written.'
       : 'Every row is valid; nothing would be skipped if this batch is applied.';
 
+    const ruleRows = validRows.filter((r) => isRuleSheet(r.sheet));
+    const rules = ruleRows.length ? summarizeRulePlan(await planRuleRows(this.ds.manager, ruleRows)) : null;
+
     return {
       batchId: batch.id,
       status: batch.status,
       classes,
+      rules,
       sensorCapabilities: {
         valid: validRows.filter((r) => r.sheet === 'sensor_capability').length,
         invalid: invalidRows.filter((r) => r.sheet === 'sensor_capability').length,

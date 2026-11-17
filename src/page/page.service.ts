@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ASSET_STORAGE, AssetStorage } from '../assets/asset-storage';
 import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual.entity';
 import { unplacedSignals } from '../catalog/visual/anchor-rules';
@@ -28,6 +28,8 @@ import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
+import { LegacyTelemetryReader } from '../legacy/legacy-telemetry.reader';
+import { MachineLive, readMachineLive } from './live-machine';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { forecastDeclarations } from '../forecast/forecast-inputs';
 import { ForecastReader } from '../forecast/forecast-reader';
@@ -38,6 +40,7 @@ import { WorkOrderService } from '../work/services/work-order.service';
 import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
 import { DEMO_WORKFORCE, SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
 import { Draft } from '../site-twin/compose';
+import { eventWindow, MachineEvents, readMachineEvents } from './machine-events';
 import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
@@ -82,6 +85,15 @@ export interface SitePage {
  */
 export type TwinMachineStatus = 'alert' | 'live' | 'no_data' | 'blocked' | 'not_configured';
 
+export interface TwinMachineKpis {
+  engineLoad?: number;
+  fuelLevel?: number;
+  fuelRate?: number;
+  coolantTemp?: number;
+  oilPressure?: number;
+  hydraulicTemp?: number;
+}
+
 export interface SiteTwinView {
   site: { plantId: string; code: string; name: string; address: string | null };
   /** False until somebody saves a layout: the extent is the default and nobody is placed. */
@@ -103,6 +115,7 @@ export interface SiteTwinView {
     engagedAt: string | null;
     /** A breakdown has started and not ended (`breakdown_event`). */
     breakdown: boolean;
+    kpis?: TwinMachineKpis | null;
   }[];
   /** Saved structures not drawn because no machine assigned here backs them any more. */
   hiddenZones: string[];
@@ -160,9 +173,41 @@ export class PageService {
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
     private readonly forecasts: ForecastReader,
     private readonly twins: SiteTwinService,
+    // Optional: the Live view asks 1.0 directly when a legacy connection exists, and
+    // answers from 2.0's own readings when it does not.
+    @Optional() private readonly legacyTelemetry?: LegacyTelemetryReader,
   ) {}
 
+  /** One machine as it is now: see live-machine.ts. */
+  async machineLive(scope: RequestScope, ref: EquipmentRef, now: Date = new Date()): Promise<MachineLive> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineLive(m, this.legacyTelemetry, scope.tenantId, ref, now);
+    });
+  }
+
   // ================================================================ machine page
+
+  /** A pump's starts, trips and voltage events over a window (Crompton U6): see machine-events.ts. */
+  async machineEvents(scope: RequestScope, ref: EquipmentRef, from: Date | undefined, to: Date | undefined, now: Date = new Date()): Promise<MachineEvents> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    const window = eventWindow(from, to, now);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineEvents(m, this.reader, scope.tenantId, profile, window);
+    });
+  }
 
   async machinePage(scope: RequestScope, ref: EquipmentRef, at: Date = new Date()): Promise<MachinePage> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
@@ -650,11 +695,11 @@ export class PageService {
     const { machines } = layout;
     const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
     const slugs = [...new Set(machines.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))];
-    const [worst, alerts, models, activity] = await Promise.all([
+    const [worst, alerts, models, telemetry] = await Promise.all([
       this.machineReadiness(scope, machines, at),
       refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
       Promise.all(slugs.map(async (slug) => [slug, await this.twinClassModel(scope, slug)] as const)),
-      this.machineActivity(scope, refs, at),
+      this.machineActivityAndKpis(scope, refs, at),
     ]);
 
     const rows = machines.map((e, i) => {
@@ -666,9 +711,10 @@ export class PageService {
         sourceSystem: e.sourceSystem, externalId: e.externalId, name: e.name, classSlug: e.equipmentClassSlug,
         placement, readiness, openAlerts,
         status: twinStatus(readiness, openAlerts),
-        activity: activity.get(k) ?? 'unknown',
+        activity: telemetry.activity.get(k) ?? 'unknown',
         engagedAt: placement ? zoneAt(layout.zones, placement.x, placement.z)?.key ?? null : null,
         breakdown: layout.brokenDown.has(k),
+        kpis: telemetry.kpis.get(k) ?? null,
       };
     });
     const summary = { total: rows.length, placed: 0, alert: 0, live: 0, no_data: 0, blocked: 0, not_configured: 0 };
@@ -737,42 +783,87 @@ export class PageService {
   }
 
   /**
-   * Each machine's duty state now, in one query for the whole site: the newest reading
-   * of each duty signal through the machine's own primary bindings, no older than
-   * `MAX_CARRY_SECONDS` — the longest a sample may speak for in the duty cycle, so the
-   * twin and the utilization report cannot disagree about whether a machine was on.
-   * Nothing recent is `unknown`, never `off`.
+   * Each machine's duty state and live telemetry KPIs, in one query for the whole site.
+   * Duty state uses the carry window (MAX_CARRY_SECONDS) so the twin and utilization
+   * cannot disagree about whether a machine was on. Key telemetry roles (fuel level,
+   * fuel burn rate, engine load, temperatures, oil pressure) provide live KPI readouts.
    */
-  private async machineActivity(scope: RequestScope, refs: EquipmentRef[], at: Date): Promise<Map<string, DutyState>> {
-    const result = new Map<string, DutyState>();
-    if (!refs.length) return result;
-    const rows: { source_system: string; external_id: string; role: string; value: number }[] = await withTenantSession(this.ds, scope, (m) => m.query(
-      `SELECT DISTINCT ON (b.source_system, b.external_id, b.measurement_role)
-              b.source_system, b.external_id, b.measurement_role AS role, r.value
-         FROM signal_binding_version b
-         JOIN unnest($2::text[], $3::text[]) AS e(source_system, external_id)
-           ON b.source_system = e.source_system AND b.external_id = e.external_id
-         JOIN telemetry_reading r
-           ON r.tenant_id = b.tenant_id AND r.imei = b.imei AND r.signal = b.signal_key
-          AND r.source_timestamp >= b.valid_from AND (b.valid_to IS NULL OR r.source_timestamp < b.valid_to)
-          AND r.source_timestamp >= $5 AND r.source_timestamp <= $6
-        WHERE b.tenant_id = $1 AND b.measurement_role = ANY($4::text[]) AND b.is_primary AND b.status = 'active'
-          AND b.imei IS NOT NULL AND b.component_id = ''
-        ORDER BY b.source_system, b.external_id, b.measurement_role, r.source_timestamp DESC`,
-      [scope.tenantId, refs.map((r) => r.sourceSystem), refs.map((r) => r.externalId), [...DUTY_SIGNALS],
-        new Date(at.getTime() - MAX_CARRY_SECONDS * 1000), at],
-    ));
-    const snapshots = new Map<string, Map<string, number>>();
+  private async machineActivityAndKpis(
+    scope: RequestScope, refs: EquipmentRef[], at: Date,
+  ): Promise<{ activity: Map<string, DutyState>; kpis: Map<string, TwinMachineKpis> }> {
+    const activityMap = new Map<string, DutyState>();
+    const kpiMap = new Map<string, TwinMachineKpis>();
+    if (!refs.length) return { activity: activityMap, kpis: kpiMap };
+
+    const twinTelemetryRoles = [
+      ...DUTY_SIGNALS,
+      'fuel_level',
+      'fuel_consumption',
+      'engine_coolant_temperature',
+      'engine_oil_pressure',
+      'hydraulic_oil_temperature',
+    ];
+    const carryWindowStart = new Date(at.getTime() - MAX_CARRY_SECONDS * 1000);
+    const rows: { source_system: string; external_id: string; role: string; value: number; source_timestamp: Date }[] =
+      await withTenantSession(this.ds, scope, (m) => m.query(
+        `SELECT DISTINCT ON (b.source_system, b.external_id, b.measurement_role)
+                b.source_system, b.external_id, b.measurement_role AS role, r.value, r.source_timestamp
+           FROM signal_binding_version b
+           JOIN unnest($2::text[], $3::text[]) AS e(source_system, external_id)
+             ON b.source_system = e.source_system AND b.external_id = e.external_id
+           JOIN telemetry_reading r
+             ON r.tenant_id = b.tenant_id AND r.imei = b.imei AND r.signal = b.signal_key
+            AND r.source_timestamp >= b.valid_from AND (b.valid_to IS NULL OR r.source_timestamp < b.valid_to)
+            AND r.source_timestamp <= $4
+          WHERE b.tenant_id = $1 AND b.measurement_role = ANY($5::text[]) AND b.is_primary AND b.status = 'active'
+            AND b.imei IS NOT NULL AND b.component_id = ''
+          ORDER BY b.source_system, b.external_id, b.measurement_role, r.source_timestamp DESC`,
+        [scope.tenantId, refs.map((r) => r.sourceSystem), refs.map((r) => r.externalId), at, twinTelemetryRoles],
+      ));
+
+    const dutySnapshots = new Map<string, Map<string, number>>();
     for (const r of rows) {
       const k = machineKey(r.source_system, r.external_id);
-      if (!snapshots.has(k)) snapshots.set(k, new Map());
-      snapshots.get(k)!.set(r.role, Number(r.value));
+      const val = Number(r.value);
+      if (new Date(r.source_timestamp) >= carryWindowStart) {
+        if (!dutySnapshots.has(k)) dutySnapshots.set(k, new Map());
+        dutySnapshots.get(k)!.set(r.role, val);
+      }
+
+      let kpi = kpiMap.get(k);
+      if (!kpi) {
+        kpi = {};
+        kpiMap.set(k, kpi);
+      }
+      const rounded = Math.round(val * 10) / 10;
+      switch (r.role) {
+        case 'engine_load':
+          kpi.engineLoad = rounded;
+          break;
+        case 'fuel_level':
+          kpi.fuelLevel = rounded;
+          break;
+        case 'fuel_consumption':
+          kpi.fuelRate = rounded;
+          break;
+        case 'engine_coolant_temperature':
+          kpi.coolantTemp = rounded;
+          break;
+        case 'engine_oil_pressure':
+          kpi.oilPressure = rounded;
+          break;
+        case 'hydraulic_oil_temperature':
+          kpi.hydraulicTemp = rounded;
+          break;
+      }
     }
+
     for (const ref of refs) {
       const k = machineKey(ref.sourceSystem, ref.externalId);
-      result.set(k, classify(snapshots.get(k) ?? new Map(), DEFAULT_LOAD_THRESHOLD));
+      activityMap.set(k, classify(dutySnapshots.get(k) ?? new Map(), DEFAULT_LOAD_THRESHOLD));
     }
-    return result;
+
+    return { activity: activityMap, kpis: kpiMap };
   }
 
   /** The class's confirmed model, or null — the machine-page twin's rule (QTWIN1): no

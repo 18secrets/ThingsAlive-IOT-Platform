@@ -139,6 +139,11 @@ export class WorkOrderService {
         throw new BadRequestException(`This job is ${order.status}. Reopen it before reassigning.`);
       }
       if (userId) await this.assertAssignable(scope, userId, order);
+      // A job under way has somebody doing it (TC_191): it can be handed to someone else,
+      // not to nobody. `ck_work_order_in_progress_assigned` holds the same line.
+      if (!userId && order.status === 'in-progress') {
+        throw new BadRequestException(`${order.reference} is in progress. Reassign it to someone rather than unassigning it.`);
+      }
 
       const from = order.assignedToUserId;
       order.assignedToUserId = userId;
@@ -157,6 +162,11 @@ export class WorkOrderService {
     return withTenantSession(this.ds, scope, async (m) => {
       const order = await this.load(m, scope, id);
       this.assertMayAct(scope, order, action);
+      // Started by somebody, never by nobody (testing sheet TC_191): an unassigned job
+      // in progress is work nobody is accountable for.
+      if (action === 'start' && !order.assignedToUserId) {
+        throw new BadRequestException(`Assign ${order.reference} to someone before starting it.`);
+      }
 
       const { to } = workOrderTransition(action, order.status, note);
       const from = order.status;
@@ -257,6 +267,11 @@ export class WorkOrderService {
     this.assertCanAssign(scope, 'edit a job');
     return withTenantSession(this.ds, scope, async (m) => {
       const order = await this.load(m, scope, id);
+      // What the job is may change until somebody starts it (TC_192); after that the
+      // fitter is working to the version they were given, and a finished job is a record.
+      if (order.status !== 'created') {
+        throw new BadRequestException(`${order.reference} is ${order.status}; a job can be edited only before it is started.`);
+      }
       if (input.title !== undefined) {
         assertTitle(input.title);
         order.title = input.title.trim();

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertEvent, apiListAlerts } from '../lib/api';
+import { AlertEvent, apiGetMe, apiListAlerts } from '../lib/api';
+import { useAuth } from '../lib/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelector } from './common/LanguageSelector';
 import {
@@ -10,11 +11,10 @@ import {
   LogOut,
   ArrowLeft,
   Menu,
-  User,
   Sparkles
 } from 'lucide-react';
 import { TextSizeSelector } from './common/TextSizeSelector';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 interface HeaderProps {
   title: string;
@@ -28,12 +28,14 @@ interface HeaderProps {
   onOpenNav?: () => void;
 }
 
-const VIEWER_ZONE = (() => {
-  const name = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const short = new Intl.DateTimeFormat('en', { timeZoneName: 'short' }).formatToParts(new Date())
+/** The zone dates are written in: the account's own when it has one (MIN-12), else the
+ * browser's. Read per render, since the account's is only known after sign-in. */
+function viewerZone(): { name: string; short: string } {
+  const name = appTimeZone() ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const short = new Intl.DateTimeFormat('en', { timeZone: name, timeZoneName: 'short' }).formatToParts(new Date())
     .find((p) => p.type === 'timeZoneName')?.value ?? name;
   return { name, short };
-})();
+}
 
 export const Header: React.FC<HeaderProps> = ({
   title,
@@ -46,6 +48,19 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // The person's initial, as on Settings: their own name from /me, else the same
+  // fallbacks Settings uses. One call per sign-in, not per page — the header stays mounted.
+  const { authUser } = useAuth();
+  const [fullName, setFullName] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    apiGetMe().then((m) => { if (live) setFullName(m.fullName ?? null); }).catch(() => {});
+    return () => { live = false; };
+  }, [authUser?.username]);
+  const displayName = fullName
+    || (authUser?.role === 'master-admin' ? t('settings.masterAdmin') : (authUser?.clientName || authUser?.username || ''));
+  const initial = displayName.trim().charAt(0).toUpperCase() || '?';
+  const zone = viewerZone();
   const [showNotifications, setShowNotifications] = useState(false);
   // The account's own open alerts, newest first. This was three fixed placeholders
   // ("Dust Collector", "Device #131", "Excavator 14") that matched no fleet (test report
@@ -106,8 +121,8 @@ export const Header: React.FC<HeaderProps> = ({
             <h1 className="text-base sm:text-xl font-semibold text-slate-800 dark:text-slate-100 tracking-tight truncate">
               {title}
             </h1>
-            <p className="md:hidden text-[0.6875rem] leading-tight text-slate-500 dark:text-slate-400 truncate" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
-              {VIEWER_ZONE.short}
+            <p className="md:hidden text-[0.6875rem] leading-tight text-slate-500 dark:text-slate-400 truncate" title={t('header.timeZoneTitle', { zone: zone.name })}>
+              {zone.short}
             </p>
           </div>
         </div>
@@ -117,8 +132,8 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
         {/* Every time on screen is formatted in the viewer's own zone, and nothing said
             which (test report MIN-12) — the fleet is in India, a viewer may not be. */}
-        <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: VIEWER_ZONE.name })}>
-          {t('header.timeZone', { zone: VIEWER_ZONE.short })}
+        <span className="hidden md:inline text-xs text-slate-400 whitespace-nowrap" title={t('header.timeZoneTitle', { zone: zone.name })}>
+          {t('header.timeZone', { zone: zone.short })}
         </span>
         {/* Notification Bell */}
         <div className="relative">
@@ -152,7 +167,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer bg-sky-50/50 dark:bg-sky-950/20"
                   >
                     <div className="font-medium text-slate-800 dark:text-slate-200">{item.summary}</div>
-                    <div className="text-[0.6875rem] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString(appLocale())}</div>
+                    <div className="text-[0.6875rem] text-slate-400 mt-1">{item.externalId} · {item.ruleName} · {new Date(item.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</div>
                   </button>
                 ))}
               </div>
@@ -202,10 +217,11 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             id="profile-btn"
             onClick={() => navigate('/settings')}
-            className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:border-sky-400 transition-colors cursor-pointer"
-            title={t('header.profile')}
+            className="w-7 h-7 rounded-full bg-sky-600 text-white text-xs font-semibold flex items-center justify-center ring-2 ring-transparent hover:ring-sky-300 dark:hover:ring-sky-700 transition-colors cursor-pointer"
+            title={displayName ? `${displayName} · ${t('header.profile')}` : t('header.profile')}
+            aria-label={t('header.profile')}
           >
-            <User className="w-3.5 h-3.5" />
+            {initial}
           </button>
           <button
             id="logout-btn"

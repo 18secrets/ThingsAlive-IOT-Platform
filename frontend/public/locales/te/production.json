@@ -107,7 +107,9 @@
     "nominalFromLibrary": "నామమాత్రం {{rate}} {{unit}}, లైబ్రరీ తరగతి {{className}} (వెర్షన్ {{version}}) నుండి",
     "nominalCitation": "మూలం: {{citation}}",
     "nominalNoCitation": "లైబ్రరీలో ఈ విలువకు డేటాషీట్ ఏదీ నమోదు కాలేదు.",
-    "nominalFromParameter": "నామమాత్రం {{rate}} {{unit}}, ఖర్చు నిర్వహణలో {{source}} సెట్ చేసింది"
+    "nominalFromParameter": "నామమాత్రం {{rate}} {{unit}}, ఖర్చు నిర్వహణలో {{source}} సెట్ చేసింది",
+    "formulaRange": "లభ్యత × పనితీరు × నాణ్యత · ఎంచుకున్న తేదీలు, పూర్తి రోజులు",
+    "pickDates": "లేదా తేదీలను ఎంచుకోండి (92 రోజుల వరకు)"
   },
   "detail": {
     "availabilityNotAvailable": "లభ్యత సమాచారం అందుబాటులో లేదు",

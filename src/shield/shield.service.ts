@@ -54,6 +54,13 @@ export interface CategoryStatus {
   status: ShieldStatus;
   /** The record the status was read from; null exactly when `not_recorded`. */
   record: EvidenceView | null;
+  /**
+   * Whole days past the record's due date; absent when it is not past due (test report
+   * MIN-4). A failed check past its date reads "Action required", the more urgent fact,
+   * and the tester still needed to see it was overdue: so it is said beside the status,
+   * not by changing it.
+   */
+  overdueDays?: number;
 }
 
 export interface MachineShield {
@@ -239,7 +246,9 @@ export function categoryStatus(records: readonly ShieldEvidenceRecord[], dueSoon
   if (latest.result !== 'passed') status = 'action_required';
   else if (latest.dueAt && latest.dueAt.getTime() < now.getTime()) status = 'overdue';
   else if (latest.dueAt && latest.dueAt.getTime() <= now.getTime() + dueSoonDays * 86_400_000) status = 'due_soon';
-  return { status, record: view(latest, null) };
+  const pastDue = latest.dueAt && latest.dueAt.getTime() < now.getTime()
+    ? Math.max(1, Math.floor((now.getTime() - latest.dueAt.getTime()) / 86_400_000)) : undefined;
+  return { status, record: view(latest, null), ...(pastDue !== undefined ? { overdueDays: pastDue } : {}) };
 }
 
 /** The latest `shield_due_soon_days` row per (scope, scope_ref) at `now`, for one tenant. */

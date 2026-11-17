@@ -9,7 +9,10 @@
     "signalAliases": "Signal Aliases",
     "signalStates": "Signal States",
     "telemetryArchive": "Telemetry Archive",
-    "fuelForecastAccuracy": "Fuel forecast accuracy"
+    "fuelForecastAccuracy": "Fuel forecast accuracy",
+    "models": "Models",
+    "serviceRoster": "Service roster",
+    "faultCodes": "Fault Codes"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",
@@ -99,6 +102,135 @@
       "levels": "“Count misses per” decides what a miss is. Shift: every machine-shift’s gap counts. Day: each machine’s day total against its forecast day total, so an over-forecast morning can offset an under-forecast night; the fleet tiles use the whole fleet’s day totals. Whole range: one total against the other.",
       "fleet": "The tiles add up only the machines that burned fuel in the dates picked, their forecast litres included.",
       "didntRun": "“Didn’t run” means the machine burned 0 litres across the dates picked."
+    }
+  },
+  "faultCodes": {
+    "section": {
+      "vehicle-j1939": "Vehicle · J1939",
+      "vehicle-obd2": "Vehicle · OBD-II",
+      "motor-pump": "Motor · Pump",
+      "access": "Account access"
+    },
+    "loadFailed": "Fault codes could not be loaded.",
+    "search": "Search code or fault…",
+    "showRetired": "Show retired",
+    "add": "Add code",
+    "vehicleHint": "These codes come from 1.0 and are copied here every day. They are edited in 1.0, so here they can be read but not changed.",
+    "empty": "No codes match.",
+    "retired": "Retired",
+    "edit": "Edit",
+    "view": "View",
+    "col": {
+      "code": "Code",
+      "fault": "Fault",
+      "severity": "Severity",
+      "source": "Source"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "Warning",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "source": {
+      "v1": "From 1.0",
+      "v2": "2.0"
+    },
+    "modalNew": "New fault code",
+    "tab": {
+      "history": "History"
+    },
+    "field": {
+      "code": "Code",
+      "spn": "SPN",
+      "fmi": "FMI",
+      "description": "Fault",
+      "symptom": "Symptom",
+      "causes": "Likely causes",
+      "remedies": "What to do",
+      "detection": "How it is detected",
+      "foundBy": "Found by",
+      "severity": "Severity",
+      "lamp": "Lamp",
+      "system": "System",
+      "oemCode": "Maker's code"
+    },
+    "codeHintMotor": "P and three digits, e.g. P103",
+    "codeHintObd2": "e.g. P0101",
+    "readOnly10": "This code comes from 1.0 and is edited there. It is copied here every day.",
+    "lamp": {
+      "red_stop": "Red stop",
+      "amber_warning": "Amber warning",
+      "protect": "Protect",
+      "mil": "Check engine",
+      "none": "No lamp"
+    },
+    "foundBy": {
+      "logger": "Logger",
+      "technician": "Technician"
+    },
+    "restore": "Restore",
+    "retire": "Retire",
+    "saved": "Saved",
+    "save": "Save",
+    "create": "Add",
+    "historyEmpty": "No changes yet.",
+    "historyBy": "{{who}} · {{when}}",
+    "historyField": {
+      "created": "Added",
+      "description": "Fault",
+      "symptom": "Symptom",
+      "causes": "Likely causes",
+      "remedies": "What to do",
+      "detection": "How it is detected",
+      "found_by": "Found by",
+      "severity": "Severity",
+      "lamp": "Lamp",
+      "retired": "Retired"
+    },
+    "access": {
+      "loadFailed": "Account access could not be loaded.",
+      "revokeConfirm": "Stop showing {{type}} codes to {{account}}?",
+      "account": "Account",
+      "granted": "Given",
+      "notGranted": "Not given",
+      "hint": "Choose which kinds of fault code each account sees. Turning one off hides those codes from the account; they stay in the library.",
+      "noAccounts": "No accounts yet."
+    },
+    "retireConfirm": "Retire {{code}}? It leaves the list and accounts stop seeing it. Past faults still show it, and it can be restored.",
+    "historyRestored": "Restored",
+    "import": {
+      "template": "Download template",
+      "open": "Import",
+      "title": "Import fault codes",
+      "hint": "Download the template, fill in one row per code (replace the example row) and upload it. It is checked first; nothing is written until you apply. A row for a code already in the library changes it; a blank cell leaves that field as it is.",
+      "choose": "Choose file",
+      "checking": "Checking…",
+      "failed": "The file could not be checked.",
+      "templateFailed": "Could not download the template.",
+      "done": "Imported: {{added}} new, {{changed}} changed.",
+      "countNew_one": "{{count}} new",
+      "countNew_other": "{{count}} new",
+      "countChanged_one": "{{count}} changed",
+      "countChanged_other": "{{count}} changed",
+      "countUnchanged_one": "{{count}} unchanged",
+      "countUnchanged_other": "{{count}} unchanged",
+      "countErrors_one": "{{count}} error",
+      "countErrors_other": "{{count}} errors",
+      "fixErrors": "Fix the rows in error and choose the file again. Nothing is written while any row is in error.",
+      "nothing": "Nothing to change: every row matches the library.",
+      "row": "Row {{n}}",
+      "status": {
+        "new": "New",
+        "changed": "Changed",
+        "unchanged": "Unchanged",
+        "error": "Error"
+      },
+      "close": "Close",
+      "cancel": "Cancel",
+      "apply_one": "Apply {{count}} change",
+      "apply_other": "Apply {{count}} changes"
     }
   }
 }

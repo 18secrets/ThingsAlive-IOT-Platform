@@ -11,7 +11,7 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface SensorTableProps {
   sensors: Sensor[];
@@ -89,7 +89,7 @@ export const SensorTable: React.FC<SensorTableProps> = ({
                       }`}>
                         {retired ? t('common.statusLabel.retired') : t('sensors.live')}
                       </span></>,
-      <span className="text-slate-500 dark:text-slate-400 text-xs">{new Date(sensor.updatedAt).toLocaleDateString(appLocale())}</span>,
+      <span className="text-slate-500 dark:text-slate-400 text-xs">{new Date(sensor.updatedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}</span>,
       <><button
                         onClick={() => setViewingSensor(sensor)}
                         className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors inline-flex items-center justify-center cursor-pointer"

@@ -32,7 +32,9 @@
     "due_soon": "త్వరలో గడువు",
     "current": "ప్రస్తుతం",
     "not_recorded": "నమోదు కాలేదు",
-    "alsoOverdue": "గడువు కూడా మీరింది"
+    "alsoOverdue": "గడువు కూడా మీరింది",
+    "overdueBy_one": "1 రోజు గడువు మీరింది",
+    "overdueBy_other": "{{count}} రోజులు గడువు మీరింది"
   },
   "result": {
     "passed": "ఉత్తీర్ణం",

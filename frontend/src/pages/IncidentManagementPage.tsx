@@ -20,7 +20,7 @@ import {
 } from '../lib/api';
 import { sortRows, useSort } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 /**
  * Incident Management on the incident entity (3d83cec): one live incident per machine,
@@ -241,7 +241,7 @@ export const IncidentManagementPage: React.FC = () => {
               </span>,
               <Chip tone={SLA_TONE[r.sla.acknowledge.state]}>{t(`sla.state.${r.sla.acknowledge.state}`)}</Chip>,
               <Chip tone={SLA_TONE[r.sla.resolve.state]}>{t(`sla.state.${r.sla.resolve.state}`)}</Chip>,
-              <span className="text-slate-500 whitespace-nowrap">{new Date(r.openedAt).toLocaleString(appLocale())}</span>,
+              <span className="text-slate-500 whitespace-nowrap">{new Date(r.openedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>,
             ]}
             onOpen={(r) => setOpenId(r.id)}
           />
@@ -263,14 +263,14 @@ export const IncidentManagementPage: React.FC = () => {
                   {r.escalationLevel > 0 && <span className="text-rose-500 font-semibold"> · {t('page.escalated', { level: r.escalationLevel })}</span>}
                 </p>
                 <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                  <Chip tone={SLA_TONE[r.sla.acknowledge.state]} title={r.sla.acknowledge.dueAt ? t('sla.ackBy', { date: new Date(r.sla.acknowledge.dueAt).toLocaleString(appLocale()) }) : t('sla.noPolicy')}>
+                  <Chip tone={SLA_TONE[r.sla.acknowledge.state]} title={r.sla.acknowledge.dueAt ? t('sla.ackBy', { date: new Date(r.sla.acknowledge.dueAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }) : t('sla.noPolicy')}>
                     {t('sla.ackChip', { state: t(`sla.state.${r.sla.acknowledge.state}`) })}
                   </Chip>
-                  <Chip tone={SLA_TONE[r.sla.resolve.state]} title={r.sla.resolve.dueAt ? t('sla.resolveBy', { date: new Date(r.sla.resolve.dueAt).toLocaleString(appLocale()) }) : t('sla.noPolicy')}>
+                  <Chip tone={SLA_TONE[r.sla.resolve.state]} title={r.sla.resolve.dueAt ? t('sla.resolveBy', { date: new Date(r.sla.resolve.dueAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }) : t('sla.noPolicy')}>
                     {t('sla.resolveChip', { state: t(`sla.state.${r.sla.resolve.state}`) })}
                   </Chip>
                 </div>
-                <small className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{t('page.openedAt', { date: new Date(r.openedAt).toLocaleString(appLocale()) })}</small>
+                <small className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{t('page.openedAt', { date: new Date(r.openedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}</small>
               </button>
             ))}
           </div>

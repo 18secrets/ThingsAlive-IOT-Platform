@@ -11,7 +11,7 @@ import {
   apiGetEffectiveParameters, apiGetParameterCatalog, apiGetParameterHistory, apiListEquipment,
   apiListMyEquipmentClasses, apiListPlants, apiSetCurrency, apiSetParameter,
 } from '../lib/api';
-import { appLocale } from '../lib/dateLocale';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 // The order the scope picker lists them in; labels are cost.json's scope.* keys.
 const SCOPES: ParameterScope[] = ['client', 'site', 'equipment_class', 'equipment'];
@@ -227,7 +227,7 @@ export const CostAdministrationPage: React.FC = () => {
             {historyRows.map((row) => (
               <div key={row.id} className="flex items-center justify-between border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-sm">
                 <span className="font-mono">{row.value != null ? `${row.value} ${row.unit ?? ''}` : t('history.cleared')}</span>
-                <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{new Date(row.effectiveFrom).toLocaleString(appLocale())}</span>
+                <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{new Date(row.effectiveFrom).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
               </div>
             ))}
           </div>

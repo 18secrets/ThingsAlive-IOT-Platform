@@ -1,4 +1,4 @@
-import { AdminSubTab, AuthUser, NavigationTab } from '../types';
+import { AdminSubTab, AuthUser, CLIENT_ADMIN_SUBTABS, NavigationTab, adminTabGrant, isClientAdminSubTab } from '../types';
 
 /**
  * Which pages a signed-in person may open — one answer for the sidebar, the
@@ -6,7 +6,8 @@ import { AdminSubTab, AuthUser, NavigationTab } from '../types';
  * menu cannot still be reached by its address or a link (tester report, 27 Oct 2026).
  *
  * - A client user opens the pages their role grants (`allowedTabs`); the account's
- *   Super Admin opens every client page, and only they open Client Users and Roles.
+ *   Super Admin opens every client page. Administration's tabs are granted one by one
+ *   (`admin-<tab>`), and the geofence map is its own page (13 Nov 2026).
  * - Things Alive staff open what their own role's capabilities allow. Before this,
  *   every staff member was shown as Master Admin, and a Catalog Author or Platform
  *   Support person met screens whose every call the API then refused.
@@ -23,10 +24,17 @@ const STAFF_ADMIN_CAPABILITY: Record<AdminSubTab | 'catalog-import', string | nu
   // read alone (Platform Support) every call came back refused (TC_149, 30 Oct).
   category: 'catalog.write',
   'named-formula': 'catalog.write',
+  // Models and their ratings and duty curves (D57, D58): read with equipment-template.read,
+  // edited with .write, both Master Admin's.
+  model: 'equipment-template.read',
+  // An account's own engineers and sites: nothing for an account-less staff login.
+  'service-roster': null,
   'tool-mapping': 'device-catalog.read',
   'signal-alias': 'catalog.write',
   'signal-state': 'device-catalog.read',
   'telemetry-archive': 'platform.admin',
+  // The library's editors (catalog.write); giving accounts their kinds is Master Admin's, inside the tab.
+  'fault-codes': 'catalog.write',
   'catalog-import': 'catalog.write',
   clients: 'tenant.provision',
   staff: 'platform.admin',
@@ -43,14 +51,12 @@ function clientTabOf(first: string): NavigationTab | null {
     case 'dashboard':
     case 'equipment':
     case 'sites':
-    // The geofence map (QGEO2) is a view of the same fleet; the API scopes its rows.
-    case 'geofence':
       // A machine's or site's page is reached from the dashboard and goes with it.
       return 'dashboard';
     case 'alert-agent':
       return 'alerts';
     case 'things-care': case 'things-shield': case 'incident-management': case 'production-monitoring':
-    case 'ai-onboarding': case 'alerts': case 'predictions': case 'scenarios': case 'work-orders':
+    case 'ai-onboarding': case 'alerts': case 'geofence': case 'predictions': case 'scenarios': case 'work-orders':
     case 'cost-administration': case 'admin': case 'settings': case 'client-users': case 'roles':
       return first;
     default:
@@ -73,7 +79,12 @@ export function staffMay(user: AuthUser | null, capability: string): boolean {
 }
 
 export function canOpenAdminSubTab(user: AuthUser, subTab: AdminSubTab | 'catalog-import'): boolean {
-  if (user.role === 'client') return true;
+  if (user.role === 'client') {
+    // Anything else under /admin is not one of a client's tabs and is left to the
+    // Administration grant, as it always was.
+    if (user.isSuperAdmin || !isClientAdminSubTab(subTab)) return true;
+    return (user.allowedTabs ?? []).includes(adminTabGrant(subTab));
+  }
   const capability = STAFF_ADMIN_CAPABILITY[subTab];
   return capability !== null && capability !== undefined && staffCan(user, capability);
 }
@@ -90,9 +101,17 @@ export function canOpenPath(user: AuthUser, pathname: string): boolean {
   if (user.role === 'client') {
     const tab = isMachineOrSitePage ? 'dashboard' : clientTabOf(first);
     if (!tab) return true; // not a page; the router's own fallback answers it
-    if (tab === 'client-users' || tab === 'roles') return !!user.isSuperAdmin;
+    // The owner, or a role granted the right to manage people or roles (an Admin, TC_193):
+    // these two pages are not on a role's page list, they follow the right itself.
+    if (tab === 'client-users') return !!user.isSuperAdmin || !!user.capabilities?.['user.manage'];
+    if (tab === 'roles') return !!user.isSuperAdmin || !!user.capabilities?.['role.manage'];
     if (user.isSuperAdmin) return true;
-    return (user.allowedTabs ?? []).includes(tab);
+    if (!(user.allowedTabs ?? []).includes(tab)) return false;
+    // Administration opens on a tab the role was given, or not at all.
+    if (tab === 'admin' && !isMachineOrSitePage) {
+      return second ? canOpenAdminSubTab(user, second as AdminSubTab) : firstAllowedAdminSubTab(user) !== null;
+    }
+    return true;
   }
 
   // Things Alive staff. The platform dashboard is account and logger-pool totals,
@@ -113,7 +132,7 @@ export function canOpenPath(user: AuthUser, pathname: string): boolean {
 
 /** The sidebar entry's own address, for the same check. */
 export function pathOfTab(tab: NavigationTab): string {
-  if (tab === 'clients' || tab === 'staff' || tab === 'devices' || tab === 'equipment') return `/admin/${tab}`;
+  if (tab === 'clients' || tab === 'staff' || tab === 'devices' || tab === 'equipment' || tab === 'fault-codes') return `/admin/${tab}`;
   return `/${tab}`;
 }
 
@@ -123,18 +142,18 @@ export function canOpenTab(user: AuthUser, tab: NavigationTab): boolean {
 
 /** Administration's tab bar order, per side — the first one the person may open. */
 const STAFF_ADMIN_ORDER: AdminSubTab[] = [
-  'industry', 'category', 'named-formula', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
+  'industry', 'category', 'named-formula', 'model', 'fault-codes', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
 ];
 
 export function firstAllowedAdminSubTab(user: AuthUser): AdminSubTab | null {
-  if (user.role === 'client') return 'plant';
+  if (user.role === 'client') return CLIENT_ADMIN_SUBTABS.find((s) => canOpenAdminSubTab(user, s)) ?? null;
   return STAFF_ADMIN_ORDER.find((s) => canOpenAdminSubTab(user, s)) ?? null;
 }
 
 /** Where to land someone whose landing page (or the page they asked for) is not theirs. */
 const LANDING_ORDER: NavigationTab[] = [
   'dashboard', 'things-care', 'things-shield', 'incident-management', 'production-monitoring', 'ai-onboarding',
-  'alerts', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin',
+  'alerts', 'geofence', 'predictions', 'scenarios', 'work-orders', 'cost-administration', 'admin',
   // Staff whose only page is the machine list (Platform Support) land there, not on Settings.
   'equipment', 'settings',
 ];

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { apiListAllEquipment, apiListDevicePool } from '../../lib/api';
 import { useSlot } from '../../lib/useSlot';
+import { Skeleton } from '../common/Skeleton';
 
 interface MasterAdminDashboardProps {
   clients: ClientAccount[];
@@ -89,7 +90,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel title={t('master.byClient')} subtitle={t('master.byClientHint')}>
           {clientsState !== 'ok' ? (
-            <p className="text-sm text-slate-400 py-6 text-center">{clientsState === 'loading' ? t('common.loading') : t('master.clientsUnreadable')}</p>
+            clientsState === 'loading' ? <Skeleton className="py-6" /> : <p className="text-sm text-slate-400 py-6 text-center">{t('master.clientsUnreadable')}</p>
           ) : byClient.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">{t('master.noClients')}</p>
           ) : (
@@ -107,7 +108,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
 
         <Panel title={t('master.devicePool')} subtitle={t('master.devicePoolHint')}>
           {pool.state !== 'ok' ? (
-            <p className="text-sm text-slate-400 py-6 text-center">{pool.state === 'loading' ? t('common.loading') : t('master.poolUnreadableDot')}</p>
+            pool.state === 'loading' ? <Skeleton className="py-6" /> : <p className="text-sm text-slate-400 py-6 text-center">{t('master.poolUnreadableDot')}</p>
           ) : (
             <div className="space-y-2.5">
               <Bar label={t('master.assigned')} value={poolCounts.assigned} max={poolTotal} color="bg-emerald-500" />

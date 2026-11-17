@@ -241,7 +241,10 @@
     "title_other": "ଶେଷ {{count}}ଟି ସ୍କୋରରେ ଝୁଙ୍କି ସ୍କୋର (0–100)",
     "caption_one": "ଝୁଙ୍କି, ଶେଷ ସ୍କୋର",
     "caption_other": "ଝୁଙ୍କି, ଶେଷ {{count}}ଟି ସ୍କୋର",
-    "risk": "ଝୁଙ୍କି"
+    "risk": "ଝୁଙ୍କି",
+    "period": "ବିପଦ ପ୍ରବୃତ୍ତି",
+    "lastScores_one": "ଶେଷ ସ୍କୋର",
+    "lastScores_other": "ଶେଷ {{count}} ସ୍କୋର"
   },
   "drill": {
     "loadError": "ଏହି ସିଗନାଲ୍ ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ।",

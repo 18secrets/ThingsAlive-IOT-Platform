@@ -1,6 +1,6 @@
 import { Capability } from '../auth/capabilities';
 import { ScopeShape } from './entities/tenant-role.entity';
-import { TENANT_ASSIGNABLE_PAGES } from './pages';
+import { ADMIN_TAB_PAGES, TENANT_ASSIGNABLE_PAGES } from './pages';
 
 export interface RoleTemplate {
   slug: string;
@@ -64,7 +64,9 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'parameters.read',
       'shield.read', 'shield.write',
     ],
-    allowedTabs: ['dashboard', 'ai-onboarding', 'predictions', 'admin', 'settings'],
+    // What a site manager could open before the map and Administration's tabs were
+    // granted separately: the map came with the dashboard, every tab with Administration.
+    allowedTabs: ['dashboard', 'geofence', 'ai-onboarding', 'predictions', 'admin', ...ADMIN_TAB_PAGES, 'settings'],
   },
   {
     slug: 'operator',
@@ -79,7 +81,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'equipment-template.read', 'device-catalog.read',
       'shield.read',
     ],
-    allowedTabs: ['dashboard', 'settings'],
+    allowedTabs: ['dashboard', 'geofence', 'settings'],
   },
 ];
 

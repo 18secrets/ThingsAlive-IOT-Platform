@@ -86,6 +86,9 @@ describeDb('client sign-out ends the access token too (D-003)', () => {
   it('a reused refresh token revokes the family, and its access token with it', async () => {
     const { accessToken, refreshToken } = await signedInAdmin();
     expect((await refresh(refreshToken)).status).toBe(201);
+    // Past the reuse grace (MAJ-5, approved 9 Nov 2026): the request runs on the real
+    // clock, so the rotation is moved back two minutes rather than waited out.
+    await owner.query(`UPDATE user_session SET rotated_at = rotated_at - interval '2 minutes' WHERE rotated_at IS NOT NULL`);
     // Presenting the retired token again is the theft signal.
     expect((await refresh(refreshToken)).status).toBe(401);
     expect((await me(accessToken)).status).toBe(401);

@@ -48,7 +48,9 @@
     "emailPlaceholder": "e.g. rohan@acmecement.com",
     "emailEditHint": "Changing this changes what they sign in with — they are not notified separately.",
     "emailHint": "This is how they'll sign in — there is no separate username on the real account.",
-    "create": "Create Client"
+    "create": "Create Client",
+    "timeZone": "Time zone",
+    "timeZoneHint": "Every date on this account’s screens is shown in this zone."
   },
   "entitlements": {
     "grantFailed": "Could not grant one or more classes.",
@@ -137,7 +139,8 @@
     "resendHint": "Issue a new invitation token. The old one stops working.",
     "resendInvitation": "Resend invitation",
     "deleteHint": "Delete (never signed in)",
-    "empty": "No staff found."
+    "empty": "No staff found.",
+    "deleteBlocked": "Has signed in, so they can be suspended but not deleted."
   },
   "invite": {
     "failed": "Could not invite this person.",

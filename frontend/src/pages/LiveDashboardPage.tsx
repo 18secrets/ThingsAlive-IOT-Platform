@@ -24,6 +24,7 @@ import { MachineIcon } from '../components/common/MachineIcon';
 import { SelectPicker } from 'rsuite';
 import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
 import { useAuth } from '../lib/AuthProvider';
+import { Skeleton } from '../components/common/Skeleton';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -115,7 +116,7 @@ export const LiveDashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Panel title={t('live.utilizationTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')} className="lg:col-span-2">
-          {utilization.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : utilization.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : utilization.data.length === 0 ? (
+          {utilization.state === 'loading' ? <Skeleton lines={2} /> : utilization.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : utilization.data.length === 0 ? (
             <Muted>{t('live.utilizationEmpty')}</Muted>
           ) : (
             <table className="w-full text-xs">
@@ -138,7 +139,7 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
 
         <Panel title={t('live.availabilityTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')}>
-          {availability.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
+          {availability.state === 'loading' ? <Skeleton lines={2} /> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex items-center gap-4">
               <RingGauge value={availability.data.availability != null ? availability.data.availability * 100 : null} size={72} colorClass="text-sky-500 dark:text-sky-400" />
               <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5">
@@ -179,7 +180,7 @@ export const LiveDashboardPage: React.FC = () => {
           ))} />
         </Panel>
         <Panel title={t('live.serviceDue')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
-          {service.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : service.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : serviceDue.length === 0 ? (
+          {service.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : service.state === 'loading' ? <Skeleton lines={2} /> : serviceDue.length === 0 ? (
             <Muted>{t('live.nothingDue')}</Muted>
           ) : <PanelRows>{serviceDue.slice(0, 5).map((a) => (
             <PanelRow key={`${a.sourceSystem}/${a.externalId}`} onClick={() => openMachine(a.sourceSystem, a.externalId)} title={a.name ?? a.externalId}
@@ -202,7 +203,7 @@ export const LiveDashboardPage: React.FC = () => {
         </div>
         {equipment.state !== 'ok' || equipment.data.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-            <Muted>{equipment.state === 'loading' ? t('common.loading') : equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>
+            {equipment.state === 'loading' ? <Skeleton lines={2} /> : <Muted>{equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>}
           </div>
         ) : (
           <MachineCards
@@ -225,7 +226,7 @@ export const LiveDashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Panel title={t('translation:sidebar.thingsShield')} icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
-          {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
+          {shield.state === 'loading' ? <Skeleton lines={2} /> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex flex-wrap gap-1.5">
               <Chip tone="rose">{t('live.shieldCount.action_required', { count: shield.data.counts.action_required })}</Chip>
               <Chip tone="rose">{t('live.shieldCount.overdue', { count: shield.data.counts.overdue })}</Chip>
@@ -236,7 +237,7 @@ export const LiveDashboardPage: React.FC = () => {
           )}
         </Panel>
         <Panel title={t('live.onboarding')} icon={<Sparkles className="w-4 h-4" />} onOpen={() => navigate('/ai-onboarding')}>
-          {onboarding.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : onboarding.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (() => {
+          {onboarding.state === 'loading' ? <Skeleton lines={2} /> : onboarding.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (() => {
             const totals = onboarding.data.sites.reduce((acc, s) => ({ total: acc.total + s.machines.total, done: acc.done + s.machines.done }), { total: 0, done: 0 });
             return (
               <div className="flex items-center gap-3 text-xs">
@@ -445,7 +446,7 @@ const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p clas
 
 function List<T>({ slot, empty, render }: { slot: Slot<T[]>; empty: string; render: (d: T[]) => React.ReactNode }) {
   const { t } = useTranslation('dashboard');
-  if (slot.state === 'loading') return <Muted>{t('common.loading')}</Muted>;
+  if (slot.state === 'loading') return <Skeleton lines={2} />;
   if (slot.state === 'unavailable') return <Muted>{t('common.unavailable')}</Muted>;
   if (slot.data.length === 0) return <Muted>{empty}</Muted>;
   return <PanelRows>{render(slot.data)}</PanelRows>;

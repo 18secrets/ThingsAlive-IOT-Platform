@@ -22,7 +22,11 @@ export type Reason =
   | 'window_not_resolved' | 'formula_not_compiled'
   // Task QGEO2: a formula names a geofence zone that does not apply to this machine —
   // not drawn, switched off, or aimed at other machines. Never read as "outside".
-  | 'zone_not_applied';
+  | 'zone_not_applied'
+  // D58: the machine's model has no duty curve (or the machine names no model); a value
+  // outside the printed range, never extrapolated; a curve read by a column with two
+  // answers at some value.
+  | 'duty_curve_not_set' | 'out_of_curve' | 'curve_not_monotonic';
 
 export interface Coverage {
   expected: number;
