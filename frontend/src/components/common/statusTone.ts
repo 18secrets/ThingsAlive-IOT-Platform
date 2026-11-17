@@ -31,3 +31,6 @@ export function severityTone(severity: string, opts: { noneIsHealthy?: boolean }
     default: return 'slate';
   }
 }
+
+/** Most severe first is the order a scenario list is read in: rank, not the words' A–Z. */
+export const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };

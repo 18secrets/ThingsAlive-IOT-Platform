@@ -149,8 +149,23 @@ export async function apiForgotPassword(email: string): Promise<void> {
   await parse(res);
 }
 
-/** Exchanges the stored refresh token for a fresh access token. False means the session is dead. */
-export async function apiResume(): Promise<SignedInUser | null> {
+/**
+ * Exchanges the stored refresh token for a fresh access token. Null means the session is dead.
+ *
+ * One refresh at a time (test report MAJ-5). A reload restores the session while the first
+ * requests' 401s ask for a refresh of their own — StrictMode alone restores twice — and
+ * each presented the same refresh token: the first rotated it, the second read as a reused
+ * token and the server ended the session. Callers now share the refresh already under way.
+ * The server's one-minute reuse grace (7fa9b2f) covers other tabs; this covers this one.
+ */
+let resumeInFlight: Promise<SignedInUser | null> | null = null;
+
+export function apiResume(): Promise<SignedInUser | null> {
+  resumeInFlight ??= resumeOnce().finally(() => { resumeInFlight = null; });
+  return resumeInFlight;
+}
+
+async function resumeOnce(): Promise<SignedInUser | null> {
   const refreshToken = sessionStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
@@ -359,6 +374,8 @@ export interface Account {
   status: "active" | "suspended";
   plan: string | null;
   region: string | null;
+  /** IANA zone the account's dates are shown in (MIN-12). Asia/Kolkata unless set. */
+  timeZone: string;
   suspendedAt: string | null;
   suspendedReason: string | null;
   provisionedBy: string | null;
@@ -386,6 +403,7 @@ export function apiListAccounts(): Promise<Account[]> {
 export function apiCreateAccount(input: {
   tenantId: string;
   name: string;
+  timeZone?: string;
   superAdmin: { email: string; fullName: string; phone?: string };
 }): Promise<CreateAccountResult> {
   return authFetch("/accounts", {
@@ -398,6 +416,7 @@ export function apiUpdateAccount(
   tenantId: string,
   input: {
     name?: string;
+    timeZone?: string;
     superAdmin?: { fullName?: string; email?: string; phone?: string };
   },
 ): Promise<Account> {
@@ -1071,6 +1090,8 @@ export interface SignalThresholdParams {
   signal: string;
   max?: number | null;
   min?: number | null;
+  /** D59: max/min are multiples of this rating, read per machine (nameplate, then model). */
+  rating?: string | null;
   /** Tenant alert rules only — unsupported in class-level template authoring, which
    *  has no live machine to default these against. */
   lookbackReadings?: number;
@@ -1285,6 +1306,11 @@ export interface NamedFormula {
   resultKind: "scalar" | "series" | null;
   status: "draft" | "published";
   publishedAt: string | null;
+  /** The soft delete (TC_151): an inactive formula is out of the picker and takes no new
+   *  binding; what is already bound keeps it. Every version alike. */
+  active: boolean;
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
   createdBy: string | null;
   updatedAt: string;
   resultUnit: string | null;
@@ -1332,6 +1358,182 @@ export function apiPublishNamedFormula(slug: string, version: number): Promise<N
   return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${version}/publish`, {
     method: "POST",
   });
+}
+
+/** Inactive or active again, every version at once (`catalog.write` to deactivate,
+ *  `catalog.publish` to activate). Idempotent. Nothing is deleted. */
+export function apiSetNamedFormulaActive(slug: string, active: boolean): Promise<NamedFormula[]> {
+  return authFetch(`/platform/catalog/named-formulas/${encodeURIComponent(slug)}/${active ? "activate" : "deactivate"}`, {
+    method: "POST",
+  });
+}
+
+// ------------------------------------------------------------------ models (D57, D58)
+
+/**
+ * A model of a machine: make and model, the class it belongs to, and since D57 the rated
+ * figures and duty curve every machine naming it is measured against (Crompton POC).
+ * Master Admin keeps the library (`/equipment-templates`); an account keeps its own copies
+ * (`/my-equipment-templates`), and a machine names one of those.
+ */
+export interface EquipmentModel {
+  id: string;
+  name: string;
+  equipmentClassSlug: string | null;
+  category: string | null;
+  manufacturer: string | null;
+  description: string | null;
+  /** Account copies only: the library model it was copied from. */
+  copiedFromId?: string | null;
+  updatedAt: string;
+}
+
+export interface ModelInput {
+  name?: string;
+  equipmentClassSlug?: string;
+  category?: string;
+  manufacturer?: string;
+  description?: string;
+}
+
+/** A rating a model can carry (D56): its unit is fixed by the name. */
+export interface RatingName { name: string; unit: string | null; description: string | null }
+
+export interface ModelRating {
+  name: string;
+  value: number;
+  unit: string | null;
+  /** The datasheet or catalogue page the figure came from. Required. */
+  source: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface DutyCurvePoint { headM: number; flowLpm: number; inputKw: number }
+export interface DutyCurve { source: string | null; points: (DutyCurvePoint & { point?: number })[] }
+
+/** `library`: Master Admin's models. `account`: the signed-in account's own copies. */
+export type ModelScope = "library" | "account";
+const modelBase = (scope: ModelScope) => (scope === "library" ? "/equipment-templates" : "/my-equipment-templates");
+
+export function apiListModels(scope: ModelScope): Promise<EquipmentModel[]> {
+  return authFetch(modelBase(scope));
+}
+
+export function apiCreateModel(scope: ModelScope, input: ModelInput & { name: string }): Promise<EquipmentModel> {
+  return authFetch(modelBase(scope), { method: "POST", body: JSON.stringify(input) });
+}
+
+export function apiUpdateModel(scope: ModelScope, id: string, input: ModelInput): Promise<EquipmentModel> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Account copies only. Refused while a machine names the model. */
+export function apiDeleteMyModel(id: string): Promise<void> {
+  return authFetch(`/my-equipment-templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Copies a library model, with its ratings and curve, into the account. Later library edits do not follow. */
+export function apiCopyModelFromLibrary(masterId: string, name?: string): Promise<EquipmentModel> {
+  return authFetch(`/my-equipment-templates/from/${encodeURIComponent(masterId)}`, {
+    method: "POST", body: JSON.stringify(name ? { name } : {}),
+  });
+}
+
+export function apiGetRatingNames(): Promise<RatingName[]> {
+  return authFetch("/equipment-templates/rating-names");
+}
+
+export function apiGetModelRatings(scope: ModelScope, id: string): Promise<ModelRating[]> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/ratings`);
+}
+
+/** Replaces every rating of the model. Idempotent. */
+export function apiReplaceModelRatings(
+  scope: ModelScope, id: string, ratings: { name: string; value: number; source: string }[],
+): Promise<ModelRating[]> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/ratings`, {
+    method: "PUT", body: JSON.stringify({ ratings }),
+  });
+}
+
+export function apiGetDutyCurve(scope: ModelScope, id: string): Promise<DutyCurve> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/duty-curve`);
+}
+
+/** Replaces the curve; no points removes it. The server orders the points and refuses a
+ *  curve whose flow does not rise as head falls. */
+export function apiReplaceDutyCurve(scope: ModelScope, id: string, curve: { source: string; points: DutyCurvePoint[] }): Promise<DutyCurve> {
+  return authFetch(`${modelBase(scope)}/${encodeURIComponent(id)}/duty-curve`, {
+    method: "PUT", body: JSON.stringify(curve),
+  });
+}
+
+/** Which of the account's models a machine is. */
+export function apiGetMachineModel(sourceSystem: string, externalId: string): Promise<{ modelId: string | null }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`);
+}
+
+/** Names the machine's model (one of the account's, of the machine's class), or clears it. */
+export function apiSetMachineModel(sourceSystem: string, externalId: string, modelId: string | null): Promise<{ modelId: string | null }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`, {
+    method: "PUT", body: JSON.stringify({ modelId }),
+  });
+}
+
+// ------------------------------------------------------------------ class requests
+
+export type ClassRequestStatus = "new" | "in_progress" | "published" | "declined";
+
+/** An account asking Things Alive for an equipment class the library lacks (test report OB-6). */
+export interface ClassRequest {
+  id: string;
+  tenantId: string;
+  machineType: string;
+  manufacturer: string | null;
+  model: string | null;
+  signals: string[];
+  note: string | null;
+  status: ClassRequestStatus;
+  /** What staff told the account: why it was declined, or anything about the new class. */
+  staffNote: string | null;
+  /** Set when published: the class to look for in the picker. */
+  publishedClassSlug: string | null;
+  requestedBy: string;
+  decidedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewClassRequest {
+  machineType: string;
+  manufacturer?: string;
+  model?: string;
+  signals?: string[];
+  note?: string;
+}
+
+/** The account asks (`client-catalog.write`). */
+export function apiCreateClassRequest(input: NewClassRequest): Promise<ClassRequest> {
+  return authFetch("/my-catalog/class-requests", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** This account's requests, newest first. */
+export function apiListMyClassRequests(): Promise<ClassRequest[]> {
+  return authFetch("/my-catalog/class-requests");
+}
+
+/** Staff: every account's requests, open ones first, oldest at the top. */
+export function apiListClassRequestQueue(status?: ClassRequestStatus): Promise<ClassRequest[]> {
+  return authFetch(`/catalog/class-requests${status ? `?status=${status}` : ""}`);
+}
+
+/** Staff move a request on (`catalog.write`). Published names the class; declined says why.
+ *  Once published or declined it is final: the account makes a new request. */
+export function apiAnswerClassRequest(
+  id: string, input: { status: ClassRequestStatus; staffNote?: string; publishedClassSlug?: string },
+): Promise<ClassRequest> {
+  return authFetch(`/catalog/class-requests/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 // ------------------------------------------------------------------ catalog import
@@ -1405,7 +1607,12 @@ export interface CatalogImportDiff {
   partialApplyNote: string;
   proposedSensors: ProposedSensor[];
   proposedCategories: ProposedCategory[];
+  /** What the rule sheets would write (TC_126); null when the workbook has none. */
+  rules?: CatalogImportRules | null;
 }
+
+export interface CatalogImportRuleCounts { created: number; newVersions: number; unchanged: number; conflicts: string[] }
+export type CatalogImportRules = Record<'scenario' | 'alertRule' | 'causalChain', CatalogImportRuleCounts>;
 
 export interface ClassApplyResult {
   action: ClassDiffAction;
@@ -1418,6 +1625,7 @@ export interface ClassApplyResult {
 export interface CatalogImportApplySummary {
   classes: Record<string, ClassApplyResult>;
   sensorCapabilities: { created: number; skipped: number; parametersAdded?: number };
+  rules?: CatalogImportRules;
 }
 
 /** Uploaded, parsed and validated in one step. Rejects outright on a malformed workbook. */
@@ -1805,7 +2013,7 @@ export function apiListDevicePool(
   return authFetch(`/inventory/pool${query ? `?${query}` : ""}`);
 }
 
-export type InventoryAction = "register" | "assign" | "release" | "retire" | "return-to-stock" | "claim" | "unclaim";
+export type InventoryAction = "register" | "assign" | "release" | "retire" | "return-to-stock" | "claim" | "unclaim" | "correct-imei";
 
 /** One move in a device's life, across every account it has been in. */
 export interface DeviceInventoryEvent {
@@ -1868,7 +2076,7 @@ export function apiReleaseDevices(
  *  A field left out is kept; `toolMappingId: null` clears it. */
 export function apiUpdateDevice(
   imei: string,
-  input: { model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+  input: { imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
 ): Promise<PooledDevice> {
   return authFetch(`/inventory/devices/${encodeURIComponent(imei)}`, {
     method: "PATCH",
@@ -2238,6 +2446,7 @@ export interface PageWidget {
   widgetKey: string;
   widgetType: PageWidgetType;
   title: string | null;
+  boundTo?: string | null;
   position: number;
   size: string;
   /** Always null unless readiness is 'ready' — never 0, never [] standing in for nothing. */
@@ -2261,6 +2470,85 @@ export function apiGetMachinePage(sourceSystem: string, externalId: string): Pro
   );
 }
 
+export type MachineEventKind = "start" | "trip_overload" | "trip_supply" | "trip_overtemp" | "voltage_low" | "voltage_high";
+
+/** A pump's starts, trips and voltage events (Crompton U6), read from its own signals. */
+export interface MachineEvents {
+  from: string;
+  to: string;
+  events: { at: string; kind: MachineEventKind; value: number; limit?: number }[];
+  unavailable: { kind: "starts" | "trips" | "voltage"; reason: "unbound" | "no_voltage_band" }[];
+  truncated: boolean;
+}
+
+/** Newest first; the last day unless a window (up to 7 days) is given. */
+export function apiGetMachineEvents(sourceSystem: string, externalId: string, range?: { from: Date; to: Date }): Promise<MachineEvents> {
+  const qs = range ? `?from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}` : "";
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/events${qs}`);
+}
+
+/** One machine as it is now (`GET /equipment/:ss/:id/live`): each signal's newest value
+ *  and its age, read from 1.0 at the moment asked when connected. Connection is the newest
+ *  reading's age: online within 5 min, delayed within 30, offline after. */
+export type LiveConnection = "online" | "delayed" | "offline" | "no-device";
+export interface LiveSignal {
+  signal: string;
+  value: number | string;
+  unit: string | null;
+  at: string;
+  ageSeconds: number;
+  stale: boolean;
+  source: "1.0" | "2.0";
+}
+export interface MachineLive {
+  asOf: string;
+  connection: LiveConnection;
+  lastReadingAt: string | null;
+  running: boolean | null;
+  location: { lat: number; lng: number; at: string; ageSeconds: number } | null;
+  signals: LiveSignal[];
+  legacyAsked: boolean;
+}
+export function apiGetMachineLive(sourceSystem: string, externalId: string): Promise<MachineLive> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/live`);
+}
+
+/** A machine's fault codes (`GET /equipment/:ss/:id/faults`): the device's DTCs from 1.0,
+ *  or a pump logger's P-codes. `reportsFaults: false` = the device reports no codes at
+ *  all: no panel. Every active code; cleared ones in the period asked for. */
+export interface FaultCode {
+  id: string;
+  code: string;
+  protocol: string;
+  spn: number | null;
+  fmi: number | null;
+  lamp: string;
+  severity: string;
+  description: string;
+  /** A motor code's: what the technician sees at the pump. Vehicle codes have none. */
+  symptom?: string | null;
+  causes: string | null;
+  remedies: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  clearedAt?: string | null;
+  occurrences: number;
+}
+export interface EquipmentFaults {
+  reportsFaults: boolean;
+  active: FaultCode[];
+  history: FaultCode[];
+  /** With a period: the period `history` covers, and whether it held more than one answer carries. */
+  historyWindow?: { from: string; to: string };
+  historyTruncated?: boolean;
+}
+export function apiGetEquipmentFaults(
+  sourceSystem: string, externalId: string, period?: { from: Date; to: Date },
+): Promise<EquipmentFaults> {
+  const qs = period ? `?from=${encodeURIComponent(period.from.toISOString())}&to=${encodeURIComponent(period.to.toISOString())}` : '';
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/faults${qs}`);
+}
+
 /** The composed dashboard for one site (`GET /sites/:plantId/page`) — every machine
  *  on it in one read, aggregated the same way a machine page is, just one level up. */
 export interface SitePage {
@@ -2271,6 +2559,127 @@ export interface SitePage {
 
 export function apiGetSitePage(plantId: string): Promise<SitePage> {
   return authFetch(`/sites/${encodeURIComponent(plantId)}/page`);
+}
+
+// ---------------------------------------------------------------------- site twin
+
+/** Flat areas, drawn as coloured ground. */
+export const SITE_AREA_KINDS = ['work_area', 'material_yard', 'parking', 'restricted'] as const;
+/** Structures, drawn in 3-D inside their rectangle. */
+export const SITE_STRUCTURE_KINDS = [
+  'head_office', 'site_office', 'batching_plant', 'maintenance_workshop', 'gate', 'road',
+  'building', 'substation', 'quay', 'container_yard', 'quay_crane_berth',
+  'generator_room', 'compressor_house', 'quarry',
+] as const;
+/** The legend a zone is drawn from. The API refuses any other kind. */
+export const SITE_ZONE_KINDS = [...SITE_AREA_KINDS, ...SITE_STRUCTURE_KINDS] as const;
+export type SiteZoneKind = (typeof SITE_ZONE_KINDS)[number];
+/** What is built in stages and can report progress. */
+export const SITE_PROGRESS_KINDS: readonly SiteZoneKind[] = ['building', 'road', 'substation', 'quay'];
+
+/** What a machine is doing now, from its own engine, utilization and load signals. */
+export type SiteTwinActivity = 'productive' | 'idle' | 'running-unclassified' | 'off' | 'unknown';
+
+/** `alert` outranks everything; the rest is the machine's worst signal readiness. There
+ *  is no "running": nothing behind this knows the engine is on. */
+export type SiteTwinStatus = 'alert' | 'live' | 'no_data' | 'blocked' | 'not_configured';
+
+/** Metres, origin at the site's centre, x east, z south. A zone is centred at (x, z).
+ *  `key` is its stable name within the site; routes refer to it. */
+export interface SiteTwinZone {
+  id?: string; key: string; label: string; kind: SiteZoneKind; x: number; z: number; widthM: number; depthM: number;
+  floors?: number | null;
+  /** As reported by the site, with the date it was reported. Null: nothing reported. */
+  progressPct?: number | null;
+  progressReportedAt?: string | null;
+  progressReportedBy?: string | null;
+}
+
+export interface SiteTwinMachineKpis {
+  engineLoad?: number;
+  fuelLevel?: number;
+  fuelRate?: number;
+  coolantTemp?: number;
+  oilPressure?: number;
+  hydraulicTemp?: number;
+}
+
+export interface SiteTwinMachine {
+  sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
+  placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
+  readiness: string; openAlerts: number; status: SiteTwinStatus;
+  activity: SiteTwinActivity;
+  /** Key of the zone it stands in. */
+  engagedAt: string | null;
+  /** A breakdown has started and not ended. */
+  breakdown: boolean;
+  kpis?: SiteTwinMachineKpis | null;
+}
+
+/** A site's digital twin (`GET /sites/:plantId/twin`, `catalog.read`). */
+export interface SiteTwin {
+  site: { plantId: string; code: string; name: string; address: string | null };
+  /** False until a layout is saved: the extent is a default and nobody is placed. */
+  saved: boolean;
+  /** Send back as `expectedVersion`; a stale one is a 409. */
+  version: number;
+  extent: { widthM: number; depthM: number };
+  zones: SiteTwinZone[];
+  /** Per class on the site; null where the class has no confirmed model. */
+  classModels: Record<string, { modelUrl: string; bounds: ModelBounds | null } | null>;
+  machines: SiteTwinMachine[];
+  summary: { total: number; placed: number } & Record<SiteTwinStatus, number>;
+  /** Saved structures not drawn: no machine assigned here backs them any more. */
+  hiddenZones: string[];
+  /** The demo tenant: every machine at a work front is animated and the twin says it is
+   *  a simulation. Always false for a real account. */
+  simulated: boolean;
+}
+
+export interface SiteTwinLayoutInput {
+  expectedVersion: number;
+  extent: { widthM: number; depthM: number };
+  zones: Pick<SiteTwinZone, 'key' | 'label' | 'kind' | 'x' | 'z' | 'widthM' | 'depthM' | 'floors' | 'progressPct'>[];
+  placements: { sourceSystem: string; externalId: string; x: number; z: number; headingDeg: number; route: string[] }[];
+}
+
+export function apiGetSiteTwin(plantId: string): Promise<SiteTwin> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin`);
+}
+
+/** Every laid-out site of the account, for the port overview (`GET /sites/twins`). */
+export interface PortTwin {
+  sites: (SiteTwin & { workforce: number | null })[];
+  /** Sites with machines but no layout yet: listed, not drawn. */
+  notLaidOut: { plantId: string; code: string; name: string; machines: number }[];
+  simulated: boolean;
+  summary: { sites: number; machines: number; live: number; alert: number; workforce: number | null };
+}
+
+export function apiGetPortTwin(): Promise<PortTwin> {
+  return authFetch('/sites/twins');
+}
+
+/** A first layout composed from the machines assigned to the site and their
+ *  categories (`GET /sites/:plantId/twin/proposal`). Not saved: the editor starts
+ *  from it. Equipment-backed structures (generator room, quarry, batching plant…)
+ *  appear only when such a machine is assigned. */
+export function apiGetSiteTwinProposal(plantId: string): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`);
+}
+
+/** The site's machines arranged around the editor's draft (`POST /sites/:plantId/twin/proposal`):
+ *  every zone in it kept as drawn, a structure already drawn reused, only the missing ones
+ *  added clear of the drawing. Not saved. */
+export function apiArrangeSiteTwinAround(
+  plantId: string, draft: Pick<SiteTwinLayoutInput, 'extent' | 'zones'>,
+): Promise<SiteTwinLayoutInput> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/proposal`, { method: 'POST', body: JSON.stringify(draft) });
+}
+
+/** Replaces the whole layout (`equipment.write`) and answers with the fresh twin. */
+export function apiSaveSiteTwinLayout(plantId: string, layout: SiteTwinLayoutInput): Promise<SiteTwin> {
+  return authFetch(`/sites/${encodeURIComponent(plantId)}/twin/layout`, { method: 'PUT', body: JSON.stringify(layout) });
 }
 
 // --------------------------------------------------------------------- utilization
@@ -2372,6 +2781,150 @@ export function apiGetFleetAvailability(from: string, to: string): Promise<Fleet
   return authFetch(`/utilization/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 }
 
+/** What one miss is counted over (D53): each machine-shift, each day, or the whole range. */
+export type FuelAccuracyLevel = "day" | "shift" | "range";
+/** Hours into a shift the in-shift forecast is scored at. JSON keys, so strings. */
+export type FuelAccuracyCheckpoint = "2" | "4" | "6";
+
+export interface FuelAccuracyTotals {
+  actualL: number;
+  forecastL: number;
+  /** 0-100; null when nothing burned in the shifts it was scored over. */
+  accuracy: number | null;
+  checkpoints: Record<FuelAccuracyCheckpoint, number | null>;
+  shiftsWithoutForecast: number;
+  shiftsWithoutCheckpoint: Record<FuelAccuracyCheckpoint, number>;
+}
+
+export interface MachineFuelAccuracy extends FuelAccuracyTotals {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  shifts: number;
+  ranShifts: number;
+}
+
+export interface ShiftFuelAccuracy {
+  from: string;
+  to: string;
+  level: FuelAccuracyLevel;
+  asOf: string;
+  /** Only the machines that burned fuel in the range; `machines` is how many. */
+  fleet: FuelAccuracyTotals & { machines: number };
+  machines: MachineFuelAccuracy[];
+  /** The newest day with a completed shift the existing platform has totalled. */
+  latestDataDate: string | null;
+}
+
+/**
+ * Which fuel-burning machines the shift fuel forecast covers, and why the rest are not
+ * (`/shift-fuel-coverage`, fuel test report FU-6): a machine missing from the accuracy
+ * table is listed here with its reason instead of simply being absent.
+ */
+export interface ShiftFuelCoverage {
+  from: string; to: string; asOf: string; fuelled: number; covered: number;
+  notCovered: { sourceSystem: string; externalId: string; name: string | null; reason: "mirrored_from_1_0" | "no_shift_totals" }[];
+}
+export function apiGetShiftFuelCoverage(query: { from: string; to: string }): Promise<ShiftFuelCoverage> {
+  return authFetch(`/shift-fuel-coverage?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`);
+}
+
+/**
+ * One shift of one machine (D50). Shifts are the existing platform's: 1 is 08:00–20:00
+ * India time on `sdate`, 2 is 20:00 to 08:00 the next morning.
+ */
+export interface ShiftFuelRow {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  /** Null when no forecast was issued for this shift. */
+  predictedL: number | null;
+  /** The newest day the forecast learned from; null = no history, and the forecast is 0. */
+  inputsThrough: string | null;
+  issuedAt: string | null;
+  /** Null until the existing platform has totalled the shift. */
+  fuelL: number | null;
+  workHrs: number | null;
+  syncedAt: string | null;
+}
+
+/** The newest in-shift re-forecast of the shift under way (D52). */
+export interface ShiftFuelNowcast {
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  method: string;
+  /** The quarter hour it describes. */
+  asOf: string;
+  /** When the newest fuel-counter reading it used was taken; far behind asOf = a stale feed. */
+  counterAt: string;
+  soFarL: number;
+  /** The pre-shift forecast it took a share of: issued, or computed the same way before the morning sync. */
+  baseL: number;
+  baseSource: "issued" | "computed";
+  predictedL: number;
+}
+
+export interface MachineShiftFuel {
+  equipment: { sourceSystem: string; externalId: string };
+  method: string;
+  asOf: string;
+  days: number;
+  shifts: ShiftFuelRow[];
+  /** Null when no shift has a reading yet, or the in-shift forecast is not running. */
+  nowcast: ShiftFuelNowcast | null;
+}
+
+/** This machine's shifts over the last `days` (1–90), forecast beside actual. `prediction.read`. */
+export function apiGetMachineShiftFuel(sourceSystem: string, externalId: string, days = 3): Promise<MachineShiftFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shift-fuel-forecast?days=${days}`);
+}
+
+/** One machine's forecast for one of its newest shifts (D50). */
+export interface FleetShiftFuelForecast {
+  sourceSystem: string;
+  externalId: string;
+  name: string | null;
+  sdate: string;
+  shift: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  predictedL: number;
+  inputsThrough: string | null;
+  issuedAt: string;
+}
+
+/**
+ * The fleet's fuel ahead (`/shift-fuel-forecasts`, D50 + D52): each machine's newest two
+ * shift forecasts, the fleet total per shift, and each machine's in-shift re-forecast of
+ * the shift under way. `prediction.read`; scoped to the caller's machines.
+ */
+export interface FleetShiftFuel {
+  method: string;
+  asOf: string;
+  forecasts: FleetShiftFuelForecast[];
+  totals: { sdate: string; shift: 1 | 2; predictedL: number; machines: number }[];
+  nowcasts: (ShiftFuelNowcast & { sourceSystem: string; externalId: string; name: string | null })[];
+}
+
+export function apiGetFleetShiftFuel(): Promise<FleetShiftFuel> {
+  return authFetch("/shift-fuel-forecasts");
+}
+
+/** Either date left out is today in India, on the server's clock. */
+export function apiGetShiftFuelAccuracy(
+  query: { from?: string; to?: string; level?: FuelAccuracyLevel } = {},
+): Promise<ShiftFuelAccuracy> {
+  const params = new URLSearchParams();
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+  if (query.level) params.set("level", query.level);
+  const qs = params.toString();
+  return authFetch(`/shift-fuel-accuracy${qs ? `?${qs}` : ""}`);
+}
+
 export function apiGetEquipmentAvailability(
   sourceSystem: string, externalId: string, from: string, to: string,
 ): Promise<EquipmentAvailability> {
@@ -2388,7 +2941,8 @@ export function apiGetEquipmentAvailability(
  * (`utilization.read`). Each factor carries its own readiness: a factor that can't be
  * computed says why rather than reading as zero.
  */
-export type OeeWindow = "day" | "week" | "month";
+/** `range` is what a from/to answers with (P3-D4); it is not asked for by name. */
+export type OeeWindow = "day" | "week" | "month" | "range";
 
 /** Which level supplied a parameter OEE used; `oem` is the class library's figure. */
 export type OeeParameterSource = "equipment" | "class" | "site" | "client" | "oem";
@@ -2399,6 +2953,11 @@ export interface OeeFactor {
   readiness: KpiReadiness;
   reason?: string;
 }
+
+/** A library figure names the class version the machine is on and its datasheet, or says it has none. */
+export type NominalOrigin =
+  | { kind: "library"; classSlug: string; classVersion: number; className: string; citation: string | null }
+  | { kind: "parameter"; scope: OeeParameterSource };
 
 export interface EquipmentOee {
   window: OeeWindow;
@@ -2413,6 +2972,8 @@ export interface EquipmentOee {
   quality: OeeFactor & {
     nominalFuel: number | null; actualFuel: number | null; unit: string | null;
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: OeeParameterSource | null;
+    /** The nominal rate and exactly where it came from (fuel test report FU-5). */
+    nominalFuelPerHour: number | null; nominalRateUnit: string | null; nominalOrigin: NominalOrigin | null;
   };
   oee: OeeFactor;
   /** The rows Performance counted. On one machine's OEE only, not on a site's machines. */
@@ -2447,10 +3008,14 @@ export interface BreakdownEvent {
 }
 
 export function apiGetEquipmentOee(
-  sourceSystem: string, externalId: string, window: OeeWindow = "day",
+  sourceSystem: string, externalId: string, window: OeeWindow | { from: Date; to: Date } = "day",
 ): Promise<EquipmentOee> {
+  // A picked range, up to 92 days (test report P3-D4), or a named window.
+  const qs = typeof window === "string"
+    ? `window=${window}`
+    : `from=${encodeURIComponent(window.from.toISOString())}&to=${encodeURIComponent(window.to.toISOString())}`;
   return authFetch(
-    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/oee?window=${window}`,
+    `/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/oee?${qs}`,
   );
 }
 
@@ -2589,6 +3154,82 @@ export interface ShiftRun {
   alertsFired: number;
   durationMs: number | null;
   ranAt: string;
+}
+
+/**
+ * Fuel per shift on the machine page (fuel test report TC-FP-11): D50's forecast from the
+ * machine's own shift history, and the cold-start expectation from its class figures and
+ * schedule (`/expected-fuel`), which is what a machine with no history has.
+ */
+export type ExpectedFuelBlocker =
+  | "no_class" | "no_shift_schedule" | "working_rate_not_set" | "nominal_unit_not_litres"
+  | "working_share_not_set" | "idle_fuel_per_hour_not_set";
+export interface ExpectedShiftFuel {
+  shiftName: string | null; startsAt: string | null; endsAt: string | null;
+  method: string; predictedL: number | null; workingL: number | null; idleL: number | null;
+  blockedBy: ExpectedFuelBlocker[]; workingRateFrom: "bsfc" | "nominal" | null;
+  inputs: { name: string; value: number; unit: string; source: string }[];
+}
+export interface MachineExpectedFuel {
+  asOf: string;
+  equipmentClass: { slug: string; version: number; name: string } | null;
+  shifts: ExpectedShiftFuel[];
+}
+/** A library class version's fuel figures and what D55 still needs (`catalog.write`). */
+export interface ClassFuelFigures {
+  classSlug: string; classVersion: number; className: string;
+  figures: {
+    nominalFuelPerHour: number | null; nominalFuelUnit: string | null; nominalFuelSource: string | null;
+    ratedPowerKw: number | null; workingLoadPct: number | null; bsfcGPerKwh: number | null; bsfcSource: string | null;
+    idleFuelPerHour: number | null; workingShare: number | null;
+  };
+  /** Null until the figures give a full answer. */
+  workingRateFrom: "bsfc" | "nominal" | null;
+  /** Empty: every machine on this version with a shift schedule gets expected litres. */
+  blockedBy: Exclude<ExpectedFuelBlocker, "no_class" | "no_shift_schedule">[];
+}
+export function apiGetClassFuelFigures(slug: string, version: number): Promise<ClassFuelFigures> {
+  return authFetch(`/catalog/authoring/equipment-classes/${encodeURIComponent(slug)}/fuel-figures?version=${version}`);
+}
+
+export function apiGetExpectedFuel(sourceSystem: string, externalId: string): Promise<MachineExpectedFuel> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/expected-fuel`);
+}
+
+/**
+ * How a library scenario version is scored, in the numbers the scorer uses
+ * (`/catalog/authoring/scenarios/:id/rule`, fuel test report FU-1). Master Admin only.
+ */
+export interface ScenarioRule {
+  scenarioId: string; slug: string; version: number;
+  method: "influence@1" | "tier1@1";
+  requiredSignals: string[]; minimumHistoryDays: number;
+  baseline: { windowDays: number; warningSigma: number; criticalSigma: number; minimumSamples: number; sentence: string };
+  influence: null | {
+    target: string; intercept: number; terms: { signal: string; coefficient: number }[];
+    warnAbove: number; criticalAbove: number; windowHours: number; formula: string; sentence: string;
+  };
+}
+export function apiGetScenarioRule(scenarioId: string): Promise<ScenarioRule> {
+  return authFetch(`/catalog/authoring/scenarios/${encodeURIComponent(scenarioId)}/rule`);
+}
+
+/** A library set of shifts (`/shift-templates`, fuel test report FU-3). */
+export interface ShiftTemplate {
+  slug: string; name: string; description: string | null;
+  shifts: { name: string; startMinute: number; endMinute: number; days: Weekday[]; timeZone: string }[];
+}
+export function apiListShiftTemplates(): Promise<ShiftTemplate[]> {
+  return authFetch("/shift-templates");
+}
+/** Idempotent: shifts already there under the same name and hours come back in alreadyThere. */
+export function apiApplyShiftTemplate(
+  sourceSystem: string, externalId: string, templateSlug: string,
+): Promise<{ template: string; created: EquipmentShift[]; alreadyThere: string[] }> {
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/shifts/from-template`, {
+    method: "POST",
+    body: JSON.stringify({ templateSlug }),
+  });
 }
 
 export function apiListShifts(sourceSystem: string, externalId: string): Promise<EquipmentShift[]> {
@@ -2780,8 +3421,13 @@ export function apiGetLatestPredictions(sourceSystem: string, externalId: string
 
 export function apiGetPredictionHistory(
   sourceSystem: string, externalId: string, clientScenarioSlug: string, take?: number,
+  /** Bounds which scores count (P3-D4); `take` still caps how many come back, newest first. */
+  range?: { from: Date; to: Date },
 ): Promise<Prediction[]> {
-  const qs = take ? `?take=${take}` : "";
+  const params = new URLSearchParams();
+  if (take) params.set("take", String(take));
+  if (range) { params.set("from", range.from.toISOString()); params.set("to", range.to.toISOString()); }
+  const qs = params.toString() ? `?${params}` : "";
   return authFetch(
     `/predictions/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/${encodeURIComponent(clientScenarioSlug)}/history${qs}`,
   );
@@ -3440,7 +4086,7 @@ export interface EffectiveParameter {
   name: string;
   value: number | string | null;
   unit: string | null;
-  source: { scope: ParameterScope; scopeRef: string | null; effectiveFrom: string } | null;
+  source: { scope: ParameterScope | "model"; scopeRef: string | null; effectiveFrom: string } | null;
 }
 
 export interface TenantParameterRow {
@@ -3508,6 +4154,8 @@ export interface MeDiagnostics {
   roleName?: string | null;
   tenantName?: string | null;
   tenantSince?: string | null;
+  /** The account's IANA zone (MIN-12); null for staff, who keep the browser's. */
+  tenantTimeZone?: string | null;
   roles: string[];
   isPlatformRole: boolean;
   scope: {
@@ -3796,7 +4444,8 @@ export interface ShieldMachine {
   machine: { sourceSystem: string; externalId: string; name: string | null; classSlug: string | null; plantId: string | null };
   /** How far ahead "due soon" looks, and whether a parameter or the default set it. */
   dueSoonWindow: { days: number; source: "parameter" | "default"; parameter: { scope: string; scopeRef: string | null } | null };
-  categories: Record<ShieldCategory, { status: ShieldStatus; record: ShieldEvidence | null }>;
+  /** `overdueDays`: whole days past the due date, present only when past due (MIN-4). */
+  categories: Record<ShieldCategory, { status: ShieldStatus; record: ShieldEvidence | null; overdueDays?: number }>;
 }
 
 export interface ShieldSummary {
@@ -4393,7 +5042,8 @@ export interface FleetImportPlan {
   /** False while any row has an error; apply refuses the whole workbook until it is true. */
   canApply: boolean;
   equipment: {
-    create: { row: number; code: string; name: string; siteCode: string | null; equipmentClassSlug: string | null }[];
+    /** `modelName`: the account's model the row names (D57), set on the machine as it is made. */
+    create: { row: number; code: string; name: string; siteCode: string | null; equipmentClassSlug: string | null; modelName?: string | null }[];
     /** Already in the register with exactly these values. */
     unchanged: number;
     /** Already in the register with different values: listed, never overwritten. */
@@ -4437,6 +5087,71 @@ export function apiPlanFleetImport(file: File, tenantId?: string): Promise<Fleet
 /** Adds the machines and fits the loggers. Idempotent; refused whole on any row error. */
 export function apiApplyFleetImport(file: File, tenantId?: string): Promise<FleetImportPlan & { applied: true }> {
   return postFleetWorkbook("apply", file, tenantId) as Promise<FleetImportPlan & { applied: true }>;
+}
+
+// ---------------------------------------------------------------- service roster (U5)
+
+/**
+ * The account's service roster (Crompton U5): regions of sites and the engineers who cover
+ * them, rank 1 first. A critical prediction's job on a machine goes to its site's region's
+ * top engineer who can still sign in; with no roster it stays unassigned, as before.
+ * `action.assign`.
+ */
+export interface RosterRegion {
+  code: string;
+  name: string;
+  sites: { id: string; code: string; name: string }[];
+  engineers: { userId: string; email: string; fullName: string; status: string; rank: number }[];
+}
+
+export interface RosterPlan {
+  valid: boolean;
+  regions: { code: string; name: string; sites: number; engineers: number }[];
+  errors: { row?: number; region: string; message: string }[];
+}
+
+export function apiGetServiceRoster(): Promise<RosterRegion[]> {
+  return authFetch("/service-roster");
+}
+
+/** Creates or replaces one region. Engineers in the order they take a job. */
+export function apiPutRosterRegion(
+  code: string, input: { name: string; siteCodes: string[]; engineers: { email: string; rank: number }[] },
+): Promise<RosterRegion> {
+  return authFetch(`/service-roster/regions/${encodeURIComponent(code)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+/** Removes a region; its sites' jobs go unassigned again. */
+export function apiDeleteRosterRegion(code: string): Promise<void> {
+  return authFetch(`/service-roster/regions/${encodeURIComponent(code)}`, { method: "DELETE" });
+}
+
+export async function apiDownloadRosterTemplate(): Promise<Blob> {
+  const res = await authFetchRaw("/service-roster/template");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.error?.message ?? "Could not download the template.", res.status);
+  }
+  return res.blob();
+}
+
+async function postRosterWorkbook(step: "plan" | "apply", file: File): Promise<RosterPlan> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw(`/service-roster/import/${step}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body?.error?.message ?? "Could not read the workbook.", res.status);
+  return body;
+}
+
+/** Checks the workbook row by row. Writes nothing. */
+export function apiPlanRosterImport(file: File): Promise<RosterPlan> {
+  return postRosterWorkbook("plan", file);
+}
+
+/** Replaces the whole roster with the workbook; refused whole on any row error. */
+export function apiApplyRosterImport(file: File): Promise<RosterPlan> {
+  return postRosterWorkbook("apply", file);
 }
 
 // ---------------------------------------------------------------- recommendations
@@ -4840,3 +5555,116 @@ export function apiDeleteGeofence(id: string): Promise<{ id: string; deleted: tr
   return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+
+// ------------------------------------------------------------------ fault code library
+
+/**
+ * The fault code library (FaultCodeLibrary / FaultCodeEditing migrations): vehicle codes
+ * (1.0's copy, read-only, plus codes 2.0 adds) and motor codes (2.0's own), and which kinds
+ * each account is given. Grants are Master Admin's (`entitlement.grant`); the library's
+ * editors write codes (`catalog.write`).
+ */
+export type FaultCodeType = "vehicle-j1939" | "vehicle-obd2" | "motor-pump";
+export const FAULT_CODE_TYPES: FaultCodeType[] = ["vehicle-j1939", "vehicle-obd2", "motor-pump"];
+
+export interface FaultCodeItem {
+  id: string;
+  code: string;
+  description: string;
+  symptom: string | null;
+  causes: string | null;
+  remedies: string | null;
+  detection: string | null;
+  foundBy: "logger" | "technician" | null;
+  severity: string;
+  lamp: string;
+  spn: number | null;
+  fmi: number | null;
+  /** 1.0's copy (read-only here), or 2.0's own. */
+  source: "1.0" | "2.0";
+  /** A vehicle code's: the unit that raises it (1.0's source_type) and the maker's own code (dtc_code). */
+  system: string | null;
+  oemCode: string | null;
+  retiredAt: string | null;
+}
+export interface FaultCodePage { type: FaultCodeType; total: number; codes: FaultCodeItem[] }
+export interface FaultCodeInput {
+  code?: string; spn?: number | null; fmi?: number | null;
+  description?: string; symptom?: string | null; causes?: string | null; remedies?: string | null;
+  detection?: string | null; foundBy?: "logger" | "technician" | null; severity?: string; lamp?: string;
+}
+export interface FaultCodeRevision {
+  id: string; library: "vehicle" | "motor"; codeId: string; code: string; field: string;
+  oldValue: string | null; newValue: string | null; changedBy: string; changedByName: string | null; changedAt: string;
+}
+export interface FaultCodeGrant {
+  id: string; tenantId: string; codeType: FaultCodeType; grantedBy: string; grantedAt: string;
+  revokedAt: string | null; revokedBy: string | null; note: string | null;
+}
+
+export function apiListFaultCodes(
+  type: FaultCodeType, query: { q?: string; limit?: number; offset?: number; includeRetired?: boolean } = {},
+): Promise<FaultCodePage> {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.offset !== undefined) params.set("offset", String(query.offset));
+  if (query.includeRetired) params.set("includeRetired", "true");
+  const qs = params.toString();
+  return authFetch(`/catalog/fault-codes/${type}${qs ? `?${qs}` : ""}`);
+}
+export function apiCreateFaultCode(type: FaultCodeType, input: FaultCodeInput): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}`, { method: "POST", body: JSON.stringify(input) });
+}
+export function apiUpdateFaultCode(type: FaultCodeType, id: string, input: FaultCodeInput): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function apiSetFaultCodeRetired(type: FaultCodeType, id: string, retired: boolean): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}/${retired ? "retire" : "restore"}`, { method: "POST" });
+}
+export function apiFaultCodeHistory(type: FaultCodeType, id: string): Promise<FaultCodeRevision[]> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}/history`);
+}
+export function apiListFaultCodeGrants(): Promise<FaultCodeGrant[]> {
+  return authFetch("/catalog/fault-codes/grants");
+}
+export function apiGrantFaultCodeType(tenantId: string, codeType: FaultCodeType, note?: string): Promise<FaultCodeGrant> {
+  return authFetch("/catalog/fault-codes/grants", { method: "POST", body: JSON.stringify({ tenantId, codeType, note }) });
+}
+export function apiRevokeFaultCodeGrant(id: string): Promise<FaultCodeGrant> {
+  return authFetch(`/catalog/fault-codes/grants/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+}
+
+export interface FaultCodeImportRow {
+  row: number;
+  code: string;
+  status: "new" | "changed" | "unchanged" | "error";
+  changes?: { field: string; from: string | null; to: string | null }[];
+  error?: string;
+}
+export interface FaultCodeImport {
+  type: FaultCodeType;
+  applied: boolean;
+  summary: { new: number; changed: number; unchanged: number; errors: number };
+  rows: FaultCodeImportRow[];
+}
+
+/** The workbook for one kind: the codes 2.0 holds now, and a read-me of every column. */
+export async function apiDownloadFaultCodeTemplate(type: FaultCodeType): Promise<Blob> {
+  const res = await authFetchRaw(`/catalog/fault-codes/${type}/template`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.error?.message ?? "Could not download the template.", res.status);
+  }
+  return res.blob();
+}
+
+/** `check` writes nothing; `apply` is refused whole while any row is in error. */
+export async function apiImportFaultCodes(type: FaultCodeType, step: "check" | "apply", file: File): Promise<FaultCodeImport> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw(`/catalog/fault-codes/${type}/import/${step}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body?.error?.message ?? "Could not read the workbook.", res.status);
+  return body;
+}

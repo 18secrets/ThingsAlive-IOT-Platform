@@ -209,7 +209,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">
+              <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[0.6875rem]">
                 <th className="px-4 py-3 text-left font-semibold">{t('platformUsers.id')}</th>
                 <SortableHeader column="employeeId">{t('platformUsers.employeeId')}</SortableHeader>
                 <SortableHeader column="username">{t('col.username')}</SortableHeader>
@@ -228,7 +228,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{u.username}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{u.email}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase border ${ROLE_BADGE_STYLES[u.role]}`}>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[0.6875rem] font-semibold uppercase border ${ROLE_BADGE_STYLES[u.role]}`}>
                       {roleLabel(u.role)}
                     </span>
                   </td>
@@ -328,7 +328,7 @@ const StatCard: React.FC<{
     </div>
     <div>
       <div className="text-xl font-semibold text-slate-800 dark:text-slate-100 leading-tight">{value}</div>
-      <div className="text-[11px] text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
     </div>
   </div>
 );

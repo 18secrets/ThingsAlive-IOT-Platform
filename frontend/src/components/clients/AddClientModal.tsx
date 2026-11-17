@@ -1,20 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check, Copy, CheckCheck } from 'lucide-react';
-import { Input } from 'rsuite';
+import { Input, SelectPicker } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, Account, CreateAccountResult } from '../../lib/api';
 import { ClientAccount } from '../../types';
 import { copyToClipboard } from '../../lib/clipboard';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+
+/** The database's default for an account that never chose (AccountTimeZone migration). */
+const DEFAULT_ZONE = 'Asia/Kolkata';
+// Every zone the browser knows, so the list is the one Intl formats with; the database
+// checks the same names (ck_tenant_time_zone). Chrome lists India as "Asia/Calcutta", so the
+// default, and whatever an account already has, are added if the browser leaves them out.
+const BROWSER_ZONES = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+const zoneOptions = (current: string) => [...new Set([DEFAULT_ZONE, current, ...BROWSER_ZONES])]
+  .sort()
+  .map((z) => ({ label: z.replace(/_/g, ' '), value: z }));
 
 interface AddClientModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (
-    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string },
+    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => Promise<CreateAccountResult>;
   onUpdate: (
     tenantId: string,
-    input: { name: string; email: string; fullName: string; phone?: string },
+    input: { name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => Promise<Account>;
   /** Present to edit that account instead of creating a new one. */
   existingClient?: ClientAccount | null;
@@ -33,6 +44,8 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  // The zone the account's dates are shown in (MIN-12); the database's own default when new.
+  const [timeZone, setTimeZone] = useState(DEFAULT_ZONE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [created, setCreated] = useState<CreateAccountResult | null>(null);
@@ -49,6 +62,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
       setFullName(existingClient.contactPersonName ?? '');
       setPhone(existingClient.phone ?? '');
       setEmail(existingClient.email ?? '');
+      setTimeZone(existingClient.timeZone ?? DEFAULT_ZONE);
     } else {
       setClientName('');
       setTenantId('');
@@ -56,6 +70,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
       setFullName('');
       setPhone('');
       setEmail('');
+      setTimeZone(DEFAULT_ZONE);
     }
     setError(undefined);
     setCreated(null);
@@ -82,12 +97,12 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
     try {
       if (existingClient) {
         await onUpdate(existingClient.id, {
-          name: clientName.trim(), email: finalEmail, fullName: finalFullName, phone: finalPhone,
+          name: clientName.trim(), email: finalEmail, fullName: finalFullName, phone: finalPhone, timeZone,
         });
         onClose();
       } else {
         const result = await onCreate({
-          tenantId: finalTenantId, name: clientName.trim(), email: finalEmail, fullName: finalFullName, phone: finalPhone,
+          tenantId: finalTenantId, name: clientName.trim(), email: finalEmail, fullName: finalFullName, phone: finalPhone, timeZone,
         });
         setCreated(result);
       }
@@ -157,11 +172,11 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 <Trans
                   t={t}
                   i18nKey="addClient.tokenHelp"
-                  values={{ when: new Date(created.invitationExpiresAt).toLocaleString() }}
+                  values={{ when: new Date(created.invitationExpiresAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }}
                   components={{ 1: <code /> }}
                 />
               </p>
@@ -202,11 +217,17 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 placeholder={t('addClient.accountIdPlaceholder')}
                 className="font-mono"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 {isEditing
                   ? t('addClient.accountIdLocked')
                   : t('addClient.accountIdHint')}
               </p>
+            </div>
+
+            <div>
+              <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('addClient.timeZone')}</span>
+              <SelectPicker data={zoneOptions(timeZone)} value={timeZone} onChange={(v) => setTimeZone(v ?? DEFAULT_ZONE)} cleanable={false} block />
+              <p className="text-xs text-slate-400 mt-1">{t('addClient.timeZoneHint')}</p>
             </div>
 
             <div>
@@ -249,7 +270,7 @@ export const AddClientModal: React.FC<AddClientModalProps> = ({
                 />
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 -mt-2">
+            <p className="text-xs text-slate-400 -mt-2">
               {isEditing
                 ? t('addClient.emailEditHint')
                 : t('addClient.emailHint')}

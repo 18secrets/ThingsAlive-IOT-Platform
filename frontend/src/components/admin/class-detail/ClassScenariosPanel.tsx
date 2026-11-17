@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, Clock, Layers, Plus, ShieldAlert, UploadCloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Scenario, ScenarioInput } from '../../../lib/api';
+import { Scenario, ScenarioInput, ScenarioRule, apiGetScenarioRule } from '../../../lib/api';
 import { AddScenarioModal } from './AddScenarioModal';
 
 interface ClassScenariosPanelProps {
@@ -41,6 +41,48 @@ function representativePerSlug(rows: Scenario[]): Scenario[] {
       ?? versions.find((v) => v.status === 'published')
       ?? versions[0]);
 }
+
+/**
+ * How the scenario is scored, fetched when opened (fuel test report FU-1): the inputs,
+ * the window and the thresholds the scorer will apply, so the rule can be checked before
+ * it is published to every account granted the class.
+ */
+const ScenarioRuleDetails: React.FC<{ scenarioId: string }> = ({ scenarioId }) => {
+  const { t } = useTranslation('catalog');
+  const [rule, setRule] = useState<ScenarioRule | null>(null);
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    if (rule || failed) return;
+    apiGetScenarioRule(scenarioId).then(setRule).catch(() => setFailed(true));
+  };
+  return (
+    <details className="text-xs text-slate-600 dark:text-slate-300" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) load(); }}>
+      <summary className="cursor-pointer font-semibold text-slate-500 dark:text-slate-400">{t('scenarios.rule.title')}</summary>
+      {failed ? (
+        <p className="mt-1 text-rose-600 dark:text-rose-400">{t('scenarios.rule.loadFailed')}</p>
+      ) : !rule ? (
+        <p className="mt-1 text-slate-400">{t('scenarios.rule.loading')}</p>
+      ) : (
+        <div className="mt-1.5 space-y-1.5">
+          {rule.influence && (
+            <>
+              <p className="font-mono">{rule.influence.formula}</p>
+              <p>{rule.influence.sentence}</p>
+              <p className="text-slate-400">{t('scenarios.rule.fallback')}</p>
+            </>
+          )}
+          <p>{rule.baseline.sentence}</p>
+          <p className="font-mono text-slate-500 dark:text-slate-400">
+            {t('scenarios.rule.figures', {
+              method: rule.method, window: rule.baseline.windowDays, warning: rule.baseline.warningSigma,
+              critical: rule.baseline.criticalSigma, samples: rule.baseline.minimumSamples, history: rule.minimumHistoryDays,
+            })}
+          </p>
+        </div>
+      )}
+    </details>
+  );
+};
 
 export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
   equipmentClassSlug, availableSignals, scenarios, error, onCreate, onUpdate, onPublish,
@@ -93,7 +135,7 @@ export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
                 </span>
                 <button
                   onClick={() => { setEditingScenario(sc); setIsModalOpen(true); }}
-                  className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
+                  className="text-xs font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
                   title={sc.status === 'published'
                     ? t('scenarios.newVersionHint', { next: sc.version + 1, current: sc.version })
                     : undefined}
@@ -110,15 +152,15 @@ export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 ${SEVERITY_STYLE[sc.severity]}`}>
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700 ${SEVERITY_STYLE[sc.severity]}`}>
                 <ShieldAlert className="w-3 h-3" />
                 <span className="capitalize">{t(`common.severity.${sc.severity}`, { defaultValue: sc.severity })}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700">
                 <Layers className="w-3 h-3 text-sky-600" />
                 <span>{t('common.tier', { tier: sc.tier })}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700">
                 <Clock className="w-3 h-3 text-sky-600" />
                 <span>{t('scenarios.historyDays', { days: sc.minimumHistoryDays })}</span>
               </div>
@@ -127,22 +169,24 @@ export const ClassScenariosPanel: React.FC<ClassScenariosPanelProps> = ({
             {sc.requiredSignals.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {sc.requiredSignals.map((s) => (
-                  <span key={s} className="px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-mono border border-slate-200 dark:border-slate-700">
+                  <span key={s} className="px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[0.6875rem] font-mono border border-slate-200 dark:border-slate-700">
                     {s}
                   </span>
                 ))}
               </div>
             )}
 
+            <ScenarioRuleDetails scenarioId={sc.id} />
+
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[sc.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[sc.status]}`}>
                 {t(`common.status.${sc.status}`, { defaultValue: sc.status })}
               </span>
               {sc.status === 'draft' && (
                 <button
                   onClick={() => handlePublish(sc.slug)}
                   disabled={busySlug === sc.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{t('common.publish')}</span>

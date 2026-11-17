@@ -16,6 +16,7 @@ import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { TablePagination, usePagination } from '../common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /**
  * Real onboarding progress (QONBOARD-STATUS), in place of the mock session list.
@@ -99,13 +100,15 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
 
   // Paged, and one definition for both views (cards or list on every list page).
   const { pageItems: pagedSites, ...pager } = usePagination(filtered);
+  // Sized to content, as the other lists are: a count, a status chip and one button
+  // are narrow and fixed; the step chips, the widest cell, get the most room.
   const viewColumns: ListColumn[] = [
-    { label: t('progress.col.site') },
-    { label: t('progress.col.equipment') },
-    { label: t('progress.col.onboarded') },
-    { label: t('progress.col.steps') },
-    { label: t('progress.col.status') },
-    { label: t('progress.col.view') },
+    { label: t('progress.col.site'), grow: 2, minWidth: 120 },
+    { label: t('progress.col.equipment'), width: 110 },
+    { label: t('progress.col.onboarded'), width: 170 },
+    { label: t('progress.col.steps'), grow: 3, minWidth: 180 },
+    { label: t('progress.col.status'), width: 130 },
+    { label: t('progress.col.view'), width: 70, align: 'right' },
   ];
   const viewCells = (s: (typeof filtered)[number]) => {
     const pctDone = s.machines.total ? Math.round((s.machines.done / s.machines.total) * 100) : 0;
@@ -116,17 +119,17 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
                           </div>
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-white">{siteName(s, t)}</p>
-                            {s.site && <p className="text-[11px] text-slate-400 font-mono">{s.site.code}</p>}
+                            {s.site && <p className="text-xs text-slate-400 font-mono">{s.site.code}</p>}
                           </div>
                         </div></>,
       <span className="text-slate-600 dark:text-slate-400"><span className="flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5 text-slate-400" />{s.machines.total}</span></span>,
-      <><div className="flex items-center gap-2 min-w-[140px]">
+      <><div className="flex items-center gap-2 w-[140px]">
                           <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                             <div className="h-full bg-emerald-500" style={{ width: `${pctDone}%` }} />
                           </div>
-                          <span className="text-[11px] text-slate-500">{s.machines.done}/{s.machines.total}</span>
+                          <span className="text-xs text-slate-500">{s.machines.done}/{s.machines.total}</span>
                         </div></>,
-      <><div className="flex flex-wrap gap-1 min-w-[220px] max-w-[360px]">
+      <><div className="flex flex-wrap gap-1 min-w-0">
                           {ONBOARDING_STEPS.map((step) => {
                             const c = s.steps[step];
                             const allDone = s.machines.total > 0 && c.done === s.machines.total;
@@ -134,7 +137,7 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
                               <span
                                 key={step}
                                 title={t('progress.stepTitle', { step: t(`step.${step}`), done: c.done, pending: c.pending, blocked: c.blocked })}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${allDone
+                                className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold border ${allDone
                                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                                   : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
                               >
@@ -143,7 +146,7 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
                             );
                           })}
                         </div></>,
-      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${SITE_STATUS[s.status].style}`}>
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${SITE_STATUS[s.status].style}`}>
                           {t(`siteStatus.${s.status}`)}
                         </span></>,
       <><button
@@ -231,8 +234,8 @@ export const OnboardingProgress: React.FC<OnboardingProgressProps> = ({ onAddNew
         )}
         {filtered.length > 0 && <TablePagination pinToBottom {...pager} />}
         {summary && (
-          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-[11px] text-slate-500 dark:text-slate-400">
-            {t('progress.asOf', { date: new Date(summary.asOf).toLocaleString() })}
+          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-500 dark:text-slate-400">
+            {t('progress.asOf', { date: new Date(summary.asOf).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
           </div>
         )}
       </div>
@@ -333,7 +336,7 @@ const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ 
 
   return (
     <div className="px-3 pb-3 space-y-1.5">
-      <p className="text-[11px] text-slate-400">
+      <p className="text-xs text-slate-400">
         {data.overall === 'done' ? t('progress.fullyOnboarded') : t('progress.inProgress')}{data.machine.classSlug ? ` · ${t('progress.class', { slug: data.machine.classSlug })}` : ''}
       </p>
       <ol className="space-y-1">
@@ -342,7 +345,7 @@ const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ 
             <div className="min-w-0">
               <p className="text-slate-700 dark:text-slate-200 font-medium">{i + 1}. {t(`step.${s.step}`)}</p>
               {s.state !== 'done' && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {s.blockedBy ? t('progress.waitingOn', { step: t(`step.${s.blockedBy}`) }) : s.reason ? t(`reason.${s.reason}`, { defaultValue: s.reason }) : null}
                 </p>
               )}
@@ -350,8 +353,17 @@ const MachineSteps: React.FC<{ sourceSystem: string; externalId: string }> = ({ 
             <span className="flex items-center gap-2 shrink-0">
               {s.state === 'pending' && (
                 <button type="button" onClick={() => navigate(FIX_ROUTE[s.step](machinePage))}
-                  className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+                  className="text-xs font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
                   {t('progress.fix')}
+                </button>
+              )}
+              {/* A blocked step had nothing to press, so onboarding read as stuck (testing
+                  sheet TC_131). It leads to the step it waits on — most often the
+                  bindings, on the machine's page. */}
+              {s.state === 'blocked' && s.blockedBy && (
+                <button type="button" onClick={() => navigate(FIX_ROUTE[s.blockedBy!](machinePage))}
+                  className="text-xs font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer text-right">
+                  {t('progress.goTo', { step: t(`step.${s.blockedBy}`) })}
                 </button>
               )}
               <Chip tone={STATE_TONE[s.state]}>{t(`stepState.${s.state}`)}</Chip>

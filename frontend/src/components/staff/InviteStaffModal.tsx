@@ -4,6 +4,7 @@ import { Input } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiError, InvitePlatformStaffResult, PlatformStaffRole } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface InviteStaffModalProps {
   isOpen: boolean;
@@ -112,11 +113,11 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                   {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 <Trans
                   t={t}
                   i18nKey="invite.tokenHelp"
-                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString() }}
+                  values={{ when: new Date(invited.invitationExpiresAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }}
                   components={{ 1: <code /> }}
                 />
               </p>
@@ -182,7 +183,7 @@ export const InviteStaffModal: React.FC<InviteStaffModalProps> = ({ isOpen, onCl
                     />
                     <div>
                       <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t(`staff.role.${r}`)}</p>
-                      <p className="text-[11px] text-slate-400">{t(`staff.roleDescription.${r}`)}</p>
+                      <p className="text-xs text-slate-400">{t(`staff.roleDescription.${r}`)}</p>
                     </div>
                   </label>
                 ))}

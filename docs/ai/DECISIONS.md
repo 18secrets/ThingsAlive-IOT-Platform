@@ -192,6 +192,11 @@ rather than wait for the UI team. Those MRs touch `frontend/` on purpose. The ru
 still holds everywhere else: no new pages are authored from the backend side, and any
 other `frontend/` change needs the same explicit ask.
 
+Amended 2026-11-04: for the two test reports of 3 Nov (*ThingsAlive_Platform2_Test_Report_03112026*
+and *Fuel_Prediction_Test_Report*), Tapas asked again for the matching `frontend/` changes
+to ship with the backend fixes. Branch `fix/test-report-fuel-03nov` touches `frontend/` on
+purpose under that ask, and under no other.
+
 ## D42 — QREC1's thirteen questions, answered
 
 Answered by Tapas, 2026-10-19, taking every recommendation in
@@ -455,6 +460,284 @@ arithmetic, so the two can be switched without a deploy and D50's rows keep thei
 meaning; a method's name is on every forecast it issues. Set on the scheduler (which
 issues) and the api (which serves only that method's rows). An unknown name stops the
 process at boot.
+
+## D52 — While a shift runs, its fuel is re-forecast from the litres already burned
+
+Decided 2026-11-02 by Tapas. (D51 is proposed by the selectable-method MR, !204; this is
+numbered past it so the two do not clash.) Every quarter hour of a running shift, each
+machine gets a snapshot of the shift's total:
+`predicted_l = so_far_l + base_l × hours_remaining / 12`. `so_far_l` is the rise of the
+existing platform's cumulative `fuel_consumption` counter since the shift started; `base_l`
+is the shift's own D50 forecast (`ewma-0.5-28d`), or, before the morning sync has issued
+it, the same function over the same synced history. Snapshots land in
+`shift_fuel_nowcast` (method `so-far+ewma-0.5-28d-share`) and are served beside D50's
+fields — `nowcast` on `GET /equipment/:sourceSystem/:externalId/shift-fuel-forecast`,
+`nowcasts` on `GET /shift-fuel-forecasts`, the newest snapshot of the shift under way —
+without changing any field D50 returns. Code: `src/shift-fuel/shift-fuel-nowcast*.ts`,
+`LegacyShiftMetricsReader.readFuelCounters`.
+
+Why: a backtest over 1,246 machine-shifts scored this rule's per-shift accuracy at 38%
+before the shift (the forecast alone), 44% two hours in, 51% at four hours and 59% at six;
+per machine-day 51% → 66%, per fleet-day 76% → 82%. The counter is exact for the part
+already burned — its rise over a shift matched `equipment_shift_metrics.fuel_consumption`
+within 2 L on 1,224 of 1,296 machine-shifts — so the only guess left is the rest of the
+shift, and the forecast's even share of it beat extrapolating the last hour's burn and a
+learned model, both of which scored worse: one busy or idle hour is a poor guide to the
+next eight, and the forecast already carries the machine's normal shift.
+
+- **Reading the counter.** So far = newest reading at or before the tick, minus the
+  counter at the start (the last reading in the five minutes before it, else the first
+  after it). No reading since the start: no snapshot — a silent feed is not an idle
+  machine. A counter that went backwards (reset, or a device replaced under the same
+  series) is clamped to nothing burned. A stale reading is still used and its time kept as
+  `counter_at`. Several fuel series on one machine: the one that reported most recently,
+  never their sum (two devices on one tank would double every shift). A series whose unit
+  is not `liter` is skipped and counted.
+- **Load on their database.** Per series, `LIMIT 1` probes down
+  `(device_sensor_measurement_id, "timestamp")` — two as a rule, a third only when nothing
+  was logged in the five minutes before the start — batched per pass with `LATERAL`, and
+  bounded on `created_at` (the partition key) as well as `timestamp`, so only the newest
+  one or two partitions are opened. The upper `created_at` bound is the tick itself: a
+  snapshot sees only what had reached the existing platform by its `as_of`.
+- **Append-only.** Snapshots are what gets scored at two, four and six hours, so `ta_app`
+  has `SELECT, INSERT` only and a trigger refuses an UPDATE from every role. The database
+  also holds: `as_of` strictly inside its own shift (D50's generated `starts_at`/`ends_at`),
+  `counter_at` between the shift start and `as_of`, litres non-negative, and
+  `so_far_l ≤ predicted_l ≤ so_far_l + base_l`. One snapshot per machine, shift, method and
+  tick (`as_of` is the tick, rounded down), so a second pass in the same quarter hour writes
+  nothing; one pass at a time, by advisory lock `8_742_310_004`.
+- **Switching it on.** Scheduler service only, the same `LEGACY_SHIFT_DB_*` connection, and
+  only where `SHIFT_FUEL_FORECAST_ENABLED=true` **and** `SHIFT_FUEL_NOWCAST_ENABLED=true`;
+  `SHIFT_FUEL_NOWCAST_TICK_SECONDS` (default 900, at least 300). Its own flag because it
+  reads more than D50 was switched on for: until the grants below exist every tick would
+  fail, and probing the existing platform's largest table should start because somebody
+  decided it, not because a deploy landed on a scheduler that already had D50 enabled. The
+  api needs none of these. The grants the read-only login now needs, beside D50's
+  `equipment_shift_metrics`: `SELECT` on `device_sensor_measurement_logs`
+  (`device_sensor_measurement_id`, `timestamp`, `value`, `created_at`, `deleted_at`),
+  `device_sensor_measurements` (`id`, `device_sensor_id`, `sensor_measurement_id`,
+  `deleted_at`), `sensor_measurements` (`id`, `name`, `unit`), `device_sensors` (`id`,
+  `device_id`, `deleted_at`), `devices` (`id`, `equipment_id`) and `equipment_master`
+  (`id`, `equipment`).
+
+## D53 — Fuel forecast accuracy is scored in 2.0, from 2.0's own tables, and shown in the console
+
+Decided 2026-11-03 by Tapas. How close D50's forecast and D52's in-shift forecast came to
+what was burned is served at `GET /shift-fuel-accuracy?from&to&level` (`prediction.read`,
+scoped and tenant-isolated like D50's routes) and shown on a page in the 2.0 console,
+Administration → Fuel forecast accuracy (`/admin/fuel-forecast-accuracy`). It replaces a
+dashboard that was refreshed by hand. Code: `src/shift-fuel/shift-fuel-accuracy*.ts`,
+`frontend/src/pages/FuelForecastAccuracyPage.tsx`.
+
+Why: the numbers that say whether D50 and D52 are worth keeping should not depend on
+somebody remembering to refresh them. Everything needed is already in 2.0 — the hourly
+sync's copy of the existing platform's totals, and the forecasts and snapshots written
+before each shift ended — so the page reads only `legacy_shift_metric`,
+`shift_fuel_forecast` and `shift_fuel_nowcast`, never the existing platform, and is current
+whenever those are.
+
+- **Which shifts.** Completed ones only (shift end ≤ now), in range by `sdate`, with D50's
+  shift boundaries. Actual is `legacy_shift_metric.fuel_l`; a row with no figure is not an
+  outcome. Forecast is `shift_fuel_forecast.predicted_l`, method `ewma-0.5-28d`, the
+  method D50's routes serve. The in-shift forecast at 2, 4 and 6 hours is the newest
+  `shift_fuel_nowcast` snapshot with `as_of` ≤ shift start + h.
+- **Missing is left out, never zero.** A shift with an actual and no forecast is left out
+  of the forecast's score — out of the miss and out of the actual it is divided by — and
+  counted (`shiftsWithoutForecast`, "N shifts had no forecast"). Each checkpoint is left
+  out the same way, shift by shift (`shiftsWithoutCheckpoint`). A forecast that was never
+  issued did not predict that nothing would burn.
+- **The score.** `accuracy = max(0, 100 − round(100 × miss / actual))`, null when the
+  scored actual is 0. The miss depends on "Count misses per": *Shift*, Σ over machine-shifts
+  of |forecast − actual|; *Day*, Σ over (machine, day) of |Σ forecast − Σ actual| for a
+  machine, and Σ over days of |fleet day forecast − fleet day actual| for the fleet;
+  *Whole range*, |Σ forecast − Σ actual|, per machine or for the fleet. Litres are summed
+  in hundredths, as the columns hold them, and rounded once.
+- **The fleet** is the machines whose actual total in the range is above 0, all of their
+  scored shifts included. A machine that burned nothing stays in the table as "Didn't run"
+  and out of the tiles: charging the forecast for a machine nobody ran would score a
+  decision about the site, not the forecast.
+- **Range** at most 92 days; both dates default to today in India. The page falls back
+  to the newest day with a completed, totalled shift (`latestDataDate`) when today has
+  none yet, and says so. Its own refresh is every 15 minutes, the nowcast's tick.
+- **The arithmetic** is in one pure module (`shift-fuel-accuracy.ts`) the SQL only feeds,
+  so the definition above lives in one place and its spec holds it to hand-worked numbers.
+- **`frontend/` was edited by explicit exception, for this task only.** The standing rule
+  (CLAUDE.md: the UI team builds pages) is unchanged; the user chose to have this page
+  built in the 2.0 console.
+
+## D54 — Past shifts get a back-calculated forecast, marked as one
+
+Decided 2026-11-03 by Tapas. D50 forecasts only from the day it went live, so the accuracy
+page (D53) had weeks of synced shift totals and nothing to score them against. Each
+completed shift with a synced total and no forecast gets what D50's method gives from the
+same machine's shifts before it — `forecastShift`, which reads only earlier days of the
+same shift, so nothing the live pass could not have seen before the shift started. Code:
+`src/shift-fuel/shift-fuel-backfill.ts`, run by hand with
+`scripts/backfill-shift-fuel-forecasts.ts <from> <to>` on the owner's login.
+
+- **Marked, not dated back.** `shift_fuel_forecast.backfilled` is true and `issued_at` is
+  when it was really written. The rule that a forecast is issued before its shift ends
+  now holds for every row that is not back-calculated, and only for those.
+- **The app role cannot write the column.** Its INSERT is narrowed to the columns the
+  hourly pass writes, so neither kind can pass as the other.
+- **A live forecast always wins.** Insert-if-absent, so running it again, or over a range
+  the live pass has reached, changes nothing.
+- The page scores both kinds alike and says, under "How accuracy is measured", that
+  forecasts before 3 Nov 2026 are back-calculated. The same page now has an equipment
+  search and hides machines that did not run unless asked.
+
+## D55 — A machine with no history gets expected litres from its class's physics
+
+Decided 2026-11-04 by Tapas, from the fuel test report of 3 Nov (TC-FP-07, TC-FP-09). D50
+forecasts a shift from the same machine's last 28 days, so a new machine is forecast at 0.
+Beside it, not instead of it, `GET /equipment/:sourceSystem/:externalId/expected-fuel`
+answers from the class and the machine's schedule:
+
+  working rate = rated_power_kw × working_load_pct/100 × bsfc_g_per_kwh ÷ 835 g/L,
+                 or the class nominal L/h when no BSFC is recorded
+  litres       = working rate × shift hours × working_share + idle_fuel_per_hour × the rest
+
+Code: `src/shift-fuel/expected-fuel.ts` (the arithmetic, alone), `expected-fuel-api.service.ts`.
+
+- **Nothing is assumed (G07).** The figures live on `equipment_class_profile`
+  (`1763400000000-ClassFuelFigures`), unset until the library team loads them from a
+  datasheet through the catalog workbook (optional v5 columns). A missing one blocks the
+  answer and is named. A BSFC needs its datasheet (`bsfc_source`) and the power and load it
+  multiplies, enforced by the database.
+- **Computed on request, stored nowhere.** It reads only the library and the schedule, so it
+  is the same answer for the same inputs; D50's forecasts stay the ones that are issued
+  before a shift and scored (D53).
+- **Shift hours come from the machine's own `equipment_shift` rows.** A library template
+  (`shift_template`, `1763500000000-ShiftTemplates`) gives a machine its working day in one
+  choice on the equipment form, as copies the account then owns (G13). One is seeded: the
+  existing platform's Day 08:00–20:00 and Night 20:00–08:00 Asia/Kolkata, D50's boundaries.
+- Template v5 rather than v6 for the new class columns: `class-oem-figures.spec.ts` pins
+  v5, and every addition is optional, as v4 → v5's were.
+
+## D56 — Parameters carry their unit into the compiler
+
+Decided 2026-11-09 by Deepak, for the motor library (`Crompton_Pump_Library.xlsx`,
+*Universal Parameters & Formulas*). Built in MR !230.
+
+Every motor threshold is a statement about a ratio to a rated value: λ = I / I_rated,
+overload at λ > 1.20, "running" above 5% of rated current. Today `@param` compiles as
+dimensionless, so `avg(motor_current) / @rated_current` comes out in **A**, and
+`λ > 1.2` is then accepted by literal polymorphism while comparing amps with a pure number.
+The unit check that exists to catch exactly this passes the wrong thing silently.
+
+- **The parameter catalog's unit becomes the compile unit**, for parameters that declare
+  one. `OPERATIONAL_PARAMETERS` already carries a `unit` per name; the compiler is handed
+  that map rather than assuming dimensionless.
+- **New motor parameters join the closed list with units**: rated voltage (V), rated current
+  (A), frequency (Hz), poles, phases, rated output (kW), rated PF, rated efficiency, rated
+  slip, temperature rise at rated load (K), thermal time constant (s), insulation class limit
+  (degC), operating and warning voltage band (V), locked-rotor multiple, max starts (1/h),
+  install head (m), ambient reference (degC).
+- **A value is stored in its declared unit or refused.** No conversion (QCE3: a dimension is
+  its unit). Writing `rated_current` in mA is refused, not divided by 1000 on the way in.
+- **Existing parameters keep compiling as they do now.** Giving `fuel_price` its
+  `currency/L` would change the result unit of formulas already published (D05). Moving them
+  over is a separate change, one parameter at a time, with the formulas that read each.
+
+## D57 — Rated data lives on a model in the library, not on the class
+
+Decided 2026-11-09 by Deepak. Built on `feature/motor-models-d57`
+(`1763700000000-ModelRatings`).
+
+One class covers a range: a single-phase induction motor class spans 0.37 to 2.2 kW, and
+rated current differs 6x across it. The workbook's finding V-01 is the failure this
+prevents: a firmware global calibrated for a demo motor read a 1 HP pump at 4,600% load.
+
+Three places the rated figures could live:
+
+| | Where | Verdict |
+|---|---|---|
+| a | One column per figure on `equipment_class_profile`, as D55's fuel figures | No. Eighteen columns, and still one value for a whole range |
+| b | Per-machine parameters, typed from the nameplate | Works today with no code, and stays the override. As the only home, every machine of a model is retyped, which is the transcription error a library exists to remove |
+| c | **A model in the library**, carrying its rated figures; a machine names its model | **Proposed** |
+
+- **The model is `equipment_template`, extended.** It is already Master Admin's make/model
+  library and already copies to the account (`client_equipment_template`). It gains the
+  class it belongs to and a child table of ratings: `(template, parameter name, value, unit,
+  source)`. A child table, not JSON, so the database refuses an unknown name, a unit that
+  disagrees with the catalog, and a duplicate. **`source` is required**: every rated value
+  names the datasheet or catalogue page it came from (workbook step A2).
+- **A machine names its model** (its own `client_equipment_template`), and parameter
+  resolution gains one step: equipment → **model** → equipment_class → site → client. A
+  nameplate value typed on the machine still wins, per name, exactly as today.
+- **Missing is not configured, never a default** (G07, the workbook's GATE row). A model
+  with no rated current leaves every λ formula `not_configured`, named.
+- Library → account follows D04: the account's copy is theirs. A corrected catalogue figure
+  reaches an account when it copies the model again, not as an edit under their alerts.
+- **A rating stores no unit.** Its unit is the rating's own, held in `rating_parameter`
+  (the database's copy of the D56 list; a test holds the two equal). A unit stored per row
+  could disagree with it; one that is not stored cannot.
+- **A model a machine names cannot be deleted** (RESTRICT): every motor KPI on that machine
+  would turn `not_configured` from somebody else's screen.
+- **A rating has no effective time.** It describes the model, not a moment, so a corrected
+  figure applies to every window it is read for.
+
+## D58 — The duty table is a curve on the model, read by one operator
+
+Decided 2026-11-09 by Deepak. Built on `feature/duty-curve-d58`
+(`1763800000000-DutyCurves`).
+
+The sensorless design rests on the pump's catalogue performance table: at rated speed,
+head H → flow Q → input power P_in, printed per model (Mini 1 HP: 6 m → 4,250 LPH … 50 m →
+900 LPH). Flow is estimated by reading that table backwards from measured power, the
+expected power at install comes from reading it forwards at install head, and duty-point
+deviation compares the two. Formulas cannot do any of this today.
+
+- **Storage: ordered points on the model.** `(template, curve, point, head_m, flow_lpm,
+  input_kw)`, with the units fixed by the curve kind and `source` required as for ratings.
+  One curve kind, `duty`, to start. A second machine type needing a curve adds a kind, not a
+  general-purpose table language.
+- **One operator:** `curve_at(column, by_column, x)` reads one column at a value of
+  another. `curve_at('flow_lpm', 'head_m', @install_head_m)` is expected flow at install
+  head; `curve_at('flow_lpm', 'input_kw', avg(input_power))` is the flow estimate. Linear
+  between points. The result carries the column's unit.
+- **The column read by must be strictly monotonic.** Head and flow always are, and the
+  database holds them to it at commit (rising flow, falling head, at least two points — a
+  deferred constraint trigger, since a row CHECK cannot see its neighbours). Input power is
+  not: on a self-priming regenerative pump it falls as flow rises, on a centrifugal one it
+  rises. So reading *by* power checks its order when read, and a curve where it turns back
+  answers `curve_not_monotonic` (not configured) rather than picking one of two flows.
+- **No extrapolation.** Outside the printed range the answer is `undefined_result`, named
+  as out of curve. A pump running beyond its catalogue table is itself worth knowing, and
+  an extrapolated flow would hide it.
+- **A machine whose model has no curve is `not_configured`**, decided at evaluation. The
+  same formula runs on every model of the class, so publish cannot know.
+- **Accuracy is a claim to test, not a property.** The workbook's ±10–15% for estimated flow
+  is what POC test T0 measures against a reference meter. Until then the estimate is shown
+  as an estimate.
+
+## D59 — An alert bound can be a multiple of a motor rating
+
+Decided 2026-11-09 by Deepak. Built on `feature/rated-alerts-d59`.
+
+U4 (Crompton's Critical/Warning/Normal) needs thresholds relative to each motor: overload
+at 1.2 × rated current, the voltage band from the model's own warning lines. A
+`signal-threshold` rule compared a signal with one fixed number for the whole class, and
+a class spans motors whose rated current differs six-fold.
+
+- **One new parameter, `rating`.** With it, the rule's `max`/`min` are multiples of that
+  D56 rating, resolved per machine the way a formula's `@rating` is: nameplate on the
+  machine, else its model (D57). `{signal: motor_current, rating: rated_current, max: 1.2}`.
+  A voltage band is two rules: `{rating: voltage_warn_high, max: 1}` and
+  `{rating: voltage_warn_low, min: 1}`.
+- **Still parameters, never an expression** (D34, D25). It reads back as "rise above
+  1.2 × rated current", not as amps that are right for one model.
+- **Rejected:** a rule kind that watches a formula's value (a new trigger reading compiled
+  expressions — D25 and D34 revisited for one use); fixed numbers per model (every model
+  its own rules, and a corrected rating would not move its alert).
+- **No rating, no alert.** A machine without the rating gets nothing from that rule — not
+  a bound guessed from the class — and the skip is logged per shift. Readings in another
+  unit than the rating's are not compared with it.
+- **Import:** an optional `rating` column on the signal sheet, no template bump (QCE3's
+  precedent). One rating per signal row; a band from two different ratings is authored as
+  two templates on the class page.
+- **Open:** proposal replay passes no ratings, so a rated rule does not fire in a replay;
+  and nothing yet shows, per machine, that a rated rule is idle for want of a rating.
 
 ## Open, and blocking something
 

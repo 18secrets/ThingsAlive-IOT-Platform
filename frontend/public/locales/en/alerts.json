@@ -93,7 +93,8 @@
     "cancel": "Cancel",
     "save": "Save changes",
     "notANumber": "Has to be a number.",
-    "minBelowMax": "Has to be above the minimum, or the rule can never fire."
+    "minBelowMax": "Has to be above the minimum, or the rule can never fire.",
+    "negativeAllowed": "Negative values are allowed: some signals go below zero, such as a temperature or a pressure difference."
   },
   "agent": {
     "assistantTitle": "AI Assistant",
@@ -222,6 +223,10 @@
     "checkPassed_other": "Ready to publish: {{count}} rules",
     "searchNodes": "Search nodes...",
     "dragHint": "Drag a node onto the canvas, then join them left to right: signal → condition → (all of / any of) → notify.",
+    "deleteHint": "To remove a node or a connection, select it and press Delete, or use the button in its panel.",
+    "deleteNode": "Delete node",
+    "connection": "Connection",
+    "deleteConnection": "Delete connection",
     "section": {
       "data": "DATA",
       "conditions": "CONDITIONS",
@@ -303,5 +308,11 @@
         "blocked": "Blocked"
       }
     }
+  },
+  "tier": {
+    "title": "Crompton’s alert tier",
+    "critical": "Critical",
+    "warning": "Warning",
+    "normal": "Normal"
   }
 }

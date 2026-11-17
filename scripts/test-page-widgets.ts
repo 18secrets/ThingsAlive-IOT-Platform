@@ -10,6 +10,7 @@ import { ParameterService } from '../src/parameters/services/parameter.service';
 import { AlertService } from '../src/alert/services/alert.service';
 import { WorkOrderService } from '../src/work/services/work-order.service';
 import { ServiceForecastService } from '../src/service/services/service-forecast.service';
+import { SiteTwinService } from '../src/site-twin/site-twin.service';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -33,7 +34,9 @@ async function main() {
   const storage = {} as any;
 
   const page = new PageService(
-    ds, kpis, bindings, alerts, workOrders, service, clientCatalog, parameters, storage, reader
+    ds, kpis, bindings, alerts, workOrders, service, clientCatalog, parameters, storage, reader,
+    // Added to PageService by the site twin (5c1cf1e); this script was not updated with it.
+    new SiteTwinService(ds),
   );
 
   const scope = { tenantId: 'demo-construction', userId: 'u1', roles: ['admin'], isPlatformRole: false };

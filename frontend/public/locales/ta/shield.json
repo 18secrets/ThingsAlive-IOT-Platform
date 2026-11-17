@@ -32,7 +32,9 @@
     "due_soon": "விரைவில் வர உள்ளது",
     "current": "நடப்பில்",
     "not_recorded": "பதிவு இல்லை",
-    "alsoOverdue": "தாமதமும் கூட"
+    "alsoOverdue": "தாமதமும் கூட",
+    "overdueBy_one": "1 நாள் தாமதம்",
+    "overdueBy_other": "{{count}} நாட்கள் தாமதம்"
   },
   "result": {
     "passed": "தேர்ச்சி",

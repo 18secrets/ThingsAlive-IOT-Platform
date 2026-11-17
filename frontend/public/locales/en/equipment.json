@@ -97,7 +97,6 @@
     "details": "Details",
     "target": "Target: {{value}} {{unit}}",
     "range": "Range: {{min}} – {{max}} {{unit}}",
-    "last24h": "Last 24 hours",
     "signalReadiness": "Signal readiness",
     "alerts": "Alerts",
     "noOpenAlerts": "No open alerts",
@@ -131,7 +130,12 @@
     },
     "anomalyDetail": "Latest {{actual}} {{unit}} vs predicted {{predicted}} (expected {{lo}} – {{hi}})",
     "noShiftSchedule": "No band yet: this machine has no shift schedule.",
-    "forecastAt": "Forecast {{at}} · {{model}}"
+    "forecastAt": "Forecast {{at}} · {{model}}",
+    "windowLastHours_one": "Last {{count}} h",
+    "windowLastHours_other": "Last {{count}} h",
+    "windowLastDays_one": "Last {{count}} day",
+    "windowLastDays_other": "Last {{count}} days",
+    "windowRange": "{{from}} – {{to}}"
   },
   "kpiExplorer": {
     "title": "KPI explorer",
@@ -163,11 +167,12 @@
     "noWidgets": "No widgets configured for this site's class yet."
   },
   "equipmentPage": {
-    "title": "Machine page",
+    "title": "Machine live",
     "loadFailed": "Could not load this machine page.",
     "notClassified": "Not classified",
     "exploreKpis": "Explore KPIs",
-    "noWidgets": "No widgets configured for this machine's class yet."
+    "noWidgets": "No widgets configured for this machine's class yet.",
+    "historyAndSettings": "History and settings"
   },
   "days": {
     "0": "Sun",
@@ -177,6 +182,42 @@
     "4": "Thu",
     "5": "Fri",
     "6": "Sat"
+  },
+  "fuelPerShift": {
+    "title": "Fuel per shift",
+    "expected": "Expected from the class figures",
+    "expectedHint": "Worked out from the machine's class and its shift schedule, so a new machine has it from its first shift.",
+    "litres": "{{litres}} L",
+    "split": "{{working}} L working, {{idle}} L idle",
+    "rateFromBsfc": "Working rate from rated power × load × BSFC ÷ 835 g/L",
+    "rateFromNominal": "Working rate from the class nominal",
+    "inputs": "Inputs",
+    "blocked": "Can't be worked out yet:",
+    "blocker": {
+      "no_class": "the machine has no library class",
+      "no_shift_schedule": "no shift is scheduled for this machine",
+      "working_rate_not_set": "the class has neither a nominal L/h nor rated power, load and BSFC",
+      "nominal_unit_not_litres": "the class nominal is not in L/h",
+      "working_share_not_set": "the class has no working share (the part of a shift spent working)",
+      "idle_fuel_per_hour_not_set": "the class has no idle burn (L/h)"
+    },
+    "history": "Forecast from this machine's own past shifts",
+    "historyNone": "No forecast from history: the existing platform has no shift totals for this machine yet.",
+    "shiftLabel": "Shift {{n}} · {{date}}",
+    "nowTitle": "{{shift}} · expected by its end",
+    "nowDetail": "{{soFar}} L burned so far + {{rest}} L expected in the rest of the shift",
+    "asOf": "Re-forecast {{time}}",
+    "stale": "fuel counter last read {{time}}",
+    "forecast": "Forecast {{litres}} L",
+    "noForecast": "No forecast issued",
+    "noHistory": "No history yet, so the forecast is 0 L",
+    "actualIn": "actual {{litres}} L in {{hours}} h",
+    "notTotalled": "actual not totalled yet",
+    "running": "Running",
+    "next": "Next",
+    "accuracy": "{{pct}}% accurate",
+    "method": "Forecast from this machine's own shifts over the last 28 days. Shift 1 is 08:00–20:00, shift 2 is 20:00–08:00 (India time).",
+    "unavailable": "Fuel per shift is not available for your role."
   },
   "shifts": {
     "title": "Shift schedule",
@@ -198,7 +239,8 @@
     "days": "Days",
     "timeZone": "Time zone (IANA)",
     "timeZonePlaceholder": "e.g. Asia/Kolkata",
-    "allDay": "24 hours from {{from}}"
+    "allDay": "24 hours from {{from}}",
+    "overnight": "Ends the next day: a night shift."
   },
   "runStatus": {
     "scored": "scored",
@@ -219,7 +261,8 @@
     "unit": "Unit",
     "readingUnitPair": "A meter reading needs its unit, and a unit needs a reading.",
     "notes": "Notes",
-    "notesPlaceholder": "What was done"
+    "notesPlaceholder": "What was done",
+    "notFuture": "A service is recorded once it is done, so the date cannot be in the future."
   },
   "serviceKind": {
     "scheduled": "Scheduled",
@@ -278,10 +321,23 @@
     "modelNumber": "Model Number",
     "serialNumber": "Serial Number",
     "serviceTier": "Service Tier",
+    "shiftTemplate": "Shift schedule",
+    "shiftTemplateNone": "None yet (add shifts on the machine page)",
+    "shiftTemplateKeep": "Keep the current shifts",
+    "shiftTemplateHint": "From the library's shift templates. The machine gets these shifts as its own; you can change them on its page. Fuel per shift is predicted from them.",
     "registering": "Registering…",
     "register": "Register Equipment",
     "codeTaken": "This code is already used by {{name}}.",
-    "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library."
+    "noLibraryClass": "No library class chosen: this machine gets no KPIs, scenarios or predictions automatically. Pick its class if it is listed. If it is not, register it anyway, then map its signals in Signal Bindings and ask Things Alive to add its class to the library.",
+    "shiftsHint": "Shifts are set on the machine page, under \"Shift schedule\", once the machine is registered. OEE and the fuel forecast use them.",
+    "scenarioCount_one": "{{count}} scenario",
+    "scenarioCount_other": "{{count}} scenarios",
+    "noScenarios": "no scenarios",
+    "classHasNoScenarios": "This class has no scenarios in your account, so machines on it get no predictions. Choose another class if one fits, or ask Things Alive to add its scenarios.",
+    "requestClass": "Request this class from Things Alive →",
+    "model": "Model",
+    "modelPlaceholder": "Choose the machine’s model",
+    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models."
   },
   "bindings": {
     "title": "Signal Bindings",
@@ -474,5 +530,258 @@
     "minPoints": "At least 3 valid points needed",
     "clear": "Clear",
     "save": "Save Boundary"
+  },
+  "siteTwin": {
+    "loadFailed": "The digital twin could not be loaded.",
+    "saveFailed": "The layout could not be saved.",
+    "composeFailed": "A layout could not be composed.",
+    "noMachines": "No machines are assigned to this site yet, so its digital twin has nothing to show. Assign equipment to the site and it appears here.",
+    "title": "Site digital twin",
+    "overview": "Whole site",
+    "edit": "Edit layout",
+    "saving": "Saving…",
+    "save": "Save layout",
+    "reportedOn": "reported {{when}}",
+    "progressNotReported": "Progress not reported",
+    "engagedHere": "Engaged here",
+    "noneEngaged": "No machine engaged here",
+    "notLaidOutEditor": "This site has not been laid out yet. Choose \"Edit layout\" to set its size, draw its zones and place each machine.",
+    "notLaidOut": "This site has not been laid out yet. The machines are shown in a row until an administrator places them.",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view",
+    "labels": "Show or hide labels",
+    "tour": "Rotate slowly",
+    "fullscreen": "Full screen",
+    "routeNote": "Dashed line: illustrative route, travelled while the machine’s data is live and nothing says it is stopped. Not GPS.",
+    "dragHint": "Drag a machine or a zone to move it.",
+    "breakdown": "Breakdown",
+    "engagedAt": "at {{zone}}",
+    "route": "Route while working (illustrative)",
+    "addStop": "+ Add a stop",
+    "turnLeft": "Turn 15° left",
+    "turnRight": "Turn 15° right",
+    "unplace": "Take off site",
+    "place": "Place on site",
+    "openMachine": "Open machine page",
+    "composing": "Composing…",
+    "compose": "Auto-arrange from equipment",
+    "composeHint": "Arranges the machines assigned to this site around what is drawn: every zone here stays as it is, only the structures still missing are added, and anything needing attention goes to the breakdown bay. Machine positions are rearranged; nothing is saved until you save.",
+    "siteSize": "Site size (metres)",
+    "width": "Width (E–W)",
+    "depth": "Depth (N–S)",
+    "zones": "Zones",
+    "newZone": "New zone",
+    "addZone": "Add zone",
+    "noZones": "No zones yet.",
+    "structures": "Structures (3-D)",
+    "areas": "Areas (on the ground)",
+    "floors": "Floors planned",
+    "progress": "Progress %",
+    "notReported": "not reported",
+    "placedCount": "{{placed}} of {{total}} machines placed. Select one in the \"Not yet placed\" row and choose \"Place on site\", then drag it into position.",
+    "notPlacedRow": "Not yet placed",
+    "status": {
+      "alert": "Alert",
+      "live": "Live",
+      "no_data": "No recent data",
+      "blocked": "Sensor missing",
+      "not_configured": "Not set up"
+    },
+    "zone": {
+      "work_area": "Work area",
+      "material_yard": "Material yard",
+      "parking": "Parking",
+      "restricted": "Restricted",
+      "head_office": "Head office",
+      "site_office": "Site office",
+      "batching_plant": "Batching plant",
+      "maintenance_workshop": "Maintenance workshop",
+      "gate": "Gate",
+      "road": "Road",
+      "building": "Building",
+      "substation": "Substation",
+      "quay": "Quay / jetty",
+      "container_yard": "Container yard",
+      "quay_crane_berth": "Quay crane berth",
+      "generator_room": "Generator room",
+      "compressor_house": "Compressor house",
+      "quarry": "Quarry"
+    },
+    "activity": {
+      "productive": "Working",
+      "idle": "Idling",
+      "running-unclassified": "Engine on",
+      "off": "Engine off",
+      "unknown": "No activity data"
+    },
+    "placePicker": "Place",
+    "equipment": "Equipment",
+    "allEquipment": "All equipment",
+    "demoTipper": "Demo tipper {{n}} (simulated)",
+    "simulated": "Demo · simulated movement",
+    "simulatedHint": "Demo account: machine movement and haul trips are simulated. Status, alerts and progress come from the platform.",
+    "onSite_one": "{{count}} machine on site",
+    "onSite_other": "{{count}} machines on site",
+    "openAlerts_one": "{{count}} open alert",
+    "openAlerts_other": "{{count}} open alerts",
+    "zoneSize": "{{w}} × {{d}} m",
+    "floorsCount_one": "{{count}} floor",
+    "floorsCount_other": "{{count}} floors",
+    "refreshFailed": "Showing the last view: the twin could not be refreshed ({{error}})."
+  },
+  "portTwin": {
+    "title": "Port overview",
+    "open": "Port overview",
+    "subtitle": "Every site, one digital twin",
+    "loadFailed": "The port overview could not be loaded.",
+    "hint": "Click a site to open it.",
+    "sites": "Sites",
+    "machines": "Machines",
+    "live": "Live",
+    "alerts": "Alerts",
+    "workforce": "Workforce (simulated)",
+    "site": "Site",
+    "machinesShort": "machines",
+    "workersShort": "workers",
+    "allSites": "All sites — the whole port",
+    "openSite": "Open site page →",
+    "empty": "No site has been laid out yet. Open a site and use \"Auto-arrange from equipment\".",
+    "notLaidOut": "Not drawn yet (no layout):"
+  },
+  "twin": {
+    "title": "Digital twin",
+    "loadFailed": "The 3-D model could not be loaded.",
+    "notForRole": "The 3-D model is not available for your role.",
+    "noCurrentReading": "no current reading"
+  },
+  "rated": {
+    "title": "Rated alerts on this machine",
+    "hint": "Each is a multiple of one of the machine’s ratings, read from its nameplate or its model. Without the rating, the alert cannot fire.",
+    "idleCount_one": "1 cannot fire",
+    "idleCount_other": "{{count}} cannot fire",
+    "allLive": "All can fire",
+    "above": "above {{multiple}} × {{rating}} = {{value}} {{unit}}",
+    "below": "below {{multiple}} × {{rating}} = {{value}} {{unit}}",
+    "missing": "Cannot fire: {{rating}} is not set on this machine or its model. Set it under Administration → Models.",
+    "live": "Can fire",
+    "idle": "Waiting for a rating",
+    "from": {
+      "equipment": "from the nameplate",
+      "model": "from the model",
+      "equipment_class": "set for the class",
+      "site": "set for the site",
+      "client": "set for the account"
+    }
+  },
+  "events": {
+    "title": "Events: starts, trips and supply",
+    "lastDay": "Last 24 hours",
+    "none": "No events in this period.",
+    "truncated": "Showing the newest 500.",
+    "filter": {
+      "all": "All",
+      "trips": "Trips",
+      "starts": "Starts",
+      "voltage": "Supply"
+    },
+    "kind": {
+      "start_one": "Started",
+      "start_other": "Started {{count}} times in the minute",
+      "trip_overload_one": "Tripped on overload (current above 1.2 × rated)",
+      "trip_overload_other": "Tripped on overload, {{count}} times",
+      "trip_supply_one": "Stopped on supply loss",
+      "trip_supply_other": "Stopped on supply loss, {{count}} times",
+      "trip_overtemp_one": "Tripped on over-temperature",
+      "trip_overtemp_other": "Tripped on over-temperature, {{count}} times",
+      "voltage_low": "Supply dipped to {{value}} V (warning line {{limit}} V)",
+      "voltage_high": "Supply rose to {{value}} V (warning line {{limit}} V)"
+    },
+    "tag": {
+      "trip": "Trip",
+      "voltage": "Supply",
+      "start": "Start"
+    },
+    "unavailable": {
+      "starts": {
+        "unbound": "Starts are not reported by this machine’s logger."
+      },
+      "trips": {
+        "unbound": "Trips are not reported by this machine’s logger."
+      },
+      "voltage": {
+        "unbound": "Supply voltage is not reported by this machine’s logger.",
+        "no_voltage_band": "Supply events need the voltage warning lines on the machine or its model (voltage_warn_low, voltage_warn_high)."
+      }
+    }
+  },
+  "live": {
+    "title": "Live now",
+    "updates": "Updates every 20 s",
+    "loadFailed": "Live values could not be loaded.",
+    "connectionTitle": "From the newest reading's age: online within 5 minutes, delayed within 30, offline after.",
+    "connection": {
+      "online": "Online",
+      "delayed": "Delayed",
+      "offline": "Offline",
+      "no-device": "No device fitted"
+    },
+    "lastReading": "Last reading {{age}} ago",
+    "noReading": "No reading in the last 24 hours",
+    "running": "Running",
+    "stopped": "Stopped",
+    "viewOnMap": "View on map",
+    "noLocation": "No position reported",
+    "parameters": "Parameters",
+    "noSignals": "No readings in the last 24 hours.",
+    "col": {
+      "signal": "Signal",
+      "value": "Value",
+      "updated": "Updated"
+    },
+    "staleTitle": "Not updated for over 15 minutes",
+    "age": {
+      "s": "{{n}} s",
+      "min": "{{n}} min",
+      "h": "{{n}} h"
+    }
+  },
+  "faults": {
+    "title": "Fault codes",
+    "activeCount_one": "{{count}} active",
+    "activeCount_other": "{{count}} active",
+    "none": "No active fault codes.",
+    "lastSeen": "Last seen {{when}}",
+    "firstSeen": "First seen {{when}}",
+    "clearedAt": "Cleared {{when}}",
+    "occurrences_one": "seen {{count}} time",
+    "occurrences_other": "seen {{count}} times",
+    "causes": "Likely causes",
+    "remedies": "What to do",
+    "noGuidance": "No causes or remedies recorded for this code.",
+    "showHistory_one": "Show {{count}} cleared recently",
+    "showHistory_other": "Show {{count}} cleared recently",
+    "hideHistory": "Hide cleared codes",
+    "lamp": {
+      "red_stop": "Red stop",
+      "protect": "Protect",
+      "amber_warning": "Amber warning",
+      "mil": "Check engine",
+      "none": "No lamp"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "Warning",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "showCleared_one": "Show {{count}} cleared",
+    "showCleared_other": "Show {{count}} cleared",
+    "last7Days": "Last 7 days",
+    "clearedPeriod": "Cleared between",
+    "noneCleared": "No codes cleared in this period.",
+    "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest.",
+    "symptom": "Symptom"
   }
 }

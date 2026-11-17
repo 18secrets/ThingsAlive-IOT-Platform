@@ -13,6 +13,9 @@ export interface ListColumn {
   width?: number;
   /** Narrowest a shared-width column may get; past it the table scrolls sideways instead. */
   minWidth?: number;
+  /** A shared-width column's share of the rest (default 1): more for the columns that
+   *  carry the most text, so a short one is not given the same room as a long one. */
+  grow?: number;
   /** Makes the header a sort control for that key; the page sorts its full set. */
   sortKey?: string;
 }
@@ -41,7 +44,7 @@ export const fromControl = (event: React.MouseEvent) =>
  * moving to. Every row opens what its card opens, so switching view never changes what
  * a click does; the buttons in an actions column act on their own.
  */
-export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort, onSort }: {
+export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort, onSort, maxHeight }: {
   columns: ListColumn[];
   rows: T[];
   rowKey: (row: T) => string;
@@ -51,14 +54,21 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
   bare?: boolean;
   sort?: SortState<string>;
   onSort?: (key: string) => void;
+  /**
+   * Tallest the table grows before its rows scroll inside it. For a table wider than its
+   * box: its horizontal scrollbar then sits at the visible bottom, beside the pagination,
+   * instead of under the last row a page further down (TC_190). Unset, it grows to fit.
+   */
+  maxHeight?: number;
 }) {
   const data: Row<T>[] = rows.map((row) => ({ key: rowKey(row), row }));
   return (
-    <div className={`${bare ? '' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs '}overflow-hidden [&_.rs-table-cell-content]:text-[13px] [&_.rs-table-cell-header_.rs-table-cell-content]:text-xs`}>
+    <div className={`${bare ? '' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs '}overflow-hidden [&_.rs-table-cell-content]:text-[0.8125rem] [&_.rs-table-cell-header_.rs-table-cell-content]:text-xs`}>
       <Table<Row<T>, string>
         data={data}
         rowKey="key"
         autoHeight
+        maxHeight={maxHeight}
         wordWrap="break-word"
         hover={!!onOpen}
         onRowClick={onOpen ? (r, event) => { if (!fromControl(event)) onOpen(r.row); } : undefined}
@@ -67,7 +77,7 @@ export function ListTable<T>({ columns, rows, rowKey, cells, onOpen, bare, sort,
         {columns.map((c, i) => (
           <Column
             key={c.label}
-            {...(c.width ? { width: c.width } : { flexGrow: 1, minWidth: c.minWidth ?? 100 })}
+            {...(c.width ? { width: c.width } : { flexGrow: c.grow ?? 1, minWidth: c.minWidth ?? 100 })}
             align={c.align ?? 'left'}
             verticalAlign="middle"
             fullText={false}

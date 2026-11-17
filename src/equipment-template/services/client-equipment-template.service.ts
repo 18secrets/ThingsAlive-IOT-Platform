@@ -3,14 +3,21 @@ import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantSession } from '../../scope/tenant-session';
 import { ClientEquipmentTemplate } from '../entities/client-equipment-template.entity';
+import { ClientEquipmentTemplateCurvePoint } from '../entities/client-equipment-template-curve-point.entity';
+import { ClientEquipmentTemplateRating } from '../entities/client-equipment-template-rating.entity';
 import { EquipmentTemplate } from '../entities/equipment-template.entity';
+import { EquipmentTemplateCurvePoint } from '../entities/equipment-template-curve-point.entity';
+import { EquipmentTemplateRating } from '../entities/equipment-template-rating.entity';
+import { CurveInput, CurveView, toCurveView, validateCurve } from './curves';
+import { RatingInput, RatingView, toView, validateRatings } from './ratings';
 
 export type ClientTemplateDraft = Partial<Pick<ClientEquipmentTemplate,
   'name' | 'category' | 'manufacturer' | 'engineType' | 'fuelTankCapacityLiters'
-  | 'serviceIntervalHours' | 'description'>>;
+  | 'serviceIntervalHours' | 'description' | 'equipmentClassSlug'>>;
 
 const FIELDS: readonly (keyof ClientTemplateDraft)[] = [
   'name', 'category', 'manufacturer', 'engineType', 'fuelTankCapacityLiters', 'serviceIntervalHours', 'description',
+  'equipmentClassSlug',
 ];
 
 /**
@@ -43,6 +50,10 @@ export class ClientEquipmentTemplateService {
    * A copy of one of Master Admin's templates, as the client's own. Provenance only:
    * `copiedFromId` says where it started, and nothing follows it — editing the master
    * afterwards changes no client's copy (G13).
+   *
+   * Its rated figures come with it, in the same transaction (D57). A model copied
+   * without them would leave every motor KPI on a machine naming it not_configured,
+   * with nothing on the copy to say why.
    */
   async copyFromMaster(scope: RequestScope, masterId: string, name?: string): Promise<ClientEquipmentTemplate> {
     refusePlatform(scope);
@@ -51,7 +62,89 @@ export class ClientEquipmentTemplateService {
       const master = await m.getRepository(EquipmentTemplate).findOne({ where: { id: masterId } });
       if (!master) throw new NotFoundException(`No equipment template "${masterId}".`);
       const fields = pick(master);
-      return insert(m, scope, { ...fields, name: name?.trim() || master.name }, master.id);
+      const copy = await insert(m, scope, { ...fields, name: name?.trim() || master.name }, master.id);
+      const ratings = await m.getRepository(EquipmentTemplateRating).find({ where: { templateId: master.id } });
+      if (ratings.length) {
+        await m.getRepository(ClientEquipmentTemplateRating).insert(ratings.map((r) => ({
+          tenantId: scope.tenantId, templateId: copy.id, name: r.name, value: r.value, source: r.source,
+          updatedBy: scope.userId,
+        })));
+      }
+      // The duty curve too (D58), for the same reason as the ratings.
+      const points = await m.getRepository(EquipmentTemplateCurvePoint).find({ where: { templateId: master.id } });
+      if (points.length) {
+        await m.getRepository(ClientEquipmentTemplateCurvePoint).insert(points.map((p) => ({
+          tenantId: scope.tenantId, templateId: copy.id, curve: p.curve, point: p.point,
+          headM: p.headM, flowLpm: p.flowLpm, inputKw: p.inputKw, source: p.source, updatedBy: scope.userId,
+        })));
+      }
+      return copy;
+    }).catch(mapWriteError);
+  }
+
+  async dutyCurve(scope: RequestScope, id: string): Promise<CurveView> {
+    refusePlatform(scope);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      return toCurveView(await m.getRepository(ClientEquipmentTemplateCurvePoint)
+        .find({ where: { tenantId: scope.tenantId, templateId: template.id, curve: 'duty' } }));
+    });
+  }
+
+  /** This account's own duty curve for the model (D58, D04). Idempotent and locked. */
+  async replaceDutyCurve(scope: RequestScope, id: string, input: CurveInput): Promise<CurveView> {
+    refusePlatform(scope);
+    const curve = input.points?.length ? validateCurve(input) : { source: '', points: [] };
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      await m.getRepository(ClientEquipmentTemplate).createQueryBuilder('t')
+        .where('t.id = :id AND t.tenantId = :tenantId', { id: template.id, tenantId: scope.tenantId })
+        .setLock('pessimistic_write').getOne();
+      const repo = m.getRepository(ClientEquipmentTemplateCurvePoint);
+      await repo.delete({ tenantId: scope.tenantId, templateId: template.id, curve: 'duty' });
+      if (curve.points.length) {
+        await repo.insert(curve.points.map((p, point) => ({
+          tenantId: scope.tenantId, templateId: template.id, curve: 'duty' as const, point, ...p,
+          source: curve.source, updatedBy: scope.userId,
+        })));
+      }
+      return toCurveView(await repo.find({ where: { tenantId: scope.tenantId, templateId: template.id, curve: 'duty' } }));
+    }).catch(mapWriteError);
+  }
+
+  async ratings(scope: RequestScope, id: string): Promise<RatingView[]> {
+    refusePlatform(scope);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      const rows = await m.getRepository(ClientEquipmentTemplateRating)
+        .find({ where: { tenantId: scope.tenantId, templateId: template.id }, order: { name: 'ASC' } });
+      return rows.map(toView);
+    });
+  }
+
+  /**
+   * Replaces this account's own figures for the model (D57, D04: the copy is theirs).
+   * Idempotent, and locked on the template row for the same reason as the library's.
+   * Every machine naming this model reads the new figures from its next evaluation.
+   */
+  async replaceRatings(scope: RequestScope, id: string, input: RatingInput[]): Promise<RatingView[]> {
+    refusePlatform(scope);
+    const ratings = validateRatings(input);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await this.find(m, scope, id);
+      await m.getRepository(ClientEquipmentTemplate).createQueryBuilder('t')
+        .where('t.id = :id AND t.tenantId = :tenantId', { id: template.id, tenantId: scope.tenantId })
+        .setLock('pessimistic_write').getOne();
+      const repo = m.getRepository(ClientEquipmentTemplateRating);
+      await repo.delete({ tenantId: scope.tenantId, templateId: template.id });
+      if (ratings.length) {
+        await repo.insert(ratings.map((r) => ({
+          tenantId: scope.tenantId, templateId: template.id, name: r.name, value: r.value, source: r.source,
+          updatedBy: scope.userId,
+        })));
+      }
+      const rows = await repo.find({ where: { tenantId: scope.tenantId, templateId: template.id }, order: { name: 'ASC' } });
+      return rows.map(toView);
     }).catch(mapWriteError);
   }
 
@@ -72,13 +165,17 @@ export class ClientEquipmentTemplateService {
     }).catch(mapWriteError);
   }
 
-  /** Deleted, not archived: nothing references a template once it is copied into equipment. */
+  /**
+   * Deleted, not archived. Equipment that was only pre-filled from it is unaffected; a
+   * machine that names it as its model (D57) makes the database refuse, since that
+   * machine reads its ratings from here.
+   */
   async remove(scope: RequestScope, id: string): Promise<void> {
     refusePlatform(scope);
     await withTenantSession(this.ds, scope, async (m) => {
       const template = await this.find(m, scope, id);
       await m.getRepository(ClientEquipmentTemplate).delete({ tenantId: scope.tenantId, id: template.id });
-    });
+    }).catch(mapWriteError);
   }
 
   private async find(m: EntityManager, scope: RequestScope, id: string): Promise<ClientEquipmentTemplate> {
@@ -105,6 +202,7 @@ function pick(source: ClientTemplateDraft): Required<ClientTemplateDraft> {
     fuelTankCapacityLiters: source.fuelTankCapacityLiters ?? null,
     serviceIntervalHours: source.serviceIntervalHours ?? null,
     description: source.description ?? null,
+    equipmentClassSlug: source.equipmentClassSlug ?? null,
   };
 }
 
@@ -122,6 +220,12 @@ function mapWriteError(error: unknown): never {
     const e = error as QueryFailedError & { code?: string; constraint?: string };
     if (e.code === '23505' && e.constraint === 'uq_client_equipment_template_name') {
       throw new ConflictException('This account already has a template with that name.');
+    }
+    if (e.code === '23503' && e.constraint === 'fk_equipment_model_template') {
+      throw new ConflictException(
+        'Machines name this template as their model and read their rated figures from it. '
+          + 'Give them another model, or none, before deleting it.',
+      );
     }
     if (e.code === '23514' || e.code === '22P02') throw new BadRequestException(`Refused by the database: ${error.message}`);
   }

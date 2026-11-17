@@ -23,7 +23,7 @@ export const Chip: React.FC<{
   <span
     title={title}
     className={`inline-flex items-center gap-1 rounded-md border font-medium whitespace-nowrap ${TONE_CLASS[tone]} ${
-      size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-[11px]'
+      size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-xs'
     }`}
   >
     {Icon && <Icon className={size === 'md' ? 'w-3.5 h-3.5 shrink-0' : 'w-3 h-3 shrink-0'} />}

@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthUser, NavigationTab } from '../types';
+import { AuthUser, NavigationTab, RolePageGrant } from '../types';
 import {
-  ApiError, apiAcceptInvitation, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
+  ApiError, apiAcceptInvitation, apiGetMe, apiMyPermissions, apiResume, apiSessionFromOtherTab, apiSignIn, apiSignOut,
   hasStoredSession, setSessionDeadHandler, shareSessionWithNewTabs, SignedInUser, takeSessionEndReason,
 } from './api';
+import { setAccountTimeZone } from './dateLocale';
 
 const SESSION_KEY = 'ta_session';
 
@@ -33,11 +34,16 @@ function loadSession(): AuthUser | null {
 // admin" (holding both user.manage and role.manage).
 async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
   const { capabilities, allowedTabs } = await apiMyPermissions();
+  // Staff have no account of their own, so no zone: they keep the browser's.
+  setAccountTimeZone(null);
   if (user.tenantId === PLATFORM_TENANT_ID) {
     // Every staff member uses the platform screens ('master-admin' here names that
     // side of the app); what each may open comes from their own role's capabilities.
     return { role: 'master-admin', username: user.email, platformRole: user.roleSlug, capabilities };
   }
+  // Every date on the account's screens is written in its own zone (MIN-12), set before
+  // the first screen draws. A /me that fails leaves the browser's zone, as before.
+  setAccountTimeZone(await apiGetMe().then((me) => me.tenantTimeZone).catch(() => null));
   return {
     role: 'client',
     username: user.email,
@@ -48,8 +54,12 @@ async function authUserFromApi(user: SignedInUser): Promise<AuthUser> {
     clientName: user.tenantId,
     userId: user.id,
     roleId: user.roleSlug,
-    allowedTabs: allowedTabs as NavigationTab[],
-    isSuperAdmin: !!(capabilities['user.manage'] && capabilities['role.manage']),
+    allowedTabs: allowedTabs as RolePageGrant[],
+    // The account's owner is its CEO / Manager, by role — not whoever holds user.manage
+    // and role.manage, which a custom "Admin" role can hold too and was then shown every
+    // page as if it owned the account (testing sheet TC_193).
+    isSuperAdmin: user.roleSlug === 'ceo-manager',
+    capabilities,
   };
 }
 
@@ -64,6 +74,9 @@ interface AuthContextValue {
   signIn: (identifier: string, password: string) => Promise<void>;
   acceptInvitation: (token: string, password: string) => Promise<void>;
   signOut: () => void;
+  /** True after the person pressed Log out, until the next sign-in: the page they left
+   *  is not a place to come back to, least of all for whoever signs in next. */
+  signedOutOnPurpose: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,6 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // handoff); that wait is a quarter-second unless one of them answers.
   const [restoringSession, setRestoringSession] = useState(() => hasStoredSession() || !loadSession());
   const [sessionEndedReason, setSessionEndedReason] = useState<string | null>(null);
+  const [signedOutOnPurpose, setSignedOutOnPurpose] = useState(false);
 
   // Resume a real session on a cold load. The cached AuthUser in
   // sessionStorage is what lets the shell render immediately without a flash
@@ -136,6 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (identifier: string, password: string) => {
     setSessionEndedReason(null);
     const user = await apiSignIn(identifier, password);
+    setSignedOutOnPurpose(false);
     setAuthUser(await authUserFromApi(user));
   };
 
@@ -149,11 +164,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // way, so a dead or unreachable server can't trap someone signed in.
     if (authUser) void apiSignOut();
     setSessionEndedReason(null);
+    setSignedOutOnPurpose(true);
+    setAccountTimeZone(null);
     setAuthUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ authUser, restoringSession, sessionEndedReason, signIn, acceptInvitation, signOut }}>
+    <AuthContext.Provider value={{ authUser, restoringSession, sessionEndedReason, signIn, acceptInvitation, signOut, signedOutOnPurpose }}>
       {children}
     </AuthContext.Provider>
   );

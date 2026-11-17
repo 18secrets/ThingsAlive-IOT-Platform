@@ -12,6 +12,10 @@ import 'rsuite/dist/rsuite-no-reset.css';
 import './index.css';
 // Loads the chosen language's file before the first render, so nothing flashes in English.
 import './i18n';
+import {applyTextSize, storedTextSize} from './lib/textSize';
+
+// The reader's text size before the first paint, so a page never jumps size on load.
+applyTextSize(storedTextSize());
 
 const Root = () => {
   const theme = useRsuiteTheme();

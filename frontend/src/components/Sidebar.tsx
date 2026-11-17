@@ -20,9 +20,10 @@ import {
   Briefcase,
   Cpu,
   Wrench,
-  MapPinned
+  MapPinned,
+  AlertOctagon
 } from 'lucide-react';
-import { NavigationTab, UserRole } from '../types';
+import { NavigationTab, RolePageGrant, UserRole } from '../types';
 import logoFull from '../../assets/logo-icon.png';
 import logoStacked from '../../assets/logo.png';
 
@@ -32,7 +33,7 @@ interface SidebarProps {
   role: UserRole;
   clientName?: string;
   /** Client role only — resolved from the signed-in user's RoleDefinition at login. */
-  allowedTabs?: NavigationTab[];
+  allowedTabs?: RolePageGrant[];
   /** Client role only — a Super Admin sees every client page, regardless of allowedTabs. */
   isSuperAdmin?: boolean;
   /** Whether this person may open a page at all (lib/pageAccess.ts); absent = no further limit. */
@@ -46,7 +47,7 @@ interface SidebarProps {
 // be sub-tabs inside Administration — promoted to their own sidebar entries
 // 2026-10-10 because the Administration sub-tab bar had grown too crowded.
 const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>([
-  'dashboard', 'admin', 'clients', 'staff', 'devices', 'equipment', 'settings',
+  'dashboard', 'admin', 'clients', 'staff', 'devices', 'equipment', 'fault-codes', 'settings',
 ]);
 
 // Never shown under the client role, Super Admin or not — Platform Users is
@@ -54,7 +55,7 @@ const MASTER_ADMIN_VISIBLE = new Set<NavigationTab>([
 // Clients/Staff/Devices/Equipment pages are Master Admin's own screens (a
 // client's own Devices/Equipment stay inside their Administration sub-tabs,
 // reached via 'admin', not these).
-const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff', 'devices', 'equipment']);
+const CLIENT_NEVER_VISIBLE = new Set<NavigationTab>(['users', 'clients', 'staff', 'devices', 'equipment', 'fault-codes']);
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab, onSelectTab, role, clientName, allowedTabs, isSuperAdmin, canOpen, isCollapsed, onToggleCollapsed,
@@ -81,6 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'staff', label: t('sidebar.staff'), icon: ShieldCheck },
     { id: 'devices', label: t('sidebar.devices'), icon: Cpu },
     { id: 'equipment', label: t('sidebar.equipment'), icon: Wrench },
+    { id: 'fault-codes', label: t('sidebar.faultCodes'), icon: AlertOctagon },
     { id: 'client-users', label: t('sidebar.clientUsers'), icon: UserCog },
     { id: 'roles', label: t('sidebar.roles'), icon: KeyRound },
     { id: 'users', label: t('sidebar.users'), icon: Users },
@@ -92,9 +94,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (canOpen && !canOpen(item.id)) return false;
     if (role === 'master-admin') return MASTER_ADMIN_VISIBLE.has(item.id);
     if (CLIENT_NEVER_VISIBLE.has(item.id)) return false;
-    // A Super Admin gets every client page unconditionally, regardless of
-    // what allowedTabs (from the real backend) happens to list.
+    // The account's CEO / Manager gets every client page. Anyone else sees their role's
+    // pages and nothing more (TC_193), plus Client Users and Roles when page access (the
+    // `canOpen` above) allows them by the right to manage people or roles.
     if (isSuperAdmin) return true;
+    if ((item.id === 'client-users' || item.id === 'roles') && canOpen) return true;
     return allowed.includes(item.id);
   });
 
@@ -116,20 +120,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             isCollapsed ? 'items-center py-3' : ''
           }`}
         >
+          {/* The logo is a PNG with "Alive" in black: on a dark sidebar it vanished (TC_142).
+              Inverted and turned back half a hue, black reads white and the cyan stays cyan. */}
           {isCollapsed ? (
             <img
               src={logoStacked}
               alt="ThingsAlive"
-              className="w-[55px] h-[55px] object-contain rounded"
+              className="w-[55px] h-[55px] object-contain rounded dark:invert dark:hue-rotate-180"
             />
           ) : (
-            <img src={logoFull} alt="ThingsAlive" className="h-[55px] w-auto object-contain" />
+            <img src={logoFull} alt="ThingsAlive" className="h-[55px] w-auto object-contain dark:invert dark:hue-rotate-180" />
           )}
         </div>
 
         {clientName && !isCollapsed && (
           <div className="px-5 -mt-1.5 text-end">
-            <span className="text-[15px] font-semibold text-sky-600 dark:text-sky-400 truncate block" title={clientName}>
+            <span className="text-[0.9375rem] font-semibold text-sky-600 dark:text-sky-400 truncate block" title={clientName}>
               {clientName}
             </span>
           </div>
@@ -172,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Version Footer */}
       {!isCollapsed && (
-        <div className="shrink-0 px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500">
+        <div className="shrink-0 px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500">
           <span>{t('sidebar.version', { version: '1.0.5' })}</span>
         </div>
       )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare, History } from 'lucide-react';
+import { Search, Plus, Edit2, AlertCircle, UploadCloud, FunctionSquare, History, Archive, RotateCcw } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, NamedFormula, NamedFormulaInput, apiGetNamedFormulaVersions } from '../../lib/api';
@@ -8,6 +8,10 @@ import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagin
 import { ListTable } from '../common/ListTable';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { AddNamedFormulaModal } from './AddNamedFormulaModal';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { useAuth } from '../../lib/AuthProvider';
+import { staffMay } from '../../lib/pageAccess';
+import { Skeleton } from '../common/Skeleton';
 
 interface NamedFormulaViewProps {
   formulas: NamedFormula[];
@@ -15,6 +19,7 @@ interface NamedFormulaViewProps {
   onCreateFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishFormula: (slug: string, version: number) => Promise<void>;
+  onSetFormulaActive: (slug: string, active: boolean) => Promise<void>;
 }
 
 const STATUS_STYLE: Record<NamedFormula['status'], string> = {
@@ -37,10 +42,14 @@ function representativePerSlug(rows: NamedFormula[]): NamedFormula[] {
 }
 
 export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
-  formulas, error, onCreateFormula, onUpdateFormula, onPublishFormula,
+  formulas, error, onCreateFormula, onUpdateFormula, onPublishFormula, onSetFormulaActive,
 }) => {
   const { t } = useTranslation('catalog');
   const { t: ts } = useTranslation('shared');
+  // Publishing and unretiring are Master Admin's (catalog.publish); a Catalog Author drafts,
+  // and the button says who publishes rather than answering with an error (TC_141).
+  const { authUser } = useAuth();
+  const canPublish = staffMay(authUser, 'catalog.publish');
   const [viewMode, setViewMode] = useViewMode('admin-formulas');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,13 +57,16 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [historyOf, setHistoryOf] = useState<NamedFormula | null>(null);
   const [publishError, setPublishError] = useState<Record<string, string>>({});
-  const [statusFilter, setStatusFilter] = useState<'all' | NamedFormula['status']>('all');
+  // Inactive is apart from draft/published: it is shown under All and under Inactive only,
+  // so the working lists are the formulas still in use.
+  const [statusFilter, setStatusFilter] = useState<'all' | NamedFormula['status'] | 'inactive'>('all');
 
   const representatives = useMemo(() => representativePerSlug(formulas), [formulas]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return representatives.filter((f) => (statusFilter === 'all' || f.status === statusFilter) && (
+    return representatives.filter((f) => (statusFilter === 'all'
+      || (statusFilter === 'inactive' ? !f.active : f.active && f.status === statusFilter)) && (
       f.name.toLowerCase().includes(term) ||
       f.slug.toLowerCase().includes(term) ||
       (f.category?.toLowerCase().includes(term) ?? false) ||
@@ -68,6 +80,19 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
       await onPublishFormula(f.slug, f.version);
     } catch (err) {
       setPublishError((prev) => ({ ...prev, [f.slug]: err instanceof ApiError ? err.message : t('formulas.publishFailed') }));
+    } finally {
+      setBusySlug(null);
+    }
+  };
+
+  // The soft delete (TC_151): nothing is removed, and what already uses the formula keeps it.
+  const handleSetActive = async (f: NamedFormula, active: boolean) => {
+    if (!active && !window.confirm(t('formulas.inactiveConfirm', { name: f.name }))) return;
+    setBusySlug(f.slug);
+    try {
+      await onSetFormulaActive(f.slug, active);
+    } catch {
+      // The red toast says why.
     } finally {
       setBusySlug(null);
     }
@@ -96,20 +121,49 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                 </div>
   );
   const statusBadge = (f: Formula) => (
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[f.status]}`}>
                 {t(`common.status.${f.status}`, { defaultValue: f.status })}
               </span>
+              {!f.active && (
+                <span title={t('formulas.inactiveHint')} className="inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">
+                  {t('formulas.inactive')}
+                </span>
+              )}
+    </span>
   );
   const publishButton = (f: Formula) => (
     <>
               {f.status === 'draft' && (
                 <button
                   onClick={() => handlePublish(f)}
-                  disabled={busySlug === f.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                  disabled={busySlug === f.slug || !canPublish}
+                  title={canPublish ? undefined : t('common.publishIsMasterAdmins')}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{t('common.publish')}</span>
+                </button>
+              )}
+              {f.active ? (
+                <button
+                  onClick={() => handleSetActive(f, false)}
+                  disabled={busySlug === f.slug}
+                  title={t('formulas.inactiveHint')}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 cursor-pointer disabled:opacity-50"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>{t('formulas.makeInactive')}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSetActive(f, true)}
+                  disabled={busySlug === f.slug || !canPublish}
+                  title={canPublish ? undefined : t('common.publishIsMasterAdmins')}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{t('formulas.makeActive')}</span>
                 </button>
               )}
     </>
@@ -117,7 +171,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
   const publishErrorNote = (f: Formula) => (
     <>
             {publishError[f.slug] && (
-              <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
+              <div className="flex items-start gap-1.5 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-md px-2 py-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <span>{t('formulas.notPublished', { error: publishError[f.slug] })}</span>
               </div>
@@ -135,7 +189,7 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
           <Input size="sm" value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder={t('formulas.searchPlaceholder')} className="w-full pl-9!" />
         </div>
         <SelectPicker
-          data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' }, { label: t('common.statusLabel.published'), value: 'published' }]}
+          data={[{ label: t('common.allStatuses'), value: 'all' }, { label: t('common.statusLabel.draft'), value: 'draft' }, { label: t('common.statusLabel.published'), value: 'published' }, { label: t('formulas.inactive'), value: 'inactive' }]}
           value={statusFilter}
           onChange={(v) => setStatusFilter((v ?? 'all') as typeof statusFilter)}
           searchable={false}
@@ -175,9 +229,9 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
             rowKey={(f) => f.slug}
             cells={(f) => [
               <span className="font-mono">{f.slug}</span>,
-              <span><span className="font-medium">{f.name}</span>{f.category && <span className="block text-[11px] text-slate-400">{f.category}</span>}</span>,
+              <span><span className="font-medium">{f.name}</span>{f.category && <span className="block text-xs text-slate-400">{f.category}</span>}</span>,
               `v${f.version}`,
-              <span className="font-mono text-[11px]">{f.expression}</span>,
+              <span className="font-mono text-xs">{f.expression}</span>,
               statusBadge(f),
               <div className="flex flex-wrap items-center gap-2">{headerButtons(f)}{publishButton(f)}{publishErrorNote(f)}</div>,
             ]}
@@ -194,16 +248,16 @@ export const NamedFormulaView: React.FC<NamedFormulaViewProps> = ({
                   {headerButtons(f)}
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug">{f.name}</h4>
-                {f.category && <p className="text-[11px] text-slate-400 mt-0.5">{f.category}</p>}
+                {f.category && <p className="text-xs text-slate-400 mt-0.5">{f.category}</p>}
               </div>
 
               {f.description && <p className="text-slate-600 dark:text-slate-300 line-clamp-2 text-xs leading-relaxed">{f.description}</p>}
 
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-[11px] rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-medium text-xs rounded-md border border-slate-200 dark:border-slate-700 w-fit">
                 <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0" />
                 <span className="truncate">{f.expression}</span>
               </div>
-              <p className="text-[11px] text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
+              <p className="text-xs text-slate-400">{t('formulas.roleCount', { count: f.inputs.length })} · {f.resultDimension ?? (f.resultUnit ? t('formulas.unit', { unit: f.resultUnit }) : t('formulas.dimensionInferred'))}</p>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                 {statusBadge(f)}
@@ -261,7 +315,7 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
   }, [slug]);
 
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!versions) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (!versions) return <Skeleton />;
 
   return (
     <ol className="space-y-2.5">
@@ -270,20 +324,20 @@ const FormulaVersions: React.FC<{ slug: string }> = ({ slug }) => {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">v{v.version}</span>
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[v.status]}`}>
                 {t(`common.status.${v.status}`, { defaultValue: v.status })}
               </span>
             </div>
-            <span className="text-[11px] text-slate-400">
-              {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString() }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString() })}
+            <span className="text-xs text-slate-400">
+              {v.publishedAt ? t('formulas.publishedAt', { date: new Date(v.publishedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) }) : t('formulas.lastEdited', { date: new Date(v.updatedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
             </span>
           </div>
           {v.name !== versions[0].name && <p className="text-xs text-slate-600 dark:text-slate-300">{v.name}</p>}
-          <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] rounded-md border border-slate-200 dark:border-slate-700">
+          <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-xs rounded-md border border-slate-200 dark:border-slate-700">
             <FunctionSquare className="w-3 h-3 text-sky-600 shrink-0 mt-0.5" />
             <span className="break-all">{v.expression}</span>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             {v.inputs.length ? v.inputs.map((i) => `${i.role} (${i.dimension})`).join(', ') : t('formulas.noInputRoles')}
             {' · '}
             {v.resultDimension ?? (v.resultUnit ? t('formulas.unit', { unit: v.resultUnit }) : t('formulas.dimensionInferred'))}

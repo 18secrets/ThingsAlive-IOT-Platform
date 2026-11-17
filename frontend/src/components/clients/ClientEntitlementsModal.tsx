@@ -101,7 +101,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">{t('entitlements.title')}</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">{client.clientName}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{client.clientName}</p>
           </div>
           <button
             onClick={onClose}
@@ -128,7 +128,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
                       <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                       <div className="min-w-0">
                         <p className="font-mono text-xs text-slate-800 dark:text-slate-100 truncate">{g.equipmentClassSlug}</p>
-                        {g.note && <p className="text-[11px] text-slate-400 truncate">{g.note}</p>}
+                        {g.note && <p className="text-xs text-slate-400 truncate">{g.note}</p>}
                       </div>
                     </div>
                     <button
@@ -152,7 +152,7 @@ export const ClientEntitlementsModal: React.FC<ClientEntitlementsModalProps> = (
                 {t('entitlements.classes')} <span className="text-rose-500">*</span>
               </label>
               {grantableClasses.length === 0 ? (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {publishedClasses.length === 0
                     ? t('entitlements.noPublished')
                     : t('entitlements.allGranted')}

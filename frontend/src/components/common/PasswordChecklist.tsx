@@ -21,7 +21,7 @@ export function passwordMeetsRules(password: string): boolean {
 export const PasswordChecklist: React.FC<{ password: string }> = ({ password }) => {
   const { t } = useTranslation();
   return (
-    <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]" aria-live="polite">
+    <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs" aria-live="polite">
       {RULES.map((r) => {
         const ok = r.ok(password);
         return (

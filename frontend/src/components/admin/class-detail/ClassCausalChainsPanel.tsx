@@ -85,7 +85,7 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
                 {chain.status === 'draft' && (
                   <button
                     onClick={() => { setEditingChain(chain); setIsModalOpen(true); }}
-                    className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
+                    className="text-xs font-semibold text-slate-500 hover:text-sky-600 cursor-pointer"
                   >
                     {t('common.editDraft')}
                   </button>
@@ -103,24 +103,24 @@ export const ClassCausalChainsPanel: React.FC<ClassCausalChainsPanelProps> = ({
               {chain.nodes.filter((n) => typeof n?.signal === 'string').map((n) => (
                 <span
                   key={n.signal}
-                  className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                  className="px-2 py-0.5 text-xs font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
                   title={n.label}
                 >
                   {n.signal}
                 </span>
               ))}
-              {!chain.nodes.some((n) => typeof n?.signal === 'string') && <span className="text-[11px] text-slate-400 italic">{t('chains.noStages')}</span>}
+              {!chain.nodes.some((n) => typeof n?.signal === 'string') && <span className="text-xs text-slate-400 italic">{t('chains.noStages')}</span>}
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATUS_STYLE[chain.status]}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLE[chain.status]}`}>
                 {t(`common.status.${chain.status}`, { defaultValue: chain.status })}
               </span>
               {chain.status === 'draft' && (
                 <button
                   onClick={() => handlePublish(chain.slug)}
                   disabled={busySlug === chain.slug}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer disabled:opacity-50"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{t('common.publish')}</span>

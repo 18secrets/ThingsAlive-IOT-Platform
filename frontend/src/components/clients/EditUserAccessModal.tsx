@@ -102,7 +102,7 @@ export const EditUserAccessModal: React.FC<EditUserAccessModalProps> = ({
                   block
                   searchable={plantOptions.length > 6}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {t('access.machinesFollowSite')}
                 </p>
               </div>

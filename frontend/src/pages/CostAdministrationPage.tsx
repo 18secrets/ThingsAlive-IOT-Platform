@@ -11,6 +11,7 @@ import {
   apiGetEffectiveParameters, apiGetParameterCatalog, apiGetParameterHistory, apiListEquipment,
   apiListMyEquipmentClasses, apiListPlants, apiSetCurrency, apiSetParameter,
 } from '../lib/api';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 // The order the scope picker lists them in; labels are cost.json's scope.* keys.
 const SCOPES: ParameterScope[] = ['client', 'site', 'equipment_class', 'equipment'];
@@ -186,7 +187,7 @@ export const CostAdministrationPage: React.FC = () => {
                     </div>
                     {entry.description && <p className="text-xs text-slate-400 dark:text-slate-500">{entry.description}</p>}
                     {entry.requiredBy.length > 0 && (
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
                         {t('param.neededBy')} {entry.requiredBy.map((r) => `${r.classSlug}/${r.formulaKey}`).join(', ')}
                       </p>
                     )}
@@ -195,7 +196,7 @@ export const CostAdministrationPage: React.FC = () => {
                     <div className="text-base font-mono font-semibold text-slate-800 dark:text-slate-100">
                       {eff?.value != null ? `${eff.value} ${entry.unit ?? ''}` : '—'}
                     </div>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[0.6875rem] text-slate-400">
                       {eff?.source ? (setHere ? t('param.setHere') : t('param.inherited', { scope: t(`scope.${eff.source.scope}`) })) : t('param.notConfigured')}
                     </p>
                   </div>
@@ -226,7 +227,7 @@ export const CostAdministrationPage: React.FC = () => {
             {historyRows.map((row) => (
               <div key={row.id} className="flex items-center justify-between border border-slate-100 dark:border-slate-800 rounded-lg p-2.5 text-sm">
                 <span className="font-mono">{row.value != null ? `${row.value} ${row.unit ?? ''}` : t('history.cleared')}</span>
-                <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{new Date(row.effectiveFrom).toLocaleString()}</span>
+                <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 className="w-3.5 h-3.5" />{new Date(row.effectiveFrom).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
               </div>
             ))}
           </div>

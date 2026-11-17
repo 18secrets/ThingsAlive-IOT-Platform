@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity, AlertTriangle, ArrowUpRight, Bell, Box, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
+  Activity, AlertTriangle, ArrowUpRight, Bell, ChevronRight, ClipboardList, Clock3, Cpu, Gauge, MapPin, Search, ShieldCheck,
   Siren, Sparkles, Wrench,
 } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
@@ -20,6 +20,11 @@ import {
   apiGetUtilizationSummary, apiListAlerts, apiListEquipment, apiListIncidentRecords, apiListMyDevices, apiListPlants, apiListWorkOrders,
 } from '../lib/api';
 import { severityTone } from '../components/common/statusTone';
+import { MachineIcon } from '../components/common/MachineIcon';
+import { SelectPicker } from 'rsuite';
+import { PanelRow, PanelRows, shortWhen } from '../components/common/PanelRow';
+import { useAuth } from '../lib/AuthProvider';
+import { Skeleton } from '../components/common/Skeleton';
 
 const DAY = 86_400_000;
 const lastDays = (days: number) => ({ from: new Date(Date.now() - days * DAY).toISOString(), to: new Date().toISOString() });
@@ -68,6 +73,20 @@ export const LiveDashboardPage: React.FC = () => {
     : fitted ? fitted.length - (online ?? 0)
     : [...latestByImei.values()].filter((r) => r.state === 'dark').length;
   const overdueOrders = orders.state === 'ok' ? orders.data.filter((o) => o.dueAt && new Date(o.dueAt).getTime() < Date.now()).length : 0;
+  // An employee given a job saw only a count of open work orders here, never the job
+  // (testing sheet TC_148). Their own jobs come first, then the rest, earliest due first.
+  const { authUser } = useAuth();
+  const me = authUser?.role === 'client' ? authUser.userId : undefined;
+  const ordersMineFirst: Slot<WorkOrder[]> = orders.state === 'ok'
+    ? {
+      state: 'ok',
+      data: orders.data.slice().sort((a, b) => {
+        const mine = Number(b.assignedToUserId === me) - Number(a.assignedToUserId === me);
+        if (mine) return mine;
+        return (a.dueAt ? Date.parse(a.dueAt) : Infinity) - (b.dueAt ? Date.parse(b.dueAt) : Infinity);
+      }),
+    }
+    : orders;
   const breached = incidents.state === 'ok'
     ? incidents.data.filter((i) => i.sla.acknowledge.state === 'breached' || i.sla.resolve.state === 'breached').length : 0;
   const serviceDue = service.state === 'ok' ? service.data.filter((a) => a.status === 'due' || a.status === 'overdue') : [];
@@ -97,7 +116,7 @@ export const LiveDashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Panel title={t('live.utilizationTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')} className="lg:col-span-2">
-          {utilization.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : utilization.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : utilization.data.length === 0 ? (
+          {utilization.state === 'loading' ? <Skeleton lines={2} /> : utilization.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : utilization.data.length === 0 ? (
             <Muted>{t('live.utilizationEmpty')}</Muted>
           ) : (
             <table className="w-full text-xs">
@@ -120,7 +139,7 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
 
         <Panel title={t('live.availabilityTitle')} icon={<Gauge className="w-4 h-4" />} onOpen={() => navigate('/production-monitoring')}>
-          {availability.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
+          {availability.state === 'loading' ? <Skeleton lines={2} /> : availability.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex items-center gap-4">
               <RingGauge value={availability.data.availability != null ? availability.data.availability * 100 : null} size={72} colorClass="text-sky-500 dark:text-sky-400" />
               <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5">
@@ -135,26 +154,39 @@ export const LiveDashboardPage: React.FC = () => {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <Panel title={t('live.openWorkOrders')} icon={<ClipboardList className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
+          <List slot={ordersMineFirst} empty={t('live.noOpenWorkOrders')} render={(d) => d.slice(0, 5).map((o) => (
+            <PanelRow key={o.id} onClick={() => navigate('/work-orders')} title={`${o.reference} · ${o.title}`}
+              detail={`${machineName(o.sourceSystem, o.externalId)} · ${t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}`}
+              meta={o.dueAt ? t('live.due', { when: shortWhen(o.dueAt) }) : undefined}
+              right={o.assignedToUserId === me && me
+                ? <Chip tone="sky">{t('live.yours')}</Chip>
+                : <Chip tone={o.priority === 'urgent' || o.priority === 'high' ? 'amber' : 'slate'}>{t(`priority.${o.priority}`, { defaultValue: o.priority })}</Chip>} />
+          ))} />
+        </Panel>
         <Panel title={t('live.liveIncidents')} icon={<Siren className="w-4 h-4" />} onOpen={() => navigate('/incident-management')}>
           <List slot={incidents} empty={t('live.noLiveIncidents')} render={(d) => d.slice(0, 5).map((i) => (
-            <Row key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} left={machineName(i.machine.sourceSystem, i.machine.externalId)}
-              right={<><Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip><span className="text-slate-400">{t(`state.${i.status}`, { defaultValue: i.status })}</span></>} />
+            <PanelRow key={i.id} onClick={() => openMachine(i.machine.sourceSystem, i.machine.externalId)} title={machineName(i.machine.sourceSystem, i.machine.externalId)}
+              detail={`${t(`state.${i.status}`, { defaultValue: i.status })} · ${shortWhen(i.openedAt)}`}
+              right={<Chip tone={severityTone(i.severity)}>{t(`severity.${i.severity}`, { defaultValue: i.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.openAlerts')} icon={<Bell className="w-4 h-4" />} onOpen={() => navigate('/alerts')}>
           <List slot={alerts} empty={t('live.noOpenAlerts')} render={(d) => d.slice(0, 5).map((a) => (
-            <Row key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={`${machineName(a.sourceSystem, a.externalId)} · ${a.summary}`}
+            <PanelRow key={a.id} onClick={() => openMachine(a.sourceSystem, a.externalId)} title={machineName(a.sourceSystem, a.externalId)}
+              detail={a.summary} meta={shortWhen(a.firedAt)}
               right={<Chip tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>} />
           ))} />
         </Panel>
         <Panel title={t('live.serviceDue')} icon={<Wrench className="w-4 h-4" />} onOpen={() => navigate('/work-orders')}>
-          {service.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : service.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : serviceDue.length === 0 ? (
+          {service.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : service.state === 'loading' ? <Skeleton lines={2} /> : serviceDue.length === 0 ? (
             <Muted>{t('live.nothingDue')}</Muted>
-          ) : serviceDue.slice(0, 5).map((a) => (
-            <Row key={`${a.sourceSystem}/${a.externalId}`} onClick={() => openMachine(a.sourceSystem, a.externalId)} left={a.name ?? a.externalId}
-              right={<Chip tone={a.status === 'overdue' ? 'rose' : 'amber'}>{a.status ? t(`serviceStatus.${a.status}`, { defaultValue: a.status }) : a.status}{a.hoursRemaining != null ? ` · ${Math.abs(a.hoursRemaining)} h` : ''}</Chip>} />
-          ))}
+          ) : <PanelRows>{serviceDue.slice(0, 5).map((a) => (
+            <PanelRow key={`${a.sourceSystem}/${a.externalId}`} onClick={() => openMachine(a.sourceSystem, a.externalId)} title={a.name ?? a.externalId}
+              detail={a.hoursRemaining != null ? t(a.hoursRemaining < 0 ? 'live.hoursOverdue' : 'live.hoursLeft', { hours: Math.abs(a.hoursRemaining) }) : undefined}
+              right={<Chip tone={a.status === 'overdue' ? 'rose' : 'amber'}>{a.status ? t(`serviceStatus.${a.status}`, { defaultValue: a.status }) : a.status}</Chip>} />
+          ))}</PanelRows>}
         </Panel>
       </div>
 
@@ -171,7 +203,7 @@ export const LiveDashboardPage: React.FC = () => {
         </div>
         {equipment.state !== 'ok' || equipment.data.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-            <Muted>{equipment.state === 'loading' ? t('common.loading') : equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>
+            {equipment.state === 'loading' ? <Skeleton lines={2} /> : <Muted>{equipment.state === 'unavailable' ? t('common.unavailable') : t('live.noMachines')}</Muted>}
           </div>
         ) : (
           <MachineCards
@@ -194,7 +226,7 @@ export const LiveDashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Panel title={t('translation:sidebar.thingsShield')} icon={<ShieldCheck className="w-4 h-4" />} onOpen={() => navigate('/things-shield')}>
-          {shield.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
+          {shield.state === 'loading' ? <Skeleton lines={2} /> : shield.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (
             <div className="flex flex-wrap gap-1.5">
               <Chip tone="rose">{t('live.shieldCount.action_required', { count: shield.data.counts.action_required })}</Chip>
               <Chip tone="rose">{t('live.shieldCount.overdue', { count: shield.data.counts.overdue })}</Chip>
@@ -205,7 +237,7 @@ export const LiveDashboardPage: React.FC = () => {
           )}
         </Panel>
         <Panel title={t('live.onboarding')} icon={<Sparkles className="w-4 h-4" />} onOpen={() => navigate('/ai-onboarding')}>
-          {onboarding.state === 'loading' ? <Muted>{t('common.loading')}</Muted> : onboarding.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (() => {
+          {onboarding.state === 'loading' ? <Skeleton lines={2} /> : onboarding.state === 'unavailable' ? <Muted>{t('common.unavailable')}</Muted> : (() => {
             const totals = onboarding.data.sites.reduce((acc, s) => ({ total: acc.total + s.machines.total, done: acc.done + s.machines.done }), { total: 0, done: 0 });
             return (
               <div className="flex items-center gap-3 text-xs">
@@ -239,12 +271,28 @@ const MachineCards: React.FC<{
   const [viewMode, setViewMode] = useViewMode('dashboard-machines');
   // Eighty-odd machines over seven pages had no way to find one (test report MIN-7).
   const [query, setQuery] = useState('');
+  // And narrowing by where, what and whether it reports, from what the cards already show (2 Nov 2026).
+  const [site, setSite] = useState('all');
+  const [kind, setKind] = useState('all');
+  const [link, setLink] = useState<'all' | 'online' | 'offline' | 'none'>('all');
+  const siteOptions = useMemo(() => [...new Set(machines.map((m) => m.plantId ?? ''))]
+    .map((id) => ({ label: plantName(id || null), value: id || 'none' }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [machines, plantName]);
+  const kindOptions = useMemo(() => [...new Set(machines.map((m) => m.equipmentClassSlug ?? ''))]
+    .map((slug) => ({ label: slug || t('live.notClassified'), value: slug || 'none' }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [machines, t]);
   const matching = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return !q ? machines : machines.filter((m) =>
-      (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q) || plantName(m.plantId).toLowerCase().includes(q));
-  }, [machines, query, plantName]);
-  const { pageItems, ...pager } = usePagination(matching, 12);
+    return machines.filter((m) => {
+      if (site !== 'all' && (m.plantId ?? 'none') !== site) return false;
+      if (kind !== 'all' && (m.equipmentClassSlug ?? 'none') !== kind) return false;
+      if (link !== 'all' && (connectionOf(m.externalId) ?? 'none') !== link) return false;
+      return !q || (m.name ?? '').toLowerCase().includes(q) || m.externalId.toLowerCase().includes(q)
+        || plantName(m.plantId).toLowerCase().includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machines, query, plantName, site, kind, link]);
+  const { pageItems, ...pager } = usePagination(matching);
   const hours = (h: number | null | undefined) => (h == null ? '—' : `${h.toFixed(0)}h`);
   // availability arrives as a 0–1 ratio (availability.ts rounds uptime / scheduled).
   const figures = (m: EquipmentProfile) => {
@@ -260,8 +308,8 @@ const MachineCards: React.FC<{
   };
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative max-w-sm">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={query}
@@ -270,7 +318,38 @@ const MachineCards: React.FC<{
             className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
           />
         </div>
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <SelectPicker
+          size="sm"
+          data={[{ label: ts('filters.allSitesPlants'), value: 'all' }, ...siteOptions]}
+          value={site}
+          onChange={(v) => setSite(v ?? 'all')}
+          searchable={siteOptions.length > 8}
+          cleanable={false}
+        />
+        <SelectPicker
+          size="sm"
+          data={[{ label: ts('filters.allClasses'), value: 'all' }, ...kindOptions]}
+          value={kind}
+          onChange={(v) => setKind(v ?? 'all')}
+          searchable={kindOptions.length > 8}
+          cleanable={false}
+        />
+        <SelectPicker
+          size="sm"
+          data={[
+            { label: ts('filters.allConnections'), value: 'all' },
+            { label: ts('connection.online'), value: 'online' },
+            { label: ts('connection.offline'), value: 'offline' },
+            { label: ts('connection.noData'), value: 'none' },
+          ]}
+          value={link}
+          onChange={(v) => setLink((v ?? 'all') as typeof link)}
+          searchable={false}
+          cleanable={false}
+        />
+        <span className="ml-auto">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </span>
       </div>
       <div className={LIST_PANEL}>
         {matching.length === 0 ? (
@@ -306,7 +385,7 @@ const MachineCards: React.FC<{
             return (
               <button key={m.id} onClick={() => onOpen(m)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs hover:border-sky-300 transition-colors space-y-2 group cursor-pointer">
                 <div className="flex items-center justify-between">
-                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><Box className="w-4.5 h-4.5" /></span>
+                  <span className="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 flex items-center justify-center"><MachineIcon classSlug={m.equipmentClassSlug} name={m.name} className="w-4.5 h-4.5" /></span>
                   <ConnectionBadge state={connectionOf(m.externalId)} />
                 </div>
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={m.name ?? m.externalId}>{m.name ?? m.externalId}</h4>
@@ -347,7 +426,7 @@ function Tile<T>({ icon, label, slot, value, note, tone, onClick }: {
       <div className={`text-2xl font-bold mt-1 ${color}`}>
         {slot.state === 'ok' ? value(slot.data) : slot.state === 'loading' ? '…' : '—'}
       </div>
-      <div className="text-[11px] text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
+      <div className="text-xs text-slate-400 min-h-[16px]">{slot.state === 'unavailable' ? t('common.unavailableShort') : slot.state === 'loading' ? '' : note}</div>
     </button>
   );
 }
@@ -364,21 +443,12 @@ const Panel: React.FC<{ title: string; icon: React.ReactNode; onOpen: () => void
 
 const Muted: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-xs text-slate-400">{children}</p>;
 
-const Row: React.FC<{ left: string; right: React.ReactNode; onClick?: () => void }> = ({ left, right, onClick }) => (
-  <div
-    onClick={onClick}
-    className={`flex items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-1.5 ${onClick ? 'cursor-pointer hover:text-sky-600' : ''}`}
-  >
-    <span className="text-slate-700 dark:text-slate-200 truncate">{left}</span>
-    <span className="flex items-center gap-1.5 shrink-0">{right}</span>
-  </div>
-);
 
 function List<T>({ slot, empty, render }: { slot: Slot<T[]>; empty: string; render: (d: T[]) => React.ReactNode }) {
   const { t } = useTranslation('dashboard');
-  if (slot.state === 'loading') return <Muted>{t('common.loading')}</Muted>;
+  if (slot.state === 'loading') return <Skeleton lines={2} />;
   if (slot.state === 'unavailable') return <Muted>{t('common.unavailable')}</Muted>;
   if (slot.data.length === 0) return <Muted>{empty}</Muted>;
-  return <div className="space-y-1">{render(slot.data)}</div>;
+  return <PanelRows>{render(slot.data)}</PanelRows>;
 }
 

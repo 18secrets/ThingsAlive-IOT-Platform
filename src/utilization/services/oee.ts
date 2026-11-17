@@ -136,18 +136,33 @@ export function overlapMinutes(i: Interval, window: Interval): number {
  * no further. A gap is not fuel — it is unknown, and is left out rather than invented.
  */
 export function fuelBurned(rate: Sample[], intervals: Interval[]): number {
-  if (!rate.length) return 0;
+  return fuelBurnedAndCovered(rate, intervals).litres;
+}
+
+/**
+ * `fuelBurned`, and the minutes inside `intervals` the samples actually speak for. Litres
+ * over those minutes is the average rate while running — the fuel KPI's definition since
+ * the fuel test report's FU-4 — and it is this loop, so the KPI and OEE's Quality cannot
+ * integrate the same readings two ways.
+ */
+export function fuelBurnedAndCovered(rate: Sample[], intervals: Interval[]): { litres: number; coveredMinutes: number } {
+  if (!rate.length) return { litres: 0, coveredMinutes: 0 };
   const samples = [...rate].sort((a, b) => a.at - b.at);
   const carryMs = carryFor(samples.map((s) => s.at)) * 1000;
   let litres = 0;
+  let coveredMinutes = 0;
   for (let k = 0; k < samples.length; k += 1) {
     const span = {
       start: samples[k].at,
       end: Math.min(samples[k].at + carryMs, k + 1 < samples.length ? samples[k + 1].at : Infinity),
     };
-    for (const i of intervals) litres += samples[k].value * overlapMinutes(span, i) / 60;
+    for (const i of intervals) {
+      const minutes = overlapMinutes(span, i);
+      litres += samples[k].value * minutes / 60;
+      coveredMinutes += minutes;
+    }
   }
-  return litres;
+  return { litres, coveredMinutes };
 }
 
 export type Readiness = 'ready' | 'not_configured' | 'blocked' | 'not_available';

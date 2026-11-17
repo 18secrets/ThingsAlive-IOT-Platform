@@ -12,6 +12,8 @@ import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { sortRows, useSort } from '../../lib/useSort';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -61,7 +63,10 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
 
   const handleUnclaim = async (d: MyDevice) => {
     const reason = window.prompt(t('bindings.unfitPrompt', { imei: d.imei, name: equipmentName(d.equipmentExternalId) ?? t('devices.itsMachine') }));
-    if (reason === null) return;
+    // Cancel or an empty reason stops it, as Resolve, Complete and Cancel do (test report
+    // MAJ-1): taking a device off a machine ends its readings there, and "why" is what
+    // the next person looking at the gap needs.
+    if (reason === null || !reason.trim()) return;
     setBusyImei(d.imei);
     setActionError(undefined);
     try {
@@ -89,9 +94,9 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
     { label: t('devices.col.fittedTo'), sortKey: 'fitted' }, { label: t('devices.col.action') },
   ];
   const viewCells = (d: (typeof pagedRows)[number]) => [
-    <span className="font-mono text-[11px]">{d.imei}</span>,
+    <span className="font-mono text-xs">{d.imei}</span>,
     <span className="text-slate-600 dark:text-slate-400">{d.model || '—'}</span>,
-    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATE_STYLE[d.state]}`}>
       {t(`deviceState.${d.state}`, { defaultValue: d.state })}
     </span>,
     <span className="text-slate-600 dark:text-slate-400">
@@ -165,7 +170,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('devices.empty')}</div>
+          loading ? <Skeleton lines={4} className="py-4" /> : <div className="py-8 text-center text-slate-400 text-sm">{t('devices.empty')}</div>
         ) : viewMode === 'list' ? (
           <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
         ) : (
@@ -211,7 +216,7 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
   }, [imei]);
 
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!windows) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (!windows) return <Skeleton />;
   if (windows.length === 0) {
     return <p className="text-sm text-slate-400">{t('devices.noHealth')}</p>;
   }
@@ -223,20 +228,20 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
               {/* The end's date too when the window crosses midnight (test report COS-4). */}
-              {new Date(w.windowStart).toLocaleString()} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
-                ? new Date(w.windowEnd).toLocaleTimeString() : new Date(w.windowEnd).toLocaleString()}
+              {new Date(w.windowStart).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString(appLocale(), { timeZone: appTimeZone() }) : new Date(w.windowEnd).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>
           <p className="text-slate-500 dark:text-slate-400">{w.detail}</p>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             {t('devices.samples', { count: w.samples })}
             {w.signalBand ? ` · ${t('devices.signal', { band: w.signalBand })}` : ''}
             {minutes(w.longestGapSeconds, t) ? ` · ${t('devices.longestGap', { value: minutes(w.longestGapSeconds, t) })}` : ''}
             {minutes(w.medianLagSeconds, t) ? ` · ${t('devices.medianLag', { value: minutes(w.medianLagSeconds, t) })}` : ''}
           </p>
           {w.missingSignals.length > 0 && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400">{t('devices.missing', { list: w.missingSignals.join(', ') })}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">{t('devices.missing', { list: w.missingSignals.join(', ') })}</p>
           )}
         </li>
       ))}

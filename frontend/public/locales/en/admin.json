@@ -8,7 +8,11 @@
     "toolMapping": "Tool Mapping",
     "signalAliases": "Signal Aliases",
     "signalStates": "Signal States",
-    "telemetryArchive": "Telemetry Archive"
+    "telemetryArchive": "Telemetry Archive",
+    "fuelForecastAccuracy": "Fuel forecast accuracy",
+    "models": "Models",
+    "serviceRoster": "Service roster",
+    "faultCodes": "Fault Codes"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",
@@ -34,5 +38,199 @@
     "noDrops": "No partition has been dropped yet.",
     "rowsDropped_one": "{{formatted}} row",
     "rowsDropped_other": "{{formatted}} rows"
+  },
+  "fuelAccuracy": {
+    "notCovered": {
+      "summary_one": "{{count}} of {{fuelled}} machines with a fuel sensor has no forecast in this range. Why:",
+      "summary_other": "{{count}} of {{fuelled}} machines with a fuel sensor have no forecast in this range. Why:",
+      "reason": {
+        "no_shift_totals": "the existing platform sent no shift totals for this equipment number, so there is no history to forecast from. Its expected litres per shift are on its machine page.",
+        "mirrored_from_1_0": "mirrored from IoT Platform 1.0, whose records are not matched to the existing platform's equipment numbers."
+      }
+    },
+    "title": "Fuel forecast accuracy",
+    "updated": "Updated {{time}}. Refreshes every 15 minutes.",
+    "loadFailed": "Could not load fuel forecast accuracy.",
+    "loading": "Loading…",
+    "empty": "No machine has a completed shift with fuel figures in the dates picked.",
+    "noMatch": "No machine matches the search and filter.",
+    "search": "Search equipment",
+    "showIdle_one": "Show the {{count}} machine that didn't run",
+    "showIdle_other": "Show the {{count}} machines that didn't run",
+    "totalsLine_one": "Totals over the {{count}} machine that burned fuel in the dates picked. Machines that didn't run are left out.",
+    "totalsLine_other": "Totals over the {{count}} machines that burned fuel in the dates picked. Machines that didn't run are left out.",
+    "tiles": {
+      "actual": "Actual fuel (L)",
+      "forecast": "Forecast fuel (L)",
+      "accuracy": "Accuracy of the forecast",
+      "inShift": "Accuracy of the in-shift forecast"
+    },
+    "noForecastNote_one": "{{count}} shift had no forecast and is left out.",
+    "noForecastNote_other": "{{count}} shifts had no forecast and are left out.",
+    "noCheckpointNote_one": "{{count}} shift had no in-shift forecast by {{hours}} and is left out.",
+    "noCheckpointNote_other": "{{count}} shifts had no in-shift forecast by {{hours}} and are left out.",
+    "checkpointLabel": "Hours into the shift",
+    "hours_one": "{{count}} h",
+    "hours_other": "{{count}} h",
+    "fellBack": "No shift dated {{today}} has been completed and totalled yet, so this shows {{shown}}, the latest day with data.",
+    "from": "From",
+    "to": "To",
+    "today": "Today",
+    "countMissesPer": "Count misses per",
+    "levels": {
+      "day": "Day",
+      "shift": "Shift",
+      "range": "Whole range"
+    },
+    "columns": {
+      "equipment": "Equipment",
+      "actual": "Actual L",
+      "forecast": "Forecast L",
+      "accuracy": "Accuracy",
+      "inShift": "In-shift at {{hours}}"
+    },
+    "didntRun": "Didn't run",
+    "notScored": "No shift with fuel burned had a forecast to score.",
+    "how": {
+      "title": "How accuracy is measured",
+      "shifts": "Only completed shifts count. A shift belongs to the date it starts on: shift 1 runs 08:00–20:00 and shift 2 runs 20:00–08:00 the next morning (India time).",
+      "actual": "Actual is the existing platform's fuel total for the shift, copied into 2.0 every hour. A shift it has no figure for is not counted.",
+      "forecast": "Forecast is the figure issued for the shift before it ended. A shift with no forecast is left out of the score, never counted as a forecast of zero, and the note under the tile says how many.",
+      "backfilled": "Forecasts for shifts before 3 Nov 2026, when the forecast went live, are back-calculated: each is what the same method gives from only the shifts that had ended before that shift started. They are marked as such in the database and scored the same way.",
+      "inShift": "The in-shift forecast at 2, 4 or 6 hours is the newest re-forecast made by that point in the shift: litres burned so far plus the forecast’s share of the hours left. A shift with none by then is left out of that checkpoint.",
+      "formula": "Accuracy = 100 − (miss ÷ actual litres × 100), rounded, and never below 0. A machine that burned nothing has no percentage: it shows “Didn’t run”.",
+      "levels": "“Count misses per” decides what a miss is. Shift: every machine-shift’s gap counts. Day: each machine’s day total against its forecast day total, so an over-forecast morning can offset an under-forecast night; the fleet tiles use the whole fleet’s day totals. Whole range: one total against the other.",
+      "fleet": "The tiles add up only the machines that burned fuel in the dates picked, their forecast litres included.",
+      "didntRun": "“Didn’t run” means the machine burned 0 litres across the dates picked."
+    }
+  },
+  "faultCodes": {
+    "section": {
+      "vehicle-j1939": "Vehicle · J1939",
+      "vehicle-obd2": "Vehicle · OBD-II",
+      "motor-pump": "Motor · Pump",
+      "access": "Account access"
+    },
+    "loadFailed": "Fault codes could not be loaded.",
+    "search": "Search code or fault…",
+    "showRetired": "Show retired",
+    "add": "Add code",
+    "vehicleHint": "These codes come from 1.0 and are copied here every day. They are edited in 1.0, so here they can be read but not changed.",
+    "empty": "No codes match.",
+    "retired": "Retired",
+    "edit": "Edit",
+    "view": "View",
+    "col": {
+      "code": "Code",
+      "fault": "Fault",
+      "severity": "Severity",
+      "source": "Source"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "Warning",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
+    },
+    "source": {
+      "v1": "From 1.0",
+      "v2": "2.0"
+    },
+    "modalNew": "New fault code",
+    "tab": {
+      "history": "History"
+    },
+    "field": {
+      "code": "Code",
+      "spn": "SPN",
+      "fmi": "FMI",
+      "description": "Fault",
+      "symptom": "Symptom",
+      "causes": "Likely causes",
+      "remedies": "What to do",
+      "detection": "How it is detected",
+      "foundBy": "Found by",
+      "severity": "Severity",
+      "lamp": "Lamp",
+      "system": "System",
+      "oemCode": "Maker's code"
+    },
+    "codeHintMotor": "P and three digits, e.g. P103",
+    "codeHintObd2": "e.g. P0101",
+    "readOnly10": "This code comes from 1.0 and is edited there. It is copied here every day.",
+    "lamp": {
+      "red_stop": "Red stop",
+      "amber_warning": "Amber warning",
+      "protect": "Protect",
+      "mil": "Check engine",
+      "none": "No lamp"
+    },
+    "foundBy": {
+      "logger": "Logger",
+      "technician": "Technician"
+    },
+    "restore": "Restore",
+    "retire": "Retire",
+    "saved": "Saved",
+    "save": "Save",
+    "create": "Add",
+    "historyEmpty": "No changes yet.",
+    "historyBy": "{{who}} · {{when}}",
+    "historyField": {
+      "created": "Added",
+      "description": "Fault",
+      "symptom": "Symptom",
+      "causes": "Likely causes",
+      "remedies": "What to do",
+      "detection": "How it is detected",
+      "found_by": "Found by",
+      "severity": "Severity",
+      "lamp": "Lamp",
+      "retired": "Retired"
+    },
+    "access": {
+      "loadFailed": "Account access could not be loaded.",
+      "revokeConfirm": "Stop showing {{type}} codes to {{account}}?",
+      "account": "Account",
+      "granted": "Given",
+      "notGranted": "Not given",
+      "hint": "Choose which kinds of fault code each account sees. Turning one off hides those codes from the account; they stay in the library.",
+      "noAccounts": "No accounts yet."
+    },
+    "retireConfirm": "Retire {{code}}? It leaves the list and accounts stop seeing it. Past faults still show it, and it can be restored.",
+    "historyRestored": "Restored",
+    "import": {
+      "template": "Download template",
+      "open": "Import",
+      "title": "Import fault codes",
+      "hint": "Download the template, fill in one row per code (replace the example row) and upload it. It is checked first; nothing is written until you apply. A row for a code already in the library changes it; a blank cell leaves that field as it is.",
+      "choose": "Choose file",
+      "checking": "Checking…",
+      "failed": "The file could not be checked.",
+      "templateFailed": "Could not download the template.",
+      "done": "Imported: {{added}} new, {{changed}} changed.",
+      "countNew_one": "{{count}} new",
+      "countNew_other": "{{count}} new",
+      "countChanged_one": "{{count}} changed",
+      "countChanged_other": "{{count}} changed",
+      "countUnchanged_one": "{{count}} unchanged",
+      "countUnchanged_other": "{{count}} unchanged",
+      "countErrors_one": "{{count}} error",
+      "countErrors_other": "{{count}} errors",
+      "fixErrors": "Fix the rows in error and choose the file again. Nothing is written while any row is in error.",
+      "nothing": "Nothing to change: every row matches the library.",
+      "row": "Row {{n}}",
+      "status": {
+        "new": "New",
+        "changed": "Changed",
+        "unchanged": "Unchanged",
+        "error": "Error"
+      },
+      "close": "Close",
+      "cancel": "Cancel",
+      "apply_one": "Apply {{count}} change",
+      "apply_other": "Apply {{count}} changes"
+    }
   }
 }

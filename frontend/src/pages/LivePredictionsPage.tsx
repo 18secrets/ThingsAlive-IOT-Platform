@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { severityTone } from '../components/common/statusTone';
+import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ChevronRight, Info, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronRight, Info, Search, Sparkles } from 'lucide-react';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { worstPrediction } from '../lib/worstPrediction';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { sortRows, useSort } from '../lib/useSort';
 import { SortSelect } from '../components/common/SortSelect';
+import { Input } from 'rsuite';
 import { DEFAULT_EQUIPMENT_FILTER_SCOPE, EquipmentFilters } from '../components/common/EquipmentFilters';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
@@ -16,6 +18,8 @@ import {
   ApiError, ClientScenario, EquipmentProfile, Plant, Prediction, PredictionSeverity,
   apiEditMyCatalogScenario, apiGetLatestPredictions, apiListEquipment, apiListMyCatalogScenarios, apiListPlants,
 } from '../lib/api';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 
@@ -29,11 +33,17 @@ const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 export const LivePredictionsPage: React.FC = () => {
   const { t } = useTranslation(['predictions', 'shared']);
   // Highest risk first, as on ThingsCare; a machine still loading or unscored goes last.
-  const { sort, setSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
+  const { sort, setSort, toggle: toggleSort } = useSort<'risk' | 'name' | 'code'>({ key: 'risk', dir: 'desc' });
+  // The scenarios above the machines had no search and no sort, while the list below them
+  // had both (testing sheet TC_156).
+  const [scenarioQuery, setScenarioQuery] = useState('');
+  const { sort: scenarioSort, setSort: setScenarioSort, toggle: toggleScenarioSort } =
+    useSort<'severity' | 'name' | 'enabled'>({ key: 'severity', dir: 'desc' });
   const { t: ts } = useTranslation('shared');
   const [viewMode, setViewMode] = useViewMode('predictions');
   usePageHeader({ title: t('translation:pages.predictions.title'), subtitle: t('translation:pages.predictions.subtitle') });
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
   // "No machines match" before the list arrived read as a filter that matched nothing.
   const [equipmentLoaded, setEquipmentLoaded] = useState(false);
@@ -89,12 +99,18 @@ export const LivePredictionsPage: React.FC = () => {
   // Scenarios follow the filters: those for the classes of the machines on screen. With
   // no machines registered yet there is nothing to narrow by, so all of them show.
   const visibleClasses = new Set(visible.map((e) => e.equipmentClassSlug));
-  const visibleScenarios = (scenarios ?? []).filter((s) => equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug));
+  const scenarioTerm = scenarioQuery.trim().toLowerCase();
+  const visibleScenarios = sortRows(
+    (scenarios ?? []).filter((s) => (equipment.length === 0 || visibleClasses.has(s.clientEquipmentClassSlug))
+      && (!scenarioTerm || s.name.toLowerCase().includes(scenarioTerm) || s.slug.toLowerCase().includes(scenarioTerm))),
+    scenarioSort,
+    { severity: (s) => SEVERITY_RANK[s.severity] ?? -1, name: (s) => s.name.toLowerCase(), enabled: (s) => (s.enabled ? 1 : 0) },
+  );
 
   // Both lists are paged, in both views.
   const { pageItems: scenarioItems, ...scenarioPager } = usePagination(visibleScenarios);
   const scenarioPage = { pageItems: scenarioItems };
-  const { pageItems: machineItems, ...machinePager } = usePagination(sorted, 12);
+  const { pageItems: machineItems, ...machinePager } = usePagination(sorted);
   const machinePage = { pageItems: machineItems };
 
   // The card's pieces, shared with the list row.
@@ -111,15 +127,24 @@ export const LivePredictionsPage: React.FC = () => {
     if (!worst) return t('kpis.notScored');
     return `${worst.clientScenarioSlug} · ${t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · ${t('kpis.scenariosScored', { count: (p as Prediction[]).length })}`;
   };
+  // The form opens with this machine chosen and the task written from its worst
+  // prediction, linked to it (testing sheet TC_181, TC_182).
+  const raiseFor = (m: EquipmentProfile) => {
+    const { worst } = scoreOf(m);
+    raiseWorkOrder({
+      machine: m, from: 'predictions', worst,
+      scenarioName: worst ? scenarios?.find((s) => s.slug === worst.clientScenarioSlug)?.name : null,
+    });
+  };
   const machineActions = (m: EquipmentProfile) => (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <button
         onClick={() => navigate(`/things-care/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
-        className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"
+        className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer whitespace-nowrap"
       >
         {t('common.details')} <ChevronRight className="w-3.5 h-3.5" />
       </button>
-      <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
+      <button onClick={() => raiseFor(m)} className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer whitespace-nowrap">
         <Sparkles className="w-3.5 h-3.5" /> {t('common.createWorkOrder')}
       </button>
     </div>
@@ -171,19 +196,24 @@ export const LivePredictionsPage: React.FC = () => {
         </div>
       )}
 
-      <EquipmentFilters
-        showConnection={false}
-        scope={scope}
-        onChange={setScope}
-        plants={plants}
-        classes={classes}
-        equipmentOptions={equipmentOptions}
-        selectedKey={selectedKey}
-        onSelect={setSelectedKey}
-      />
-
-      <div className="flex justify-end">
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      {/* One switch for both lists, in the filter row rather than on a row of its own. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <EquipmentFilters
+            showConnection={false}
+            scope={scope}
+            onChange={setScope}
+            plants={plants}
+            classes={classes}
+            equipmentOptions={equipmentOptions}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+          />
+        </div>
+        {/* On a phone the picker sits under its label; line up with the picker, not the label. */}
+        <div className="self-end sm:self-auto">
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
@@ -193,26 +223,52 @@ export const LivePredictionsPage: React.FC = () => {
             {t('scenarios.manage')} <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+        <p className="flex items-center gap-1.5 text-xs text-slate-400">
           <Info className="w-3.5 h-3.5" />{t('scenarios.info')}
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+            <Input size="sm" value={scenarioQuery} onChange={(v) => { setScenarioQuery(v); scenarioPager.setPage(1); }} placeholder={t('scenarios.search')} className="w-full pl-9!" />
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-sm text-slate-400 dark:text-slate-500">{t('scenarios.count', { count: visibleScenarios.length })}</span>
+            <SortSelect
+              sort={scenarioSort}
+              disabled={visibleScenarios.length === 0}
+              onChange={(next) => { setScenarioSort(next); scenarioPager.setPage(1); }}
+              options={[
+                { key: 'severity', dir: 'desc', label: ts('sort.severityHigh') },
+                { key: 'name', dir: 'asc', label: ts('sort.nameAz') },
+                { key: 'enabled', dir: 'desc', label: ts('sort.enabledFirst') },
+                { key: 'enabled', dir: 'asc', label: ts('sort.disabledFirst') },
+              ]}
+            />
+          </div>
+        </div>
         <div className={LIST_PANEL}>
           {scenarios === null ? (
-            <p className="p-4 text-sm text-slate-400">{error ? '—' : t('common.loading')}</p>
+            error ? <p className="p-4 text-sm text-slate-400">—</p> : <Skeleton className="p-4" />
           ) : visibleScenarios.length === 0 ? (
             <p className="p-4 text-sm text-slate-400">{t('scenarios.empty')}</p>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              // As on Scenarios: the toggle's column is narrow and fixed, and its room goes to
+              // Details and Needs, which carry the most text.
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.needs') },
-                { label: ts('listCol.enabled') },
+                { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 130 },
+                { label: ts('listCol.details'), sortKey: 'severity', grow: 3, minWidth: 180 },
+                { label: ts('listCol.needs'), grow: 3, minWidth: 160 },
+                { label: ts('listCol.enabled'), sortKey: 'enabled', width: 100 },
               ]}
+              sort={scenarioSort}
+              onSort={(key) => { toggleScenarioSort(key as 'severity' | 'name' | 'enabled', key === 'name' ? 'asc' : 'desc'); scenarioPager.setPage(1); }}
               rows={scenarioPage.pageItems}
               rowKey={(s) => s.id}
               cells={(s) => [
                 <span className="font-medium">{s.name}</span>,
                 <div className="flex items-center gap-1.5 flex-wrap">{scenarioChips(s)}</div>,
-                <span className="text-[11px] text-slate-500">{scenarioNeeds(s)}</span>,
+                <span className="text-xs text-slate-500">{scenarioNeeds(s)}</span>,
                 scenarioToggle(s),
               ]}
             />
@@ -227,7 +283,7 @@ export const LivePredictionsPage: React.FC = () => {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {scenarioChips(s)}
                   </div>
-                  <p className="text-[11px] text-slate-400">{scenarioNeeds(s)}</p>
+                  <p className="text-xs text-slate-400">{scenarioNeeds(s)}</p>
                 </div>
               ))}
             </div>
@@ -258,15 +314,24 @@ export const LivePredictionsPage: React.FC = () => {
         </p>
         <div className={LIST_PANEL}>
           {!equipmentLoaded ? (
-            <p className="p-4 text-sm text-slate-400">{t('common.loading')}</p>
+            <Skeleton className="p-4" />
           ) : sorted.length === 0 ? (
             <div className="py-10 text-center text-slate-400 text-sm">{t('kpis.noMatch')}</div>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              // Sortable headers, as on every other list (test report MAJ-9): the select above
+              // and these are the same sort. Risk starts highest first, the point of the page.
+              // A chip and a number need little room; the machine and its summary take the
+              // rest, and the two actions sit right, as Edit does on Scenarios.
               columns={[
-                { label: ts('listCol.machine') }, { label: ts('listCol.severity') }, { label: ts('listCol.risk'), align: 'right' },
-                { label: ts('listCol.details') }, { label: ts('listCol.actions') },
+                { label: ts('listCol.machine'), sortKey: 'name', grow: 2, minWidth: 120 },
+                { label: ts('listCol.severity'), width: 110 },
+                { label: ts('listCol.risk'), align: 'right', sortKey: 'risk', width: 80 },
+                { label: ts('listCol.details'), grow: 3, minWidth: 170 },
+                { label: ts('listCol.actions'), align: 'right', width: 230 },
               ]}
+              sort={sort}
+              onSort={(key) => toggleSort(key as 'risk' | 'name' | 'code', key === 'risk' ? 'desc' : 'asc')}
               rows={machinePage.pageItems}
               rowKey={(m) => `${m.sourceSystem}|${m.externalId}`}
               cells={(m) => {
@@ -275,8 +340,10 @@ export const LivePredictionsPage: React.FC = () => {
                   <span><span className="font-medium">{m.name ?? m.externalId}</span> <span className="text-slate-400">{m.externalId}</span></span>,
                   worst ? <Chip tone={SEVERITY_TONE(worst.severity)}>{t(`severity.${worst.severity}`, { defaultValue: worst.severity })}</Chip> : '—',
                   worst ? worst.riskScore : '—',
-                  <span className="text-[11px] text-slate-500">{scoreSummary(p, worst)}</span>,
-                  machineActions(m),
+                  <span className="text-xs text-slate-500">{scoreSummary(p, worst)}</span>,
+                  // A link never breaks inside a word (Tamil's "Details" split in two); when
+                  // both do not fit on one line they stack, still right-aligned.
+                  <div className="flex justify-end [&>div]:justify-end">{machineActions(m)}</div>,
                 ];
               }}
               onOpen={(m) => navigate(`/things-care/${encodeURIComponent(m.sourceSystem)}/${encodeURIComponent(m.externalId)}`)}
@@ -302,7 +369,7 @@ export const LivePredictionsPage: React.FC = () => {
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {worst.clientScenarioSlug} · {t('kpis.confidence', { value: t(`confidence.${worst.confidence}`, { defaultValue: worst.confidence }) })} · {t('kpis.scenariosScored', { count: (p as Prediction[]).length })}
                         </p>
-                        <p className="text-[11px] text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(), count: worst.windowDays })}</p>
+                        <p className="text-xs text-slate-400">{t('kpis.scoredAt', { time: new Date(worst.computedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }), count: worst.windowDays })}</p>
                       </>
                     )}
                     <div className="pt-1">{machineActions(m)}</div>

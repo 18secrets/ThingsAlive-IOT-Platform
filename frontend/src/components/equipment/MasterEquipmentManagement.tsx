@@ -14,6 +14,9 @@ import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 import { ClientAccount } from '../../types';
 import { MasterAddEquipmentModal } from './MasterAddEquipmentModal';
 import { sortRows, useSort } from '../../lib/useSort';
+import { useAuth } from '../../lib/AuthProvider';
+import { staffMay } from '../../lib/pageAccess';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface MasterEquipmentManagementProps {
   equipment: EquipmentProfile[];
@@ -45,6 +48,10 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   onGetEquipmentPlacementHistory, onListPlantsForTenant,
 }) => {
   const { t } = useTranslation(['devices', 'shared']);
+  // Registering, editing and retiring are Master Admin's (equipment.write); other staff
+  // roles read this list.
+  const { authUser } = useAuth();
+  const canWrite = staffMay(authUser, 'equipment.write');
   const [viewMode, setViewMode] = useViewMode('admin-equipment');
   const STATUS_OPTIONS = STATUS_VALUES.map((value) => ({ label: t(`equipment.status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,7 +91,11 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
   }, [equipment]);
 
   const clientOptions = useMemo(
-    () => [{ label: t('equipment.allClients'), value: 'All' }, ...clients.map((c) => ({ label: c.clientName, value: c.id }))],
+    () => [{ label: t('equipment.allClients'), value: 'All' }, ...clients.map((c) => ({
+      // The account's id beside its name (FU-8): demo-construction is listed as "Apex
+      // Infrastructure & Mining Ltd.", and a tester looking for the id found nothing.
+      label: c.clientName === c.id ? c.id : `${c.clientName} (${c.id})`, value: c.id,
+    }))],
     [clients, t],
   );
 
@@ -165,11 +176,11 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
     const busy = retiringKey === k;
     return [
       <span className="text-slate-600 dark:text-slate-400">{clientName(item.tenantId)}</span>,
-      <span className="font-mono text-[11px]">{item.externalId}</span>,
+      <span className="font-mono text-xs">{item.externalId}</span>,
       <span className="text-slate-900 dark:text-white">{item.name || '—'}</span>,
       <span className="text-slate-600 dark:text-slate-400">{plantName(item.tenantId, item.plantId)}</span>,
       <span className="capitalize text-slate-600 dark:text-slate-400">{t(`equipment.tier.${item.tier}`, { defaultValue: item.tier })}</span>,
-      <><span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+      <><span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                             item.status === 'active'
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
@@ -177,13 +188,13 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                             {t(`equipment.status.${item.status}`, { defaultValue: item.status })}
                           </span></>,
       <><div className="flex items-center gap-1.5">
-                            <button
+                            {canWrite && <button
                               onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
                               title={t('equipment.edit')}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>}
                             <button
                               onClick={() => handleToggleHistory(item)}
                               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -191,7 +202,7 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
                             >
                               {historyKey === k ? <ChevronUp className="w-3.5 h-3.5" /> : <History className="w-3.5 h-3.5" />}
                             </button>
-                            {item.status === 'active' && (
+                            {canWrite && item.status === 'active' && (
                               <button
                                 onClick={() => handleRetire(item)}
                                 disabled={busy}
@@ -243,13 +254,13 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
 
         <div className="flex items-center gap-3 shrink-0">
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-          <button
+          {canWrite && <button
           onClick={() => { setEditingEquipment(null); setIsModalOpen(true); }}
           className="px-4 py-2 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t('equipment.register')}</span>
-        </button>
+        </button>}
         </div>
       </div>
 
@@ -273,21 +284,21 @@ export const MasterEquipmentManagement: React.FC<MasterEquipmentManagementProps>
             table, which has no room for that; one panel under the list serves both views. */}
         {historyItem && (
           <div ref={historyPanel} className="px-4 pb-3 pt-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 space-y-1.5">
-            <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               {t('equipment.placementHistory')}: {historyItem.name || historyItem.externalId}
             </p>
             <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 p-2.5 space-y-1.5 max-h-40 overflow-y-auto">
-                              {historyLoading && <p className="text-[11px] text-slate-400">{t('shared:loading')}</p>}
+                              {historyLoading && <p className="text-xs text-slate-400">{t('shared:loading')}</p>}
                               {!historyLoading && history.length === 0 && (
-                                <p className="text-[11px] text-slate-400">{t('equipment.noHistory')}</p>
+                                <p className="text-xs text-slate-400">{t('equipment.noHistory')}</p>
                               )}
                               {history.map((h) => (
-                                <div key={h.id} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                                <div key={h.id} className="text-xs text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
                                   <span>
                                     {plantName(historyItem.tenantId, h.fromPlantId)} → {plantName(historyItem.tenantId, h.toPlantId)}
                                     {h.reason ? `: "${h.reason}"` : ''}
                                   </span>
-                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString()}</span>
+                                  <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                                 </div>
                               ))}
                             </div>

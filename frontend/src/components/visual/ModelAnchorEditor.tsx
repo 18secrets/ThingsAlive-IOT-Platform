@@ -90,8 +90,8 @@ export const ModelAnchorEditor: React.FC<{
           />
         </Suspense>
       </div>
-      <p className="text-[11px] text-slate-400">{editable ? t('model.howTo') : t('model.viewOnly')}</p>
-      {note && <p className="text-[11px] text-slate-400">{note}</p>}
+      <p className="text-xs text-slate-400">{editable ? t('model.howTo') : t('model.viewOnly')}</p>
+      {note && <p className="text-xs text-slate-400">{note}</p>}
 
       {editable && current && (
         <div className="flex items-center gap-2 flex-wrap">

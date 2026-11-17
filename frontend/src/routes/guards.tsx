@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/AuthProvider';
+import { canOpenPath, firstAllowedPath } from '../lib/pageAccess';
 
 function RestoringSession() {
   const { t } = useTranslation();
@@ -14,11 +15,14 @@ function RestoringSession() {
 
 /** Wraps every route that needs a signed-in user — /sign-in otherwise. */
 export const RequireAuth: React.FC = () => {
-  const { authUser, restoringSession } = useAuth();
+  const { authUser, restoringSession, signedOutOnPurpose } = useAuth();
   const location = useLocation();
   if (restoringSession) return <RestoringSession />;
-  // Where they were going, so signing in lands there and not on the dashboard.
-  if (!authUser) return <Navigate to="/sign-in" replace state={{ from: `${location.pathname}${location.search}` }} />;
+  // Where they were going, so signing in lands there and not on the dashboard — but not
+  // after Log out: the next person to sign in was taken to the page the last one left.
+  if (!authUser) {
+    return <Navigate to="/sign-in" replace state={signedOutOnPurpose ? undefined : { from: `${location.pathname}${location.search}` }} />;
+  }
   return <Outlet />;
 };
 
@@ -27,14 +31,19 @@ export const GuestOnly: React.FC = () => {
   const { authUser, restoringSession } = useAuth();
   const from = useReturnPath();
   if (restoringSession) return <RestoringSession />;
-  if (authUser) return <Navigate to={from} replace />;
+  // The page they were headed for only if it is theirs to open; otherwise their own
+  // first page — the dashboard, where their role has one.
+  if (authUser) {
+    const to = from && canOpenPath(authUser, from) ? from : firstAllowedPath(authUser) ?? '/settings';
+    return <Navigate to={to} replace />;
+  }
   return <Outlet />;
 };
 
-/** The deep link a signed-out visit was headed for, else the dashboard. Only a path on
- *  this site: a `from` of "//elsewhere" would be an open redirect. */
-export function useReturnPath(): string {
+/** The deep link a signed-out visit was headed for, or null. Only a path on this site:
+ *  a `from` of "//elsewhere" would be an open redirect. */
+export function useReturnPath(): string | null {
   const from = (useLocation().state as { from?: unknown } | null)?.from;
   return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/sign-in')
-    ? from : '/dashboard';
+    ? from : null;
 }

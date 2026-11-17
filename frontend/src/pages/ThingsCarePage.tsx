@@ -17,8 +17,9 @@ import {
   ApiError, EquipmentProfile, FleetLinkRow, Plant, Prediction, PredictionSeverity,
   apiGetDeviceHealthFleet, apiGetLatestPredictions, apiListEquipment, apiListPlants,
 } from '../lib/api';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
-const PAGE_SIZE = 12;
 const SEVERITY_STYLE: Record<PredictionSeverity, { ring: string; bg: string; gauge: string }> = {
   none: { ring: 'border-emerald-200 dark:border-emerald-900', bg: 'bg-emerald-50/60 dark:bg-emerald-950/20', gauge: 'text-emerald-500 dark:text-emerald-400' },
   // Low is sky, as on every other page's severity scale (test report COS-1); green stays for none.
@@ -118,7 +119,7 @@ export const ThingsCarePage: React.FC = () => {
   }), [rows, sort]);
 
   // The shared rsuite pager, as every other list; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(sorted, PAGE_SIZE);
+  const { pageItems, ...pager } = usePagination(sorted);
 
   return (
     <div id="things-care-view" className="space-y-3">
@@ -145,7 +146,7 @@ export const ThingsCarePage: React.FC = () => {
       />
 
       {loading ? (
-        <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        <Skeleton />
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -164,17 +165,19 @@ export const ThingsCarePage: React.FC = () => {
               <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('list.heading')}</h3>
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <span className="text-sm text-slate-400 dark:text-slate-500">{t('list.count', { count: rows.length })}</span>
-                <SortSelect
-                  sort={sort}
-                  onChange={(next) => { setSort(next); pager.setPage(1); }}
-                  options={[
-                    { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
-                    { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
-                    { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
-                    { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
-                  ]}
-                />
-                <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                <span className="inline-flex items-center gap-2">
+                  <SortSelect
+                    sort={sort}
+                    onChange={(next) => { setSort(next); pager.setPage(1); }}
+                    options={[
+                      { key: 'risk', dir: 'desc', label: t('shared:sort.riskHigh') },
+                      { key: 'risk', dir: 'asc', label: t('shared:sort.riskLow') },
+                      { key: 'name', dir: 'asc', label: t('shared:sort.nameAz') },
+                      { key: 'code', dir: 'asc', label: t('shared:sort.codeAz') },
+                    ]}
+                  />
+                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                </span>
               </div>
             </div>
 
@@ -250,18 +253,18 @@ const ThingsCareCard: React.FC<{
       <div className="flex items-center gap-3">
         <span title={t('card.gaugeTitle')}>
           {/* Points out of 100, as Live Predictions writes them: "21%" here beside "29/100" there read as two scorings (test report MAJ-7). */}
-          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} unit="" />
+          <RingGauge value={prediction ? prediction.riskScore : null} size={60} colorClass={style.gauge} unit="/100" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <span className="inline-block px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
               {prediction ? t(`severity.${prediction.severity}`, { defaultValue: prediction.severity }) : t('card.noScenario')}
             </span>
             <ConnectionBadge state={connection} />
           </div>
           <h4 className="font-semibold text-slate-900 dark:text-white text-md truncate mt-0.5" title={name}>{name}</h4>
           <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{externalId}</p>
-          {prediction && <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString() })}</p>}
+          {prediction && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{t('card.scoredAt', { time: new Date(prediction.computedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}</p>}
         </div>
       </div>
       <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">

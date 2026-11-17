@@ -109,6 +109,10 @@ export class KpiEmitter implements ArtifactEmitter<'kpi'> {
       if (!named) {
         throw new BadRequestException(`Named formula "${seed.namedFormulaSlug}" is not published or does not exist.`);
       }
+      // Inactive is the library's soft delete (TC_151): what is bound stays, nothing new binds.
+      if (!named.active) {
+        throw new BadRequestException(`Named formula "${seed.namedFormulaSlug}" is inactive, so it cannot be bound. Choose another.`);
+      }
 
       const expectedSignals = cls.expectedSignals ?? [];
       const signalUnits = new Map<string, string | null>(expectedSignals.map((s) => [s.signal, s.unit ?? null]));

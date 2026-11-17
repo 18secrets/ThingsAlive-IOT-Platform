@@ -214,7 +214,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
               cleanable={false}
             />
             {isEditing && (
-              <p className="text-[11px] text-slate-400 mt-1">{t('equipment.clientLocked')}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('equipment.clientLocked')}</p>
             )}
           </div>
 
@@ -231,11 +231,11 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
                 className="font-mono text-xs"
               />
               {duplicateOf ? (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
                   {t('equipment.codeTaken', { name: duplicateOf.name ?? duplicateOf.externalId })}
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {isEditing
                     ? t('equipment.codeLocked')
                     : t('equipment.codeHint')}
@@ -270,7 +270,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
               cleanable
             />
             {tenantId && classOptions.length === 0 && (
-              <p className="text-[11px] text-slate-400 mt-1">{t('equipment.noGrantedTypes')}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('equipment.noGrantedTypes')}</p>
             )}
           </div>
 

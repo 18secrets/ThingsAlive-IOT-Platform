@@ -108,6 +108,36 @@ export class LegacyTelemetryReader {
     return probe(this.legacy);
   }
 
+  /**
+   * The newest value of each of a machine's mapped signals, straight from the existing
+   * platform (the Live view). The scheduled pull copies readings in every few minutes;
+   * this asks 1.0 at the moment someone is looking, one row per measurement, so the
+   * value is as fresh as the device's last report. Read-only, a primary-key range per
+   * measurement, and only for the minutes a Live view is open.
+   */
+  async latestReadings(
+    request: { tenantId: string; sourceSystem: string; externalId: string },
+    since: Date,
+  ): Promise<{ imei: string; signal: string; unit: string | null; value: number | string; at: Date }[]> {
+    if (!this.legacy?.isInitialized) return [];
+    const map = await this.sensorMapFor(request);
+    if (map.size === 0) return [];
+    const rows: { measurement_id: string; ts: Date; value: string }[] = await this.legacy.query(
+      `SELECT DISTINCT ON ("device_sensor_measurement_id")
+              "device_sensor_measurement_id"::text AS measurement_id, "timestamp" AS ts, "value"::text AS value
+         FROM "device_sensor_measurement_logs"
+        WHERE "device_sensor_measurement_id" = ANY($1::bigint[]) AND "timestamp" > $2
+        ORDER BY "device_sensor_measurement_id", "timestamp" DESC`,
+      [[...map.keys()], since],
+    );
+    return rows.flatMap((r) => {
+      const sensor = map.get(r.measurement_id);
+      if (!sensor) return [];
+      const n = Number(r.value);
+      return [{ imei: sensor.imei, signal: sensor.signal, unit: sensor.unit, value: r.value !== '' && Number.isFinite(n) ? n : r.value, at: new Date(r.ts) }];
+    });
+  }
+
   async pull(request: PullRequest): Promise<PullResult> {
     if (!this.legacy?.isInitialized) return { envelope: null, reason: 'no-connection' };
 

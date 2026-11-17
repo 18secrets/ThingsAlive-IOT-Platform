@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
-import { ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption } from '../../lib/api';
+import {
+  ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption, ShiftTemplate,
+  apiApplyShiftTemplate, apiListMyCatalogScenarios, apiListShiftTemplates, EquipmentModel, apiGetMachineModel, apiListModels, apiSetMachineModel,
+} from '../../lib/api';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (input: EquipmentInput) => Promise<void>;
+  /** Resolves to the new machine when the caller has it, so a shift template can be applied to it. */
+  onSave: (input: EquipmentInput) => Promise<EquipmentProfile | void>;
   onUpdate: (
     sourceSystem: string, externalId: string, input: Partial<Omit<EquipmentInput, 'code' | 'plantId'>>,
   ) => Promise<void>;
@@ -20,6 +24,8 @@ interface AddEquipmentModalProps {
   existingEquipment?: EquipmentProfile | null;
   /** Every machine in the account, to say before saving that a code is already taken. */
   allEquipment?: EquipmentProfile[];
+  /** Opens the class request form with this machine's make and model (OB-6). */
+  onRequestClass?: (prefill: { manufacturer?: string; model?: string }) => void;
 }
 
 const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
@@ -34,6 +40,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   plants,
   existingEquipment,
   allEquipment = [],
+  onRequestClass,
 }) => {
   const { t } = useTranslation('equipment');
   const tierOptions = TIERS.map((tier) => ({ label: t(`tier.${tier}`), value: tier }));
@@ -41,17 +48,35 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [equipmentClassSlug, setEquipmentClassSlug] = useState('');
+  // The machine's model (D57): where its rated current, voltage band and duty curve come
+  // from. One of the account's own models, of the machine's class (Crompton POC, 11 Nov).
+  const [models, setModels] = useState<EquipmentModel[]>([]);
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [initialModelId, setInitialModelId] = useState<string | null>(null);
   const [plantId, setPlantId] = useState('');
   const [manufacturer, setManufacturer] = useState('');
   const [modelNumber, setModelNumber] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [tier, setTier] = useState<ServiceTier>('basic');
+  // The working day, from the library's shift templates (fuel test report FU-3): a machine
+  // given one here has shift hours from its first shift, so its fuel can be predicted.
+  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
+  const [shiftTemplate, setShiftTemplate] = useState('');
+  // Active scenarios per class, so the picker shows which classes bring predictions
+  // (test report OB-4: a class copy with none looked the same as one with five). Null when
+  // the account's scenarios cannot be read: then no counts, never a wrong zero.
+  const [scenarioCounts, setScenarioCounts] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const isEditing = !!existingEquipment;
 
   const equipmentClassOptions = equipmentClasses.map((ec) => ({ label: ec.name, value: ec.slug }));
+  const scenarioCountOf = (slug: string) => (scenarioCounts ? scenarioCounts[slug] ?? 0 : null);
+  useEffect(() => {
+    if (modelId && !models.some((m) => m.id === modelId && m.equipmentClassSlug === equipmentClassSlug)) setModelId(null);
+  }, [equipmentClassSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selectedHasNoScenarios = !!equipmentClassSlug && scenarioCountOf(equipmentClassSlug) === 0;
   const plantOptions = plants.map((p) => ({ label: p.name, value: p.id }));
 
   const reset = () => {
@@ -64,8 +89,19 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     setModelNumber('');
     setSerialNumber('');
     setTier('basic');
+    setShiftTemplate('');
     setError(undefined);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    apiListModels('account').then(setModels).catch(() => setModels([]));
+    setModelId(null); setInitialModelId(null);
+    if (existingEquipment) {
+      apiGetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId)
+        .then((r) => { setModelId(r.modelId); setInitialModelId(r.modelId); }).catch(() => {});
+    }
+  }, [isOpen, existingEquipment]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,9 +118,26 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
     } else {
       reset();
     }
+    setShiftTemplate('');
     setError(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, existingEquipment]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let live = true;
+    // Optional: without the library's templates the form still registers a machine.
+    apiListShiftTemplates().then((list) => { if (live) setShiftTemplates(list); }).catch(() => { if (live) setShiftTemplates([]); });
+    apiListMyCatalogScenarios()
+      .then((list) => {
+        if (!live) return;
+        const counts: Record<string, number> = {};
+        for (const sc of list) if (sc.status === 'active') counts[sc.clientEquipmentClassSlug] = (counts[sc.clientEquipmentClassSlug] ?? 0) + 1;
+        setScenarioCounts(counts);
+      })
+      .catch(() => { if (live) setScenarioCounts(null); });
+    return () => { live = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -119,8 +172,10 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           serialNumber: serialNumber.trim() || undefined,
           tier,
         });
+        if (shiftTemplate) await apiApplyShiftTemplate(existingEquipment.sourceSystem, existingEquipment.externalId, shiftTemplate);
+        if (modelId !== initialModelId) await apiSetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId, modelId);
       } else {
-        await onSave({
+        const created = await onSave({
           code: finalCode,
           name: finalName,
           description: description.trim() || undefined,
@@ -131,6 +186,8 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
           serialNumber: serialNumber.trim() || undefined,
           tier,
         });
+        if (shiftTemplate && created) await apiApplyShiftTemplate(created.sourceSystem, created.externalId, shiftTemplate);
+        if (modelId && created) await apiSetMachineModel(created.sourceSystem, created.externalId, modelId);
       }
       reset();
       onClose();
@@ -178,11 +235,11 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                 className="font-mono text-xs"
               />
               {duplicateOf ? (
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
                   {t('equipmentForm.codeTaken', { name: duplicateOf.name ?? duplicateOf.externalId })}
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {isEditing ? t('equipmentForm.codeHintEdit') : t('equipmentForm.codeHintNew')}
                 </p>
               )}
@@ -224,20 +281,63 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
                 block
                 searchable={equipmentClassOptions.length > 6}
                 cleanable
+                renderOption={(label, item) => {
+                  const n = scenarioCountOf(String(item.value));
+                  return (
+                    <span className="flex items-center justify-between gap-3 w-full">
+                      <span className="truncate">{label}</span>
+                      {n !== null && (
+                        <span className={`shrink-0 text-xs ${n === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
+                          {n === 0 ? t('equipmentForm.noScenarios') : t('equipmentForm.scenarioCount', { count: n })}
+                        </span>
+                      )}
+                    </span>
+                  );
+                }}
               />
+              {selectedHasNoScenarios && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
+                  {t('equipmentForm.classHasNoScenarios')}
+                </p>
+              )}
               {equipmentClasses.length === 0 && (
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   {t('equipmentForm.noClasses')}
                 </p>
               )}
               {/* A machine with no library class registered silently as Unclassified, with
                   nothing saying what it would not get or what to do next (test report OB-6). */}
               {!equipmentClassSlug && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-md px-2 py-1.5 mt-1.5">
                   {t('equipmentForm.noLibraryClass')}
+                  {/* The hint said to ask Things Alive, with nowhere to ask (OB-6). */}
+                  {onRequestClass && (
+                    <button
+                      type="button"
+                      onClick={() => onRequestClass({ manufacturer: manufacturer.trim() || undefined, model: modelNumber.trim() || undefined })}
+                      className="block mt-1 font-semibold text-sky-700 dark:text-sky-400 hover:underline cursor-pointer"
+                    >
+                      {t('equipmentForm.requestClass')}
+                    </button>
+                  )}
                 </p>
               )}
             </div>
+
+            {equipmentClassSlug && (
+              <div>
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('equipmentForm.model')}</span>
+                <SelectPicker
+                  data={models.filter((m) => m.equipmentClassSlug === equipmentClassSlug)
+                    .map((m) => ({ label: [m.manufacturer, m.name].filter(Boolean).join(' '), value: m.id }))}
+                  value={modelId}
+                  onChange={setModelId}
+                  placeholder={t('equipmentForm.modelPlaceholder')}
+                  block
+                />
+                <p className="text-xs text-slate-400 mt-1">{t('equipmentForm.modelHint')}</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
@@ -308,12 +408,34 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             />
           </div>
 
+          {shiftTemplates.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('equipmentForm.shiftTemplate')}
+              </label>
+              <SelectPicker
+                data={shiftTemplates.map((st) => ({ label: st.name, value: st.slug }))}
+                value={shiftTemplate || null}
+                onChange={(value) => setShiftTemplate(value ?? '')}
+                placeholder={isEditing ? t('equipmentForm.shiftTemplateKeep') : t('equipmentForm.shiftTemplateNone')}
+                block
+                searchable={false}
+              />
+              <p className="text-xs text-slate-400 mt-1">{t('equipmentForm.shiftTemplateHint')}</p>
+            </div>
+          )}
+
           {error && (
             <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
 
+          {/* Shifts are kept per machine on its page, not in this form; testers looked for them
+              here (fuel test report TC-FP-07), so the form says where they are. */}
+          {/* With library shift templates the form sets shifts itself (the picker below); the
+              pointer to the machine page is for when there are none to choose from. */}
+          {shiftTemplates.length === 0 && <p className="text-xs text-slate-500">{t('equipmentForm.shiftsHint')}</p>}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"

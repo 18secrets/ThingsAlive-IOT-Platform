@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, Search } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Plus, ClipboardList, AlertCircle, Clock3, Wrench, Edit2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -21,6 +21,7 @@ import {
   apiGetDeviceHealthFleet, apiGetServiceForecast, apiGetWorkOrderHistory, apiListEquipment, apiListPlants,
   apiListWorkOrderPeople, apiListWorkOrders, apiRaiseWorkOrder,
 } from '../lib/api';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 const SERVICE_STATUS_TONE: Record<ServiceStatus, 'rose' | 'amber' | 'sky' | 'emerald'> = {
   overdue: 'rose', due: 'amber', approaching: 'sky', ok: 'emerald',
@@ -36,6 +37,14 @@ const STATUS_STYLE: Record<WorkOrderStatus, string> = {
   cancelled: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
 };
 const PRIORITY_OPTIONS: WorkOrderPriority[] = ['low', 'normal', 'high', 'urgent'];
+
+/**
+ * A work order raised before 30 Oct carries the prediction's uuid in its history note
+ * (test report MIN-8). History is append-only and is not rewritten; the uuid is dropped
+ * when it is shown, as notes written since leave it out. `prediction_id` still traces it.
+ */
+const OLD_RAISE_NOTE = /^Prediction [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} scored (\w+) at (.+)$/;
+const readableNote = (note: string) => note.replace(OLD_RAISE_NOTE, 'Scored $1 on the reading at $2');
 
 export const WorkOrdersPage: React.FC = () => {
   const { t } = useTranslation(['workOrders', 'shared']);
@@ -53,11 +62,21 @@ export const WorkOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | WorkOrderPriority>('all');
-  const [search, setSearch] = useState('');
   const [scope, setScope] = useState(DEFAULT_EQUIPMENT_FILTER_SCOPE);
   const [selectedKey, setSelectedKey] = useState('all');
   const [creating, setCreating] = useState(false);
-  const [prefill, setPrefill] = useState<{ equipmentKey: string; title: string } | null>(null);
+  const [prefill, setPrefill] = useState<WorkOrderPrefill | null>(null);
+  // Arriving from a prediction (Live Predictions' Create work order, TC_181): open the form
+  // filled, once, and take the request off the history entry so a reload does not reopen it.
+  const location = useLocation();
+  useEffect(() => {
+    const ask = (location.state as { createWorkOrder?: { sourceSystem: string; externalId: string; title: string; description?: string; predictionId?: string } } | null)?.createWorkOrder;
+    if (!ask) return;
+    setPrefill({ equipmentKey: `${ask.sourceSystem}|${ask.externalId}`, title: ask.title, description: ask.description, predictionId: ask.predictionId });
+    setCreating(true);
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [people, setPeople] = useState<{ id: string; fullName: string }[]>([]);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
@@ -137,7 +156,6 @@ export const WorkOrdersPage: React.FC = () => {
 
   const visible = useMemo(() => {
     const term = scope.query.trim().toLowerCase();
-    const text = search.trim().toLowerCase();
     const matching = orders.filter((o) => {
       const profile = profileOf(o.sourceSystem, o.externalId);
       const key = `${o.sourceSystem}|${o.externalId}`;
@@ -147,12 +165,11 @@ export const WorkOrdersPage: React.FC = () => {
       const matchesPlant = scope.plantId === 'all' || profile?.plantId === scope.plantId;
       const matchesClass = scope.classSlug === 'all' || profile?.equipmentClassSlug === scope.classSlug;
       const matchesConnection = scope.connection === 'all' || connectionOf(o.externalId) === scope.connection;
-      const matchesQuery = !term || o.title.toLowerCase().includes(term) || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
-      // The list's own search, beside the sort: the Filters panel's box finds machines, and
-      // a WO reference is what people quote to each other (test report P3-A10).
-      const matchesText = !text || o.reference.toLowerCase().includes(text) || o.title.toLowerCase().includes(text)
-        || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(text);
-      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery && matchesText;
+      // The Filters panel's search finds a job by its reference too: that is what people
+      // quote to each other (test report P3-A10). One box, not a second one above the list.
+      const matchesQuery = !term || o.reference.toLowerCase().includes(term) || o.title.toLowerCase().includes(term)
+        || equipmentName(o.sourceSystem, o.externalId).toLowerCase().includes(term);
+      return matchesSelected && matchesStatus && matchesPlant && matchesClass && matchesConnection && matchesQuery;
     });
     // By reference, not the API's created-at: seeded and imported jobs carry backdated
     // creation times, which put WO-000003 ahead of 6, 5 and 4 (test report MIN-8).
@@ -161,10 +178,16 @@ export const WorkOrdersPage: React.FC = () => {
       status: (o) => STATUS_OPTIONS.indexOf(o.status), machine: (o) => equipmentName(o.sourceSystem, o.externalId),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort, search]);
+  }, [orders, equipment, linkHealth, statusFilter, priorityFilter, scope, selectedKey, sort]);
 
   async function act(order: WorkOrder, action: 'start' | 'complete' | 'cancel' | 'reopen') {
     let note: string | undefined;
+    // Nobody can start a job nobody is doing (TC_191): said here, before the confirm,
+    // rather than as the server's refusal after it. The server holds the same rule.
+    if (action === 'start' && !order.assignedToUserId) {
+      window.alert(t('prompts.assignFirst', { reference: order.reference }));
+      return;
+    }
     // Start has no note to ask for, which made it the one transition a single click committed.
     if (action === 'start' && !window.confirm(t('prompts.start', { reference: order.reference }))) return;
     if (action !== 'start') {
@@ -239,9 +262,12 @@ export const WorkOrdersPage: React.FC = () => {
       )}
       {(o.status === 'created' || o.status === 'in-progress') && (
         <>
-          <button disabled={busyId === o.id} onClick={() => setEditing(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
-            {t('actions.edit')}
-          </button>
+          {/* Editable only before it is started (TC_192); the server refuses it after. */}
+          {o.status === 'created' && (
+            <button disabled={busyId === o.id} onClick={() => setEditing(o)} title={t('actions.edit')} aria-label={t('actions.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button disabled={busyId === o.id} onClick={() => setAssigning(o)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
             {o.assignedToUserId ? t('actions.reassign') : t('actions.assign')}
           </button>
@@ -254,11 +280,11 @@ export const WorkOrdersPage: React.FC = () => {
   );
 
   // The shared rsuite pager, in both views; back to page 1 when the filters change the count.
-  const { pageItems, ...pager } = usePagination(visible, 12);
+  const { pageItems, ...pager } = usePagination(visible);
 
   return (
     <div id="work-orders-view" className="space-y-3">
-      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4">
+      <div className="bg-gradient-to-r from-sky-600 to-cyan-600 rounded-xl p-6 text-white flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
           <h2 className="text-xl font-bold">{t('hero.heading')}</h2>
           <p className="text-sm text-sky-100">{t('hero.subtitle')}</p>
@@ -310,7 +336,7 @@ export const WorkOrdersPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <EquipmentFilters
           scope={scope}
           onChange={setScope}
@@ -319,6 +345,8 @@ export const WorkOrdersPage: React.FC = () => {
           equipmentOptions={equipmentOptions}
           selectedKey={selectedKey}
           onSelect={setSelectedKey}
+          findLabel={t('filters.find')}
+          findPlaceholder={t('filters.search')}
         />
         <SelectPicker
           data={[{ label: t('filters.allStatuses'), value: 'all' }, ...STATUS_OPTIONS.map((s) => ({ label: t(`status.${s}`, { defaultValue: s }), value: s }))]}
@@ -326,7 +354,6 @@ export const WorkOrdersPage: React.FC = () => {
           onChange={(value) => setStatusFilter((value ?? 'all') as 'all' | WorkOrderStatus)}
           searchable={false}
           cleanable={false}
-          className="min-w-[180px]"
         />
         <SelectPicker
           data={[{ label: t('filters.allPriorities'), value: 'all' }, ...PRIORITY_OPTIONS.map((p) => ({ label: t(`priority.${p}`, { defaultValue: p }), value: p }))]}
@@ -334,25 +361,8 @@ export const WorkOrdersPage: React.FC = () => {
           onChange={(value) => setPriorityFilter((value ?? 'all') as 'all' | WorkOrderPriority)}
           searchable={false}
           cleanable={false}
-          className="min-w-[160px]"
         />
-      </div>
-
-      <div className="flex justify-end items-center gap-2 flex-wrap">
-        <div className="relative w-full sm:w-72 sm:mr-auto">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 z-10" />
-          <Input value={search} onChange={(v) => setSearch(v)} placeholder={t('filters.search')} size="sm" className="w-full pl-9!" />
-        </div>
-        <SortSelect
-          sort={sort}
-          onChange={setSort}
-          options={[
-            { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
-            { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
-            { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
-            { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
-          ]}
-        />
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
         <ExportCsvButton
           name="work-orders"
           disabled={!visible.length}
@@ -363,7 +373,20 @@ export const WorkOrdersPage: React.FC = () => {
             o.dueAt ? o.dueAt.slice(0, 10) : '',
           ])}
         />
-        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        <span className="inline-flex items-center gap-2">
+          <SortSelect
+            sort={sort}
+            onChange={setSort}
+            options={[
+              { key: 'reference', dir: 'desc', label: t('shared:sort.newest') },
+              { key: 'reference', dir: 'asc', label: t('shared:sort.oldest') },
+              { key: 'due', dir: 'asc', label: t('shared:sort.dueSoonest') },
+              { key: 'priority', dir: 'desc', label: t('shared:sort.priorityHigh') },
+            ]}
+          />
+          <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+        </span>
+        </div>
       </div>
 
       <div className={LIST_PANEL}>
@@ -397,7 +420,7 @@ export const WorkOrdersPage: React.FC = () => {
               </Chip>,
               o.assignedToUserId ? personName(o.assignedToUserId) : <span className="text-slate-400">{t('card.unassigned')}</span>,
               <span className="capitalize">{t(`priority.${o.priority}`, { defaultValue: o.priority })}</span>,
-              o.dueAt ? new Date(o.dueAt).toLocaleDateString() : '—',
+              o.dueAt ? new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) : '—',
               <div className="flex flex-wrap items-center gap-1.5">{renderActions(o)}</div>,
             ]}
           />
@@ -427,8 +450,8 @@ export const WorkOrdersPage: React.FC = () => {
                   {' · '}<Trans t={t} i18nKey="card.priority" values={{ priority: t(`priority.${o.priority}`, { defaultValue: o.priority }) }} components={{ cap: <span className="capitalize" /> }} />
                 </p>
                 <small className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 pt-1">
-                  <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString()}
-                  {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString() })}` : ''}
+                  <Clock3 className="w-3.5 h-3.5" />{new Date(o.createdAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
+                  {o.dueAt ? ` · ${t('card.due', { date: new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}` : ''}
                 </small>
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   {renderActions(o)}
@@ -475,14 +498,17 @@ const todayLocal = () => {
 };
 
 const TitleCounter: React.FC<{ title: string }> = ({ title }) => (
-  <span className={`text-[11px] ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+  <span className={`text-xs ${title.length > MAX_TITLE ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
     {title.length}/{MAX_TITLE}
   </span>
 );
 
+/** What the create form can start from: the service-due list, or a prediction (TC_181). */
+interface WorkOrderPrefill { equipmentKey: string; title: string; description?: string; predictionId?: string }
+
 const CreateWorkOrderForm: React.FC<{
   equipment: EquipmentProfile[];
-  initial?: { equipmentKey: string; title: string } | null;
+  initial?: WorkOrderPrefill | null;
   onCancel: () => void;
   onCreate: (input: RaiseWorkOrderInput) => void;
 }> = ({ equipment, initial, onCancel, onCreate }) => {
@@ -490,7 +516,7 @@ const CreateWorkOrderForm: React.FC<{
   const [title, setTitle] = useState(initial?.title ?? '');
   const [equipmentKey, setEquipmentKey] = useState<string | null>(initial?.equipmentKey ?? null);
   const [priority, setPriority] = useState<WorkOrderPriority>('normal');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initial?.description ?? '');
   const [dueAt, setDueAt] = useState('');
   const pastDue = !!dueAt && dueAt < todayLocal();
   const canCreate = !!title.trim() && title.trim().length <= MAX_TITLE && !!equipmentKey && !pastDue;
@@ -505,6 +531,8 @@ const CreateWorkOrderForm: React.FC<{
         onCreate({
           sourceSystem, externalId, title: title.trim(), priority,
           description: description.trim() || undefined,
+          // Linked to the prediction it came from, while the machine is still the one it was raised on.
+          predictionId: initial?.predictionId && equipmentKey === initial.equipmentKey ? initial.predictionId : undefined,
           dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
         });
       }}
@@ -549,7 +577,7 @@ const CreateWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
-          {pastDue && <span className="text-[11px] text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
+          {pastDue && <span className="text-xs text-rose-600 dark:text-rose-400">{t('form.pastDue')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -628,7 +656,7 @@ const EditWorkOrderForm: React.FC<{
             onChange={(e) => setDueAt(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm"
           />
-          {movedIntoPast && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
+          {movedIntoPast && <span className="text-xs text-amber-600 dark:text-amber-400">{t('form.pastDueWarning')}</span>}
         </label>
       </div>
       <label className="block space-y-1">
@@ -715,7 +743,7 @@ const WorkOrderHistory: React.FC<{
         <li key={e.id} className="border-l-2 border-sky-200 dark:border-sky-800 pl-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t(`event.${e.kind}`, { defaultValue: e.kind })}</span>
-            <span className="text-[11px] text-slate-400">{new Date(e.at).toLocaleString()}</span>
+            <span className="text-xs text-slate-400">{new Date(e.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('history.by', { name: personName(e.actorUserId) })}
@@ -723,7 +751,7 @@ const WorkOrderHistory: React.FC<{
             {e.kind === 'unassigned' && e.fromAssignee && <> · {t('history.from', { name: personName(e.fromAssignee) })}</>}
             {e.fromStatus && e.toStatus && e.fromStatus !== e.toStatus && <> · {t(`status.${e.fromStatus}`, { defaultValue: e.fromStatus })} → {t(`status.${e.toStatus}`, { defaultValue: e.toStatus })}</>}
           </p>
-          {e.note && <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">"{e.note}"</p>}
+          {e.note && <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">"{readableNote(e.note)}"</p>}
         </li>
       ))}
     </ol>

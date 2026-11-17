@@ -77,6 +77,7 @@ interface AdminPageProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
+  onSetNamedFormulaActive: (slug: string, active: boolean) => Promise<void>;
   onCreateIndustryType: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
   onUpdateIndustryType: (id: string, input: IndustryTypeInput) => Promise<void>;
   onDeleteIndustryType: (id: string) => Promise<void>;
@@ -232,6 +233,7 @@ export const AdminPage: React.FC<AdminPageProps> = (props) => {
       onCreateNamedFormula={props.onCreateNamedFormula}
       onUpdateNamedFormula={props.onUpdateNamedFormula}
       onPublishNamedFormula={props.onPublishNamedFormula}
+      onSetNamedFormulaActive={props.onSetNamedFormulaActive}
       onCreateIndustryType={props.onCreateIndustryType}
       onUpdateIndustryType={props.onUpdateIndustryType}
       onDeleteIndustryType={props.onDeleteIndustryType}

@@ -4,6 +4,7 @@ import { Input } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import { ResendInvitationResult } from '../../lib/api';
 import { copyToClipboard } from '../../lib/clipboard';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface InvitationTokenDialogProps {
   result: ResendInvitationResult | null;
@@ -61,8 +62,8 @@ export const InvitationTokenDialog: React.FC<InvitationTokenDialogProps> = ({ re
                 {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {t('token.expires', { when: new Date(result.invitationExpiresAt).toLocaleString() })}
+            <p className="text-xs text-slate-400 mt-1">
+              {t('token.expires', { when: new Date(result.invitationExpiresAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
             </p>
           </div>
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">

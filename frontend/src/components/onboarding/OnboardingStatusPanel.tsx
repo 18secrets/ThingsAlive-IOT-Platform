@@ -100,9 +100,9 @@ export const OnboardingStatusPanel: React.FC<{
       <div className="flex items-start justify-between gap-2 pb-3 mb-1 border-b border-slate-100 dark:border-slate-800">
         <div className="min-w-0">
           <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('chat.setupStatus')}</h3>
-          {subtitle && <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{subtitle}</p>}
           {focus && (
-            <button type="button" onClick={onClearFocus} className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline cursor-pointer">
+            <button type="button" onClick={onClearFocus} className="text-xs text-sky-600 dark:text-sky-400 hover:underline cursor-pointer">
               {t('chat.status.allMachines')}
             </button>
           )}
@@ -140,10 +140,10 @@ export const OnboardingStatusPanel: React.FC<{
                 <div className={`text-sm font-medium leading-snug ${row.state === 'blocked' ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
                   {row.label}
                 </div>
-                {row.sub && <div className="text-[11px] text-slate-500 dark:text-slate-400">{row.sub}</div>}
+                {row.sub && <div className="text-xs text-slate-500 dark:text-slate-400">{row.sub}</div>}
               </div>
             </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5 ${BADGE[row.state]}`}>
+            <span className={`text-[0.6875rem] font-bold uppercase tracking-wider shrink-0 mt-0.5 ${BADGE[row.state]}`}>
               {t(`stepState.${row.badge ?? row.state}`)}
             </span>
           </div>

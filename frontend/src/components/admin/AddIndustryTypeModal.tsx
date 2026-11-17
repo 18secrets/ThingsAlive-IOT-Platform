@@ -119,7 +119,7 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
                 onChange={(value) => setCode(value.toUpperCase())}
                 placeholder={t('common.eg', { example: 'PWR' })}
               />
-              <p className={`text-[11px] mt-1 ${code && !codeValid ? 'text-rose-500' : 'text-slate-400'}`}>
+              <p className={`text-xs mt-1 ${code && !codeValid ? 'text-rose-500' : 'text-slate-400'}`}>
                 {t('industry.codeHint')}
               </p>
             </div>
@@ -133,7 +133,7 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">{t('industry.status')}</div>
-                <div className="text-[11px] text-slate-400">{t('industry.statusHint')}</div>
+                <div className="text-xs text-slate-400">{t('industry.statusHint')}</div>
               </div>
             </div>
 
@@ -158,7 +158,7 @@ export const AddIndustryTypeModal: React.FC<AddIndustryTypeModalProps> = ({
 
           {/* Modal Footer Buttons */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <span><Trans i18nKey="common.mandatoryNote" t={t}>Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory</Trans></span>
             </span>

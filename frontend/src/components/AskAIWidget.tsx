@@ -182,7 +182,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
               </div>
               <div className="min-w-0">
                 <h4 className="font-semibold text-sm leading-tight truncate">{t('askAI.assistantName')}</h4>
-                <p className="text-[11px] text-sky-100/90 truncate">{t('askAI.assistantTagline')}</p>
+                <p className="text-xs text-sky-100/90 truncate">{t('askAI.assistantTagline')}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -210,7 +210,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                 key={prompt}
                 onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
                 disabled={isTyping}
-                className="shrink-0 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-[11px] font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer whitespace-nowrap"
+                className="shrink-0 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer whitespace-nowrap"
               >
                 {t(`askAI.prompts.${prompt}`)}
               </button>
@@ -239,13 +239,13 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                     {m.key ? t(m.key, m.values) : m.role === 'assistant' ? <ChatMarkdown text={m.text} /> : m.text}
                   </div>
                   {m.toolsUsed && m.toolsUsed.length > 0 && (
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">
+                    <span className="text-[0.6875rem] text-slate-400 dark:text-slate-500 mt-1 px-1">
                       {t('askAI.sources', {
                         sources: m.toolsUsed.map((tool) => t(`askAI.tools.${tool}`, { defaultValue: tool.replace(/_/g, ' ') })).join(', '),
                       })}
                     </span>
                   )}
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-1">{t('askAI.justNow')}</span>
+                  <span className="text-[0.6875rem] text-slate-400 dark:text-slate-500 mt-1 px-1">{t('askAI.justNow')}</span>
                 </div>
               </div>
             ))}

@@ -7,8 +7,9 @@ import { TablePagination, usePagination } from '../common/TablePagination';
 import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
-const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' });
+const monthLabel = (iso: string) => new Date(iso).toLocaleDateString(appLocale(), { year: 'numeric', month: 'short', timeZone: 'UTC' });
 const bytes = (n: string) => {
   const v = Number(n);
   if (v < 1024) return `${v} B`;
@@ -58,7 +59,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
     <>{a.part}</>,
     <span className="font-mono">{Number(a.rowCount).toLocaleString()}</span>,
     <span className="font-mono">{bytes(a.byteSize)}</span>,
-    <span className="text-slate-500">{new Date(a.exportedAt).toLocaleString()}</span>,
+    <span className="text-slate-500">{new Date(a.exportedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>,
     <>{a.verifiedAt ? <Chip tone="emerald">{t('archive.status.verified')}</Chip>
                       : a.verifyError ? <span title={a.verifyError}><Chip tone="rose">{t('archive.status.failed')}</Chip></span>
                         : <Chip tone="amber">{t('archive.status.pending')}</Chip>}</>,
@@ -71,7 +72,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
     <span className="font-mono">{d.partition_name}</span>,
     monthLabel(d.month),
     Number(d.rows_dropped).toLocaleString(),
-    new Date(d.dropped_at).toLocaleString(),
+    new Date(d.dropped_at).toLocaleString(appLocale(), { timeZone: appTimeZone() }),
   ];
 
   return (
@@ -117,7 +118,7 @@ export const TelemetryArchiveView: React.FC<{ clientName: (tenantId: string) => 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('archive.droppedPartitions')}</h3>
-          <p className="text-[11px] text-slate-400">{t('archive.droppedHint')}</p>
+          <p className="text-xs text-slate-400">{t('archive.droppedHint')}</p>
         </div>
         {drops.length === 0 ? (
           <p className="py-6 text-center text-slate-400 text-xs">{t('archive.noDrops')}</p>

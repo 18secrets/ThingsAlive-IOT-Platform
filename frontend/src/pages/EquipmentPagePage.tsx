@@ -1,23 +1,30 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench } from 'lucide-react';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { MachineEventsPanel, RatedAlertsPanel } from '../components/equipment/MotorPanels';
+import { AlertTriangle, Box, Clock3, Gauge, Plus, Wrench, Edit2 } from 'lucide-react';
 import { CheckPicker, Input, SelectPicker } from 'rsuite';
 import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import {
-  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageSignalChartData, PageWidget, RecordServiceInput,
+  ApiError, EquipmentServiceRecord, EquipmentShift, MachinePage, PageReadinessRow, PageSignalChartData, PageWidget, RecordServiceInput,
   RuntimeUnit, ServiceKind, ShiftInput, ShiftRun, TenantModel, Weekday, apiCreateShift, apiGetMachinePage,
   apiGetMyClassModel, apiGetServiceHistory, apiGetShiftRuns, apiListShifts, apiReinstateShift, apiRecordService,
   apiRetireShift, apiUpdateShift,
+  MachineLive,
 } from '../lib/api';
 import { Chip } from '../components/common/Chip';
+import { PanelRow, PanelRows } from '../components/common/PanelRow';
+import { LivePanel } from '../components/equipment/LivePanel';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { Modal } from '../components/common/Modal';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
 import { KpiExplorer } from '../components/page-widgets/KpiExplorer';
 import { ProposeKpi } from '../components/page-widgets/ProposeKpi';
 import type { SceneMarker } from '../components/visual/ModelScene';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 // Lazy, as in ModelAnchorEditor: three.js is fetched only when a machine has a model.
 const ModelScene = lazy(() => import('../components/visual/ModelScene'));
@@ -74,8 +81,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       if (shift.status === 'active') await apiRetireShift(sourceSystem, externalId, shift.id);
       else await apiReinstateShift(sourceSystem, externalId, shift.id);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.changeFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     } finally {
       setBusyId(null);
     }
@@ -86,8 +94,9 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiCreateShift(sourceSystem, externalId, input);
       setAdding(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.addFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
@@ -96,15 +105,18 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
       await apiUpdateShift(sourceSystem, externalId, shift.id, input);
       setEditing(null);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('shifts.saveFailed'));
+    } catch {
+      // The red toast already says why (authFetch reports every refused write); an
+      // alert on top said it twice (testing sheet, 5 Nov). The form stays open to fix.
     }
   }
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('shifts.title')}</h3>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+          <Clock3 className="w-4 h-4 text-slate-400" /> {t('shifts.title')}
+        </h3>
         <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
           <Plus className="w-3.5 h-3.5" /> {t('shifts.add')}
         </button>
@@ -112,50 +124,53 @@ function ShiftSchedule({ sourceSystem, externalId }: { sourceSystem: string; ext
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : shifts.length === 0 ? (
-        <p className="text-xs text-slate-400">{t('shifts.empty')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('shifts.empty')}</p>
       ) : (
-        <div className="space-y-2">
+        <PanelRows>
           {shifts.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
-                <p className="text-[11px] text-slate-400">
-                  {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
-                    // 0–1440, or an end at its own start the next day, is round the clock;
-                    // both printed "00:00–00:00", which read as no shift at all (MIN-14).
-                    ? t('shifts.allDay', { from: minutesToClock(s.startMinute) })
-                    : `${minutesToClock(s.startMinute)}–${minutesToClock(s.endMinute)}`} ({s.timeZone})
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => setEditing(s)}
-                  className="px-2 py-1 text-[11px] font-semibold rounded-md border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
-                >
-                  {t('common.edit')}
-                </button>
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => toggle(s)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                  title={s.status === 'active' ? t('shifts.retire') : t('shifts.reinstate')}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                </button>
-              </div>
-            </div>
+            <PanelRow
+              key={s.id}
+              title={s.name}
+              detail={<>
+                {s.days.slice().sort().map((d) => t(`days.${d}`)).join(', ')} · {(s.endMinute - s.startMinute) % 1440 === 0
+                  // 0–1440, or an end at its own start the next day, is round the clock;
+                  // both printed "00:00–00:00", which read as no shift at all (MIN-14).
+                  ? t('shifts.allDay', { from: minutesToClock(s.startMinute) })
+                  : `${minutesToClock(s.startMinute)}–${minutesToClock(s.endMinute)}`} ({s.timeZone})
+              </>}
+              right={(
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    disabled={busyId === s.id}
+                    onClick={() => setEditing(s)}
+                    title={t('common.edit')}
+                    aria-label={t('common.edit')}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    disabled={busyId === s.id}
+                    onClick={() => toggle(s)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer disabled:opacity-50 shrink-0 ${s.status === 'active' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    title={s.status === 'active' ? t('shifts.retire') : t('shifts.reinstate')}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${s.status === 'active' ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              )}
+            />
           ))}
-        </div>
+        </PanelRows>
       )}
 
       {runs.length > 0 && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('shifts.recentRuns')}</p>
           {runs.slice(0, 5).map((r) => (
-            <div key={r.id} className="flex items-center justify-between text-[11px]">
+            <div key={r.id} className="flex items-center justify-between text-xs">
               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock3 className="w-3 h-3" />{r.localDate} · {r.shiftName}</span>
               <Chip tone={RUN_STATUS_TONE[r.status] ?? 'slate'}>{r.detail ?? t(`runStatus.${r.status}`, { defaultValue: r.status })}</Chip>
             </div>
@@ -189,10 +204,18 @@ const ShiftForm: React.FC<{
   const [days, setDays] = useState<Weekday[]>(initial?.days ?? [1, 2, 3, 4, 5]);
   const [timeZone, setTimeZone] = useState(initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
 
+  // An end at or before the start runs past midnight, as the server reads it: a night
+  // shift 18:00–06:00 was refused here with its button greyed out (testing sheet, 5 Nov).
+  // Only start equal to end is no shift at all.
+  const overnight = useMemo(() => {
+    const s = clockToMinutes(start);
+    const e = clockToMinutes(end);
+    return s != null && e != null && e < s;
+  }, [start, end]);
   const valid = useMemo(() => {
     const s = clockToMinutes(start);
     const e = clockToMinutes(end);
-    return !!name.trim() && s != null && e != null && e > s && days.length > 0 && !!timeZone.trim();
+    return !!name.trim() && s != null && e != null && e !== s && days.length > 0 && !!timeZone.trim();
   }, [name, start, end, days, timeZone]);
 
   return (
@@ -201,8 +224,10 @@ const ShiftForm: React.FC<{
       onSubmit={(e) => {
         e.preventDefault();
         const startMinute = clockToMinutes(start);
-        const endMinute = clockToMinutes(end);
-        if (!valid || startMinute == null || endMinute == null) return;
+        const clockEnd = clockToMinutes(end);
+        if (!valid || startMinute == null || clockEnd == null) return;
+        // Midnight as an end is the end of the day, 1440, which the server takes; 0 it refuses.
+        const endMinute = clockEnd === 0 ? 1440 : clockEnd;
         onCreate({ name: name.trim(), startMinute, endMinute, days, timeZone: timeZone.trim() });
       }}
     >
@@ -220,6 +245,7 @@ const ShiftForm: React.FC<{
           <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
         </label>
       </div>
+      {overnight && <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">{t('shifts.overnight')}</p>}
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('shifts.days')}</span>
         <CheckPicker
@@ -279,15 +305,17 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
       await apiRecordService(sourceSystem, externalId, input);
       setRecording(false);
       await refresh();
-    } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t('service.recordFailed'));
+    } catch {
+      // The red toast already says why; an alert on top said it twice (testing sheet, 5 Nov).
     }
   }
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{t('service.title')}</h3>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+          <Wrench className="w-4 h-4 text-slate-400" /> {t('service.title')}
+        </h3>
         <button onClick={() => setRecording(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
           <Wrench className="w-3.5 h-3.5" /> {t('service.record')}
         </button>
@@ -295,26 +323,25 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       {loading ? (
-        <p className="text-xs text-slate-400">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : records.length === 0 ? (
-        <p className="text-xs text-slate-400">{t('service.empty')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('service.empty')}</p>
       ) : (
-        <div className="space-y-2">
+        <PanelRows>
           {records.map((r) => (
-            <div key={r.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  {new Date(r.performedAt).toLocaleDateString()}
-                  {r.meterReading != null && r.meterUnit && (
-                    <span className="font-normal text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
-                  )}
-                </p>
-                {r.notes && <p className="text-[11px] text-slate-400 mt-0.5">{r.notes}</p>}
-              </div>
-              <Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>
-            </div>
+            <PanelRow
+              key={r.id}
+              title={<>
+                {new Date(r.performedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}
+                {r.meterReading != null && r.meterUnit && (
+                  <span className="font-normal text-slate-500 dark:text-slate-400"> · {r.meterReading} {r.meterUnit}</span>
+                )}
+              </>}
+              detail={r.notes || undefined}
+              right={<Chip tone={KIND_TONE[r.kind]}>{t(`serviceKind.${r.kind}`, { defaultValue: r.kind })}</Chip>}
+            />
           ))}
-        </div>
+        </PanelRows>
       )}
 
       <Modal isOpen={recording} onClose={() => setRecording(false)} title={t('service.record')} subtitle={t('service.title')} maxWidth="max-w-md">
@@ -326,7 +353,16 @@ function ServiceHistory({ sourceSystem, externalId }: { sourceSystem: string; ex
 
 const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: RecordServiceInput) => void }> = ({ onCancel, onRecord }) => {
   const { t } = useTranslation('equipment');
-  const [performedAt, setPerformedAt] = useState(new Date().toISOString().slice(0, 10));
+  // Today on the reader's own calendar: toISOString() is UTC, which before 05:30 in India
+  // is still yesterday.
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const [performedAt, setPerformedAt] = useState(today);
+  // A service is recorded once done, so a future date is caught here, not by a refusal
+  // and a toast after Save (testing sheet, 5 Nov).
+  const future = !!performedAt && performedAt > today;
   const [kind, setKind] = useState<ServiceKind>('scheduled');
   const [meterReading, setMeterReading] = useState('');
   const [meterUnit, setMeterUnit] = useState<RuntimeUnit | null>(null);
@@ -336,8 +372,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     const hasReading = meterReading.trim() !== '';
     if (hasReading !== !!meterUnit) return false;
     if (hasReading && (Number.isNaN(Number(meterReading)) || Number(meterReading) < 0)) return false;
-    return !!performedAt;
-  }, [meterReading, meterUnit, performedAt]);
+    return !!performedAt && !future;
+  }, [meterReading, meterUnit, performedAt, future]);
 
   return (
     <form
@@ -356,7 +392,8 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
     >
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.datePerformed')}</span>
-        <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        <input type="date" value={performedAt} max={today} onChange={(e) => setPerformedAt(e.target.value)} className="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-800 px-2.5 py-1.5 text-sm" />
+        {future && <span className="block text-xs text-rose-600 dark:text-rose-400">{t('service.notFuture')}</span>}
       </label>
       <div className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.kind')}</span>
@@ -386,7 +423,7 @@ const ServiceRecordForm: React.FC<{ onCancel: () => void; onRecord: (input: Reco
         </div>
       </div>
       {meterReading.trim() !== '' !== !!meterUnit && (
-        <p className="text-[11px] text-rose-500">{t('service.readingUnitPair')}</p>
+        <p className="text-xs text-rose-500">{t('service.readingUnitPair')}</p>
       )}
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('service.notes')}</span>
@@ -417,10 +454,20 @@ function latestBySignal(widgets: PageWidget[]): Map<string, string> {
   return out;
 }
 
+/** Each signal's readiness from the page's readiness list, when the layout has one. */
+function readinessBySignal(widgets: PageWidget[]): Map<string, PageReadinessRow['readiness']> {
+  const out = new Map<string, PageReadinessRow['readiness']>();
+  for (const w of widgets) {
+    if (w.widgetType !== 'readiness_list' || w.readiness !== 'ready' || !Array.isArray(w.data)) continue;
+    for (const row of w.data as PageReadinessRow[]) out.set(row.signal, row.readiness);
+  }
+  return out;
+}
+
 /** The machine's digital twin: its class's 3-D model, read only, with each marker labelled
  *  by its signal's latest value. Markers waiting for a recheck are left off — the geometry
  *  moved under them, so where they would be drawn is not known to be right. */
-function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageWidget[] }) {
+function DigitalTwin({ classSlug, widgets, live }: { classSlug: string; widgets: PageWidget[]; live?: MachineLive | null }) {
   const { t } = useTranslation('equipment');
   const [model, setModel] = useState<TenantModel | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -429,19 +476,36 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
     let live = true;
     apiGetMyClassModel(classSlug)
       .then((m) => { if (live) { setModel(m); setError(undefined); } })
-      .catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' })); });
+      // A role that may not read the class's model is told so, not shown the API's refusal.
+      .catch((err) => {
+        if (!live) return;
+        setError(err instanceof ApiError && err.status === 403 ? t('twin.notForRole')
+          : err instanceof ApiError ? err.message : t('twin.loadFailed', { defaultValue: 'The 3-D model could not be loaded.' }));
+      });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classSlug]);
 
   const markers = useMemo<SceneMarker[]>(() => {
-    const values = latestBySignal(widgets);
+    // The Live view's values when it has them (refreshed every 20 s); the page's 24 h
+    // charts' last points otherwise, as before.
+    const liveBySignal = new Map((live?.signals ?? []).map((s) => [s.signal, s]));
+    const values = live
+      ? new Map(live.signals.map((s) => [s.signal, `${typeof s.value === 'number' ? s.value.toFixed(2) : s.value}${s.unit ? ` ${s.unit}` : ''}`]))
+      : latestBySignal(widgets);
+    const readiness = readinessBySignal(widgets);
     return (model?.anchors ?? []).filter((a) => !a.needsRecheck).map((a) => {
       const name = a.label || a.signal;
-      const value = values.get(a.signal);
-      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label: value ? `${name} · ${value}` : name, tone: 'normal' };
+      // A stale or unbound signal looked the same as a live one; it is grey and says so,
+      // and its last value is not shown as if it were current.
+      const notCurrent = live
+        ? !liveBySignal.has(a.signal) || liveBySignal.get(a.signal)!.stale
+        : readiness.has(a.signal) && readiness.get(a.signal) !== 'ready';
+      const value = notCurrent ? undefined : values.get(a.signal);
+      const label = notCurrent ? `${name} · ${t('twin.noCurrentReading')}` : value ? `${name} · ${value}` : name;
+      return { signal: a.signal, x: a.x, y: a.y, z: a.z, label, tone: notCurrent ? 'stale' : 'normal' };
     });
-  }, [model, widgets]);
+  }, [model, widgets, live]);
 
   // A machine whose class has no model shows nothing rather than an empty frame.
   if (!error && (!model || model.state !== 'ready' || !model.modelUrl)) return null;
@@ -455,7 +519,7 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
         <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
       ) : (
         <div className="h-96 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800/50">
-          <Suspense fallback={<p className="text-xs text-slate-400 p-3">{t('common.loading')}</p>}>
+          <Suspense fallback={<Skeleton lines={2} className="p-3" />}>
             <ModelScene url={model!.modelUrl!} bounds={model!.bounds} markers={markers} />
           </Suspense>
         </div>
@@ -463,6 +527,13 @@ function DigitalTwin({ classSlug, widgets }: { classSlug: string; widgets: PageW
     </div>
   );
 }
+
+/** How often the KPIs below Live are asked again. They are 24 h and shift figures, and
+ *  the call evaluates every one of them, so a minute is as current as they get. */
+const PAGE_REFRESH_MS = 60_000;
+
+/** Widget kinds Machine summary already shows for this machine. */
+const DUPLICATED_ON_SUMMARY = ['alert_list', 'work_order_list'];
 
 export const EquipmentPagePage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
@@ -474,6 +545,9 @@ export const EquipmentPagePage: React.FC = () => {
   // undefined = closed; null = open on the first KPI; a key = open on that KPI.
   const [exploring, setExploring] = useState<string | null | undefined>(undefined);
   const [proposing, setProposing] = useState(false);
+  const [live, setLive] = useState<MachineLive | null>(null);
+  // Bumped on each quiet refresh, so the panels that fetch their own data ask again too.
+  const [refreshKey, setRefreshKey] = useState(0);
   // drafts: for the Propose a KPI button and modal title, which live with the drafts page.
   const { t } = useTranslation(['equipment', 'drafts']);
 
@@ -495,7 +569,36 @@ export const EquipmentPagePage: React.FC = () => {
     return () => { live = false; };
   }, [sourceSystem, externalId]);
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  // Everything below Live is asked again quietly while the device is sending (16 Nov):
+  // no skeleton, and a failed refresh keeps the figures already shown. Only then, because
+  // a device that is offline or not fitted sends nothing that could change them; Live
+  // itself keeps asking regardless, which is how the page sees the device come back.
+  // Delayed counts as sending: a logger posts its buffer every five minutes, so its
+  // newest reading crosses the five-minute "online" line between posts all the time.
+  const connection = live?.connection;
+  const sending = connection === 'online' || connection === 'delayed';
+  // Seen offline (or with no device) since the page opened: coming back is news, and is
+  // caught up at once rather than a minute later. Not set by the first Live answer, which
+  // arrives just after the page itself and would only fetch it twice.
+  const wasQuiet = useRef(false);
+  const refreshPage = useCallback(() => {
+    if (!sourceSystem || !externalId || document.visibilityState === 'hidden') return;
+    apiGetMachinePage(sourceSystem, externalId)
+      .then((result) => { setPage(result); setRefreshKey((k) => k + 1); })
+      .catch(() => {});
+  }, [sourceSystem, externalId]);
+  useEffect(() => {
+    if (!sending) {
+      if (connection) wasQuiet.current = true;
+      return;
+    }
+    if (wasQuiet.current) { wasQuiet.current = false; refreshPage(); }
+    const timer = window.setInterval(refreshPage, PAGE_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshPage);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshPage); };
+  }, [sending, connection, refreshPage]);
+
+  if (loading) return <Skeleton />;
   if (error) {
     return (
       <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
@@ -506,7 +609,12 @@ export const EquipmentPagePage: React.FC = () => {
   if (!page) return null;
 
   const gauges = page.widgets.filter((w) => GAUGE_WIDGET_TYPES.includes(w.widgetType));
-  const lists = page.widgets.filter((w) => !gauges.includes(w));
+  // Each KPI's card title, so the explorer's picker names it the way its card does.
+  const kpiTitles: Record<string, string> = Object.fromEntries(
+    page.widgets.filter((w) => w.boundTo && w.title).map((w) => [w.boundTo as string, w.title as string]));
+  // Open alerts and work orders are on Machine summary; shown here too, one machine had
+  // the same lists on two pages, neither of them live.
+  const lists = page.widgets.filter((w) => !gauges.includes(w) && !DUPLICATED_ON_SUMMARY.includes(w.widgetType));
 
   return (
     <div className="space-y-4">
@@ -538,7 +646,13 @@ export const EquipmentPagePage: React.FC = () => {
         </div>
       </div>
 
-      {page.equipment.classSlug && <DigitalTwin classSlug={page.equipment.classSlug} widgets={page.widgets} />}
+      {/* What the machine is doing now, refreshed every 20 s; everything below it is
+          history over a window or settings. */}
+      <LivePanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} onLive={setLive} />
+
+      {page.equipment.classSlug && <DigitalTwin classSlug={page.equipment.classSlug} widgets={page.widgets} live={live} />}
+
+      <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('equipmentPage.historyAndSettings')}</h3>
 
       {page.widgets.length === 0 && (
         <p className="text-sm text-slate-400">{t('equipmentPage.noWidgets')}</p>
@@ -547,12 +661,26 @@ export const EquipmentPagePage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {gauges.map((w) => <Widget key={w.widgetKey} widget={w} onExploreKpi={(key) => setExploring(key)} />)}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* Two columns from desktop width: one full-width card each left most of a wide
+          screen empty (16 Nov). The class's list widgets share it with the panels: on
+          their own, Signals and readiness sat alone in a two-column row with nothing
+          beside it. The two cards in a row are one height (asked for, 16 Nov), the
+          shorter one ending in white space; a panel that does not apply (no rated alerts,
+          no fuel) renders nothing, so the rest close up, and a last card with no partner
+          takes the whole row rather than half of it beside nothing. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 [&>*]:h-full lg:[&>*:last-child:nth-child(odd)]:col-span-2">
+        {/* Rows as agreed (16 Nov): what the machine reports beside what it burns; what
+            can alert beside what happened; when it works beside what was done to it. */}
         {lists.map((w) => <Widget key={w.widgetKey} widget={w} />)}
+        <FuelPerShiftPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+        {/* Motors and pumps (Crompton POC): which rated alerts can fire, and the event log.
+            Both stay out of the way on a machine that has neither. */}
+        <RatedAlertsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId}
+          classSlug={page.equipment.classSlug} plantId={page.equipment.plantId} />
+        <MachineEventsPanel sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} refreshKey={refreshKey} />
+        <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
+        <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
       </div>
-
-      <ShiftSchedule sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
-      <ServiceHistory sourceSystem={page.equipment.sourceSystem} externalId={page.equipment.externalId} />
 
       <Modal isOpen={proposing} onClose={() => setProposing(false)} title={t('drafts:propose.title')} subtitle={page.equipment.name ?? page.equipment.externalId} maxWidth="max-w-xl">
         {proposing && page.equipment.classSlug && (
@@ -567,6 +695,7 @@ export const EquipmentPagePage: React.FC = () => {
             sourceSystem={page.equipment.sourceSystem}
             externalId={page.equipment.externalId}
             initialFormulaKey={exploring ?? undefined}
+            titles={kpiTitles}
           />
         )}
       </Modal>

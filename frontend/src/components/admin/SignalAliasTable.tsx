@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { SignalAlias, SignalAliasInput } from '../../lib/api';
 import { AddSignalAliasModal } from './AddSignalAliasModal';
 import { TablePagination, usePagination } from '../common/TablePagination';
-import { ListTable } from '../common/ListTable';
+import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
 
@@ -51,26 +51,30 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
 
 
   // One definition for both views (tester request: cards or list on every list page).
-  const viewColumns = [
-    { label: t('aliases.sourceSystem') },
-    { label: t('aliases.upstreamSpelling') },
-    { label: t('aliases.canonicalName') },
-    { label: t('sensorModal.unit') },
-    { label: t('aliases.note') },
-    { label: t('common.action') },
+  const viewColumns: ListColumn[] = [
+    // Sized to content: the source and unit are short, the note the longest; the two
+    // icons sit right.
+    { label: t('aliases.sourceSystem'), width: 140 },
+    { label: t('aliases.upstreamSpelling'), grow: 2, minWidth: 120 },
+    { label: t('aliases.canonicalName'), grow: 2, minWidth: 120 },
+    { label: t('sensorModal.unit'), width: 80 },
+    { label: t('aliases.note'), grow: 3, minWidth: 150 },
+    { label: t('common.action'), width: 100, align: 'right' },
   ];
   const viewCells = (a: (typeof pagedRows)[number]) => {
 
                 const key = `${a.sourceSystem}|${a.alias}`;
     return [
-      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{a.sourceSystem}</span>,
+      <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{a.sourceSystem}</span>,
       <span className="font-mono text-sm text-slate-900 dark:text-white">{a.alias}</span>,
-      <><span className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+      <><span className="px-2 py-0.5 text-xs font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
                         {a.canonical}
                       </span></>,
       <span className="text-slate-500 dark:text-slate-400">{a.unit ?? '—'}</span>,
-      <span className="text-slate-500 dark:text-slate-400 max-w-xs truncate">{a.note ?? '—'}</span>,
-      <><div className="flex items-center justify-center gap-2">
+      // A block that wraps, two lines at most, the whole note on hover: `truncate` on an
+      // inline span never clipped, and a long note ran out of its card (TC_177).
+      <span title={a.note ?? undefined} className="block text-slate-500 dark:text-slate-400 break-words line-clamp-2">{a.note ?? '—'}</span>,
+      <><div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => { setEditingAlias(a); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -135,7 +139,7 @@ export const SignalAliasTable: React.FC<SignalAliasTableProps> = ({
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(a) => `${a.sourceSystem}|${a.alias}`} cells={viewCells} actionsIndex={5} /></div>
         )}
 
-        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 font-sans">
           {t('aliases.footer')}
         </div>
         <TablePagination pinToBottom {...pager} />

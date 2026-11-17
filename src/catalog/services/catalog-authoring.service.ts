@@ -77,6 +77,7 @@ async function copyRequirementsAndFormulas(m: EntityManager, classSlug: string, 
   }
 }
 
+import { copyFuelFigures } from './class-fuel-figures';
 @Injectable()
 export class CatalogAuthoringService {
   private readonly logger = new Logger(CatalogAuthoringService.name);
@@ -138,6 +139,7 @@ export class CatalogAuthoringService {
         await copyClassContent(m, slug, working.version - 1, working.version);
         await copyLayout(m, slug, working.version - 1, working.version);
         await copyVisual(m, slug, working.version - 1, working.version);
+        await copyFuelFigures(m, slug, working.version - 1, working.version);
         await copyModel(m, slug, working.version - 1, working.version);
         await copyRequirementsAndFormulas(m, slug, working.version - 1, working.version);
       }

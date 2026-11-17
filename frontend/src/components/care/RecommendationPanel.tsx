@@ -7,6 +7,7 @@ import {
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { ChatMarkdown } from '../common/ChatMarkdown';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 const OUTCOME_TONE: Record<RecBundleOutcome, 'rose' | 'amber' | 'slate' | 'emerald'> = {
   attributed: 'rose', unattributed: 'amber', inconclusive: 'slate', nothing_detected: 'emerald',
@@ -20,7 +21,15 @@ const notFound = (err: unknown) => err instanceof ApiError && err.status === 404
  * until someone asks, because the page never renders on read. Analysing again returns
  * the same evidence when nothing it read has changed, so the button is safe to press.
  */
-export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: string }> = ({ sourceSystem, externalId }) => {
+export const RecommendationPanel: React.FC<{
+  sourceSystem: string; externalId: string;
+  /**
+   * The cause chains on this page ran and none had enough readings (test report MIN-5).
+   * A recommendation can still name a cause from its own evidence; it is then said as a
+   * possible cause, not a found one, so the two panels do not contradict each other.
+   */
+  chainsUnconfirmed?: boolean;
+}> = ({ sourceSystem, externalId, chainsUnconfirmed = false }) => {
   const { t } = useTranslation('care');
   const [bundle, setBundle] = useState<RecEvidenceBundle | null>(null);
   const [frame, setFrame] = useState<RecFrame | null>(null);
@@ -82,7 +91,9 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
 
   const chip = !bundle ? null
     : bundle.status === 'ready' && bundle.outcome
-      ? <Chip tone={(bundle.outcome && bundle.outcome in OUTCOME_TONE) ? OUTCOME_TONE[bundle.outcome] : 'slate'}>{t(`rec.outcome.${bundle.outcome}`, { defaultValue: bundle.outcome })}</Chip>
+      ? bundle.outcome === 'attributed' && chainsUnconfirmed
+        ? <Chip tone="amber" title={t('rec.outcome.attributedUnconfirmedWhy')}>{t('rec.outcome.attributedUnconfirmed')}</Chip>
+        : <Chip tone={(bundle.outcome && bundle.outcome in OUTCOME_TONE) ? OUTCOME_TONE[bundle.outcome] : 'slate'}>{t(`rec.outcome.${bundle.outcome}`, { defaultValue: bundle.outcome })}</Chip>
       : <Chip tone="slate">{t(`rec.reason.${bundle.reason}`, { defaultValue: bundle.reason ?? bundle.status })}</Chip>;
 
   return (
@@ -107,7 +118,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-slate-500 dark:text-slate-400">
               {!loaded ? t('rec.loading')
-                : bundle ? t('rec.asOf', { at: bundle.asOf && !isNaN(new Date(bundle.asOf).getTime()) ? new Date(bundle.asOf).toLocaleString() : '—' })
+                : bundle ? t('rec.asOf', { at: bundle.asOf && !isNaN(new Date(bundle.asOf).getTime()) ? new Date(bundle.asOf).toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—' })
                   : t('rec.notYet')}
               {bundle && expected > 0 && <> · {t('rec.coverage', { observed, expected })}</>}
             </p>
@@ -141,7 +152,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
                   {answer.hypotheses.map((h, i) => (
                     <div key={i} className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-1">
                       <p className="text-slate-800 dark:text-slate-100">{h.claim}</p>
-                      {h.limitations.map((l, j) => <p key={j} className="text-[11px] text-slate-500 dark:text-slate-400">{l}</p>)}
+                      {h.limitations.map((l, j) => <p key={j} className="text-xs text-slate-500 dark:text-slate-400">{l}</p>)}
                     </div>
                   ))}
                 </Block>
@@ -153,7 +164,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
                     {answer.next_steps.map((s, i) => (
                       <li key={i}>
                         <span className="text-slate-800 dark:text-slate-100">{s.aim}</span>
-                        {s.expected_outcome && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{s.expected_outcome}</span>}
+                        {s.expected_outcome && <span className="block text-xs text-slate-500 dark:text-slate-400">{s.expected_outcome}</span>}
                       </li>
                     ))}
                   </ol>
@@ -182,7 +193,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
               )}
 
               {frame?.provenance && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   {frame.provenance.renderer === 'model'
                     ? t('rec.byModel', { model: frame.provenance.modelId ?? '' })
                     : t('rec.byTemplate', { version: frame.provenance.rendererVersion ?? '' })}
@@ -198,7 +209,7 @@ export const RecommendationPanel: React.FC<{ sourceSystem: string; externalId: s
 
 const Block: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="space-y-1.5">
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
     <div className="text-slate-700 dark:text-slate-200">{children}</div>
   </div>
 );

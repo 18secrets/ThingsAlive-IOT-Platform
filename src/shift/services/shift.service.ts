@@ -4,6 +4,7 @@ import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { runTenantSpanning, withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { EquipmentShift } from '../entities/equipment-shift.entity';
+import { ShiftTemplate } from '../entities/shift-template.entity';
 import {
   isValidTimeZone, MINUTES_PER_DAY, nominalLengthMinutes, ShiftDefinition, shiftsOverlap,
   ShiftWindow, Weekday, windowsEndingBetween,
@@ -98,6 +99,71 @@ export class ShiftService {
         createdBy: scope.userId,
         updatedBy: scope.userId,
       }));
+    });
+  }
+
+  /** The library's shift templates an account may apply (fuel test report FU-3). */
+  async templates(scope: RequestScope): Promise<ShiftTemplate[]> {
+    return withTenantSession(this.ds, scope, (m) =>
+      m.getRepository(ShiftTemplate).find({ where: { status: 'published' }, order: { name: 'ASC' } }));
+  }
+
+  /**
+   * Give a machine a template's working day, as its own shifts (fuel test report FU-3,
+   * TC-FP-08). Idempotent: a shift the machine already has under the same name with the
+   * same hours is left as it is, so applying twice, or two requests at once, writes each
+   * shift once. A same-named shift with other hours is the account's own edit and is not
+   * overwritten; an overlap with another shift is refused, as it is when typed by hand.
+   *
+   * The machine's row is locked for the transaction: the overlap check reads the shifts
+   * that exist and then writes, and two applies racing between the read and the write
+   * would each see none and insert the same shift twice (the unique name would refuse the
+   * second, but as a 500 rather than "already there").
+   */
+  async applyTemplate(
+    scope: RequestScope, ref: EquipmentRef, templateSlug: string,
+  ): Promise<{ template: string; created: EquipmentShift[]; alreadyThere: string[] }> {
+    return withTenantSession(this.ds, scope, async (m) => {
+      const template = await m.getRepository(ShiftTemplate).findOne({ where: { slug: templateSlug, status: 'published' } });
+      if (!template) throw new NotFoundException(`No shift template "${templateSlug}" in the library.`);
+      for (const s of template.shifts) this.validate(s);
+
+      const asset = await m.getRepository(EquipmentProfile).createQueryBuilder('e')
+        .setLock('pessimistic_write')
+        .where('e.tenant_id = :t AND e.source_system = :s AND e.external_id = :x', {
+          t: scope.tenantId, s: ref.sourceSystem, x: ref.externalId,
+        })
+        .getOne();
+      if (!asset) throw new NotFoundException('No such machine in this account.');
+      if (asset.status === 'retired') throw new BadRequestException('That machine is retired. It has no working day.');
+
+      const repo = m.getRepository(EquipmentShift);
+      const existing = await repo.find({ where: { tenantId: scope.tenantId, ...ref } });
+      const created: EquipmentShift[] = [];
+      const alreadyThere: string[] = [];
+      for (const s of template.shifts) {
+        const same = existing.find((e) => e.name === s.name);
+        if (same) {
+          const identical = same.startMinute === s.startMinute && same.endMinute === s.endMinute
+            && same.timeZone === s.timeZone && [...same.days].sort().join() === [...s.days].sort().join();
+          if (!identical) {
+            throw new ConflictException(
+              `This machine already has a "${s.name}" shift with other hours. Change or retire it first; `
+              + 'a template does not overwrite a working day the account set.',
+            );
+          }
+          alreadyThere.push(s.name);
+          continue;
+        }
+        await this.assertNoOverlap(m, scope, ref, s, null);
+        const row = await repo.save(repo.create({
+          tenantId: scope.tenantId, ...ref, name: s.name, startMinute: s.startMinute, endMinute: s.endMinute,
+          days: s.days, timeZone: s.timeZone, status: 'active', scoredThrough: null, arrivalsThrough: null,
+          createdBy: scope.userId, updatedBy: scope.userId,
+        }));
+        created.push(row);
+      }
+      return { template: template.slug, created, alreadyThere };
     });
   }
 

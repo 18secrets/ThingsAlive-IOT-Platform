@@ -27,7 +27,23 @@ export const TENANT_ASSIGNABLE_PAGES = [
   "scenarios",
   "work-orders",
   "cost-administration",
+  // The geofence map rode on "dashboard" and each Administration tab on "admin", so an
+  // owner could not give one without the other (13 Nov 2026). Each is its own grant now;
+  // "admin" stays as the Administration entry itself and is held whenever any of its tabs
+  // is. The frontend's grant list must match this one — `npm run lint` compares them.
+  "geofence",
+  "admin-plant",
+  "admin-devices",
+  "admin-equipment",
+  "admin-model",
+  "admin-service-roster",
+  "admin-fuel-forecast-accuracy",
 ] as const;
+
+/** Administration's tabs a client role is granted one by one. */
+export const ADMIN_TAB_PAGES = [
+  "admin-plant", "admin-devices", "admin-equipment", "admin-model", "admin-service-roster", "admin-fuel-forecast-accuracy",
+] as const satisfies readonly TenantPage[];
 // 'alert-agent' used to be here too — removed along with its sidebar entry
 // (frontend's Sidebar.tsx); granting it would otherwise look like it does
 // something and land nobody anywhere.

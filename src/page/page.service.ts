@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ASSET_STORAGE, AssetStorage } from '../assets/asset-storage';
 import { EquipmentClassVisual } from '../catalog/entities/equipment-class-visual.entity';
 import { unplacedSignals } from '../catalog/visual/anchor-rules';
@@ -28,6 +28,8 @@ import { KpiEvaluatorService } from '../kpi/services/kpi-evaluator.service';
 import { TelemetryWindowReader } from '../kpi/services/telemetry-window-reader';
 import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
+import { LegacyTelemetryReader } from '../legacy/legacy-telemetry.reader';
+import { MachineLive, readMachineLive } from './live-machine';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { forecastDeclarations } from '../forecast/forecast-inputs';
 import { ForecastReader } from '../forecast/forecast-reader';
@@ -35,6 +37,11 @@ import { classifyFreshness } from '../signal-binding/services/signal-freshness';
 import { ParameterService } from '../parameters/services/parameter.service';
 import { bindingSegments, overlapping, SignalBindingService } from '../signal-binding/services/signal-binding.service';
 import { WorkOrderService } from '../work/services/work-order.service';
+import { machineKey, SiteTwinService, ZoneView, zoneAt } from '../site-twin/site-twin.service';
+import { DEMO_WORKFORCE, SIMULATED_TENANTS } from '../site-twin/site-twin-demo';
+import { Draft } from '../site-twin/compose';
+import { eventWindow, MachineEvents, readMachineEvents } from './machine-events';
+import { classify, DEFAULT_LOAD_THRESHOLD, DUTY_SIGNALS, DutyState, MAX_CARRY_SECONDS } from '../utilization/services/duty-cycle';
 import { failureModeStatus } from '../rec-engine/attribute';
 import { presentEnvelope } from '../kpi/kpi-presentation';
 import { isUnobserved, observeSignals } from '../rec-engine/observe';
@@ -68,6 +75,54 @@ export interface SitePage {
   site: { plantId: string; code: string; name: string; siteClass: { slug: string; version: number } };
   layout: { fallback: boolean };
   widgets: PageWidget[];
+}
+
+/**
+ * What the site twin draws a machine as. An open alert outranks everything; otherwise
+ * it is the machine's worst signal readiness, renamed for a legend — `no_data` is
+ * stale or silent, `blocked` is a required sensor not bound. Never "running": nothing
+ * here knows the engine is on, and a twin that guessed would look healthy when it is not.
+ */
+export type TwinMachineStatus = 'alert' | 'live' | 'no_data' | 'blocked' | 'not_configured';
+
+export interface TwinMachineKpis {
+  engineLoad?: number;
+  fuelLevel?: number;
+  fuelRate?: number;
+  coolantTemp?: number;
+  oilPressure?: number;
+  hydraulicTemp?: number;
+}
+
+export interface SiteTwinView {
+  site: { plantId: string; code: string; name: string; address: string | null };
+  /** False until somebody saves a layout: the extent is the default and nobody is placed. */
+  saved: boolean;
+  /** Send this back as `expectedVersion` when saving. */
+  version: number;
+  extent: { widthM: number; depthM: number };
+  zones: ZoneView[];
+  /** One per class on the site; null where the class has no confirmed model. */
+  classModels: Record<string, { modelUrl: string; bounds: ReturnType<typeof boundsOf> } | null>;
+  machines: {
+    sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
+    placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
+    readiness: PageReadiness; openAlerts: number; status: TwinMachineStatus;
+    /** What the machine is doing now, from its own engine, utilization and load signals
+     * (duty-cycle's `classify`), read no further back than one sample may speak for. */
+    activity: DutyState;
+    /** The key of the zone it stands in, or null when unplaced or outside every zone. */
+    engagedAt: string | null;
+    /** A breakdown has started and not ended (`breakdown_event`). */
+    breakdown: boolean;
+    kpis?: TwinMachineKpis | null;
+  }[];
+  /** Saved structures not drawn because no machine assigned here backs them any more. */
+  hiddenZones: string[];
+  /** The demo tenant: the page animates every machine at a work front and labels the
+   * twin a simulation. False for every real account. */
+  simulated: boolean;
+  summary: { total: number; placed: number } & Record<TwinMachineStatus, number>;
 }
 
 /**
@@ -117,9 +172,42 @@ export class PageService {
     private readonly parameters: ParameterService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
     private readonly forecasts: ForecastReader,
+    private readonly twins: SiteTwinService,
+    // Optional: the Live view asks 1.0 directly when a legacy connection exists, and
+    // answers from 2.0's own readings when it does not.
+    @Optional() private readonly legacyTelemetry?: LegacyTelemetryReader,
   ) {}
 
+  /** One machine as it is now: see live-machine.ts. */
+  async machineLive(scope: RequestScope, ref: EquipmentRef, now: Date = new Date()): Promise<MachineLive> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineLive(m, this.legacyTelemetry, scope.tenantId, ref, now);
+    });
+  }
+
   // ================================================================ machine page
+
+  /** A pump's starts, trips and voltage events over a window (Crompton U6): see machine-events.ts. */
+  async machineEvents(scope: RequestScope, ref: EquipmentRef, from: Date | undefined, to: Date | undefined, now: Date = new Date()): Promise<MachineEvents> {
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    const window = eventWindow(from, to, now);
+    return withTenantSession(this.ds, scope, async (m) => {
+      const profile = await m.getRepository(EquipmentProfile).findOne({
+        where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
+      });
+      if (!profile) throw new NotFoundException('No such equipment in this account.');
+      return readMachineEvents(m, this.reader, scope.tenantId, profile, window);
+    });
+  }
 
   async machinePage(scope: RequestScope, ref: EquipmentRef, at: Date = new Date()): Promise<MachinePage> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
@@ -594,6 +682,198 @@ export class PageService {
     };
   }
 
+  // ==================================================================== site twin
+
+  /**
+   * The site's digital twin: the saved layout, every machine the caller can see on the
+   * site with its status, and one model per class. The status is the site page's own
+   * readiness and alert count, from the same two batched reads, so the twin and the
+   * machine list cannot disagree about a machine.
+   */
+  async siteTwin(scope: RequestScope, plantId: string, at: Date = new Date()): Promise<SiteTwinView> {
+    const layout = await this.twins.read(scope, plantId);
+    const { machines } = layout;
+    const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
+    const slugs = [...new Set(machines.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))];
+    const [worst, alerts, models, telemetry] = await Promise.all([
+      this.machineReadiness(scope, machines, at),
+      refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
+      Promise.all(slugs.map(async (slug) => [slug, await this.twinClassModel(scope, slug)] as const)),
+      this.machineActivityAndKpis(scope, refs, at),
+    ]);
+
+    const rows = machines.map((e, i) => {
+      const k = machineKey(e.sourceSystem, e.externalId);
+      const openAlerts = alerts?.countByMachine.get(k) ?? 0;
+      const readiness = worst[i];
+      const placement = layout.placements.get(k) ?? null;
+      return {
+        sourceSystem: e.sourceSystem, externalId: e.externalId, name: e.name, classSlug: e.equipmentClassSlug,
+        placement, readiness, openAlerts,
+        status: twinStatus(readiness, openAlerts),
+        activity: telemetry.activity.get(k) ?? 'unknown',
+        engagedAt: placement ? zoneAt(layout.zones, placement.x, placement.z)?.key ?? null : null,
+        breakdown: layout.brokenDown.has(k),
+        kpis: telemetry.kpis.get(k) ?? null,
+      };
+    });
+    const summary = { total: rows.length, placed: 0, alert: 0, live: 0, no_data: 0, blocked: 0, not_configured: 0 };
+    for (const r of rows) { summary[r.status] += 1; if (r.placement) summary.placed += 1; }
+
+    return {
+      site: { plantId: layout.plant.id, code: layout.plant.code, name: layout.plant.name, address: layout.plant.address },
+      saved: layout.saved, version: layout.version, extent: layout.extent, zones: layout.zones,
+      classModels: Object.fromEntries(models), machines: rows, summary, hiddenZones: layout.hiddenZones,
+      simulated: SIMULATED_TENANTS.has(scope.tenantId),
+    };
+  }
+
+  /**
+   * Every laid-out site of the account in one call, for the port overview: each site's
+   * own twin, as its page shows it. A site with machines and no layout yet is listed, not
+   * drawn — the overview does not invent one. Sites are read one after another: a port is
+   * a handful of sites, and each read already batches across its machines.
+   *
+   * On the demo account a workforce figure is shared across the sites by machine count;
+   * it is simulated, labelled so, and null everywhere else.
+   */
+  async portTwin(scope: RequestScope, at: Date = new Date()) {
+    const plants = await withTenantSession(this.ds, scope, (m) => m.getRepository(Plant).find({
+      where: { tenantId: scope.tenantId, status: 'active' }, order: { code: 'ASC' },
+    }));
+    const visible = plants.filter((p) => scope.plantIds === undefined || scope.plantIds.includes(p.id));
+    const sites: (SiteTwinView & { workforce: number | null })[] = [];
+    const notLaidOut: { plantId: string; code: string; name: string; machines: number }[] = [];
+    for (const p of visible) {
+      const view = await this.siteTwin(scope, p.id, at);
+      if (!view.machines.length) continue;
+      if (!view.saved) { notLaidOut.push({ plantId: p.id, code: p.code, name: p.name, machines: view.machines.length }); continue; }
+      sites.push({ ...view, workforce: null });
+    }
+    const simulated = SIMULATED_TENANTS.has(scope.tenantId);
+    const machines = sites.reduce((a, s) => a + s.summary.total, 0);
+    if (simulated && machines) {
+      let left = DEMO_WORKFORCE;
+      sites.forEach((s, i) => {
+        s.workforce = i === sites.length - 1 ? left : Math.round((DEMO_WORKFORCE * s.summary.total) / machines);
+        left -= s.workforce;
+      });
+    }
+    return {
+      sites, notLaidOut, simulated,
+      summary: {
+        sites: sites.length, machines,
+        live: sites.reduce((a, s) => a + s.summary.live, 0),
+        alert: sites.reduce((a, s) => a + s.summary.alert, 0),
+        workforce: simulated && machines ? DEMO_WORKFORCE : null,
+      },
+    };
+  }
+
+  /** A first layout from the site's own machines (`composeLayout`), for the editor to
+   * start from. Not saved. A machine the twin shows as alerting, silent or missing a
+   * sensor goes to the maintenance and breakdown bay, as an open breakdown does. With the
+   * editor's `draft`, its zones stay and the machines are arranged around them. */
+  async siteTwinProposal(scope: RequestScope, plantId: string, at: Date = new Date(), draft?: Draft) {
+    const view = await this.siteTwin(scope, plantId, at);
+    const attention = new Set(view.machines
+      .filter((m) => m.status === 'alert' || m.status === 'no_data' || m.status === 'blocked')
+      .map((m) => machineKey(m.sourceSystem, m.externalId)));
+    return this.twins.propose(scope, plantId, attention, draft);
+  }
+
+  /**
+   * Each machine's duty state and live telemetry KPIs, in one query for the whole site.
+   * Duty state uses the carry window (MAX_CARRY_SECONDS) so the twin and utilization
+   * cannot disagree about whether a machine was on. Key telemetry roles (fuel level,
+   * fuel burn rate, engine load, temperatures, oil pressure) provide live KPI readouts.
+   */
+  private async machineActivityAndKpis(
+    scope: RequestScope, refs: EquipmentRef[], at: Date,
+  ): Promise<{ activity: Map<string, DutyState>; kpis: Map<string, TwinMachineKpis> }> {
+    const activityMap = new Map<string, DutyState>();
+    const kpiMap = new Map<string, TwinMachineKpis>();
+    if (!refs.length) return { activity: activityMap, kpis: kpiMap };
+
+    const twinTelemetryRoles = [
+      ...DUTY_SIGNALS,
+      'fuel_level',
+      'fuel_consumption',
+      'engine_coolant_temperature',
+      'engine_oil_pressure',
+      'hydraulic_oil_temperature',
+    ];
+    const carryWindowStart = new Date(at.getTime() - MAX_CARRY_SECONDS * 1000);
+    const rows: { source_system: string; external_id: string; role: string; value: number; source_timestamp: Date }[] =
+      await withTenantSession(this.ds, scope, (m) => m.query(
+        `SELECT DISTINCT ON (b.source_system, b.external_id, b.measurement_role)
+                b.source_system, b.external_id, b.measurement_role AS role, r.value, r.source_timestamp
+           FROM signal_binding_version b
+           JOIN unnest($2::text[], $3::text[]) AS e(source_system, external_id)
+             ON b.source_system = e.source_system AND b.external_id = e.external_id
+           JOIN telemetry_reading r
+             ON r.tenant_id = b.tenant_id AND r.imei = b.imei AND r.signal = b.signal_key
+            AND r.source_timestamp >= b.valid_from AND (b.valid_to IS NULL OR r.source_timestamp < b.valid_to)
+            AND r.source_timestamp <= $4
+          WHERE b.tenant_id = $1 AND b.measurement_role = ANY($5::text[]) AND b.is_primary AND b.status = 'active'
+            AND b.imei IS NOT NULL AND b.component_id = ''
+          ORDER BY b.source_system, b.external_id, b.measurement_role, r.source_timestamp DESC`,
+        [scope.tenantId, refs.map((r) => r.sourceSystem), refs.map((r) => r.externalId), at, twinTelemetryRoles],
+      ));
+
+    const dutySnapshots = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+      const k = machineKey(r.source_system, r.external_id);
+      const val = Number(r.value);
+      if (new Date(r.source_timestamp) >= carryWindowStart) {
+        if (!dutySnapshots.has(k)) dutySnapshots.set(k, new Map());
+        dutySnapshots.get(k)!.set(r.role, val);
+      }
+
+      let kpi = kpiMap.get(k);
+      if (!kpi) {
+        kpi = {};
+        kpiMap.set(k, kpi);
+      }
+      const rounded = Math.round(val * 10) / 10;
+      switch (r.role) {
+        case 'engine_load':
+          kpi.engineLoad = rounded;
+          break;
+        case 'fuel_level':
+          kpi.fuelLevel = rounded;
+          break;
+        case 'fuel_consumption':
+          kpi.fuelRate = rounded;
+          break;
+        case 'engine_coolant_temperature':
+          kpi.coolantTemp = rounded;
+          break;
+        case 'engine_oil_pressure':
+          kpi.oilPressure = rounded;
+          break;
+        case 'hydraulic_oil_temperature':
+          kpi.hydraulicTemp = rounded;
+          break;
+      }
+    }
+
+    for (const ref of refs) {
+      const k = machineKey(ref.sourceSystem, ref.externalId);
+      activityMap.set(k, classify(dutySnapshots.get(k) ?? new Map(), DEFAULT_LOAD_THRESHOLD));
+    }
+
+    return { activity: activityMap, kpis: kpiMap };
+  }
+
+  /** The class's confirmed model, or null — the machine-page twin's rule (QTWIN1): no
+   * model, an unconfirmed upload and no storage all draw the same stand-in block. */
+  private async twinClassModel(scope: RequestScope, slug: string) {
+    const source = await this.modelSource(scope, slug);
+    if (!source?.model?.assetKey || !this.storage.configured) return null;
+    return { modelUrl: await this.storage.readUrl(source.model.assetKey), bounds: boundsOf(source.model) };
+  }
+
   /** The signals this machine's class version declares a forecast for (QREC0a) — the
    * forecast pass's own definition (QML1 §3), so the two cannot disagree. */
   private async forecastDeclarations(profile: EquipmentProfile): Promise<Set<string>> {
@@ -641,6 +921,16 @@ export class PageService {
       result.set(key, machines.map((machine, i) => ({ machine, env: perMachine[i].get(key) ?? null })));
     }
     return result;
+  }
+}
+
+export function twinStatus(readiness: PageReadiness, openAlerts: number): TwinMachineStatus {
+  if (openAlerts > 0) return 'alert';
+  switch (readiness) {
+    case 'ready': return 'live';
+    case 'not_available': return 'no_data';
+    case 'blocked': return 'blocked';
+    default: return 'not_configured';
   }
 }
 

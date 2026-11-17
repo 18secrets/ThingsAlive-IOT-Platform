@@ -6,6 +6,7 @@ import {
   apiGetClassModel, apiRequestClassModelUpload, apiSetClassModelAnchors,
 } from '../../../lib/api';
 import { ModelAnchorEditor, measureModel } from '../../visual/ModelAnchorEditor';
+import { Skeleton } from '../../common/Skeleton';
 
 /**
  * The class's 3-D model and its signal markers (QTWIN1), beside the schematic and on
@@ -93,7 +94,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-white text-base flex items-center gap-2"><Box className="w-4 h-4 text-sky-600" />{t('model.title')}</h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             v{version} · {isDraft ? t('visual.draftEditable') : t('visual.publishedReadOnly')}
             {model?.geometryVersion != null && ` · ${t('model.geometryVersion', { version: model.geometryVersion })}`}
           </p>
@@ -112,7 +113,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
       )}
 
       {!model ? (
-        !error && <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        !error && <Skeleton />
       ) : model.state === 'assets_unavailable' ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('model.storageUnavailable')}</p>
       ) : model.state === 'no_model' || model.state === 'upload_pending' ? (
@@ -121,7 +122,7 @@ export const ClassModelPanel: React.FC<{ slug: string; version: number; isDraft:
             {model.state === 'upload_pending' ? t('visual.uploadPending') : t('model.noModel')}
             {model.unplacedSignals.length > 0 && ` ${t('visual.unplaced', { count: model.unplacedSignals.length })}`}
           </p>
-          {isDraft ? uploader : <p className="text-xs text-slate-400">{t('visual.draftOnly')}</p>}
+          {isDraft ? uploader : <p className="text-xs text-slate-500 dark:text-slate-400">{t('visual.draftOnly')}</p>}
         </div>
       ) : model.modelUrl ? (
         <div className="space-y-3">

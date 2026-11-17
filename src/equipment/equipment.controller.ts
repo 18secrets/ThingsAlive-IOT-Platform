@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, NotFoundException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsDefined, IsIn, IsISO8601, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
@@ -7,6 +7,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { ServiceTier } from './equipment-profile.entity';
 import { EquipmentService } from './services/equipment.service';
 import { PlantService } from './services/plant.service';
+import { DtcEpisodeService, faultPeriod } from '../diagnostics/services/dtc-episode.service';
 
 export class PlantDto {
   @IsString() @IsNotEmpty() code: string;
@@ -62,6 +63,13 @@ export class EquipmentPatchDto {
   @IsOptional() @IsString() tenantId?: string;
 }
 
+/** D57: one of the account's own models (`/my-equipment-templates`), or null for none. */
+export class EquipmentModelDto {
+  @IsOptional() @IsString() modelId?: string | null;
+  /** Master Admin only — acts on this account instead of the caller's own. */
+  @IsOptional() @IsString() tenantId?: string;
+}
+
 export class MoveDto {
   /** Null takes the machine off site without retiring it. */
   @IsOptional() @IsString() toPlantId?: string | null;
@@ -97,6 +105,7 @@ export class EquipmentController {
   constructor(
     private readonly equipment: EquipmentService,
     private readonly plants: PlantService,
+    private readonly dtcService: DtcEpisodeService,
   ) {}
 
   @Get('plants')
@@ -193,6 +202,30 @@ export class EquipmentController {
     }, body.tenantId);
   }
 
+  @Get(':sourceSystem/:externalId/model')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'Which of the account\'s models this machine is (D57)' })
+  model(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.equipment.model(scope, { sourceSystem, externalId }, tenantId);
+  }
+
+  @Put(':sourceSystem/:externalId/model')
+  @Requires('equipment.write')
+  @ApiOperation({ summary: 'Name the machine\'s model, or clear it with null. Its ratings and duty curve feed motor KPIs' })
+  setModel(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Body() body: EquipmentModelDto,
+  ) {
+    return this.equipment.setModel(scope, { sourceSystem, externalId }, body.modelId ?? null, body.tenantId);
+  }
+
   @Post(':sourceSystem/:externalId/move')
   @Requires('equipment.write')
   @ApiOperation({ summary: 'Move a machine to another site. Requires a reason' })
@@ -215,6 +248,23 @@ export class EquipmentController {
     @Query('tenantId') tenantId?: string,
   ) {
     return this.equipment.placementHistory(scope, { sourceSystem, externalId }, tenantId);
+  }
+
+  @Get(':sourceSystem/:externalId/faults')
+  @Requires('prediction.read')
+  @ApiOperation({ summary: 'Fault codes for an equipment: every active one, and those cleared in from–to (else the 20 most recent)' })
+  getFaults(
+    @CurrentScope() scope: RequestScope,
+    @Param('sourceSystem') sourceSystem: string,
+    @Param('externalId') externalId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    // A user limited to some machines is refused the rest, as on every machine route.
+    if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(externalId)) {
+      throw new NotFoundException('No such equipment in this account.');
+    }
+    return this.dtcService.getEquipmentFaults(scope.tenantId, sourceSystem, externalId, faultPeriod(from, to));
   }
 
   @Post(':sourceSystem/:externalId/retire')

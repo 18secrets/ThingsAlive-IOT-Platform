@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { severityTone } from '../components/common/statusTone';
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Settings } from 'lucide-react';
+import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings, Edit2 } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,9 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
+import { FILTER_PICKER } from '../lib/filterPicker';
+import { SortSelect } from '../components/common/SortSelect';
+import { sortRows, useSort } from '../lib/useSort';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { AnchorEditor } from '../components/visual/AnchorEditor';
@@ -23,6 +26,7 @@ import {
 } from '../lib/api';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
+const SEVERITIES = ['critical', 'high', 'medium', 'low', 'none'] as const;
 
 export const ScenariosPage: React.FC = () => {
   const { t } = useTranslation('scenarios');
@@ -31,6 +35,12 @@ export const ScenariosPage: React.FC = () => {
   usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
   const [scenarios, setScenarios] = useState<ClientScenario[]>([]);
   const [classFilter, setClassFilter] = useState('all');
+  // The table had a class filter and nothing else, in the order the API sent (testing
+  // sheet TC_157): now a search, severity and on/off, and a sort.
+  const [query, setQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'on' | 'off'>('all');
+  const { sort, setSort, toggle: toggleSort } = useSort<'severity' | 'name' | 'enabled'>({ key: 'severity', dir: 'desc' });
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [busySlug, setBusySlug] = useState<string | null>(null);
@@ -52,10 +62,19 @@ export const ScenariosPage: React.FC = () => {
     () => [...new Set(scenarios.map((s) => s.clientEquipmentClassSlug))].sort(),
     [scenarios],
   );
-  const visible = useMemo(
-    () => scenarios.filter((s) => classFilter === 'all' || s.clientEquipmentClassSlug === classFilter),
-    [scenarios, classFilter],
-  );
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const rows = scenarios.filter((s) => (classFilter === 'all' || s.clientEquipmentClassSlug === classFilter)
+      && (severityFilter === 'all' || s.severity === severityFilter)
+      && (enabledFilter === 'all' || s.enabled === (enabledFilter === 'on'))
+      && (!term || s.name.toLowerCase().includes(term) || s.slug.toLowerCase().includes(term)
+        || s.requiredSignals.some((sig) => sig.toLowerCase().includes(term))));
+    return sortRows(rows, sort, {
+      severity: (s) => SEVERITY_RANK[s.severity] ?? -1,
+      name: (s) => s.name.toLowerCase(),
+      enabled: (s) => (s.enabled ? 1 : 0),
+    });
+  }, [scenarios, classFilter, severityFilter, enabledFilter, query, sort]);
 
   async function toggle(scenario: ClientScenario) {
     // Disabling stops scoring on every machine of the class; enabling only adds work.
@@ -110,8 +129,8 @@ export const ScenariosPage: React.FC = () => {
     </>
   );
   const editButton = (s: Scenario) => (
-                <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                  {t('page.edit')}
+                <button onClick={() => setEditing(s)} title={t('page.edit')} aria-label={t('page.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
   );
 
@@ -129,15 +148,39 @@ export const ScenariosPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full sm:w-56">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+          <Input size="sm" value={query} onChange={(v) => { setQuery(v); pager.setPage(1); }} placeholder={t('page.search')} className="w-full pl-9!" />
+        </div>
         <SelectPicker
           data={[{ label: t('page.allClasses'), value: 'all' }, ...classes.map((c) => ({ label: c, value: c }))]}
           value={classFilter}
-          onChange={(value) => setClassFilter(value ?? 'all')}
+          onChange={(value) => { setClassFilter(value ?? 'all'); pager.setPage(1); }}
           searchable={false}
           cleanable={false}
           size="sm"
-          className="w-64"
+          className={`w-full sm:w-56 ${FILTER_PICKER}`}
+        />
+        <SelectPicker
+          data={[{ label: t('page.allSeverities'), value: 'all' }, ...SEVERITIES.map((v) => ({ label: t(`severity.${v}`), value: v }))]}
+          value={severityFilter}
+          onChange={(value) => { setSeverityFilter(value ?? 'all'); pager.setPage(1); }}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className={`w-full sm:w-40 ${FILTER_PICKER}`}
+        />
+        <SelectPicker
+          data={[
+            { label: t('page.allStates'), value: 'all' }, { label: t('page.enabledOnly'), value: 'on' }, { label: t('page.disabledOnly'), value: 'off' },
+          ]}
+          value={enabledFilter}
+          onChange={(value) => { setEnabledFilter((value ?? 'all') as 'all' | 'on' | 'off'); pager.setPage(1); }}
+          searchable={false}
+          cleanable={false}
+          size="sm"
+          className={`w-full sm:w-40 ${FILTER_PICKER}`}
         />
         {classFilter !== 'all' && (
           <button
@@ -147,7 +190,22 @@ export const ScenariosPage: React.FC = () => {
             <Settings className="w-3.5 h-3.5" /> {t('page.manageClass')}
           </button>
         )}
-        <div className="ml-auto"><ViewModeToggle mode={viewMode} onChange={setViewMode} /></div>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <span className="text-sm text-slate-400 dark:text-slate-500">{t('page.count', { count: visible.length })}</span>
+          <span className="inline-flex items-center gap-2">
+            <SortSelect
+              sort={sort}
+              onChange={(next) => { setSort(next); pager.setPage(1); }}
+              options={[
+                { key: 'severity', dir: 'desc', label: ts('sort.severityHigh') },
+                { key: 'name', dir: 'asc', label: ts('sort.nameAz') },
+                { key: 'enabled', dir: 'desc', label: ts('sort.enabledFirst') },
+                { key: 'enabled', dir: 'asc', label: ts('sort.disabledFirst') },
+              ]}
+            />
+            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+          </span>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
@@ -159,15 +217,24 @@ export const ScenariosPage: React.FC = () => {
           ) : viewMode === 'list' ? (
             <ListTable bare
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.needs') },
-                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+                // The toggle and the one Edit link are narrow and fixed; the room they gave up
+                // goes to Details and Needs, which carry the most text.
+                { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 130 },
+                { label: ts('listCol.details'), sortKey: 'severity', grow: 3, minWidth: 180 },
+                { label: ts('listCol.needs'), grow: 3, minWidth: 160 },
+                { label: ts('listCol.enabled'), sortKey: 'enabled', width: 100 },
+                { label: ts('listCol.actions'), width: 80, align: 'right' },
               ]}
+              sort={sort}
+              onSort={(key) => { toggleSort(key as 'severity' | 'name' | 'enabled', key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
               rows={pageItems}
               rowKey={(s) => s.id}
               cells={(s) => [
                 <span className="font-medium">{s.name}</span>,
-                <div className="flex items-center gap-1.5 flex-wrap">{tagChips(s)}</div>,
-                <span className="text-[11px] text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
+                // A chip never wraps, so a long class or template ran past the column and was cut
+                // off (TC_186); in the list's narrow column the chip's own text wraps instead.
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0 [&>span]:whitespace-normal [&>span]:[overflow-wrap:anywhere]">{tagChips(s)}</div>,
+                <span className="text-xs text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
                 enabledToggle(s),
                 editButton(s),
               ]}
@@ -184,7 +251,7 @@ export const ScenariosPage: React.FC = () => {
                     {tagChips(s)}
                   </div>
                   {s.description && <p className="text-xs text-slate-400 dark:text-slate-500">{s.description}</p>}
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     {t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}
                   </p>
                   {editButton(s)}
@@ -328,14 +395,14 @@ const ClassManageModal: React.FC<{ slug: string; onClose: () => void }> = ({ slu
       <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('manage.layout')}</h4>
-          {fallback && <span className="text-[11px] text-slate-400">{t('manage.fallback')}</span>}
+          {fallback && <span className="text-xs text-slate-400">{t('manage.fallback')}</span>}
         </div>
         <div className="space-y-1.5">
           {widgets.map((w, i) => (
             <div key={w.widgetKey} className="flex items-center justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{w.title ?? w.widgetKey}</p>
-                <p className="text-[11px] text-slate-400">{w.widgetType}{w.positionCustom ? ` · ${t('manage.reordered')}` : ''}</p>
+                <p className="text-xs text-slate-400">{w.widgetType}{w.positionCustom ? ` · ${t('manage.reordered')}` : ''}</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button disabled={fallback || busyKey === w.widgetKey || i === 0} onClick={() => move(i, -1)} className="p-1.5 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed">
@@ -550,9 +617,9 @@ const ClassUpgradeSection: React.FC<{ slug: string; onUpgraded: () => Promise<vo
         ))}
       </dl>
       {lines.slice(1).every(([, text]) => !text) && (
-        <p className="text-[11px] text-slate-500">{t('upgrade.noChanges')}</p>
+        <p className="text-xs text-slate-500">{t('upgrade.noChanges')}</p>
       )}
-      {notice && <p className="text-[11px] text-slate-500">{notice}</p>}
+      {notice && <p className="text-xs text-slate-500">{notice}</p>}
     </div>
   );
 };
@@ -648,7 +715,7 @@ const ScenarioEditForm: React.FC<{
             <InputNumber min={0} max={365} value={minimumHistoryDays} onChange={(value) => setMinimumHistoryDays(Number(value) || 0)} />
           </div>
         </div>
-        <p className="text-[11px] text-slate-400">{t('form.requiredSignals', { signals: scenario.requiredSignals.join(', ') || t('form.none') })}</p>
+        <p className="text-xs text-slate-400">{t('form.requiredSignals', { signals: scenario.requiredSignals.join(', ') || t('form.none') })}</p>
 
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">

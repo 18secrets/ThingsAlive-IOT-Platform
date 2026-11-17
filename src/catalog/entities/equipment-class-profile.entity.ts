@@ -116,6 +116,11 @@ export class EquipmentClassProfile {
   @Column({ name: 'availability_signal', type: 'text', nullable: true })
   availabilitySignal: string | null;
 
+  // The cold-start fuel figures (`1763400000000-ClassFuelFigures`: nominal_fuel_source,
+  // rated_power_kw, working_load_pct, bsfc_g_per_kwh, bsfc_source, idle_fuel_per_hour,
+  // working_share) are columns of this table and deliberately not of this entity: they
+  // are read and written only by `services/class-fuel-figures.ts`, which says why.
+
   @Column({ type: 'text', default: 'draft' })
   @Index('ix_equipment_class_profile_status')
   status: CatalogStatus;

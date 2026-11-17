@@ -29,9 +29,10 @@ import { AcceptInvitationScreen } from './components/auth/AcceptInvitationScreen
 import { ForgotPasswordScreen } from './components/auth/ForgotPasswordScreen';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminPage } from './pages/AdminPage';
-import { firstAllowedAdminSubTab } from './lib/pageAccess';
+import { firstAllowedAdminSubTab, canOpenPath } from './lib/pageAccess';
 import { EquipmentPagePage } from './pages/EquipmentPagePage';
 import { SitePagePage } from './pages/SitePagePage';
+import { PortOverviewPage } from './pages/PortOverviewPage';
 import { EquipmentClassDetailPage } from './pages/EquipmentClassDetailPage';
 import { CatalogImportPage } from './pages/CatalogImportPage';
 import { DeviceSetupPage } from './pages/DeviceSetupPage';
@@ -62,7 +63,7 @@ import {
   apiSetPlantBoundary, apiImportEquipmentFromMirror,
   apiListEquipmentClasses, apiCreateEquipmentClass, apiUpdateEquipmentClass,
   apiPublishEquipmentClass, apiRetireEquipmentClass, apiUnretireEquipmentClass,
-  apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula,
+  apiListNamedFormulas, apiCreateNamedFormula, apiEditNamedFormula, apiPublishNamedFormula, apiSetNamedFormulaActive,
   apiListAuthoringScenarios, apiCreateScenario, apiUpdateScenario, apiPublishScenario,
   apiListAuthoringAlertTemplates, apiCreateAlertTemplate, apiUpdateAlertTemplate,
   apiListAuthoringCausalChains, apiDraftCausalChain, apiPublishCausalChain,
@@ -121,6 +122,7 @@ function accountToClient(a: Account): ClientAccount {
     mustChangePassword: a.superAdmin?.status === 'invited',
     status: a.status === 'active' ? 'Active' : 'Inactive',
     createdAt: new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    timeZone: a.timeZone,
   };
 }
 
@@ -143,6 +145,8 @@ function AppData() {
   // cached locally. Everything below this is still mock data.
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [accountsError, setAccountsError] = useState<string | undefined>(undefined);
+  // Whether /accounts has answered yet: until it has, an empty list is not "no clients" (FU-8).
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   // The signed-in client's own real sites (GET /equipment/plants). Separate
   // from the mock `plants` array below on purpose: Master Admin has no
   // tenant of their own, so this stays empty for them, while their still-mock
@@ -246,6 +250,8 @@ function AppData() {
       setAccountsError(undefined);
     } catch (err) {
       setAccountsError(err instanceof ApiError ? err.message : 'Could not load accounts.');
+    } finally {
+      setAccountsLoaded(true);
     }
   };
 
@@ -474,6 +480,9 @@ function AppData() {
     const master = authUser.role === 'master-admin';
     const path = location.pathname;
     if (/^\/admin\/(equipment|sites)\/.+\/page$/.test(path)) return;
+    // Not for a page the person may not open: Shell shows them "no access" there, and its
+    // lists would only come back refused (TC_149, a Platform Support role on Equipment Classes).
+    if (!canOpenPath(authUser, path)) return;
     const sub = path.startsWith('/admin/') ? path.split('/')[2] : path.split('/')[1];
     const sensors = () => refreshSensorCatalog();
     const forMaster: Record<string, (() => Promise<void>)[]> = {
@@ -491,6 +500,8 @@ function AppData() {
       staff: [refreshPlatformStaff],
       devices: [refreshDevicePool, refreshAccounts, refreshToolMappings],
       equipment: [refreshAllEquipment, refreshAccounts],
+      // Account access lists every account: on a fresh load nothing else had fetched them.
+      'fault-codes': [refreshAccounts],
     };
     const forClient: Record<string, (() => Promise<void>)[]> = {
       plant: [refreshPlants],
@@ -499,8 +510,15 @@ function AppData() {
       'client-users': [refreshTenantUsers, refreshRoles, refreshPlants, refreshEquipment],
       roles: [refreshRoles, refreshTenantUsers],
     };
+    // Client names come from the accounts list, which only Master Admin may read; other
+    // staff see the account id rather than a refused call.
+    // The sensor catalogue likewise needs device-catalog.read, which a Catalog Author lacks.
+    const readsAccounts = authUser.capabilities?.['tenant.provision'] === true;
+    const readsSensors = authUser.capabilities?.['device-catalog.read'] === true;
+    const loaders = ((master ? forMaster : forClient)[sub] ?? []).filter((refresh) => !master
+      || (refresh !== refreshAccounts || readsAccounts) && (refresh !== sensors || readsSensors));
     // Each refresher records its own failure on its own screen; none may stop another.
-    void Promise.allSettled(((master ? forMaster : forClient)[sub] ?? []).map((refresh) => refresh()));
+    void Promise.allSettled(loaders.map((refresh) => refresh()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, restoringSession, authUser?.role]);
 
@@ -524,11 +542,12 @@ function AppData() {
   // invent here: the modal shows that token so it can be handed to the
   // client, who sets their own via POST /auth/accept-invitation.
   const handleCreateAccount = async (
-    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string },
+    input: { tenantId: string; name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => {
     const result = await apiCreateAccount({
       tenantId: input.tenantId,
       name: input.name,
+      timeZone: input.timeZone,
       superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
     });
     // Re-read from the server rather than trust the create response to be
@@ -543,10 +562,11 @@ function AppData() {
   // a different person; see ProvisioningService.update's own comment on why.
   const handleUpdateAccount = async (
     tenantId: string,
-    input: { name: string; email: string; fullName: string; phone?: string },
+    input: { name: string; email: string; fullName: string; phone?: string; timeZone?: string },
   ) => {
     const updated = await apiUpdateAccount(tenantId, {
       name: input.name,
+      timeZone: input.timeZone,
       superAdmin: { email: input.email, fullName: input.fullName, phone: input.phone },
     });
     await refreshAccounts();
@@ -845,6 +865,11 @@ function AppData() {
   // person may have scrolled past.
   const handlePublishNamedFormula = async (slug: string, version: number) => {
     await apiPublishNamedFormula(slug, version);
+    await refreshNamedFormulas();
+  };
+
+  const handleSetNamedFormulaActive = async (slug: string, active: boolean) => {
+    await apiSetNamedFormulaActive(slug, active);
     await refreshNamedFormulas();
   };
 
@@ -1158,7 +1183,10 @@ function AppData() {
           <Route
             path="dashboard"
             element={
-              <DashboardPage clients={clients} />
+              <DashboardPage
+                clients={clients}
+                clientsState={!accountsLoaded ? 'loading' : accountsError ? 'unavailable' : 'ok'}
+              />
             }
           />
           <Route path="dashboard-live" element={<Navigate to="/dashboard" replace />} />
@@ -1214,6 +1242,7 @@ function AppData() {
               }
             />
             <Route path="equipment/:sourceSystem/:externalId/page" element={<EquipmentPagePage />} />
+            <Route path="sites/port" element={<PortOverviewPage />} />
             <Route path="sites/:plantId/page" element={<SitePagePage />} />
             <Route
               path=":subTab"
@@ -1276,6 +1305,7 @@ function AppData() {
                   onCreateNamedFormula={handleCreateNamedFormula}
                   onUpdateNamedFormula={handleUpdateNamedFormula}
                   onPublishNamedFormula={handlePublishNamedFormula}
+                  onSetNamedFormulaActive={handleSetNamedFormulaActive}
                   onCreateIndustryType={handleCreateIndustryType}
                   onUpdateIndustryType={handleUpdateIndustryType}
                   onDeleteIndustryType={handleDeleteIndustryType}

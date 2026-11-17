@@ -151,7 +151,7 @@ export const AddNamedFormulaModal: React.FC<AddNamedFormulaModalProps> = ({
                   {t('classModal.slug')} <span className="text-rose-500">*</span>
                 </label>
                 <Input size="sm" required disabled={isEditing} value={slug} onChange={(value) => { setSlug(value); setSlugTouched(true); }} placeholder={t('formulaModal.slugPlaceholder')} />
-                <p className="text-[10px] text-slate-400 mt-1">
+                <p className="text-[0.6875rem] text-slate-400 mt-1">
                   {isEditing ? t('formulaModal.slugPermanent') : t('formulaModal.slugHint')}
                 </p>
               </div>
@@ -182,7 +182,7 @@ export const AddNamedFormulaModal: React.FC<AddNamedFormulaModalProps> = ({
                 {t('formulaModal.expression')} <span className="text-rose-500">*</span>
               </label>
               <Input size="sm" required value={expression} onChange={(value) => setExpression(value)} placeholder={t('formulaModal.expressionPlaceholder')} />
-              <p className="text-[10px] text-slate-400 mt-1">{t('formulaModal.expressionHint')}</p>
+              <p className="text-[0.6875rem] text-slate-400 mt-1">{t('formulaModal.expressionHint')}</p>
             </div>
 
             <div>
@@ -201,11 +201,11 @@ export const AddNamedFormulaModal: React.FC<AddNamedFormulaModalProps> = ({
             <div className="p-4 rounded-xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 dark:text-white">{t('formulaModal.roles')}</span>
-                <button type="button" onClick={addInputRow} className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer">
+                <button type="button" onClick={addInputRow} className="text-xs text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer">
                   <Plus className="w-3.5 h-3.5" /><span>{t('formulaModal.addRole')}</span>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 -mt-1">{t('formulaModal.rolesHint')}</p>
+              <p className="text-[0.6875rem] text-slate-400 -mt-1">{t('formulaModal.rolesHint')}</p>
 
               {inputs.map((r, i) => (
                 <div key={i} className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
@@ -230,7 +230,7 @@ export const AddNamedFormulaModal: React.FC<AddNamedFormulaModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans t={t} i18nKey="common.mandatoryNote" components={{ req: <span className="text-rose-500 font-bold" /> }} />
             </span>

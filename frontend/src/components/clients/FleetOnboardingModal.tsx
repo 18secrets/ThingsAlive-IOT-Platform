@@ -110,14 +110,14 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
           {plan.conflicts.map((c, i) => (
             <div key={`${c.imei}-${i}`} className="border-t border-slate-100 dark:border-slate-800 pt-1.5">
               <p className="text-slate-700 dark:text-slate-200"><span className="font-mono">{c.imei}</span> · {conflictLabel(t, c.reason)}</p>
-              <p className="text-[11px] text-slate-400">{c.detail}</p>
+              <p className="text-xs text-slate-400">{c.detail}</p>
             </div>
           ))}
         </Section>
       )}
 
       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-        <span className="text-[11px] text-slate-400">
+        <span className="text-xs text-slate-400">
           {toDo === 0 ? t('fleet.nothingToAdd') : t('fleet.changesToAdd', { count: toDo })}
         </span>
         <button
@@ -135,13 +135,13 @@ const FleetOnboardingBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
 const Stat: React.FC<{ label: string; value: number; muted?: boolean }> = ({ label, value, muted }) => (
   <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
     <div className={`text-xl font-bold ${muted ? 'text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{value}</div>
-    <div className="text-[11px] text-slate-400">{label}</div>
+    <div className="text-xs text-slate-400">{label}</div>
   </div>
 );
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
   <div className="space-y-1.5">
-    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{icon}{title}</p>
+    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{icon}{title}</p>
     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">{children}</div>
   </div>
 );

@@ -106,6 +106,16 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'running_signal', requiredCell: false, since: 'v5' },
       { name: 'running_idle_bound', requiredCell: false, since: 'v5' },
       { name: 'availability_signal', requiredCell: false, since: 'v5' },
+      // Cold-start fuel figures (fuel test report FU-3/FU-5), blank in the example for the
+      // nominal's reason. Optional v5 columns rather than a v6: nothing earlier changes
+      // meaning, and a workbook without them loads exactly as before.
+      { name: 'nominal_fuel_source', requiredCell: false, since: 'v5' },
+      { name: 'rated_power_kw', requiredCell: false, since: 'v5' },
+      { name: 'working_load_pct', requiredCell: false, since: 'v5' },
+      { name: 'bsfc_g_per_kwh', requiredCell: false, since: 'v5' },
+      { name: 'bsfc_source', requiredCell: false, since: 'v5' },
+      { name: 'idle_fuel_per_hour', requiredCell: false, since: 'v5' },
+      { name: 'working_share', requiredCell: false, since: 'v5' },
     ],
     example: {
       slug: 'diesel-generator', name: 'Diesel Generator', description: 'Backup power genset',
@@ -160,6 +170,11 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'min', requiredCell: false },
       { name: 'max', requiredCell: false },
       { name: 'severity', requiredCell: false },
+      // D59: optional, so no template bump (QCE3's precedent: an optional column asks
+      // nothing of a workbook that predates it). Set, it makes min and max multiples of
+      // a motor rating on each machine — `rated_current` with max 1.2 is overload at
+      // 1.2 × that motor's own rated current — instead of one value for every model.
+      { name: 'rating', requiredCell: false },
       { name: 'component_scope', requiredCell: false },
       { name: 'criticality', requiredCell: false },
       { name: 'min_count', requiredCell: false },
@@ -323,6 +338,133 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       chart_type: 'line',
     },
   },
+  /**
+   * Rules (testing sheet TC_126): what predicts a fault on the class, what alerts on
+   * it, and the causal chain behind it — content the class page could hold and the
+   * workbook could not, so a library built in Excel arrived without any of it. Each
+   * row lands as a library draft, beside the class, for an author to review and
+   * publish, exactly as one written on the class page would.
+   *
+   * Optional v5 sheets rather than a v6, the layout precedent: nothing earlier changes
+   * meaning, and a workbook without them loads exactly as before.
+   *
+   * `prediction_scenario` is the machine's-own-baseline rule (tier1), its sigma
+   * thresholds written as the scenario's parameters under the keys the scorer reads,
+   * so a client sees them as tunables like any other. No influence-model columns: that
+   * model is a structure, not a tunable, and nothing authors one outside the tests yet.
+   */
+  {
+    sheet: 'prediction_scenario',
+    entityKind: 'prediction_scenario',
+    since: 'v5',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      { name: 'slug', requiredCell: true },
+      { name: 'name', requiredCell: true },
+      { name: 'description', requiredCell: false },
+      { name: 'severity', requiredCell: false },
+      { name: 'tier', requiredCell: false },
+      { name: 'required_signals', requiredCell: true, multiValue: true },
+      { name: 'minimum_history_days', requiredCell: false },
+      { name: 'warning_sigma', requiredCell: false },
+      { name: 'critical_sigma', requiredCell: false },
+      { name: 'baseline_window_days', requiredCell: false },
+      { name: 'minimum_samples', requiredCell: false },
+    ],
+    example: {
+      class_slug: 'diesel-generator', slug: 'diesel-generator-coolant-drift', name: 'Coolant drifting hot',
+      description: 'Coolant running hotter than this machine usually does', severity: 'high', tier: 1,
+      required_signals: 'coolant_temp_c', minimum_history_days: 7, warning_sigma: 2, critical_sigma: 3,
+      baseline_window_days: 14, minimum_samples: 30,
+    },
+  },
+  /**
+   * One alert rule per row. Which columns apply depends on `trigger`, as on the class
+   * page: a signal-threshold reads signal/min/max/rating, a prediction-severity reads
+   * at_least and scenario_slug, a chain-origin reads at_least, chain_slug and
+   * stage_signal. Checked by the same `validateParams` a client's own rule is.
+   * Signal limits on the `signal` sheet still draft their own threshold rule; this
+   * sheet is for the rules a limit cannot say.
+   */
+  {
+    sheet: 'alert_rule',
+    entityKind: 'alert_rule',
+    since: 'v5',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      { name: 'slug', requiredCell: true },
+      { name: 'name', requiredCell: true },
+      { name: 'description', requiredCell: false },
+      { name: 'trigger', requiredCell: true },
+      { name: 'severity', requiredCell: false },
+      { name: 'enabled_on_copy', requiredCell: false, boolean: true },
+      { name: 'signal', requiredCell: false },
+      { name: 'min', requiredCell: false },
+      { name: 'max', requiredCell: false },
+      { name: 'rating', requiredCell: false },
+      { name: 'at_least', requiredCell: false },
+      { name: 'scenario_slug', requiredCell: false },
+      { name: 'chain_slug', requiredCell: false },
+      { name: 'stage_signal', requiredCell: false },
+    ],
+    // Alerts on the example scenario above, so the example workbook passes its own
+    // validation: the scenario it names is in the same batch.
+    example: {
+      class_slug: 'diesel-generator', slug: 'diesel-generator-coolant-drift-alert', name: 'Coolant drifting hot',
+      description: 'Raised when the coolant drift prediction reaches high', trigger: 'prediction-severity',
+      severity: 'high', enabled_on_copy: 'TRUE', signal: '', min: '', max: '', rating: '',
+      at_least: 'high', scenario_slug: 'diesel-generator-coolant-drift', chain_slug: '', stage_signal: '',
+    },
+  },
+  /**
+   * A causal chain, one row; its stages are rows of `causal_chain_stage` naming it.
+   * A chain is written whole, so a chain with no stage row is refused, and so is a
+   * stage naming a chain this workbook does not carry.
+   */
+  {
+    sheet: 'causal_chain',
+    entityKind: 'causal_chain',
+    since: 'v5',
+    columns: [
+      { name: 'class_slug', requiredCell: true },
+      { name: 'slug', requiredCell: true },
+      { name: 'name', requiredCell: true },
+      { name: 'description', requiredCell: false },
+      { name: 'scenario_slug', requiredCell: false },
+      { name: 'outcome', requiredCell: false },
+      { name: 'alignment_seconds', requiredCell: false },
+      { name: 'provenance', requiredCell: false },
+    ],
+    example: {
+      class_slug: 'diesel-generator', slug: 'diesel-generator-cooling-chain', name: 'Load heats the coolant',
+      description: 'Coolant temperature explained by engine load', scenario_slug: 'diesel-generator-coolant-drift',
+      outcome: 'Overheating shutdown', alignment_seconds: 60, provenance: 'OEM cooling curve',
+    },
+  },
+  {
+    sheet: 'causal_chain_stage',
+    entityKind: 'causal_chain_stage',
+    since: 'v5',
+    columns: [
+      { name: 'chain_slug', requiredCell: true },
+      { name: 'signal', requiredCell: true },
+      { name: 'label', requiredCell: false },
+      { name: 'intercept', requiredCell: true },
+      // "signal=coefficient@lagSeconds; signal=coefficient" — a driver may be an
+      // upstream stage or an outside input such as load or ambient.
+      { name: 'drivers', requiredCell: true },
+      { name: 'warn_above', requiredCell: true },
+      { name: 'critical_above', requiredCell: true },
+      { name: 'direction', requiredCell: false },
+      { name: 'limit_warn_at', requiredCell: false },
+      { name: 'limit_critical_at', requiredCell: false },
+    ],
+    example: {
+      chain_slug: 'diesel-generator-cooling-chain', signal: 'coolant_temp_c', label: 'Coolant under load',
+      intercept: 70, drivers: 'engine_load_pct=0.3@120', warn_above: 5, critical_above: 10,
+      direction: 'above', limit_warn_at: 100, limit_critical_at: 105,
+    },
+  },
 ];
 
 export const ALL_SHEETS: SheetSchema[] = [META_SHEET, ...CONTENT_SHEETS];
@@ -349,6 +491,12 @@ export const COMPARISON_BASIS_VALUES = ['none', 'previous_period', 'target'];
 /** QCE2's vocabulary — `resolveWindow` in kpi-evaluator.service.ts accepts exactly these. */
 export const AGGREGATION_WINDOW_VALUES = ['shift', 'today', '24h', '7d', '30d', 'mtd', 'ytd'];
 export const CHART_TYPE_VALUES = ['none', 'line', 'bar', 'area', 'gauge', 'number'];
+/** The triggers the alert_rule sheet can write (TC_126). Not composite or fuel-loss:
+ * their parameters are a structure, not a row of cells. */
+export const IMPORTABLE_TRIGGERS = ['signal-threshold', 'prediction-severity', 'chain-origin'];
+export const SCENARIO_TIER_VALUES = ['1', '2', '3'];
+export const CHAIN_DIRECTION_VALUES = ['above', 'below', 'either'];
+export const CHAIN_ALERT_LEVELS = ['warning', 'critical'];
 
 /** What a workbook stamped `version` does not use, for the diff to name — derived from
  * `since`, so it cannot drift from the columns themselves. */
@@ -402,4 +550,10 @@ export const KNOWN_ENUMS: { field: string; values: string[] }[] = [
   { field: 'formula.chart_type', values: CHART_TYPE_VALUES },
   { field: 'layout.widget_type', values: [...WIDGET_TYPES] },
   { field: 'layout.size', values: [...WIDGET_SIZES] },
+  { field: 'prediction_scenario.severity', values: SEVERITY_VALUES },
+  { field: 'prediction_scenario.tier', values: SCENARIO_TIER_VALUES },
+  { field: 'alert_rule.trigger', values: IMPORTABLE_TRIGGERS },
+  { field: 'alert_rule.severity', values: SEVERITY_VALUES },
+  { field: 'alert_rule.at_least', values: [...SEVERITY_VALUES.filter((v) => v !== 'none'), ...CHAIN_ALERT_LEVELS] },
+  { field: 'causal_chain_stage.direction', values: CHAIN_DIRECTION_VALUES },
 ];

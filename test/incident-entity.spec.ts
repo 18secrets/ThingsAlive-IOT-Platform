@@ -154,6 +154,8 @@ describeDb('incident entity, end to end', () => {
 
     await expect(records.resolve(tech, incident.id, 'Fixed')).rejects.toThrow(/"Check the radiator"/);
     await expect(records.resolve(tech, incident.id, '  ')).rejects.toThrow(/note is required/);
+    // Started by somebody (TC_191): the job is assigned first.
+    await owner.query(`UPDATE work_order SET assigned_to_user_id = $1 WHERE id = $2`, [operatorId, job.id]);
     await work.act(boss, job.id, 'start', null);
     await work.act(boss, job.id, 'complete', 'Radiator cleaned');
 

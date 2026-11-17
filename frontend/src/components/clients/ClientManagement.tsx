@@ -12,6 +12,7 @@ import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
 import { FleetOnboardingModal } from './FleetOnboardingModal';
 import { FleetImportModal } from './FleetImportModal';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface ClientManagementProps {
   clients: ClientAccount[];
@@ -198,11 +199,11 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const signInBadge = (c: Client) => (
     <>
               {c.mustChangePassword ? (
-                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                <span className="inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
                   {t('clients.awaitingFirstLogin')}
                 </span>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                <span className="inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
                   {t('clients.passwordSet')}
                 </span>
               )}
@@ -283,7 +284,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
             rows={pagedRows}
             rowKey={(c) => c.id}
             cells={(c) => [
-              <span><span className="font-medium">{c.clientName}</span><span className="block font-mono text-[11px] text-slate-400">{c.id}</span></span>,
+              <span><span className="font-medium">{c.clientName}</span><span className="block font-mono text-xs text-slate-400">{c.id}</span></span>,
               c.contactPersonName ?? '—',
               c.email ?? '—',
               <span className="font-mono">{c.phone ?? '—'}</span>,
@@ -305,7 +306,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
                       <Building2 className="w-4 h-4" />
                     </div>
-                    <span className="font-mono text-[11px] text-slate-400 truncate">{c.id}</span>
+                    <span className="font-mono text-xs text-slate-400 truncate">{c.id}</span>
                   </div>
 
                   {actions(c)}
@@ -314,7 +315,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                 <h4 className="font-semibold text-slate-900 dark:text-white text-base leading-snug truncate" title={c.clientName}>
                   {c.clientName}
                 </h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5">
                   {t('clients.created', { date: c.createdAt })}
                 </p>
               </div>
@@ -417,8 +418,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {t('shared:token.expires', { when: new Date(reissued.invitationExpiresAt).toLocaleString() })}
+                <p className="text-xs text-slate-400 mt-1">
+                  {t('shared:token.expires', { when: new Date(reissued.invitationExpiresAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}
                 </p>
               </div>
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">

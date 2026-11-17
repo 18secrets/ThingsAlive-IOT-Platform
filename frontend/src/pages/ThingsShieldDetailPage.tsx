@@ -129,7 +129,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base">{t(`category.${category}`)}</h4>
           <Chip tone={STATUS_TONE[cell.status]} size="md">{shieldStatusLabel(t, cell)}</Chip>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-xs text-slate-400">
             {t('detail.dueSoonWindow', { count: shield.dueSoonWindow.days, source: shield.dueSoonWindow.source === 'default' ? t('detail.windowDefault') : t('detail.windowParameter') })}
           </span>
         </div>
@@ -146,7 +146,7 @@ export const ThingsShieldDetailPage: React.FC = () => {
 
         {others.length > 0 && (
           <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('detail.history')}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('detail.history')}</p>
             {others.map((r) => (
               <EvidenceRecordCard key={r.id} record={r} onCorrect={() => setCorrecting(r)} />
             ))}

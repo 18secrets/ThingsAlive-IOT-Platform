@@ -32,6 +32,7 @@ import { EquipmentShift } from '../../shift/entities/equipment-shift.entity';
 import { SignalBindingVersion } from '../../signal-binding/entities/signal-binding-version.entity';
 import { ProvisioningService } from '../../tenancy/services/provisioning.service';
 import { dataSourceOptions } from '../data-source';
+import { ensureSiteTwinDemo, onboardTwinDemoMachines, tickSiteTwinDemo } from '../../site-twin/site-twin-demo';
 
 /**
  * The demo tenant (task QSEED1): one command that puts six machines in front of a
@@ -977,8 +978,23 @@ async function main() {
         // eslint-disable-next-line no-console
         console.log(`positions per machine: ${JSON.stringify(gps.positions)}; drew ${gps.boundaries} boundaries, ${gps.zones} no-go zones.`);
       };
+      // The site twins (site page): the named test machines are set up and kept
+      // reporting, each demo site with machines is laid out from its own equipment, and
+      // its road and building progress moves on every minute.
+      // A twin failure is logged, never allowed to stop the readings.
+      const twins = async () => {
+        try {
+          await onboardTwinDemoMachines(ds, DEMO_TENANT, new Date());
+          await ensureSiteTwinDemo(ds, DEMO_TENANT);
+          await tickSiteTwinDemo(ds, DEMO_TENANT, new Date(), { writeLoad: false });
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('site twin demo tick skipped:', (err as Error)?.message ?? err);
+        }
+      };
       await once();
       await positions();
+      await twins();
       if (!process.argv.includes('--follow')) return;
       let lastReadings = Date.now();
       for (;;) {
@@ -988,6 +1004,7 @@ async function main() {
           lastReadings = Date.now();
         }
         await positions();
+        await twins();
       }
     }
     if (process.argv.includes('--reset')) {

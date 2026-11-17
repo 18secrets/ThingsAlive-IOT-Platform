@@ -5,7 +5,7 @@ import { LegacyShiftMetricRow, LegacyShiftMetricsReader, ShiftMetricsSource } fr
 import { runTenantSpanning, withTenantId } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import {
-  addDays, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHODS, shiftFuelMethodFrom, ShiftKey, ShiftObservation, targetShifts,
+  addDays, HISTORY_DAYS, indiaDate, SHIFT_FUEL_METHODS, shiftEnd, shiftFuelMethodFrom, ShiftKey, ShiftObservation, targetShifts,
 } from './shift-fuel-forecast';
 
 /** Beside the shift pass (…001) and the forecast pass (…002): its own, so none waits on another. */
@@ -38,7 +38,7 @@ export interface ShiftFuelPassSummary {
   forecastsIssued: number;
 }
 
-interface Machine {
+export interface Machine {
   tenantId: string;
   externalId: string;
   active: boolean;
@@ -152,8 +152,11 @@ export class ShiftFuelService {
     return summary;
   }
 
-  /** Every 2.0-created machine, by equipment number, and the numbers two accounts share. */
-  private async machines(): Promise<{ placed: Map<string, Machine>; ambiguous: string[] }> {
+  /**
+   * Every 2.0-created machine, by equipment number, and the numbers two accounts share.
+   * Public so the nowcast (D52) places machines by this same rule rather than a copy of it.
+   */
+  async machines(): Promise<{ placed: Map<string, Machine>; ambiguous: string[] }> {
     const profiles = await runTenantSpanning(this.ds, 'shift fuel: placing equipment numbers', (m) =>
       m.getRepository(EquipmentProfile).find({
         where: { sourceSystem: CLIENT_SOURCE_SYSTEM },
@@ -239,7 +242,11 @@ export class ShiftFuelService {
         addDays(dates[0], -HISTORY_DAYS), dates[dates.length - 1]],
     )).map((r: { external_id: string; sdate: string; shift: 1 | 2; fuel_l: number | null }) => ({
       external_id: r.external_id, sdate: r.sdate, shift: r.shift, fuelL: r.fuel_l,
-    }));
+    }))
+      // The existing platform opens a shift's row when the shift starts and fills it as it
+      // runs. Read as history, a shift ten minutes old is one that burned almost nothing,
+      // and as the newest of its kind it would carry half the forecast's weight.
+      .filter((h) => shiftEnd({ sdate: h.sdate, shift: h.shift }) <= now);
 
     const method = shiftFuelMethodFrom(process.env);
     const rows = targets.map((t) => ({

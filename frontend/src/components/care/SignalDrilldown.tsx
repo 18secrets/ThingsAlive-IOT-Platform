@@ -4,6 +4,8 @@ import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { ApiError, PredictionSignalDetail, apiGetPredictionSignalDetail } from '../../lib/api';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const WINDOWS = [24, 72, 168] as const;
 
@@ -65,8 +67,8 @@ export const SignalDrilldown: React.FC<{
   const from = detail ? new Date(detail.window.from).getTime() : 0;
   const to = detail ? new Date(detail.window.to).getTime() : 0;
   const scoredAt = detail?.occurredAt ? new Date(detail.occurredAt).getTime() : null;
-  const tick = (ms: number) => new Date(ms).toLocaleString(undefined, hours <= 24
-    ? { hour: '2-digit', minute: '2-digit' } : { day: '2-digit', month: 'short', hour: '2-digit' });
+  const tick = (ms: number) => new Date(ms).toLocaleString(appLocale(), hours <= 24
+    ? { timeZone: appTimeZone(), hour: '2-digit', minute: '2-digit' } : { timeZone: appTimeZone(), day: '2-digit', month: 'short', hour: '2-digit' });
 
   return (
     <div className="mt-2 mb-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 p-3 space-y-2">
@@ -78,7 +80,7 @@ export const SignalDrilldown: React.FC<{
               key={h}
               onClick={() => setHours(h)}
               aria-pressed={hours === h}
-              className={`px-2 py-0.5 text-[11px] font-medium cursor-pointer ${hours === h
+              className={`px-2 py-0.5 text-xs font-medium cursor-pointer ${hours === h
                 ? 'bg-sky-600 text-white'
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
             >
@@ -89,7 +91,7 @@ export const SignalDrilldown: React.FC<{
       </div>
 
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
-      {loading && !detail && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+      {loading && !detail && <Skeleton lines={2} />}
 
       {detail && data.length === 0 && !loading && (
         <p className="text-xs text-slate-400 py-6 text-center">{t('drill.noReadings')}</p>
@@ -119,11 +121,11 @@ export const SignalDrilldown: React.FC<{
                   stroke="#fff" strokeWidth={1.5} ifOverflow="extendDomain" />
               )}
               <Tooltip
-                labelFormatter={(ms) => new Date(Number(ms)).toLocaleString()}
+                labelFormatter={(ms) => new Date(Number(ms)).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
                 formatter={(value, name) => (name === 'range'
                   ? [Array.isArray(value) ? `${fmt(Number(value[0]))} – ${fmt(Number(value[1]))}` : String(value), t('drill.minMax')]
                   : [fmt(Number(value)), t('drill.average')])}
-                contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                contentStyle={{ fontSize: '0.75rem', borderRadius: 8 }}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -131,7 +133,7 @@ export const SignalDrilldown: React.FC<{
       )}
 
       {detail && (
-        <div className="flex items-center gap-3 flex-wrap text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500 dark:text-slate-400">
           <Legend swatch={<span className="inline-block w-4 h-0.5" style={{ background: C.line }} />} label={t('drill.legend.reading')} />
           {b && <Legend swatch={<span className="inline-block w-4 h-2 rounded-sm" style={{ background: C.normal, opacity: 0.25 }} />} label={t('drill.legend.normal', { lo: fmt(b.warning.lo), hi: fmt(b.warning.hi) })} />}
           {b && <Legend swatch={<span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: C.warning }} />} label={t('drill.legend.warning', { sigma: b.warningSigma })} />}
@@ -154,7 +156,7 @@ function summary(t: (k: string, o?: Record<string, unknown>) => string, d: Predi
   if (!d) return '';
   const v = d.verdict;
   if (!v) return t('drill.notScoredYet');
-  const at = d.occurredAt ? new Date(d.occurredAt).toLocaleString() : '—';
+  const at = d.occurredAt ? new Date(d.occurredAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—';
   if (v.state === 'unscored') return t('drill.unscored', { reason: t(`unscoredReason.${v.reason ?? 'unknown'}`, { defaultValue: v.reason ?? '' }), at });
   if (typeof v.residual === 'number') {
     return t('drill.influenceSummary', { value: fmt(v.value), expected: fmt(v.expected), residual: fmt(Math.abs(v.residual)), dir: t(v.residual >= 0 ? 'drill.above' : 'drill.below'), at });

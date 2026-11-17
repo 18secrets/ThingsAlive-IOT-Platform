@@ -6,12 +6,15 @@ import {
   AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Gauge, Plus, RefreshCw, Wrench,
 } from 'lucide-react';
 import { useGoBack } from '../lib/useGoBack';
+import { worstPrediction } from '../lib/worstPrediction';
+import { useRaiseWorkOrder } from '../lib/workOrderPrefill';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Chip } from '../components/common/Chip';
 import { RingGauge } from '../components/common/RingGauge';
 import { MachineLinks } from '../components/common/MachineLinks';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { RiskTrend } from '../components/care/RiskTrend';
+import { DateRangePicker } from 'rsuite';
 import { SignalDrilldown } from '../components/care/SignalDrilldown';
 import {
   ApiError, EquipmentProfile, Prediction, PredictionBaseline, PredictionSeverity, WorkOrder,
@@ -20,6 +23,9 @@ import {
 } from '../lib/api';
 import { ChainDiagnosisPanel } from '../components/care/ChainDiagnosisPanel';
 import { RecommendationPanel } from '../components/care/RecommendationPanel';
+import { FuelPerShiftPanel } from '../components/equipment/FuelPerShiftPanel';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
+import { Skeleton } from '../components/common/Skeleton';
 
 const SEVERITY_TONE = (s: string) => severityTone(s, { noneIsHealthy: true });
 const SIGNAL_STATE_TONE: Record<string, 'emerald' | 'amber' | 'rose' | 'slate'> = {
@@ -98,7 +104,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
             </button>
           </div>
 
-          {loading && <p className="text-slate-400">{t('common.loading')}</p>}
+          {loading && <Skeleton />}
           {error && <p className="text-rose-600 dark:text-rose-400">{error}</p>}
 
           {baselines && baselines.length === 0 && (
@@ -128,7 +134,7 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
                       <td className="py-1.5 pr-3">{b.sampleCount ?? '—'}</td>
                       <td className="py-1.5 pr-3">{typeof b.coverageRatio === 'number' ? `${(b.coverageRatio * 100).toFixed(0)}%` : '—'}</td>
                       <td className="py-1.5 pr-3 font-sans">{b.source ?? '—'}</td>
-                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString() : '—'}</td>
+                      <td className="py-1.5 font-sans text-slate-400">{b.computedAt && !isNaN(new Date(b.computedAt).getTime()) ? new Date(b.computedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -141,14 +147,26 @@ function BaselinesPanel({ sourceSystem, externalId }: { sourceSystem: string; ex
   );
 }
 
+/** A month of scores every few minutes is thousands; the trend is a 168px line. */
+const HISTORY_CAP = 500;
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
 export const ThingsCareDetailPage: React.FC = () => {
   const { sourceSystem, externalId } = useParams<{ sourceSystem: string; externalId: string }>();
   const navigate = useNavigate();
+  const raiseWorkOrder = useRaiseWorkOrder();
   const goBack = useGoBack('/things-care');
   const { t } = useTranslation('care');
   const [profile, setProfile] = useState<EquipmentProfile | null>(null);
+  // The cause chains ran and none had enough readings (MIN-5): the recommendation then says
+  // "possible cause", not "found".
+  const [chainsUnconfirmed, setChainsUnconfirmed] = useState(false);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [history, setHistory] = useState<Map<string, Prediction[]>>(new Map());
+  // The risk trend's period (test report P3-D4). None: the last 20 scores, as before; a
+  // range: every score in it, up to HISTORY_CAP, the whole days from the first to the last.
+  const [historyRange, setHistoryRange] = useState<[Date, Date] | null>(null);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -165,13 +183,19 @@ export const ThingsCareDetailPage: React.FC = () => {
     onBack: goBack,
   });
 
+  const loadHistory = async (preds: Prediction[], range: [Date, Date] | null) => {
+    if (!sourceSystem || !externalId) return;
+    const bounds = range ? { from: startOfDay(range[0]), to: endOfDay(range[1]) } : undefined;
+    const histEntries = await Promise.all(preds.map(async (p): Promise<[string, Prediction[]]> =>
+      [p.clientScenarioSlug, await apiGetPredictionHistory(sourceSystem, externalId, p.clientScenarioSlug, range ? HISTORY_CAP : 20, bounds).catch(() => [])]));
+    setHistory(new Map(histEntries));
+  };
+
   const load = async () => {
     if (!sourceSystem || !externalId) return;
     const preds = await apiGetLatestPredictions(sourceSystem, externalId);
     setPredictions(preds);
-    const histEntries = await Promise.all(preds.map(async (p): Promise<[string, Prediction[]]> =>
-      [p.clientScenarioSlug, await apiGetPredictionHistory(sourceSystem, externalId, p.clientScenarioSlug, 20).catch(() => [])]));
-    setHistory(new Map(histEntries));
+    await loadHistory(preds, historyRange);
   };
 
   useEffect(() => {
@@ -217,7 +241,7 @@ export const ThingsCareDetailPage: React.FC = () => {
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (loading) return <Skeleton />;
 
   return (
     <div className="space-y-3">
@@ -243,7 +267,7 @@ export const ThingsCareDetailPage: React.FC = () => {
             <button onClick={scoreNow} disabled={scoring} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
               <RefreshCw className={`w-4 h-4 ${scoring ? 'animate-spin' : ''}`} /> {t('detail.scoreNow')}
             </button>
-            <button onClick={() => navigate('/work-orders')} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
+            <button onClick={() => raiseWorkOrder({ machine: { sourceSystem, externalId, name: profile?.name }, from: 'thingsCare', worst: worstPrediction(predictions) })} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-sky-600 text-white hover:bg-sky-700 cursor-pointer">
               <Plus className="w-4 h-4" /> {t('common.createWorkOrder')}
             </button>
           </div>
@@ -260,7 +284,10 @@ export const ThingsCareDetailPage: React.FC = () => {
 
       {sourceSystem && externalId && (
         <ErrorBoundary fallbackTitle={t('rec.title')}>
-          <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} />
+          <RecommendationPanel sourceSystem={sourceSystem} externalId={externalId} chainsUnconfirmed={chainsUnconfirmed} />
+          {/* Forward litres beside the backward-looking risk (fuel test report: "ThingsCare fuel
+              view forward-looking"): the same panel as the machine page. */}
+          <FuelPerShiftPanel sourceSystem={sourceSystem} externalId={externalId} />
         </ErrorBoundary>
       )}
       {sourceSystem && externalId && (
@@ -270,12 +297,36 @@ export const ThingsCareDetailPage: React.FC = () => {
       )}
       {sourceSystem && externalId && (
         <ErrorBoundary fallbackTitle={t('chain.title')}>
-          <ChainDiagnosisPanel sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null} />
+          <ChainDiagnosisPanel
+            sourceSystem={sourceSystem} externalId={externalId} classSlug={profile?.equipmentClassSlug ?? null}
+            onDiagnosis={(d) => setChainsUnconfirmed(d.chains.length > 0 && !d.chains.some((c) => c.evaluated))}
+          />
         </ErrorBoundary>
       )}
 
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white text-base mb-3">{t('detail.activeScenarios')}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('detail.activeScenarios')}</h3>
+          {predictions.length > 0 && (
+            <div className="flex items-center gap-2 w-full sm:w-auto text-sm">
+              <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{t('trend.period')}</span>
+              <DateRangePicker
+                format="yyyy-MM-dd"
+                value={historyRange}
+                onChange={(v) => {
+                  const next = (v as [Date, Date] | null) ?? null;
+                  setHistoryRange(next);
+                  void loadHistory(predictions, next);
+                }}
+                shouldDisableDate={(date) => date.getTime() > Date.now()}
+                placeholder={t('trend.lastScores', { count: 20 })}
+                cleanable
+                block
+                className="sm:w-auto! sm:min-w-[230px]"
+              />
+            </div>
+          )}
+        </div>
         {predictions.length === 0 ? (
           <div className="py-10 text-center text-slate-400 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
             {t('detail.noPrediction')}
@@ -284,7 +335,7 @@ export const ThingsCareDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {predictions.map((p) => {
               const occurred = p.occurredAt ? new Date(p.occurredAt) : null;
-              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString() : '—';
+              const readingAt = occurred && !isNaN(occurred.getTime()) ? occurred.toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—';
               const severityTone = (p.severity && p.severity in SEVERITY_TONE) ? SEVERITY_TONE(p.severity) : 'slate';
               const signals = (p.signals ?? []).slice().sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9));
               const healthy = signals.filter((s) => s.state === 'normal').length;
@@ -322,12 +373,12 @@ export const ThingsCareDetailPage: React.FC = () => {
                     </div>
                     <RiskTrend history={history.get(p.clientScenarioSlug) ?? []} />
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     {t('detail.footer', { count: p.windowDays, model: p.modelRef, at: readingAt })}
                   </p>
                   {signals.length > 0 && sourceSystem && externalId && (
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <p className="text-[11px] text-slate-400 mb-1">{t('detail.clickSignal')}</p>
+                      <p className="text-xs text-slate-400 mb-1">{t('detail.clickSignal')}</p>
                       {signals.map((s) => {
                         const open = openHere === s.signal;
                         return (
@@ -348,7 +399,7 @@ export const ThingsCareDetailPage: React.FC = () => {
                                   </span>
                                 )}
                                 {typeof s.z === 'number' && (
-                                  <span className="font-mono text-[11px] text-slate-400 w-12 text-right" title={t('detail.sigmaTitle')}>
+                                  <span className="font-mono text-xs text-slate-400 w-12 text-right" title={t('detail.sigmaTitle')}>
                                     {s.z >= 0 ? '+' : '−'}{Math.abs(s.z).toFixed(1)}σ
                                   </span>
                                 )}

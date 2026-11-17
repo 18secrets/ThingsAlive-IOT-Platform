@@ -86,14 +86,14 @@ export const AnchorEditor: React.FC<{
             style={{ left: `${a.hotspotX}%`, top: `${a.hotspotY}%` }}
             className={`absolute -translate-x-1/2 -translate-y-full flex flex-col items-center pointer-events-none ${a.signal === selected ? 'z-10' : ''}`}
           >
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap shadow ${a.signal === selected ? 'bg-sky-600 text-white' : 'bg-white/90 text-slate-800'}`}>
+            <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold whitespace-nowrap shadow ${a.signal === selected ? 'bg-sky-600 text-white' : 'bg-white/90 text-slate-800'}`}>
               {a.label || a.signal}
             </span>
             <MapPin className={`w-4 h-4 ${a.signal === selected ? 'text-sky-600' : 'text-rose-500'}`} />
           </span>
         ))}
       </div>
-      {note && <p className="text-[11px] text-slate-400">{note}</p>}
+      {note && <p className="text-xs text-slate-400">{note}</p>}
 
       {current && (
         <div className="flex items-center gap-2">

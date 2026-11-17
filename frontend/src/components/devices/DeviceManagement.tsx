@@ -131,7 +131,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
                       {d.name}
                     </td>
-                    <td className="py-3 px-4 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                    <td className="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">
                       {d.imei}
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
@@ -139,7 +139,7 @@ export const DeviceManagement: React.FC<DeviceManagementProps> = ({
                     </td>
                     <td className="py-3 px-4">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase rounded border ${
+                        className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${
                           d.status === 'Online'
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'

@@ -34,7 +34,8 @@
     "version": "Version: {{version}}",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "geofence": "Geofence map"
+    "geofence": "Geofence map",
+    "faultCodes": "Fault Codes"
   },
   "header": {
     "goBack": "Go Back",
@@ -48,7 +49,14 @@
     "noNotifications": "No open alerts.",
     "loadingNotifications": "Loading…",
     "timeZone": "Times in {{zone}}",
-    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}."
+    "timeZoneTitle": "Every date and time is shown in your browser's time zone, {{zone}}.",
+    "textSize": "Text size",
+    "textSizes": {
+      "small": "Small",
+      "default": "Default",
+      "large": "Large",
+      "xlarge": "Extra large"
+    }
   },
   "login": {
     "title": "Sign in",
@@ -212,6 +220,10 @@
     "geofence": {
       "title": "Geofence map",
       "subtitle": "Where every machine is, against its fences"
+    },
+    "faultCodes": {
+      "title": "Fault Codes",
+      "subtitle": "Vehicle and motor fault code library"
     }
   },
   "rsuite": {

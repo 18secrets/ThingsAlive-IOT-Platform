@@ -3,15 +3,19 @@ import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   Disc,
+  Gauge,
+  MapPinned,
   LayoutGrid,
   Building2,
   Wrench,
   Cpu,
   Briefcase,
   ShieldCheck,
-  FunctionSquare
+  FunctionSquare,
+  Fuel,
+  AlertOctagon
 } from 'lucide-react';
-import { AdminSubTab, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
+import { AdminSubTab, CLIENT_ADMIN_SUBTABS, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
   Account, CreateAccountResult, EquipmentClass, EquipmentClassInput, Plant, PlantInput, ResendInvitationResult,
   Sensor, SensorCategory, SensorInput, ToolMapping, ToolMappingInput, PooledDevice, RegisterDeviceInput,
@@ -30,12 +34,16 @@ import { CategoryView } from './CategoryView';
 import { NamedFormulaView } from './NamedFormulaView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
 import { TelemetryArchiveView } from './TelemetryArchiveView';
+import { FaultCodeLibraryView } from './FaultCodeLibraryView';
 import { ClientDeviceManagement } from '../devices/ClientDeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
 import { MasterEquipmentManagement } from '../equipment/MasterEquipmentManagement';
 import { ClientManagement } from '../clients/ClientManagement';
 import { StaffManagement } from '../staff/StaffManagement';
+import { FuelForecastAccuracyPage } from '../../pages/FuelForecastAccuracyPage';
+import { ModelsTab } from '../models/ModelsView';
+import { ServiceRosterView } from '../service-roster/ServiceRosterView';
 
 interface AdminManagementProps {
   sensors: SensorItem[];
@@ -105,6 +113,7 @@ interface AdminManagementProps {
   onCreateNamedFormula: (slug: string, input: NamedFormulaInput) => Promise<NamedFormula>;
   onUpdateNamedFormula: (slug: string, version: number, input: NamedFormulaInput) => Promise<NamedFormula>;
   onPublishNamedFormula: (slug: string, version: number) => Promise<void>;
+  onSetNamedFormulaActive: (slug: string, active: boolean) => Promise<void>;
   onCreateIndustryType?: (input: IndustryTypeInput & { name: string; code: string }) => Promise<void>;
   onUpdateIndustryType?: (id: string, input: IndustryTypeInput) => Promise<void>;
   onDeleteIndustryType?: (id: string) => Promise<void>;
@@ -201,13 +210,18 @@ interface AdminManagementProps {
   canOpenSubTab?: (tab: AdminSubTab) => boolean;
 }
 
-const CLIENT_VISIBLE_ADMIN_SUBTABS: AdminSubTab[] = ['plant', 'devices', 'equipment'];
+// Fuel forecast accuracy (D53) is a reading of the account's own fleet, beside the fleet
+// it reads; Administration is where an account's people already go to see that fleet.
+// Models: the account's own copies, which its machines name for their ratings (D57).
+// Service roster (Crompton U5): which engineer a job on each site goes to.
+// Each is granted to a role on its own (types.ts, CLIENT_ADMIN_SUBTABS).
+const CLIENT_VISIBLE_ADMIN_SUBTABS: readonly AdminSubTab[] = CLIENT_ADMIN_SUBTABS;
 
 // Master Admin only (task: move to the sidebar, 2026-10-10) — see Shell.tsx's
 // ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
 // component at the same /admin/<subtab> routes; only the sub-tab bar and the
 // sidebar highlighting changed.
-const PROMOTED_SUBTABS: AdminSubTab[] = ['clients', 'staff', 'devices', 'equipment'];
+const PROMOTED_SUBTABS: AdminSubTab[] = ['clients', 'staff', 'devices', 'equipment', 'fault-codes'];
 
 export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensors,
@@ -267,6 +281,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   onCreateNamedFormula,
   onUpdateNamedFormula,
   onPublishNamedFormula,
+  onSetNamedFormulaActive,
   onCreateIndustryType,
   onUpdateIndustryType,
   onDeleteIndustryType,
@@ -339,13 +354,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'plant', label: t('tabs.plant'), icon: Building2 },
     { id: 'category', label: t('tabs.equipmentClasses'), icon: LayoutGrid },
     { id: 'named-formula', label: t('tabs.namedFormulas'), icon: FunctionSquare },
+    { id: 'model', label: t('tabs.models'), icon: Gauge },
+    { id: 'service-roster', label: t('tabs.serviceRoster'), icon: MapPinned },
     { id: 'sensor', label: t('tabs.sensor'), icon: Disc },
     { id: 'tool-mapping', label: t('tabs.toolMapping'), icon: Wrench },
     { id: 'signal-alias', label: t('tabs.signalAliases'), icon: Disc },
     { id: 'signal-state', label: t('tabs.signalStates'), icon: Disc },
     { id: 'devices', label: t('translation:sidebar.devices'), icon: Cpu },
     { id: 'equipment', label: t('translation:sidebar.equipment'), icon: Wrench },
+    { id: 'fault-codes', label: t('tabs.faultCodes'), icon: AlertOctagon },
     { id: 'telemetry-archive', label: t('tabs.telemetryArchive'), icon: Disc },
+    { id: 'fuel-forecast-accuracy', label: t('tabs.fuelForecastAccuracy'), icon: Fuel },
   ];
 
   // Master Admin's tab bar: no Plant (tenant-scoped, no cross-tenant read —
@@ -357,7 +376,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   // own Devices/Equipment are untouched by this — CLIENT_VISIBLE_ADMIN_SUBTABS
   // is a separate list that still names them.
   const subTabs = restrictToClientAdmin
-    ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id))
+    ? allSubTabs.filter((tab) => CLIENT_VISIBLE_ADMIN_SUBTABS.includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true))
     : allSubTabs.filter((tab) => (
       !['plant', ...PROMOTED_SUBTABS].includes(tab.id) && (canOpenSubTab?.(tab.id) ?? true)
     ));
@@ -440,6 +459,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           />
         )}
 
+        {!restrictToClientAdmin && activeSubTab === 'fault-codes' && <FaultCodeLibraryView clients={clients} />}
+
         {!restrictToClientAdmin && activeSubTab === 'telemetry-archive' && (
           <TelemetryArchiveView clientName={(id) => clients.find((c) => c.id === id)?.clientName ?? id} />
         )}
@@ -473,6 +494,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onCreateFormula={onCreateNamedFormula}
             onUpdateFormula={onUpdateNamedFormula}
             onPublishFormula={onPublishNamedFormula}
+            onSetFormulaActive={onSetNamedFormulaActive}
           />
         )}
 
@@ -487,6 +509,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onRematchIndustries={onRematchIndustries}
           />
         )}
+
+        {restrictToClientAdmin && activeSubTab === 'fuel-forecast-accuracy' && <FuelForecastAccuracyPage />}
+
+        {activeSubTab === 'model' && <ModelsTab scope={restrictToClientAdmin ? 'account' : 'library'} />}
+
+        {restrictToClientAdmin && activeSubTab === 'service-roster' && <ServiceRosterView />}
 
         {restrictToClientAdmin && activeSubTab === 'plant' && (
           <PlantView

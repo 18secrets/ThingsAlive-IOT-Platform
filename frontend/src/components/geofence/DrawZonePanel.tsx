@@ -130,7 +130,7 @@ export const DrawZonePanel: React.FC<{
             <label className={labelClass} htmlFor="zone-name">{t('geofence.draw.name')}</label>
             <input id="zone-name" className={inputClass} value={name} maxLength={80}
               placeholder={t('geofence.draw.namePlaceholder')} onChange={(e) => setName(e.target.value)} />
-            {name.trim() && <div className="mt-1 text-[11px] text-slate-400 font-mono">{t('geofence.draw.code', { code: codeFrom(name) })}</div>}
+            {name.trim() && <div className="mt-1 text-xs text-slate-400 font-mono">{t('geofence.draw.code', { code: codeFrom(name) })}</div>}
           </div>
         )}
 

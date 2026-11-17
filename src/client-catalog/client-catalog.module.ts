@@ -12,6 +12,7 @@ import { ClientModelService } from './services/client-model.service';
 import { ClientModelController } from './client-model.controller';
 import { ClassUpgradeController } from './class-upgrade.controller';
 import { ClassUpgradeService } from './services/class-upgrade.service';
+import { ClassRequestQueueController, ClassRequestService, MyClassRequestController } from './class-requests';
 
 /**
  * The client's own copies. Registered separately from the catalog module because the
@@ -20,8 +21,9 @@ import { ClassUpgradeService } from './services/class-upgrade.service';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ClientEquipmentClass, ClientScenario, ClientFormula])],
-  controllers: [ClientCatalogController, ClientVisualController, ClientModelController, ClassUpgradeController],
-  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService, ClientModelService, ClassUpgradeService],
+  controllers: [ClientCatalogController, ClientVisualController, ClientModelController, ClassUpgradeController,
+    MyClassRequestController, ClassRequestQueueController],
+  providers: [ClientCatalogService, CopyOnGrantService, ClientVisualService, ClientModelService, ClassUpgradeService, ClassRequestService],
   exports: [ClientCatalogService, CopyOnGrantService],
 })
 export class ClientCatalogModule {}

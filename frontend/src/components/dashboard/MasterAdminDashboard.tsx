@@ -4,9 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { apiListAllEquipment, apiListDevicePool } from '../../lib/api';
 import { useSlot } from '../../lib/useSlot';
+import { Skeleton } from '../common/Skeleton';
 
 interface MasterAdminDashboardProps {
   clients: ClientAccount[];
+  /**
+   * Whether `clients` is an answer yet (fuel test report FU-8): the tester saw this page
+   * alternate between "20 clients, 105 equipment" and all zeros. The zeros were this
+   * page drawn before the accounts list arrived, or after it failed — an empty list read
+   * as "no clients". Until the list is in, the tiles say so instead.
+   */
+  clientsState?: 'loading' | 'ok' | 'unavailable';
 }
 
 /**
@@ -17,7 +25,7 @@ interface MasterAdminDashboardProps {
  * caller's own account, which for a platform user is none), so they are named as
  * missing rather than shown with numbers nobody measured.
  */
-export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clients }) => {
+export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clients, clientsState = 'ok' }) => {
   const { t } = useTranslation('dashboard');
   const pool = useSlot(() => apiListDevicePool(), []);
   const equipment = useSlot(() => apiListAllEquipment(), []);
@@ -52,11 +60,14 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
 
   const count = (slot: { state: string }, n: number) =>
     slot.state === 'loading' ? '…' : slot.state === 'unavailable' ? '—' : n;
+  // Equipment per client is counted against the client list, so it waits for both.
+  const clientsSlot = { state: clientsState };
+  const equipmentSlot = { state: clientsState !== 'ok' ? clientsState : equipment.state };
 
   return (
     <div id="master-admin-dashboard-view" className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Tile label={t('master.totalClients')} value={clients.length} note={t('master.activeCount', { count: activeClientsCount })} tone="sky" icon={<Building2 className="w-5 h-5" />} />
+        <Tile label={t('master.totalClients')} value={count(clientsSlot, clients.length)} note={clientsState === 'ok' ? t('master.activeCount', { count: activeClientsCount }) : clientsState === 'unavailable' ? t('master.clientsUnreadable') : ''} tone="sky" icon={<Building2 className="w-5 h-5" />} />
         <Tile
           label={t('master.devicesInPool')}
           value={count(pool, devices.length)}
@@ -66,8 +77,8 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
         />
         <Tile
           label={t('master.totalEquipment')}
-          value={count(equipment, machines.length)}
-          note={equipment.state === 'unavailable'
+          value={count(equipmentSlot, machines.length)}
+          note={equipmentSlot.state === 'unavailable'
             ? t('master.registerUnreadable')
             : t('master.withClass', { count: machines.filter((e) => e.equipmentClassSlug).length })
               + (outsideAccounts ? ` · ${t('master.outsideAccounts', { count: outsideAccounts })}` : '')}
@@ -78,7 +89,9 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel title={t('master.byClient')} subtitle={t('master.byClientHint')}>
-          {byClient.length === 0 ? (
+          {clientsState !== 'ok' ? (
+            clientsState === 'loading' ? <Skeleton className="py-6" /> : <p className="text-sm text-slate-400 py-6 text-center">{t('master.clientsUnreadable')}</p>
+          ) : byClient.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">{t('master.noClients')}</p>
           ) : (
             <div className="space-y-3">
@@ -95,7 +108,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
 
         <Panel title={t('master.devicePool')} subtitle={t('master.devicePoolHint')}>
           {pool.state !== 'ok' ? (
-            <p className="text-sm text-slate-400 py-6 text-center">{pool.state === 'loading' ? t('common.loading') : t('master.poolUnreadableDot')}</p>
+            pool.state === 'loading' ? <Skeleton className="py-6" /> : <p className="text-sm text-slate-400 py-6 text-center">{t('master.poolUnreadableDot')}</p>
           ) : (
             <div className="space-y-2.5">
               <Bar label={t('master.assigned')} value={poolCounts.assigned} max={poolTotal} color="bg-emerald-500" />
@@ -106,7 +119,7 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
         </Panel>
       </div>
 
-      <div className="flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
+      <div className="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <span>{t('master.notShown')}</span>
       </div>
@@ -125,7 +138,7 @@ const Tile: React.FC<{ label: string; value: React.ReactNode; note: string; tone
     <div>
       <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{value}</div>
-      <div className="text-[11px] text-slate-400 mt-1">{note}</div>
+      <div className="text-xs text-slate-400 mt-1">{note}</div>
     </div>
     <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${TONES[tone]}`}>{icon}</div>
   </div>
@@ -135,14 +148,14 @@ const Panel: React.FC<{ title: string; subtitle: string; children: React.ReactNo
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 space-y-4">
     <div>
       <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{title}</h3>
-      <p className="text-[11px] text-slate-400">{subtitle}</p>
+      <p className="text-xs text-slate-400">{subtitle}</p>
     </div>
     {children}
   </div>
 );
 
 const Bar: React.FC<{ label: string; value: number; max: number; color: string }> = ({ label, value, max, color }) => (
-  <div className="flex items-center gap-2 text-[11px]">
+  <div className="flex items-center gap-2 text-xs">
     <span className="w-16 shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
     <div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
       <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />

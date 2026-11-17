@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles, Edit2 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -16,9 +16,10 @@ import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
   apiAcknowledgeAlert, apiCreateAlertRule, apiDisableAlertRule, apiEnableAlertRule, apiListAlertRules,
-  apiListAlerts, apiListEquipment, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
+  apiListAlerts, apiListEquipment, apiListMyCatalogEquipmentClasses, apiListPlants, apiResolveAlert, apiUpdateAlertRule,
 } from '../lib/api';
 import { sortRows, useSort } from '../lib/useSort';
+import { appLocale, appTimeZone } from '../lib/dateLocale';
 
 const SEVERITY_TONE = (s: string) => severityTone(s);
 const SEVERITY_OPTIONS: AlertRuleSeverity[] = ['none', 'low', 'medium', 'high', 'critical'];
@@ -53,6 +54,8 @@ export const AlertsPage: React.FC = () => {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [equipment, setEquipment] = useState<EquipmentProfile[]>([]);
+  // Class category by slug: motor and pump alerts also read in Crompton's three tiers (U4).
+  const [classCategory, setClassCategory] = useState<Map<string, string | null>>(new Map());
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export const AlertsPage: React.FC = () => {
     // shouldn't blank out data the others already loaded.
     apiListPlants().then((p) => { if (live) setPlants(p); }).catch(() => {});
     apiListEquipment().then((eq) => { if (live) setEquipment(eq); }).catch(() => {});
+    apiListMyCatalogEquipmentClasses().then((c) => { if (live) setClassCategory(new Map(c.map((x) => [x.slug, x.category ?? null]))); }).catch(() => {});
     apiListAlertRules().then((r) => { if (live) setRules(r); }).catch((err) => { if (live) setError(err instanceof ApiError ? err.message : t('errors.loadRules')); });
     apiListAlerts({ state: ['open', 'acknowledged'] })
       .then((e) => { if (live) { setEvents(e); setError(undefined); } })
@@ -173,12 +177,25 @@ export const AlertsPage: React.FC = () => {
     </>
   );
   const ruleEdit = (r: Rule) => CREATABLE_TRIGGERS.includes(r.trigger) ? (
-    <button onClick={() => setEditingRule(r)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-      {t('rules.edit')}
+    // The pencil, as on every other table (Models, devices); the word is its tooltip.
+    <button onClick={() => setEditingRule(r)} title={t('rules.edit')} aria-label={t('rules.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+      <Edit2 className="w-3.5 h-3.5" />
     </button>
   ) : null;
   const machineName = (e: Event) =>
     equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.name ?? e.externalId;
+  // Crompton's Critical / Warning / Normal (U4) beside our five severities, for motors and
+  // pumps only: every other account's alerts read exactly as before.
+  const tierOf = (e: Event): 'critical' | 'warning' | 'normal' | null => {
+    const slug = equipment.find((eq) => eq.sourceSystem === e.sourceSystem && eq.externalId === e.externalId)?.equipmentClassSlug;
+    const category = slug ? classCategory.get(slug) : null;
+    if (category !== 'motor' && category !== 'pump') return null;
+    return e.severity === 'critical' ? 'critical' : e.severity === 'high' || e.severity === 'medium' ? 'warning' : 'normal';
+  };
+  const tierChip = (e: Event) => {
+    const tier = tierOf(e);
+    return tier ? <Chip tone={tier === 'critical' ? 'rose' : tier === 'warning' ? 'amber' : 'emerald'} title={t('tier.title')}>{t(`tier.${tier}`)}</Chip> : null;
+  };
   const eventActions = (e: Event) => (
     <>
       {e.state === 'open' && (
@@ -238,16 +255,21 @@ export const AlertsPage: React.FC = () => {
             <p className="p-4 text-sm text-slate-400">{t('rules.empty')}</p>
           ) : viewMode === 'list' ? (
             <ListTable bare
+              // As on Scenarios: the toggle and the pencil are narrow and fixed, the edit
+              // right-aligned; the rest goes to the rule, its chips and what it covers.
               columns={[
-                { label: ts('listCol.name') }, { label: ts('listCol.details') }, { label: ts('listCol.scope') },
-                { label: ts('listCol.enabled') }, { label: ts('listCol.actions') },
+                { label: ts('listCol.name'), grow: 2, minWidth: 130 },
+                { label: ts('listCol.details'), grow: 3, minWidth: 180 },
+                { label: ts('listCol.scope'), grow: 2, minWidth: 130 },
+                { label: ts('listCol.enabled'), width: 100 },
+                { label: ts('listCol.actions'), width: 80, align: 'right' },
               ]}
               rows={rulePage.pageItems}
               rowKey={(r) => r.id}
               cells={(r) => [
                 <span className="font-medium">{r.name}</span>,
                 <div className="flex items-center gap-1.5 flex-wrap">{ruleChips(r)}</div>,
-                <span className="text-[11px] text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
+                <span className="text-xs text-slate-500">{ruleScopeText(r, plants, equipment, t)}</span>,
                 ruleToggle(r),
                 ruleEdit(r),
               ]}
@@ -310,21 +332,29 @@ export const AlertsPage: React.FC = () => {
             <ListTable bare
               sort={eventSort}
               onSort={(key) => { toggleEventSort(key as typeof eventSort.key, key === 'fired' || key === 'severity' ? 'desc' : 'asc'); eventPager.setPage(1); }}
+              // Chips and the time need little room; the summary, the longest text, gets the
+              // most, so it no longer wraps to six lines beside two half-empty chip columns.
               columns={[
-                { label: ts('listCol.severity'), sortKey: 'severity' }, { label: ts('listCol.state'), sortKey: 'state' }, { label: ts('listCol.name'), sortKey: 'name' },
-                { label: ts('listCol.machine'), sortKey: 'machine' }, { label: ts('listCol.summary') }, { label: ts('listCol.firedAt'), sortKey: 'fired' },
-                { label: ts('listCol.actions'), width: 310 },
+                { label: ts('listCol.severity'), sortKey: 'severity', width: 120 },
+                { label: ts('listCol.state'), sortKey: 'state', width: 130 },
+                { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 110 },
+                { label: ts('listCol.machine'), sortKey: 'machine', grow: 2, minWidth: 100 },
+                { label: ts('listCol.summary'), grow: 4, minWidth: 160 },
+                { label: ts('listCol.firedAt'), sortKey: 'fired', width: 160 },
+                { label: ts('listCol.actions'), width: 220, align: 'right' },
               ]}
               rows={eventPage.pageItems}
               rowKey={(e) => e.id}
               cells={(e) => [
-                <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>,
+                <span className="inline-flex flex-wrap items-center gap-1"><Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>{tierChip(e)}</span>,
                 <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>,
                 <span className="font-medium">{e.ruleName}</span>,
                 machineName(e),
                 e.summary,
-                new Date(e.firedAt).toLocaleString(),
-                <div className="flex flex-wrap items-center gap-2">{eventActions(e)}</div>,
+                new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }),
+                // A button never breaks inside its label; when they do not all fit they wrap,
+                // right-aligned like the column.
+                <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">{eventActions(e)}</div>,
               ]}
             />
           ) : (
@@ -332,13 +362,13 @@ export const AlertsPage: React.FC = () => {
               {eventPage.pageItems.map((e) => (
                 <div key={e.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>
+                    <span className="inline-flex flex-wrap items-center gap-1"><Chip icon={AlertTriangle} tone={SEVERITY_TONE(e.severity)}>{t(`severity.${e.severity}`, { defaultValue: e.severity })}</Chip>{tierChip(e)}</span>
                     <Chip tone={statusTone(e.state)}>{t(`state.${e.state}`, { defaultValue: e.state })}</Chip>
                   </div>
                   <h4 className="font-semibold text-slate-900 dark:text-white text-base">{e.ruleName}</h4>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{machineName(e)}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{e.summary}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</p>
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     {eventActions(e)}
                   </div>
@@ -478,13 +508,16 @@ const AlertRuleForm: React.FC<{
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.min')}</span>
             <Input type="number" inputMode="decimal" value={min} onChange={(value) => setMin(value)} placeholder={t('form.optional')} />
-            {minError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{minError}</span>}
+            {minError && <span className="text-xs text-rose-600 dark:text-rose-400">{minError}</span>}
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('form.max')}</span>
             <Input type="number" inputMode="decimal" value={max} onChange={(value) => setMax(value)} placeholder={t('form.optional')} />
-            {maxError && <span className="text-[11px] text-rose-600 dark:text-rose-400">{maxError}</span>}
+            {maxError && <span className="text-xs text-rose-600 dark:text-rose-400">{maxError}</span>}
           </label>
+          {/* Negative bounds are kept on purpose (test report MAJ-4a, decided 11 Nov): a
+              temperature or a pressure difference goes below zero. Said, so it reads as meant. */}
+          <p className="col-span-full text-xs text-slate-400 dark:text-slate-500">{t('form.negativeAllowed')}</p>
         </div>
       )}
 

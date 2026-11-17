@@ -118,7 +118,7 @@ export const AddSignalStateModal: React.FC<AddSignalStateModalProps> = ({
               placeholder={t('stateModal.rolePlaceholder')}
             />
             {role.trim() && !roleValid && (
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+              <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
                 {t('stateModal.roleInvalid')}
               </p>
             )}
@@ -155,7 +155,7 @@ export const AddSignalStateModal: React.FC<AddSignalStateModalProps> = ({
           <button
             type="button"
             onClick={addRow}
-            className="text-[11px] text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
+            className="text-xs text-sky-700 dark:text-sky-300 font-semibold flex items-center gap-1 hover:text-sky-800 dark:hover:text-sky-200 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{t('stateModal.addState')}</span>
@@ -168,7 +168,7 @@ export const AddSignalStateModal: React.FC<AddSignalStateModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               {t('stateModal.rule')}
             </span>

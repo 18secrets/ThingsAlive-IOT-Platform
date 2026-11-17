@@ -139,7 +139,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
                 onChange={(value) => { setCode(value); setCodeTouched(true); }}
                 placeholder={t('common.eg', { example: 'HYD-WKS' })}
               />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 {t('plants.codeHint')}
               </p>
             </div>
@@ -164,7 +164,7 @@ export const AddPlantModal: React.FC<AddPlantModalProps> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 text-slate-400" />
               <Trans i18nKey="common.mandatoryNote" t={t}>Fields marked with <span className="text-rose-500 font-bold">*</span> are mandatory</Trans>
             </span>

@@ -6,6 +6,8 @@ import { useGoBack } from '../lib/useGoBack';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { ApiError, SitePage, apiGetSitePage } from '../lib/api';
 import { Widget, GAUGE_WIDGET_TYPES } from '../components/page-widgets/PageWidgets';
+import { SiteTwinCard } from '../components/site-twin/SiteTwinCard';
+import { Skeleton } from '../components/common/Skeleton';
 
 export const SitePagePage: React.FC = () => {
   const { plantId } = useParams<{ plantId: string }>();
@@ -34,7 +36,7 @@ export const SitePagePage: React.FC = () => {
     return () => { live = false; };
   }, [plantId]);
 
-  if (loading) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (loading) return <Skeleton />;
   if (error) {
     return (
       <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2.5">
@@ -60,6 +62,8 @@ export const SitePagePage: React.FC = () => {
           {page.layout.fallback ? ` · ${t('common.fallbackLayout')}` : ''}
         </p>
       </div>
+
+      <SiteTwinCard plantId={page.site.plantId} />
 
       {page.widgets.length === 0 && (
         <p className="text-sm text-slate-400">{t('sitePage.noWidgets')}</p>

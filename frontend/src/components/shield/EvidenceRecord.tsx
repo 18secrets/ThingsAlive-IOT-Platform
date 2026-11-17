@@ -3,6 +3,7 @@ import { AlertCircle, Calendar, User, Pencil, History } from 'lucide-react';
 import { DatePicker, Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, ShieldEvidence, ShieldEvidenceInput, ShieldResult, ShieldStatus } from '../../lib/api';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 // Dates are picked as calendar days and sent as local midnight, so the day shown in the
 // picker is the day the backend stores whatever the browser's UTC offset.
@@ -10,7 +11,7 @@ function toDay(value: string | null): Date | null {
   return value ? new Date(value) : null;
 }
 
-const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : '—');
+const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) : '—');
 
 // Labels live in shield.json under status.* and result.*, read at render time so they
 // follow the language switch.
@@ -47,7 +48,7 @@ export const EvidenceRecordCard: React.FC<{
     <div className={`border rounded-xl p-3.5 space-y-2 ${STATUS_STYLE[tone]} ${corrected ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <h4 className={`font-semibold text-slate-900 dark:text-white text-base truncate ${corrected ? 'line-through' : ''}`}>{record.title}</h4>
-        <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[tone]}`}>
+        <span className={`shrink-0 px-1.5 py-0.5 text-[0.6875rem] font-bold uppercase rounded bg-white/70 dark:bg-slate-900/50 ${STATUS_TEXT[tone]}`}>
           {corrected ? t('record.corrected') : status ? t(`status.${status}`) : t(`result.${record.result}`)}
         </span>
       </div>
@@ -57,8 +58,8 @@ export const EvidenceRecordCard: React.FC<{
         {(record.ownerName || record.ownerUserId) && (
           <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" />{record.ownerName ?? t('record.accountUser')}</span>
         )}
-        {record.reference && <span className="font-mono text-[11px] text-slate-400" title={record.reference}>{record.reference}</span>}
-        <span className="text-[11px] text-slate-400">· {t(`result.${record.result}`)}</span>
+        {record.reference && <span className="font-mono text-xs text-slate-400" title={record.reference}>{record.reference}</span>}
+        <span className="text-xs text-slate-400">· {t(`result.${record.result}`)}</span>
       </div>
       {record.findings && (
         <p className="text-xs text-slate-500 dark:text-slate-400" title={record.findings}>{record.findings}</p>
@@ -69,8 +70,8 @@ export const EvidenceRecordCard: React.FC<{
             <Pencil className="w-3.5 h-3.5" /> {t('record.correct')}
           </button>
         ) : <span />}
-        <span className="text-[11px] text-slate-400" title={t('record.recordedTitle')}>
-          {t('record.recorded', { date: new Date(record.recordedAt).toLocaleString() })}{record.supersedesId ? ` · ${t('record.aCorrection')}` : ''}
+        <span className="text-xs text-slate-400" title={t('record.recordedTitle')}>
+          {t('record.recorded', { date: new Date(record.recordedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }) })}{record.supersedesId ? ` · ${t('record.aCorrection')}` : ''}
         </span>
       </div>
     </div>
@@ -128,7 +129,7 @@ export const EvidenceRecordForm: React.FC<{
       }}
     >
       {initial && (
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
           {t('form.correctionNote')}
         </p>
       )}

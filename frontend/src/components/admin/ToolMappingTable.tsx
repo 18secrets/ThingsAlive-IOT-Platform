@@ -5,9 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput } from '../../lib/api';
 import { MapSensorsModal } from './MapSensorsModal';
 import { TablePagination, usePagination } from '../common/TablePagination';
-import { ListTable } from '../common/ListTable';
+import { ListColumn, ListTable } from '../common/ListTable';
 import { RecordCards } from '../common/RecordCards';
 import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface ToolMappingTableProps {
   mappings: ToolMapping[];
@@ -60,13 +61,15 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
 
 
   // One definition for both views (tester request: cards or list on every list page).
-  const viewColumns = [
-    { label: t('toolMappings.toolProfile') },
-    { label: t('toolMappings.industryType') },
-    { label: t('toolMappings.mappedSensors') },
-    { label: t('sensors.parameters') },
-    { label: t('sensors.updatedAt') },
-    { label: t('common.action') },
+  const viewColumns: ListColumn[] = [
+    // Sized to content: the sensor chips get the room; a count, a date and two icons
+    // are narrow, and the icons sit right.
+    { label: t('toolMappings.toolProfile'), grow: 2, minWidth: 110 },
+    { label: t('toolMappings.industryType'), grow: 2, minWidth: 90 },
+    { label: t('toolMappings.mappedSensors'), grow: 4, minWidth: 150 },
+    { label: t('sensors.parameters'), width: 110 },
+    { label: t('sensors.updatedAt'), width: 110 },
+    { label: t('common.action'), width: 90, align: 'right' },
   ];
   const viewCells = (item: (typeof pagedRows)[number]) => {
 
@@ -75,25 +78,25 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
       <><div className="font-semibold text-sm text-slate-900 dark:text-white">{item.toolName}</div></>,
       <span className="text-slate-600 dark:text-slate-400">{item.industryType ?? (item.industryTypeLegacy ? (
                         <span className="text-amber-600 dark:text-amber-400" title={t('toolMappings.unmatchedHint')}>
-                          {item.industryTypeLegacy} <span className="text-[10px]">{t('toolMappings.unmatched')}</span>
+                          {item.industryTypeLegacy} <span className="text-[0.6875rem]">{t('toolMappings.unmatched')}</span>
                         </span>
                       ) : '—')}</span>,
-      <><div className="flex flex-wrap gap-1.5 max-w-sm">
+      <><div className="flex flex-wrap gap-1.5 min-w-0">
                         {item.mappedSensors.map((sensor) => (
                           <span
                             key={sensor.sensorId}
-                            className="px-2 py-0.5 text-[11px] font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                            className="px-2 py-0.5 text-xs font-mono rounded bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
                             title={t('toolMappings.parametersTitle', { list: sensor.parameters.join(', ') })}
                           >
                             {sensor.sensorName}
                           </span>
                         ))}
                       </div></>,
-      <><span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-semibold text-[11px] border border-slate-200 dark:border-slate-700">
+      <><span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-semibold text-xs border border-slate-200 dark:border-slate-700">
                         {t('toolMappings.channelsShort', { count: activeParametersCount })}
                       </span></>,
-      <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">{new Date(item.updatedAt).toLocaleDateString()}</span>,
-      <><div className="flex items-center justify-center gap-2">
+      <span className="text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(item.updatedAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() })}</span>,
+      <><div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => { setEditingMapping(item); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -168,7 +171,7 @@ export const ToolMappingTable: React.FC<ToolMappingTableProps> = ({
           <div className="p-4"><RecordCards columns={viewColumns} rows={pagedRows} rowKey={(item) => String(item.id)} cells={viewCells} actionsIndex={5} /></div>
         )}
 
-        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 font-sans">
+        <div className="px-6 py-2 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 font-sans">
           {t('toolMappings.autoBind')}
         </div>
         <TablePagination pinToBottom {...pager} />

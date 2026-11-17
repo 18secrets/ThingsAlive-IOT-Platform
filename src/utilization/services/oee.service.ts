@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
+import { readFuelFigures } from '../../catalog/services/class-fuel-figures';
 import { SIGNALS } from '../../common/signals';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { TelemetryWindowReader } from '../../kpi/services/telemetry-window-reader';
@@ -18,8 +19,11 @@ import {
   Sample, subtract,
 } from './oee';
 
-export type OeeWindow = 'day' | 'week' | 'month';
+/** A named calendar window, or `range`: the from/to someone picked (test report P3-D4). */
+export type OeeWindow = 'day' | 'week' | 'month' | 'range';
 export const OEE_WINDOWS: readonly OeeWindow[] = ['day', 'week', 'month'];
+/** The longest range asked for at once: detection reads every reading in it. */
+export const MAX_RANGE_DAYS = 92;
 export type ParameterSource = 'equipment' | 'class' | 'site' | 'client' | 'oem';
 
 /** The rate signal actual fuel is measured from. Compared with the nominal in the same
@@ -45,6 +49,8 @@ export interface OeeResult {
   quality: FactorState & {
     nominalFuel: number | null; actualFuel: number | null; unit: string | null;
     wasteFraction: number | null; wasteLitres: number | null; parameterSource: ParameterSource | null;
+    /** The nominal rate itself, and where it came from (fuel test report FU-5). */
+    nominalFuelPerHour: number | null; nominalRateUnit: string | null; nominalOrigin: NominalOrigin | null;
   };
   oee: FactorState;
 }
@@ -83,6 +89,41 @@ export function windowBounds(window: OeeWindow, at: Date, now: Date): { from: Da
   return { from: new Date(from), to: new Date(to), daysCovered: Math.ceil((to - from) / DAY) };
 }
 
+/**
+ * A picked range, cut at `now` like a named window (test report P3-D4: Production detail
+ * could show today, this week or this month, never "1 to 15 October"). The factors are
+ * the same sums over whatever bounds they are given, so a range is only new bounds.
+ */
+export function rangeBounds(from: Date, to: Date, now: Date): { from: Date; to: Date; daysCovered: number } {
+  const end = Math.min(to.getTime(), now.getTime());
+  if (to.getTime() <= from.getTime()) throw new BadRequestException('to must be after from.');
+  if (end <= from.getTime()) throw new BadRequestException('That range has not started yet.');
+  if (to.getTime() - from.getTime() > MAX_RANGE_DAYS * DAY) {
+    throw new BadRequestException(`A range is at most ${MAX_RANGE_DAYS} days.`);
+  }
+  return { from, to: new Date(end), daysCovered: Math.ceil((end - from.getTime()) / DAY) };
+}
+
+/** A named window, or a picked range. */
+export type OeePeriod = OeeWindow | { from: Date; to: Date };
+const boundsOf = (period: OeePeriod, at: Date, now: Date) => (typeof period === 'string'
+  ? windowBounds(period, at, now) : rangeBounds(period.from, period.to, now));
+const labelOf = (period: OeePeriod): OeeWindow => (typeof period === 'string' ? period : 'range');
+
+/**
+ * Where a nominal came from, precisely enough to go and check it (fuel test report FU-5).
+ *
+ * The tester saw "OEM figure" beside a number and could find it nowhere: not in Cost
+ * Administration, which reads only the account's own parameters, and not on the machine.
+ * A library figure names the class and the version the machine is on — the version is
+ * what was granted, and a later one may say something else — and the datasheet, when the
+ * library recorded one. A parameter names its scope. `citation: null` is said, not hidden:
+ * a library nominal with no datasheet behind it is a finding, not a source.
+ */
+export type NominalOrigin =
+  | { kind: 'library'; classSlug: string; classVersion: number; className: string; citation: string | null }
+  | { kind: 'parameter'; scope: ParameterSource };
+
 const SCOPE_NAME: Record<string, ParameterSource> = {
   equipment: 'equipment', equipment_class: 'class', site: 'site', client: 'client',
 };
@@ -105,15 +146,15 @@ export class OeeService {
 
   async forEquipment(
     scope: RequestScope, ref: { sourceSystem: string; externalId: string },
-    window: OeeWindow, at: Date, now: Date = new Date(),
+    period: OeePeriod, at: Date, now: Date = new Date(),
   ): Promise<OeeResult & { breakdowns: BreakdownEvent[] }> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
       throw new NotFoundException('No such equipment in this account.');
     }
-    const bounds = windowBounds(window, at, now);
+    const bounds = boundsOf(period, at, now);
     return withTenantSession(this.ds, scope, async (m) => {
       const profile = await this.profile(m, scope.tenantId, ref);
-      const result = await this.measure(m, scope.tenantId, profile, window, bounds, now);
+      const result = await this.measure(m, scope.tenantId, profile, labelOf(period), bounds, now);
       // The rows Performance counted, read in the same transaction over the same bounds.
       // A second request for the list re-ran detection and could land after the count,
       // or fail on its own, leaving "7 breakdowns" above "none recorded".
@@ -142,8 +183,9 @@ export class OeeService {
    * average of per-machine ratios, the same rule as the window (§5) and as QPAGE1's
    * site rollup. The rest are counted by reason, so the number says what it covers.
    */
-  async forSite(scope: RequestScope, plantId: string, window: OeeWindow, at: Date, now: Date = new Date()): Promise<SiteOee> {
-    const bounds = windowBounds(window, at, now);
+  async forSite(scope: RequestScope, plantId: string, period: OeePeriod, at: Date, now: Date = new Date()): Promise<SiteOee> {
+    const bounds = boundsOf(period, at, now);
+    const window = labelOf(period);
     return withTenantSession(this.ds, scope, async (m) => {
       const qb = m.getRepository(EquipmentProfile).createQueryBuilder('e')
         .where('e.tenant_id = :tenantId', { tenantId: scope.tenantId })
@@ -207,9 +249,16 @@ export class OeeService {
       breakdownMinutes: 0, breakdownCount: 0, openBreakdown: false,
       thresholdMinutes: config.threshold.value, parameterSource: config.threshold.source,
     };
+    // The rate and its origin travel with every Quality, ready or not: "nominal not set"
+    // and "nominal 15 L/h from the library, Quality blocked on no readings" are different
+    // things to fix, and the page can only tell them apart if both are said.
+    const nominalOf = {
+      nominalFuelPerHour: config.nominal?.value ?? null, nominalRateUnit: config.nominal?.unit ?? null,
+      nominalOrigin: config.nominal?.origin ?? null,
+    };
     const emptyQuality = {
       nominalFuel: null, actualFuel: null, unit: config.nominal?.unit ?? null, wasteFraction: null, wasteLitres: null,
-      parameterSource: config.nominal?.source ?? null,
+      parameterSource: config.nominal?.source ?? null, ...nominalOf,
     };
     const refuse = (readiness: Readiness, reason: string): FactorState => ({ value: null, readiness, reason });
 
@@ -307,7 +356,7 @@ export class OeeService {
           const q = qualityOf(config.nominal.value, productiveMinutes, actual);
           quality = {
             ...q, actualFuel: Math.round(actual * 1000) / 1000, unit: config.nominal.unit.replace(/\/h$/, ''),
-            parameterSource: config.nominal.source,
+            parameterSource: config.nominal.source, ...nominalOf,
           };
         }
       }
@@ -336,12 +385,23 @@ export class OeeService {
         ? { value: r.value, unit: r.unit, source: SCOPE_NAME[r.source.scope] }
         : null;
     };
+    // Not on the entity (class-fuel-figures.ts says why): read beside it.
+    const citation = oem ? (await readFuelFigures(m, oem.slug, oem.version)).nominalFuelSource : null;
     const nominalParam = pick('nominal_fuel_per_hour');
     const thresholdParam = pick('idle_breakdown_threshold_minutes');
-    const nominal = nominalParam
-      ? { value: nominalParam.value, unit: nominalParam.unit ?? 'L/h', source: nominalParam.source }
+    const nominal: { value: number; unit: string; source: ParameterSource; origin: NominalOrigin } | null = nominalParam
+      ? {
+          value: nominalParam.value, unit: nominalParam.unit ?? 'L/h', source: nominalParam.source,
+          origin: { kind: 'parameter', scope: nominalParam.source },
+        }
       : oem?.nominalFuelPerHour != null
-        ? { value: oem.nominalFuelPerHour, unit: oem.nominalFuelUnit!, source: 'oem' as ParameterSource }
+        ? {
+            value: oem.nominalFuelPerHour, unit: oem.nominalFuelUnit!, source: 'oem',
+            origin: {
+              kind: 'library', classSlug: oem.slug, classVersion: oem.version, className: oem.name,
+              citation,
+            },
+          }
         : null;
     const threshold = thresholdParam
       ? { value: thresholdParam.value, source: thresholdParam.source }

@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Line, LineChart, ReferenceArea, Tooltip, XAxis, YAxis } from 'recharts';
 import { Prediction } from '../../lib/api';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /**
  * A scenario's risk score over its recent scores, on the fixed 0–100 scale the score
@@ -24,7 +25,7 @@ export const RiskTrend: React.FC<{ history: Prediction[]; width?: number; height
 
   if (points.length < 2) {
     return (
-      <p className="text-[11px] text-slate-400 text-right w-[168px] leading-snug">
+      <p className="text-xs text-slate-400 text-right w-[168px] leading-snug">
         {t('trend.tooFew', { count: points.length })}
       </p>
     );
@@ -40,12 +41,12 @@ export const RiskTrend: React.FC<{ history: Prediction[]; width?: number; height
         <Line dataKey="risk" stroke="#0ea5e9" strokeWidth={1.75} isAnimationActive={false}
           dot={{ r: 2, fill: '#0ea5e9', strokeWidth: 0 }} activeDot={{ r: 3.5 }} />
         <Tooltip
-          labelFormatter={(ms) => new Date(Number(ms)).toLocaleString()}
+          labelFormatter={(ms) => new Date(Number(ms)).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
           formatter={(value) => [`${value}`, t('trend.risk')]}
-          contentStyle={{ fontSize: 11, borderRadius: 8, padding: '4px 8px' }}
+          contentStyle={{ fontSize: '0.75rem', borderRadius: 8, padding: '4px 8px' }}
         />
       </LineChart>
-      <span className="text-[10px] text-slate-400">{t('trend.caption', { count: points.length })}</span>
+      <span className="text-[0.6875rem] text-slate-400">{t('trend.caption', { count: points.length })}</span>
     </div>
   );
 };
