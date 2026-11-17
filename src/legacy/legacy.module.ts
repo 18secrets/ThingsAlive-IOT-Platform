@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { InventoryModule } from '../inventory/inventory.module';
 import { ProjectionModule } from '../projection/projection.module';
 import { LegacyFleetSyncController } from './legacy-fleet-sync.controller';
 import { LegacyFleetSyncScheduler } from './legacy-fleet-sync.scheduler';
@@ -18,7 +19,7 @@ import { initLegacyDataSource, LEGACY_DATA_SOURCE, legacyConfigFrom } from './le
  * appears rather than being lost while there was none.
  */
 @Module({
-  imports: [ProjectionModule],
+  imports: [ProjectionModule, InventoryModule],
   controllers: [LegacyFleetSyncController],
   providers: [
     {
