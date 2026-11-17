@@ -15,9 +15,10 @@ import { createTestDataSource, describeDb } from './db';
 describe('seed:vani-test refusals', () => {
   it('runs against a local database only', () => {
     expect(() => requireLocal({ DB_HOST: 'localhost' })).not.toThrow();
-    expect(() => requireLocal({ DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/ta2' })).not.toThrow();
+    // Fake credentials (u:p): the seed only reads the host. scan-allow keeps the CI secrets scan quiet.
+    expect(() => requireLocal({ DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/ta2' })).not.toThrow(); // scan-allow
     expect(() => requireLocal({ DB_HOST: 'postgres.railway.internal' })).toThrow(/local database only/);
-    expect(() => requireLocal({ DATABASE_URL: 'postgres://u:p@roundhouse.proxy.rlwy.net:5432/railway' }))
+    expect(() => requireLocal({ DATABASE_URL: 'postgres://u:p@roundhouse.proxy.rlwy.net:5432/railway' })) // scan-allow
       .toThrow(/local database only/);
   });
 
