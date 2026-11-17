@@ -29,6 +29,8 @@ export interface EquipmentFaultItem {
   lamp: string;
   severity: Severity;
   description: string;
+  /** A motor code's: what the technician sees at the pump. Vehicle codes have none. */
+  symptom: string | null;
   causes: string | null;
   remedies: string | null;
   firstSeenAt: string;
@@ -242,19 +244,29 @@ export class DtcEpisodeService {
 
       // Every active code, and the cleared ones (in the period, when there is one).
       const rows = await m.query(
+        // A code's meaning from its own table (FaultCodeLibrary1765300000000): a pump's
+        // P-code from the motor library, a vehicle's from 1.0's copy.
         `SELECT e.id, e.code, e.protocol, e.spn, e.fmi, e.status,
-                COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status) AS lamp,
-                COALESCE(mc.severity, e.severity) AS severity,
+                COALESCE(NULLIF(COALESCE(mf.lamp, mc.lamp), 'none'), e.lamp_status) AS lamp,
+                COALESCE(mf.severity, mc.severity, e.severity) AS severity,
                 e.first_seen_at AS "firstSeenAt", e.last_seen_at AS "lastSeenAt", e.cleared_at AS "clearedAt",
                 e.occurrences,
-                COALESCE(mc.description, e.code) AS description, mc.causes, mc.remedies
+                COALESCE(mf.description, mc.description, e.code) AS description, mf.symptom,
+                COALESCE(mf.causes, mc.causes) AS causes, COALESCE(mf.remedies, mc.remedies) AS remedies
            FROM "device_dtc_episode" e
-           LEFT JOIN "dtc_master_catalog" mc ON mc.protocol = e.protocol AND mc.code = e.code
+           -- Account access (fault code library, step 4): a code's meaning is the account's
+           -- only for the kinds it was given. A code of any other kind still shows — a real
+           -- fault is never hidden — as its bare code, with no title, cause or fix.
+           LEFT JOIN "fault_code_type_grant" g
+             ON g.tenant_id = e.tenant_id AND g.revoked_at IS NULL
+            AND g.code_type = CASE e.protocol WHEN 'pcode' THEN 'motor-pump' WHEN 'j1939' THEN 'vehicle-j1939' ELSE 'vehicle-obd2' END
+           LEFT JOIN "dtc_master_catalog" mc ON g.id IS NOT NULL AND mc.protocol = e.protocol AND mc.code = e.code
+           LEFT JOIN "fault_code_motor" mf ON g.id IS NOT NULL AND e.protocol = 'pcode' AND mf.code = e.code
           WHERE e.tenant_id = $1 AND e.source_system = $2 AND e.external_id = $3
             AND (e.status = 'active' OR $4::timestamptz IS NULL OR (e.cleared_at >= $4 AND e.cleared_at <= $5))
           ORDER BY CASE WHEN e.status = 'active' THEN 0 ELSE 1 END,
                    CASE WHEN e.status = 'active' THEN
-                     CASE COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status)
+                     CASE COALESCE(NULLIF(COALESCE(mf.lamp, mc.lamp), 'none'), e.lamp_status)
                        WHEN 'red_stop' THEN 0 WHEN 'protect' THEN 1 WHEN 'amber_warning' THEN 2 ELSE 3 END
                    ELSE 0 END,
                    coalesce(e.cleared_at, e.last_seen_at) DESC`,
@@ -266,7 +278,7 @@ export class DtcEpisodeService {
       for (const r of rows) {
         const item: EquipmentFaultItem = {
           id: r.id, code: r.code, protocol: r.protocol, spn: r.spn ?? null, fmi: r.fmi ?? null,
-          lamp: r.lamp, severity: r.severity, description: r.description,
+          lamp: r.lamp, severity: r.severity, description: r.description, symptom: r.symptom ?? null,
           causes: r.causes ?? null, remedies: r.remedies ?? null,
           firstSeenAt: new Date(r.firstSeenAt).toISOString(),
           lastSeenAt: new Date(r.lastSeenAt).toISOString(),

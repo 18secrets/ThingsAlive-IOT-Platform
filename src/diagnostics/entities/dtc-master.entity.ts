@@ -38,8 +38,21 @@ export class DtcMasterCatalog {
   @Column({ type: 'text', nullable: true })
   remedies: string | null;
 
+  /** 1.0's `source_type`: the unit that raises the code (VehicleCodeSource1765500000000). */
+  @Column({ name: 'source_unit', type: 'text', nullable: true })
+  sourceUnit: string | null;
+
+  /** 1.0's `dtc_code`: the maker's own code for the fault. */
+  @Column({ name: 'oem_code', type: 'text', nullable: true })
+  oemCode: string | null;
+
+  /** 1.0's copy, or a vehicle code 2.0 holds as its own (FaultCodeLibrary1765300000000). */
   @Column({ name: 'source_system', type: 'text', default: '1.0' })
   sourceSystem: string;
+
+  /** A 2.0 vehicle code no longer used: retired, never deleted (FaultCodeEditing1765400000000). */
+  @Column({ name: 'retired_at', type: 'timestamptz', nullable: true })
+  retiredAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

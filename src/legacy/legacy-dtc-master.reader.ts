@@ -30,6 +30,10 @@ export interface NormalizedDtcDefinition {
   severity: Severity;
   causes: string | null;
   remedies: string | null;
+  /** 1.0's `source_type`: the unit that raises the code (engine, transmission …). */
+  sourceUnit?: string | null;
+  /** 1.0's `dtc_code`: the maker's own code, as its manual names the fault. */
+  oemCode?: string | null;
 }
 
 /**
@@ -86,6 +90,7 @@ export class LegacyDtcMasterReader {
       definitions.push({
         protocol, code, spn, fmi, description: r.description || code, lamp, severity,
         causes: r.causes ?? null, remedies: r.remedies ?? null,
+        sourceUnit: r.source_type?.trim() || null, oemCode: r.dtc_code?.trim() || null,
       });
     }
 
