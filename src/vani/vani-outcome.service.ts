@@ -116,7 +116,7 @@ export class VaniOutcomeService {
         [scope.tenantId, calls.map((c) => c.event_id)]);
       return calls.map((c) => ({
         eventId: c.event_id,
-        // `alert`, or `trigger_action` for a prediction that raised no alert (D57).
+        // `alert`, or `trigger_action` for a prediction that raised no alert (D61).
         kind: c.kind,
         alertEventId: c.alert_event_id,
         predictionId: c.prediction_id,
@@ -141,7 +141,7 @@ export class VaniOutcomeService {
           // Written by Vani for an alert history. Shown as sent.
           summary: o.summary, durationS: o.durationS, calledAt: o.calledAt, receivedAt: o.receivedAt,
         })),
-        // What the customer decided on the call and what 2.0 did about it (D57), or null.
+        // What the customer decided on the call and what 2.0 did about it (D61), or null.
         decision: ((a) => (a ? {
           decision: a.decision, status: a.status, reason: a.reason,
           acknowledged: a.acknowledged, workOrderId: a.work_order_id,
@@ -161,7 +161,7 @@ interface OutcomeBody {
   summary: string | null;
   duration_s: number | null;
   called_at: string | null;
-  /** What the customer decided on the call (D57). Acted on separately; see `record`. */
+  /** What the customer decided on the call (D61). Acted on separately; see `record`. */
   customer_decision: string | null;
 }
 

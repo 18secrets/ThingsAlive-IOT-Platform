@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SEVERITY_RANK, severityTone } from '../components/common/statusTone';
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, RefreshCw, Search, Settings, Edit2 } from 'lucide-react';
 import { Input, InputNumber, SelectPicker } from 'rsuite';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
 import { Chip } from '../components/common/Chip';
 import { ListTable } from '../components/common/ListTable';
+import { FILTER_PICKER } from '../lib/filterPicker';
 import { SortSelect } from '../components/common/SortSelect';
 import { sortRows, useSort } from '../lib/useSort';
 import { LIST_PANEL, TablePagination, usePagination } from '../components/common/TablePagination';
@@ -128,8 +129,8 @@ export const ScenariosPage: React.FC = () => {
     </>
   );
   const editButton = (s: Scenario) => (
-                <button onClick={() => setEditing(s)} className="text-xs font-medium text-sky-700 dark:text-sky-400 hover:underline cursor-pointer">
-                  {t('page.edit')}
+                <button onClick={() => setEditing(s)} title={t('page.edit')} aria-label={t('page.edit')} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
   );
 
@@ -159,7 +160,7 @@ export const ScenariosPage: React.FC = () => {
           searchable={false}
           cleanable={false}
           size="sm"
-          className="w-full sm:w-56"
+          className={`w-full sm:w-56 ${FILTER_PICKER}`}
         />
         <SelectPicker
           data={[{ label: t('page.allSeverities'), value: 'all' }, ...SEVERITIES.map((v) => ({ label: t(`severity.${v}`), value: v }))]}
@@ -168,7 +169,7 @@ export const ScenariosPage: React.FC = () => {
           searchable={false}
           cleanable={false}
           size="sm"
-          className="w-full sm:w-40"
+          className={`w-full sm:w-40 ${FILTER_PICKER}`}
         />
         <SelectPicker
           data={[
@@ -179,7 +180,7 @@ export const ScenariosPage: React.FC = () => {
           searchable={false}
           cleanable={false}
           size="sm"
-          className="w-full sm:w-40"
+          className={`w-full sm:w-40 ${FILTER_PICKER}`}
         />
         {classFilter !== 'all' && (
           <button
@@ -216,8 +217,13 @@ export const ScenariosPage: React.FC = () => {
           ) : viewMode === 'list' ? (
             <ListTable bare
               columns={[
-                { label: ts('listCol.name'), sortKey: 'name' }, { label: ts('listCol.details'), sortKey: 'severity' }, { label: ts('listCol.needs') },
-                { label: ts('listCol.enabled'), sortKey: 'enabled' }, { label: ts('listCol.actions') },
+                // The toggle and the one Edit link are narrow and fixed; the room they gave up
+                // goes to Details and Needs, which carry the most text.
+                { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 130 },
+                { label: ts('listCol.details'), sortKey: 'severity', grow: 3, minWidth: 180 },
+                { label: ts('listCol.needs'), grow: 3, minWidth: 160 },
+                { label: ts('listCol.enabled'), sortKey: 'enabled', width: 100 },
+                { label: ts('listCol.actions'), width: 80, align: 'right' },
               ]}
               sort={sort}
               onSort={(key) => { toggleSort(key as 'severity' | 'name' | 'enabled', key === 'name' ? 'asc' : 'desc'); pager.setPage(1); }}
@@ -225,7 +231,9 @@ export const ScenariosPage: React.FC = () => {
               rowKey={(s) => s.id}
               cells={(s) => [
                 <span className="font-medium">{s.name}</span>,
-                <div className="flex items-center gap-1.5 flex-wrap">{tagChips(s)}</div>,
+                // A chip never wraps, so a long class or template ran past the column and was cut
+                // off (TC_186); in the list's narrow column the chip's own text wraps instead.
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0 [&>span]:whitespace-normal [&>span]:[overflow-wrap:anywhere]">{tagChips(s)}</div>,
                 <span className="text-xs text-slate-500">{t('page.needs', { signals: s.requiredSignals.join(', ') || t('page.noSignals'), days: s.minimumHistoryDays })}</span>,
                 enabledToggle(s),
                 editButton(s),

@@ -40,7 +40,8 @@
       "retire": "Retired",
       "return-to-stock": "Returned to stock",
       "claim": "Fitted to a machine",
-      "unclaim": "Taken off its machine"
+      "unclaim": "Taken off its machine",
+      "correct-imei": "IMEI corrected"
     }
   },
   "edit": {
@@ -52,7 +53,9 @@
     "none": "None",
     "profileLocked": "Fixed while the device is {{state}}: a client machine may already be bound to the signals this profile declares.",
     "batch": "Batch / delivery note",
-    "notes": "Notes"
+    "notes": "Notes",
+    "imeiHint": "Correct it only if it was typed wrong; the device is known by this number from now on.",
+    "imeiLocked": "Fixed: this device has left stock, and its readings already name this IMEI."
   },
   "register": {
     "failed": "Could not register these devices.",

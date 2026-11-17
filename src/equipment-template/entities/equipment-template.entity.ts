@@ -6,14 +6,20 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
  *
  * Deliberately separate from `EquipmentClassProfile` — that table is the prediction
  * catalog (expected signals, failure modes, entitlement-gated, versioned) and this
- * one is onboarding convenience only: no lifecycle, no entitlement, no tenant. It
- * exists to be copied into a client's own Equipment record and then edited freely;
- * nothing here is ever referenced back to by an Equipment row.
+ * one is onboarding convenience: no lifecycle, no entitlement, no tenant. It exists to
+ * be copied into a client's own template and equipment record and then edited freely.
+ *
+ * Since D57 it is also the model a machine's rated figures come from: its ratings
+ * (`equipment_template_rating`) copy with it, and a machine names the account's copy.
  */
 @Entity('equipment_template')
 export class EquipmentTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /** The library class this is a model of (D57); null for an onboarding-only template. */
+  @Column({ name: 'equipment_class_slug', type: 'text', nullable: true })
+  equipmentClassSlug: string | null;
 
   @Column({ type: 'text' })
   name: string;

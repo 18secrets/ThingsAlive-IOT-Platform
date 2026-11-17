@@ -14,7 +14,7 @@ const FLEET_DEFINITIONS = [
   { id: 'EX-01', source: 'seed-demo', name: 'CAT 320D3 Heavy Hydraulic Excavator (Unit 01)', classSlug: 'hydraulic-excavator', imei: '358000000000100', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
   { id: 'EX-02', source: 'seed-demo', name: 'Komatsu PC210-10M0 Excavator (Unit 02)', classSlug: 'hydraulic-excavator', imei: '358000000000200', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
   { id: 'EX-03', source: 'seed-demo', name: 'Hitachi ZX200-5G Heavy Excavator (Unit 03)', classSlug: 'hydraulic-excavator', imei: '358000000000300', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
-  { id: 'EX-04', source: 'seed-demo', name: 'Kobelco CKL-1000i Heavy Crawler Crane (Unit 04)', classSlug: 'heavy-crawler-crane', imei: '358000000000400', model: 'TA-OBD-CAN', plantCode: 'PUNE-02' },
+  { id: 'EX-04', source: 'seed-demo', name: 'Kobelco CKL-1000i Heavy Crawler Crane (Unit 04)', classSlug: 'heavy-crawler-crane', imei: '358000000000400', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
   { id: 'EX-05', source: 'seed-demo', name: 'Cummins C320D5P Diesel Generator (Unit 05)', classSlug: 'prime-diesel-generator', imei: '358000000000500', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
   { id: 'EX-06', source: 'seed-demo', name: 'Kaeser CSDX 162 Screw Compressor (Unit 06)', classSlug: 'screw-air-compressor', imei: '358000000000600', model: 'TA-OBD-CAN', plantCode: 'PUNE-01' },
   { id: 'EX-08', source: 'ta-2.0', name: 'Volvo EC210D Heavy Hydraulic Excavator (Unit 08)', classSlug: 'hydraulic-excavator', imei: '356938035643825', model: 'Volvo EC210D', plantCode: 'PUNE-01' },
@@ -22,8 +22,8 @@ const FLEET_DEFINITIONS = [
   { id: 'EX-10', source: 'ta-2.0', name: 'Tata Hitachi EX210LC Excavator (Unit 10)', classSlug: 'hydraulic-excavator', imei: '356938035643841', model: 'Tata Hitachi EX210LC', plantCode: 'PUNE-01' },
   { id: 'EX-11', source: 'ta-2.0', name: 'Komatsu PC210LC-10MO Excavator (Unit 11)', classSlug: 'hydraulic-excavator', imei: '356938035643858', model: 'Komatsu PC210LC-10MO', plantCode: 'PUNE-01' },
   { id: 'EX-12', source: 'ta-2.0', name: 'SANY SY215C Hydraulic Excavator (Unit 12)', classSlug: 'hydraulic-excavator', imei: '356938035643866', model: 'SANY SY215C', plantCode: 'PUNE-01' },
-  { id: 'EX-13', source: 'ta-2.0', name: 'CASE CX210C Excavator (Unit 13)', classSlug: 'hydraulic-excavator', imei: '356938035643874', model: 'CASE CX210C', plantCode: 'PUNE-02' },
-  { id: 'EX-14', source: 'ta-2.0', name: 'Doosan DX225LC Excavator (Unit 14)', classSlug: 'hydraulic-excavator', imei: '356938035643882', model: 'Doosan DX225LC', plantCode: 'PUNE-02' },
+  { id: 'EX-13', source: 'ta-2.0', name: 'CASE CX210C Excavator (Unit 13)', classSlug: 'hydraulic-excavator', imei: '356938035643874', model: 'CASE CX210C', plantCode: 'PUNE-01' },
+  { id: 'EX-14', source: 'ta-2.0', name: 'Doosan DX225LC Excavator (Unit 14)', classSlug: 'hydraulic-excavator', imei: '356938035643882', model: 'Doosan DX225LC', plantCode: 'PUNE-01' },
   { id: 'EXC-001', source: 'ta-2.0', name: 'Hyundai R215L Smart Plus', classSlug: 'hydraulic-excavator', imei: '356938035643809', model: 'Hyundai R215L', plantCode: 'PUNE-01' },
 ];
 

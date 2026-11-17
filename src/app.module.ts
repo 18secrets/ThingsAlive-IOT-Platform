@@ -18,6 +18,7 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { GeofenceModule } from './geofence/geofence.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { FleetImportModule } from './fleet-import/fleet-import.module';
+import { ServiceRosterModule } from './service-roster/service-roster.module';
 import { RecEngineModule } from './rec-engine/rec-engine.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { RecFrameModule } from './rec-frame/rec-frame.module';
@@ -29,6 +30,7 @@ import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
 import { PageModule } from './page/page.module';
 import { SiteTwinModule } from './site-twin/site-twin.module';
 import { VaniModule } from './vani/vani.module';
+import { MotorIngestModule } from './motor-ingest/motor-ingest.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
 import { AlertModule } from './alert/alert.module';
@@ -50,6 +52,7 @@ import { UtilizationModule } from './utilization/utilization.module';
 import { ServiceModule } from './service/service.module';
 import { DeviceHealthModule } from './device-health/device-health.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { IdentityModule } from './identity/identity.module';
 import { MailModule } from './mail/mail.module';
@@ -113,11 +116,13 @@ export class AppModule {
               EquipmentModule,
               GeofenceModule,
               FleetImportModule,
+              ServiceRosterModule,
               SignalBindingModule,
               KpiModule,
       PageModule,
       SiteTwinModule,
       VaniModule,
+      MotorIngestModule,
       IncidentModule,
       ShieldModule,
       OnboardingStatusModule,
@@ -137,6 +142,7 @@ export class AppModule {
               ServiceModule,
               DeviceHealthModule,
               IntelligenceModule,
+              DiagnosticsModule,
               LegacyModule,
               AlertModule,
               WorkflowModule,

@@ -114,7 +114,7 @@ export class VaniCall {
   @Column({ name: 'alert_event_id', type: 'uuid', nullable: true })
   alertEventId: string | null;
 
-  /** `alert` or `trigger_action` — what Vani is told in `trigger.kind` (D57, Lane B). */
+  /** `alert` or `trigger_action` — what Vani is told in `trigger.kind` (D61, Lane B). */
   @Column({ type: 'text', default: 'alert' })
   kind: VaniCallKind;
 

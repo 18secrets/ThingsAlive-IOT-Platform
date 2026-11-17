@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
@@ -42,9 +42,12 @@ export class PredictionController {
     @Param('externalId') externalId: string,
     @Param('clientScenarioSlug') clientScenarioSlug: string,
     @Query('take') take?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     return this.predictions.historyFor(
       scope, { sourceSystem, externalId, clientScenarioSlug }, take ? Number(take) : 100,
+      { from: parseDate(from, 'from'), to: parseDate(to, 'to') },
     );
   }
 
@@ -103,4 +106,14 @@ export class PredictionController {
   ) {
     return this.predictions.scoreAsset(scope, { sourceSystem, externalId });
   }
+}
+
+// Same reading as the utilization routes, so one date picker in the UI feeds both.
+function parseDate(raw: string | undefined, field: string): Date | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(`${field} is not a date I can read: "${raw}".`);
+  }
+  return parsed;
 }

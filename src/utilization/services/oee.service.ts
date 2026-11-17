@@ -19,8 +19,11 @@ import {
   Sample, subtract,
 } from './oee';
 
-export type OeeWindow = 'day' | 'week' | 'month';
+/** A named calendar window, or `range`: the from/to someone picked (test report P3-D4). */
+export type OeeWindow = 'day' | 'week' | 'month' | 'range';
 export const OEE_WINDOWS: readonly OeeWindow[] = ['day', 'week', 'month'];
+/** The longest range asked for at once: detection reads every reading in it. */
+export const MAX_RANGE_DAYS = 92;
 export type ParameterSource = 'equipment' | 'class' | 'site' | 'client' | 'oem';
 
 /** The rate signal actual fuel is measured from. Compared with the nominal in the same
@@ -87,6 +90,27 @@ export function windowBounds(window: OeeWindow, at: Date, now: Date): { from: Da
 }
 
 /**
+ * A picked range, cut at `now` like a named window (test report P3-D4: Production detail
+ * could show today, this week or this month, never "1 to 15 October"). The factors are
+ * the same sums over whatever bounds they are given, so a range is only new bounds.
+ */
+export function rangeBounds(from: Date, to: Date, now: Date): { from: Date; to: Date; daysCovered: number } {
+  const end = Math.min(to.getTime(), now.getTime());
+  if (to.getTime() <= from.getTime()) throw new BadRequestException('to must be after from.');
+  if (end <= from.getTime()) throw new BadRequestException('That range has not started yet.');
+  if (to.getTime() - from.getTime() > MAX_RANGE_DAYS * DAY) {
+    throw new BadRequestException(`A range is at most ${MAX_RANGE_DAYS} days.`);
+  }
+  return { from, to: new Date(end), daysCovered: Math.ceil((end - from.getTime()) / DAY) };
+}
+
+/** A named window, or a picked range. */
+export type OeePeriod = OeeWindow | { from: Date; to: Date };
+const boundsOf = (period: OeePeriod, at: Date, now: Date) => (typeof period === 'string'
+  ? windowBounds(period, at, now) : rangeBounds(period.from, period.to, now));
+const labelOf = (period: OeePeriod): OeeWindow => (typeof period === 'string' ? period : 'range');
+
+/**
  * Where a nominal came from, precisely enough to go and check it (fuel test report FU-5).
  *
  * The tester saw "OEM figure" beside a number and could find it nowhere: not in Cost
@@ -122,15 +146,15 @@ export class OeeService {
 
   async forEquipment(
     scope: RequestScope, ref: { sourceSystem: string; externalId: string },
-    window: OeeWindow, at: Date, now: Date = new Date(),
+    period: OeePeriod, at: Date, now: Date = new Date(),
   ): Promise<OeeResult & { breakdowns: BreakdownEvent[] }> {
     if (scope.equipmentIds !== undefined && !scope.equipmentIds.includes(ref.externalId)) {
       throw new NotFoundException('No such equipment in this account.');
     }
-    const bounds = windowBounds(window, at, now);
+    const bounds = boundsOf(period, at, now);
     return withTenantSession(this.ds, scope, async (m) => {
       const profile = await this.profile(m, scope.tenantId, ref);
-      const result = await this.measure(m, scope.tenantId, profile, window, bounds, now);
+      const result = await this.measure(m, scope.tenantId, profile, labelOf(period), bounds, now);
       // The rows Performance counted, read in the same transaction over the same bounds.
       // A second request for the list re-ran detection and could land after the count,
       // or fail on its own, leaving "7 breakdowns" above "none recorded".
@@ -159,8 +183,9 @@ export class OeeService {
    * average of per-machine ratios, the same rule as the window (§5) and as QPAGE1's
    * site rollup. The rest are counted by reason, so the number says what it covers.
    */
-  async forSite(scope: RequestScope, plantId: string, window: OeeWindow, at: Date, now: Date = new Date()): Promise<SiteOee> {
-    const bounds = windowBounds(window, at, now);
+  async forSite(scope: RequestScope, plantId: string, period: OeePeriod, at: Date, now: Date = new Date()): Promise<SiteOee> {
+    const bounds = boundsOf(period, at, now);
+    const window = labelOf(period);
     return withTenantSession(this.ds, scope, async (m) => {
       const qb = m.getRepository(EquipmentProfile).createQueryBuilder('e')
         .where('e.tenant_id = :tenantId', { tenantId: scope.tenantId })

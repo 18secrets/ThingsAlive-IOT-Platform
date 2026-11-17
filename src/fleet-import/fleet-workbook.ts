@@ -18,6 +18,9 @@ export const EQUIPMENT_COLUMNS = {
   classSlug: 'Class slug',
   manufacturer: 'Manufacturer',
   modelNumber: 'Model number',
+  // The account's model (D57) by its name, as on Administration → Models: where the
+  // machine's rated figures come from. Not "Model number", which is free text.
+  model: 'Model',
   serialNumber: 'Serial number',
   description: 'Description',
   commissionedAt: 'Commissioned (YYYY-MM-DD)',
@@ -130,6 +133,8 @@ export async function buildFleetTemplate(): Promise<Buffer> {
     `${EQUIPMENT_SHEET}: one row per machine. Code and Name are required. Code is letters, digits, dots,`,
     'hyphens or underscores, and becomes part of the machine\'s identity: it is not changed later.',
     'Site code must be a site already set up in this account.',
+    'Model is optional: the name of one of this account\'s models (Administration → Models), of the',
+    'machine\'s class. Its rated figures feed the motor KPIs and rated alerts. Model number is free text.',
     '',
     `${DEVICES_SHEET}: one row per logger. The logger must already be assigned to this account.`,
     'Equipment code is a machine in this workbook or already in the register. Leave Source system',

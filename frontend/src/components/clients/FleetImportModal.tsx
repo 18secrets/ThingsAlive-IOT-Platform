@@ -182,7 +182,7 @@ const FleetImportBody: React.FC<{ tenantId: string }> = ({ tenantId }) => {
                 <Row
                   key={`m-${m.row}`}
                   left={`${m.code} · ${m.name}`}
-                  right={[m.siteCode && t('fleetImport.atSite', { site: m.siteCode }), m.equipmentClassSlug ?? t('fleetImport.unclassified')].filter(Boolean).join(' · ')}
+                  right={[m.siteCode && t('fleetImport.atSite', { site: m.siteCode }), m.equipmentClassSlug ?? t('fleetImport.unclassified'), m.modelName].filter(Boolean).join(' · ')}
                 />
               ))}
             </Section>

@@ -8,7 +8,7 @@ import { withTenantId, withTenantSession } from '../scope/tenant-session';
 import { MAX_TITLE_LENGTH, WorkOrderService } from '../work/services/work-order.service';
 import { VaniCall } from './vani.entities';
 
-/** The decisions D57 names. Anything else Vani sends is recorded, never acted on. */
+/** The decisions D61 names. Anything else Vani sends is recorded, never acted on. */
 export const VANI_DECISIONS = ['inspection_approved', 'call_back_requested', 'declined', 'acknowledged'] as const;
 export type VaniDecision = (typeof VANI_DECISIONS)[number];
 
@@ -39,7 +39,7 @@ interface Customer {
 }
 
 /**
- * Acts on what a customer decided on a Vani call (D57, Lane D): an acknowledgement
+ * Acts on what a customer decided on a Vani call (D61, Lane D): an acknowledgement
  * acknowledges the alert; an approved inspection acknowledges it and raises the job.
  * A call-back request or a "no" is recorded and nothing more.
  *
@@ -135,7 +135,7 @@ export class VaniDecisionService {
             input.summary ? `Vani's summary of the call: ${input.summary}` : null,
           ].filter(Boolean).join('\n\n'),
           // "Act within the week" is what a non-critical alert asks for; a critical
-          // one is the platform's night tier (D56), so its job is high priority.
+          // one is the platform's night tier (D60), so its job is high priority.
           priority: call.severity === 'critical' ? 'high' : 'normal',
         }, now);
         workOrderId = order.id;
@@ -155,7 +155,7 @@ export class VaniDecisionService {
   }
 
   /**
-   * What the call was about: its alert, or for a prediction call (D57, Lane B) the
+   * What the call was about: its alert, or for a prediction call (D61, Lane B) the
    * machine and scenario it carries. A prediction call has nothing to acknowledge.
    */
   private async subject(m: EntityManager, call: VaniCall): Promise<{

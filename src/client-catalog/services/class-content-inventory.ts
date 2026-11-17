@@ -64,6 +64,11 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
       + 'row and the one object it names, never a copy of the bytes; only its anchors are copied',
   },
   {
+    table: 'class_request', disposition: 'exclude',
+    reason: 'an account asking for a class the library lacks (OB-6); published_class_slug only points at '
+      + 'the class that answered it, so the row is the account\'s own record, not class content a grant copies',
+  },
+  {
     table: 'site_class', disposition: 'exclude',
     reason: 'platform-owned and read directly (resolveSiteClass); nothing grants a site class to a tenant, '
       + 'so there is no copy to make — the same shape as causal_chain',
@@ -77,6 +82,19 @@ export const CLASS_CONTENT_INVENTORY: ClassContentEntry[] = [
   // Platform-wide specifications, read directly by (class_slug[, class_version])
   // at the point of use. Nothing about either varies per tenant, so there is
   // nothing for a tenant copy to hold that the platform row does not already say.
+  // D57: a model names the class it is a model of. Models are not class content a grant
+  // carries: an account copies the models it actually owns, one at a time.
+  {
+    table: 'equipment_template', disposition: 'exclude',
+    reason: 'a model of a class (D57), not content of it: an account copies the models it uses on demand '
+      + '(POST /my-equipment-templates/from/:id, ratings and curve with it); a class grant cannot know which '
+      + 'of a class\'s models an account owns, so it copies none',
+  },
+  {
+    table: 'client_equipment_template', disposition: 'exclude',
+    reason: 'the account\'s own copy of a model (D57); equipment_class_slug records which class it fits, '
+      + 'it is not class content and nothing about a grant writes it',
+  },
   {
     table: 'rec_evidence_bundle', disposition: 'exclude',
     reason: 'tenant-owned evidence about one machine at one instant (QREC1); class_slug records which class '

@@ -37,10 +37,12 @@ describeDb('vani: the fuller account snapshot', () => {
     [name, SRC, ext, state, firedAt, state === 'resolved' ? 'deepak' : null, state === 'resolved' ? firedAt : null, note]);
   const job = (ext: string, ref: string, status: string, dueAt: Date | null = null) => owner.query(
     `INSERT INTO work_order (tenant_id, reference, source_system, external_id, title, status, priority, origin, raised_by, due_at,
-                             resolution)
-       VALUES ('usa-test', $1, $2, $3, $4, $5, 'normal', 'manual', 'deepak', $6, $7)`,
-    // A completed job must say how (ck_work_order_resolution).
-    [ref, SRC, ext, `Job ${ref}`, status, dueAt, status === 'completed' ? 'Done' : null]);
+                             resolution, assigned_to_user_id)
+       VALUES ('usa-test', $1, $2, $3, $4, $5, 'normal', 'manual', 'deepak', $6, $7, $8)`,
+    // A completed job must say how (ck_work_order_resolution), and one in progress must
+    // have somebody on it (ck_work_order_in_progress_assigned).
+    [ref, SRC, ext, `Job ${ref}`, status, dueAt, status === 'completed' ? 'Done' : null,
+      status === 'in-progress' ? '00000000-0000-4000-8000-000000000001' : null]);
   const scored = (ext: string, slug: string, severity: string, at: Date, over: { confidence?: string; source?: string; risk?: number } = {}) =>
     owner.query(
       `INSERT INTO prediction (tenant_id, source_system, external_id, client_scenario_slug, severity, risk_score, confidence,

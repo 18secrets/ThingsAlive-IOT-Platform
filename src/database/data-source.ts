@@ -78,6 +78,11 @@ import { ClientEquipmentClassLayout } from '../client-catalog/entities/client-eq
 import { EquipmentClassVisual, EquipmentClassVisualAnchor } from '../catalog/entities/equipment-class-visual.entity';
 import { ShieldEvidenceRecord } from '../shield/shield-evidence-record.entity';
 import { ClientEquipmentTemplate } from '../equipment-template/entities/client-equipment-template.entity';
+import { ClientEquipmentTemplateRating } from '../equipment-template/entities/client-equipment-template-rating.entity';
+import { EquipmentTemplateRating } from '../equipment-template/entities/equipment-template-rating.entity';
+import { EquipmentModel } from '../equipment/entities/equipment-model.entity';
+import { EquipmentTemplateCurvePoint } from '../equipment-template/entities/equipment-template-curve-point.entity';
+import { ClientEquipmentTemplateCurvePoint } from '../equipment-template/entities/client-equipment-template-curve-point.entity';
 import { SITE_TWIN_ENTITIES } from '../site-twin/site-twin.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
 import { IndustryType } from '../device-catalog/entities/industry-type.entity';
@@ -96,6 +101,11 @@ import { EMBEDDING_ENTITIES } from '../embedding/embedding.entities';
 import { EVALUATION_ENTITIES } from '../evaluation/evaluation.entities';
 import { SHIFT_FUEL_ENTITIES } from '../shift-fuel/shift-fuel.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
+import { DtcMasterCatalog } from '../diagnostics/entities/dtc-master.entity';
+import { FaultCodeTypeGrant } from '../diagnostics/entities/fault-code-type-grant.entity';
+import { MotorFaultCode } from '../diagnostics/entities/motor-fault-code.entity';
+import { DeviceDtcEpisode } from '../diagnostics/entities/device-dtc-episode.entity';
+import { DtcPullWatermark } from '../diagnostics/entities/dtc-pull-watermark.entity';
 
 /**
  * 2.0 owns its own database. Nothing here joins to the existing platform's schema —
@@ -191,6 +201,11 @@ export const ENTITIES = [
   SignalState,
   ShieldEvidenceRecord,
   ClientEquipmentTemplate,
+  ClientEquipmentTemplateRating,
+  EquipmentTemplateRating,
+  EquipmentModel,
+  EquipmentTemplateCurvePoint,
+  ClientEquipmentTemplateCurvePoint,
   BreakdownEvent,
   IndustryType,
   Incident,
@@ -205,6 +220,11 @@ export const ENTITIES = [
   ArtifactProposal,
   ReplayRun,
   ProposalRuleEnablement,
+  DtcMasterCatalog,
+  MotorFaultCode,
+  FaultCodeTypeGrant,
+  DeviceDtcEpisode,
+  DtcPullWatermark,
   ...FORECAST_ENTITIES,
   ...EMBEDDING_ENTITIES,
   ...EVALUATION_ENTITIES,

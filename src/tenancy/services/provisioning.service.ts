@@ -19,6 +19,8 @@ export interface ProvisionInput {
   name: string;
   plan?: string | null;
   region?: string | null;
+  /** IANA zone, e.g. "Asia/Kolkata". Left out, the account takes the database default. */
+  timeZone?: string;
   /** The first person, who becomes the account's own administrator. */
   superAdmin: { email: string; fullName: string; phone?: string | null };
   /** Optional: the upstream client identifiers whose data belongs to this account. */
@@ -41,6 +43,7 @@ export interface UpdateInput {
   name?: string;
   plan?: string | null;
   region?: string | null;
+  timeZone?: string;
   superAdmin?: { fullName?: string; email?: string; phone?: string | null };
 }
 
@@ -55,6 +58,19 @@ export interface ProvisionResult {
 }
 
 const TENANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
+
+/**
+ * The zone is checked by the row (`ck_tenant_time_zone`), not here: a list kept in
+ * the service would drift from the one Postgres converts with. This only turns the
+ * row's refusal into a sentence the person typing can act on.
+ */
+function rethrowTimeZone(err: unknown): never {
+  const e = err as { code?: string; constraint?: string; driverError?: { constraint?: string } };
+  if (e.code === '23514' && (e.constraint ?? e.driverError?.constraint) === 'ck_tenant_time_zone') {
+    throw new BadRequestException('timeZone must be an IANA zone name such as "Asia/Kolkata" or "Europe/London".');
+  }
+  throw err;
+}
 
 /**
  * Standing an account up, in one transaction (task P1-89).
@@ -237,7 +253,8 @@ export class ProvisioningService {
       if (input.name !== undefined) tenant.name = input.name.trim();
       if (input.plan !== undefined) tenant.plan = input.plan;
       if (input.region !== undefined) tenant.region = input.region;
-      await m.getRepository(Tenant).save(tenant);
+      if (input.timeZone !== undefined) tenant.timeZone = input.timeZone.trim();
+      await m.getRepository(Tenant).save(tenant).catch(rethrowTimeZone);
 
       let superAdmin: SuperAdminContact | null = (await this.superAdminsFor(m, [tenantId])).get(tenantId) ?? null;
 
@@ -326,10 +343,11 @@ export class ProvisioningService {
       status: 'active',
       plan: input.plan ?? null,
       region: input.region ?? null,
+      ...(input.timeZone !== undefined ? { timeZone: input.timeZone.trim() } : {}),
       suspendedAt: null,
       suspendedReason: null,
       provisionedBy: scope.userId,
-    }));
+    })).catch(rethrowTimeZone);
   }
 
   private async mapExternalClients(

@@ -6,13 +6,14 @@ import {
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { PanelRow, PanelRows, shortWhen } from '../common/PanelRow';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const litres = (l: number) => l.toFixed(1);
 /** "2026-11-03" as that calendar day, not UTC midnight moved into the reader's zone. */
 const shiftDate = (sdate: string) => {
   const [y, m, d] = sdate.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
+  return new Date(y, m - 1, d).toLocaleDateString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short' });
 };
 /** The accuracy page's score for one shift (D53): 100 − the miss as a share of what burned, never below 0. */
 const shiftAccuracy = (forecast: number, actual: number) => Math.max(0, 100 - Math.round((100 * Math.abs(forecast - actual)) / actual));
@@ -83,11 +84,11 @@ export function FuelPerShiftPanel({ sourceSystem, externalId }: { sourceSystem: 
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-3">
-      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
-        <Fuel className="w-4 h-4" />{t('fuelPerShift.title')}
-      </p>
+      <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+        <Fuel className="w-4 h-4 text-slate-400" /> {t('fuelPerShift.title')}
+      </h3>
       {loading ? (
-        <p className="text-xs text-slate-500">{t('common.loading')}</p>
+        <Skeleton lines={2} />
       ) : !expected && !history ? (
         <p className="text-xs text-slate-500">{t('fuelPerShift.unavailable')}</p>
       ) : (

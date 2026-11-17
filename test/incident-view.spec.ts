@@ -77,10 +77,11 @@ describeDb('incident view', () => {
   };
 
   const seedWorkOrder = (tenant: string, externalId: string, status: string, title: string, priority = 'normal') => owner.query(
-    `INSERT INTO work_order (tenant_id, reference, source_system, external_id, title, status, priority, raised_by, resolution)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'u', $8)`,
+    `INSERT INTO work_order (tenant_id, reference, source_system, external_id, title, status, priority, raised_by, resolution, assigned_to_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'u', $8, $9)`,
+    // A job in progress has somebody doing it (TC_191, ck_work_order_in_progress_assigned).
     [tenant, `WO-${Math.random().toString(36).slice(2, 8)}`, SS, externalId, title, status, priority,
-      status === 'completed' ? 'Done' : null],
+      status === 'completed' ? 'Done' : null, status === 'in-progress' ? '00000000-0000-4000-8000-000000000001' : null],
   );
 
   // ================================================================== shape

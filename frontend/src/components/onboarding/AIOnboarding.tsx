@@ -63,7 +63,9 @@ function focusOf(p: AssistantProposal): OnboardingFocus | null {
   return null;
 }
 
-export const AIOnboarding: React.FC = () => {
+/** `footer`: one line under the input, inside the height-locked column, so it never
+ *  pushes the input below the fold (as the form note above the chat did). */
+export const AIOnboarding: React.FC<{ footer?: React.ReactNode }> = ({ footer }) => {
   const { t } = useTranslation('onboarding');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Hidden until the conversation is about setup; then re-read after each answer and
@@ -151,7 +153,9 @@ export const AIOnboarding: React.FC = () => {
     // it) so this component owns its own scrolling instead of the page:
     // the chat column below splits into a scrollable history and a input
     // bar that stays put in normal flow, never inside the scrollable part.
-    <div id="ai-onboarding-view" className="flex items-start gap-6 h-[calc(100vh-5rem)]" data-purpose="ai-onboarding-page">
+    // 5.5rem: the 4rem header and the page's 0.75rem padding above and below; 5rem left
+    // the page 8px taller than the screen, so it scrolled.
+    <div id="ai-onboarding-view" className="flex items-start gap-6 h-[calc(100vh-5.5rem)]" data-purpose="ai-onboarding-page">
 
       {/* Main Chat Column */}
       <div className="flex-1 min-w-0 max-w-3xl mx-auto flex flex-col h-full min-h-0">
@@ -279,6 +283,7 @@ export const AIOnboarding: React.FC = () => {
               <Send className="w-4 h-4" />
             </button>
           </form>
+          {footer}
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not 
 import { RequestScope } from '../../auth/types/request-scope';
 import { Severity } from '../../common/severity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { chainForEquipment, resolveParameters } from '../../parameters/services/parameter-resolution';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { AlertAppliesTo, AlertRule } from '../entities/alert-rule.entity';
 import { AlertEvent } from '../entities/alert-event.entity';
@@ -13,8 +14,8 @@ import {
   alertRuleContentChecksum, describeProvenance, Provenance,
 } from '../../client-catalog/services/provenance';
 import {
-  AlertParams, AlertTrigger, evaluateRule, validateParams, WindowPrediction, WindowReading,
-  WindowChain,
+  AlertParams, AlertTrigger, evaluateRule, EvaluationInput, RatingValue, SignalThresholdParams, validateParams, WindowPrediction,
+  WindowReading, WindowChain,
 } from './alert-rules';
 
 export interface RuleInput {
@@ -48,6 +49,13 @@ export interface WindowContext {
    * chain, and firing on the absence would be an alert about our own plumbing.
    */
   chains?: WindowChain[];
+  /**
+   * Only rules of these kinds. The live pass (readings judged as they land, POC T3)
+   * names `signal-threshold`: the kinds that read predictions, chains or a whole
+   * shift's absence of data have nothing to judge until the shift closes, and the
+   * shift close still evaluates every kind as before. Omitted, every kind runs.
+   */
+  onlyTriggers?: AlertTrigger[];
 }
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
@@ -307,21 +315,38 @@ export class AlertService {
    */
   async evaluateWindow(context: WindowContext): Promise<AlertEvent[]> {
     return withTenantId(this.ds, context.tenantId, async (m) => {
-      const rules = await m.getRepository(AlertRule).find({
+      const rules = (await m.getRepository(AlertRule).find({
         where: { tenantId: context.tenantId, enabled: true },
-      });
+      })).filter((r) => !context.onlyTriggers || context.onlyTriggers.includes(r.trigger));
       if (rules.length === 0) return [];
 
       const applicable = await this.applicableTo(m, context, rules);
+      const ratings = await this.ratingsFor(m, context, applicable);
+      // The machine's open fault codes, for a `dtc` rule. Nothing passed them before, so
+      // such a rule could be saved and could never fire.
+      const dtcs = applicable.some((r) => r.trigger === 'dtc') ? await this.activeDtcs(m, context) : undefined;
       const fired: AlertEvent[] = [];
 
       for (const rule of applicable) {
+        const rating = rule.trigger === 'signal-threshold' ? (rule.params as SignalThresholdParams).rating : null;
+        if (rating && !ratings.has(rating)) {
+          // Not an alert, and not silence either: a rule whose bound is a multiple of a
+          // rating this machine does not have can say nothing about it (D59). Logged per
+          // shift so "why did the overload alert never fire" has an answer.
+          this.logger.warn(
+            `Rule "${rule.slug}" not evaluated on ${context.sourceSystem}/${context.externalId}: `
+              + `no "${rating}" on the machine or its model.`,
+          );
+          continue;
+        }
         const firing = evaluateRule({
           trigger: rule.trigger,
           params: rule.params,
           readings: context.readings,
           predictions: context.predictions,
           chains: context.chains,
+          ratings,
+          dtcs,
         });
         if (!firing) continue;
 
@@ -362,6 +387,31 @@ export class AlertService {
     });
   }
 
+  /**
+   * The machine's ratings that its rated rules need (D59), resolved the way a formula's
+   * `@rating` is: the machine's own nameplate value, else its model's (D57). Read only
+   * when some rule asks, at the window's end.
+   */
+  private async ratingsFor(
+    m: EntityManager, context: WindowContext, rules: AlertRule[],
+  ): Promise<Map<string, RatingValue>> {
+    const names = [...new Set(rules
+      .filter((r) => r.trigger === 'signal-threshold')
+      .map((r) => (r.params as SignalThresholdParams).rating)
+      .filter((n): n is string => !!n))];
+    const out = new Map<string, RatingValue>();
+    if (!names.length) return out;
+    const profile = await m.getRepository(EquipmentProfile).findOne({
+      where: { tenantId: context.tenantId, sourceSystem: context.sourceSystem, externalId: context.externalId },
+    });
+    if (!profile) return out;
+    const resolved = await resolveParameters(m, context.tenantId, chainForEquipment(profile), names, context.windowEnd);
+    for (const [name, r] of resolved) {
+      if (r && typeof r.value === 'number') out.set(name, { value: r.value, unit: r.unit });
+    }
+    return out;
+  }
+
   /** Which of these rules cover this machine. */
   private async applicableTo(
     m: EntityManager, context: WindowContext, rules: AlertRule[],
@@ -387,6 +437,20 @@ export class AlertService {
       plantId: profile?.plantId ?? null, equipmentClassSlug: profile?.equipmentClassSlug ?? null,
     };
     return rules.filter((rule) => ruleCoversMachine(rule, machine));
+  }
+
+  /** The machine's active fault codes, lamp and severity from the 1.0 code list when it has the code. */
+  private async activeDtcs(m: EntityManager, context: WindowContext): Promise<NonNullable<EvaluationInput['dtcs']>> {
+    const rows: { code: string; protocol: string; spn: number | null; fmi: number | null; lampStatus: string; severity: Severity }[] = await m.query(
+      `SELECT e.code, e.protocol, e.spn, e.fmi,
+              COALESCE(NULLIF(mc.lamp, 'none'), e.lamp_status) AS "lampStatus",
+              COALESCE(mc.severity, e.severity) AS severity
+         FROM "device_dtc_episode" e
+         LEFT JOIN "dtc_master_catalog" mc ON mc.protocol = e.protocol AND mc.code = e.code
+        WHERE e.tenant_id = $1 AND e.source_system = $2 AND e.external_id = $3 AND e.status = 'active'`,
+      [context.tenantId, context.sourceSystem, context.externalId],
+    );
+    return rows;
   }
 
   private async validate(scope: RequestScope, input: RuleInput): Promise<void> {

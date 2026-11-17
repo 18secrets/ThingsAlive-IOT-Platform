@@ -10,7 +10,8 @@ import {
   KpiEnvelope, ClientScenario, ActivationView, ActivationAction, ActivationHistoryEvent, EquipmentRecommendation,
   Plant, EquipmentPlacementEvent,
 } from '../../lib/api';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 interface EquipmentBindingsModalProps {
   isOpen: boolean;
@@ -463,7 +464,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
 
                 {placementsOpen && (
                   <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
-                    {placementsLoading && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+                    {placementsLoading && <Skeleton lines={2} />}
                     {placementsError && <p className="text-xs text-rose-600 dark:text-rose-400">{placementsError}</p>}
                     {!placementsLoading && !placementsError && placements.length === 0 && (
                       <p className="text-xs text-slate-400">{t('bindings.noPlacementHistory')}</p>
@@ -474,7 +475,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                           {plantName(p.fromPlantId)} → {plantName(p.toPlantId)}
                           {p.reason ? `: "${p.reason}"` : ''}
                         </span>
-                        <span className="text-slate-400 shrink-0">{new Date(p.at).toLocaleString(appLocale())}</span>
+                        <span className="text-slate-400 shrink-0">{new Date(p.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                       </div>
                     ))}
                   </div>
@@ -526,7 +527,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
 
                 {historyOpen && (
                   <div className="mb-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/40 p-2.5 space-y-1.5 max-h-48 overflow-y-auto">
-                    {historyLoading && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
+                    {historyLoading && <Skeleton lines={2} />}
                     {historyError && <p className="text-xs text-rose-600 dark:text-rose-400">{historyError}</p>}
                     {!historyLoading && !historyError && history.length === 0 && (
                       <p className="text-xs text-slate-400">{t('bindings.noActivationHistory')}</p>
@@ -542,7 +543,7 @@ export const EquipmentBindingsModal: React.FC<EquipmentBindingsModalProps> = ({
                             : ` (→ ${t(`activationState.${h.toState}`, { defaultValue: h.toState })})`}
                           {h.reason ? `: "${h.reason}"` : ''}
                         </span>
-                        <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale())}</span>
+                        <span className="text-slate-400 shrink-0">{new Date(h.at).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</span>
                       </div>
                     ))}
                   </div>

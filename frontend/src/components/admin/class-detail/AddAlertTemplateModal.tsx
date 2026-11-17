@@ -250,7 +250,7 @@ export const AddAlertTemplateModal: React.FC<AddAlertTemplateModalProps> = ({
                   />
                 </div>
               </div>
-              <p className="text-[0.6875rem] text-slate-400">{t('alertModal.minOrMax')}</p>
+              <p className="text-[0.6875rem] text-slate-400">{t('alertModal.minOrMax')} {t('alertModal.negativeAllowed')}</p>
             </div>
           )}
 

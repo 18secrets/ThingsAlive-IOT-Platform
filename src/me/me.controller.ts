@@ -52,6 +52,9 @@ export class MeController {
       roleName: identity && 'roleName' in identity ? identity.roleName : null,
       tenantName: identity && 'tenantName' in identity ? identity.tenantName : null,
       tenantSince: identity && 'tenantSince' in identity ? identity.tenantSince : null,
+      // The zone the account's dates are shown in (MIN-12). Null for staff, who have
+      // no account of their own; the UI then keeps the browser's zone.
+      tenantTimeZone: identity && 'tenantTimeZone' in identity ? identity.tenantTimeZone : null,
       roles: scope.roles,
       isPlatformRole: scope.isPlatformRole,
       scope: {
@@ -74,6 +77,9 @@ export class MeController {
       // Which pages this caller's own role grants — empty for a platform role
       // (no page-access system yet) or when the app has no database at all.
       allowedTabs: (await this.roles?.myAllowedTabs(scope)) ?? [],
+      // The caller's own role: the screens tell the account's CEO / Manager from an Admin
+      // by it, not by the two management rights an Admin can also hold (TC_193).
+      roles: scope.roles,
     };
   }
 

@@ -1,12 +1,17 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { ActivationService } from '../../activation/services/activation.service';
+import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { RequestScope } from '../../auth/types/request-scope';
+import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { ClientEquipmentClass } from '../../client-catalog/entities/client-equipment-class.entity';
+import { ClientEquipmentTemplate } from '../../equipment-template/entities/client-equipment-template.entity';
 import { runTenantSpanning, withTenantId } from '../../scope/tenant-session';
 import { EquipmentProjection } from '../../projection/entities/equipment-projection.entity';
 import {
   CLIENT_SOURCE_SYSTEM, EquipmentProfile, EquipmentStatus, ServiceTier,
 } from '../equipment-profile.entity';
+import { EquipmentModel } from '../entities/equipment-model.entity';
 import { EquipmentPlacementEvent } from '../entities/equipment-placement-event.entity';
 import { Plant } from '../entities/plant.entity';
 
@@ -62,6 +67,35 @@ export async function pinnedClassVersion(
 }
 
 /**
+ * The model a machine names (D57): one of its own account's templates, of the machine's
+ * own class when both say which class they are. A 5 HP pump model on a motor class would
+ * hand the machine ratings for something it is not; the motor KPIs would compute, wrongly.
+ *
+ * The database refuses another account's model by itself (the key includes the tenant);
+ * this says so in a sentence first.
+ */
+export async function resolveModel(
+  m: EntityManager, tenantId: string, modelId: string | null, classSlug: string | null,
+): Promise<string | null> {
+  if (modelId === null || modelId === '') return null;
+  const notFound = () => new NotFoundException(`No equipment model "${modelId}" in this account.`);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)) throw notFound();
+  const model = await m.getRepository(ClientEquipmentTemplate).findOne({ where: { tenantId, id: modelId } });
+  if (!model) throw notFound();
+  if (model.equipmentClassSlug && classSlug) {
+    const cls = await m.getRepository(ClientEquipmentClass).findOne({ where: { tenantId, slug: classSlug } });
+    const machineClass = cls?.templateSlug ?? classSlug;
+    if (model.equipmentClassSlug !== machineClass && model.equipmentClassSlug !== classSlug) {
+      throw new BadRequestException(
+        `"${model.name}" is a model of "${model.equipmentClassSlug}", and this machine is a "${classSlug}". `
+          + 'Its rated figures would describe a different machine.',
+      );
+    }
+  }
+  return model.id;
+}
+
+/**
  * The equipment register, owned by the client (tasks P1-85, P1-86).
  *
  * Two kinds of row live here and they are deliberately the same shape. A machine
@@ -79,7 +113,12 @@ export async function pinnedClassVersion(
 export class EquipmentService {
   private readonly logger = new Logger(EquipmentService.name);
 
-  constructor(private readonly ds: DataSource) {}
+  constructor(
+    private readonly ds: DataSource,
+    // Optional so the register still stands on its own where activation is not wired
+    // (a spec constructing it directly); in the app it is always there.
+    @Optional() private readonly activation?: ActivationService,
+  ) {}
 
   async list(
     scope: RequestScope,
@@ -121,7 +160,7 @@ export class EquipmentService {
     }
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
 
-    return withTenantId(this.ds, tenantId, async (m) => {
+    const created = await withTenantId(this.ds, tenantId, async (m) => {
       const repo = m.getRepository(EquipmentProfile);
       const existing = await repo.findOne({
         where: { tenantId, sourceSystem: CLIENT_SOURCE_SYSTEM, externalId: input.code },
@@ -157,13 +196,16 @@ export class EquipmentService {
       }
       return saved;
     });
+    await this.adoptClassScenarios(scope, tenantId, created);
+    return created;
   }
 
   async update(
     scope: RequestScope, ref: AssetRef, input: Partial<EquipmentInput>, onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile> {
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
-    return withTenantId(this.ds, tenantId, async (m) => {
+    let classChanged = false;
+    const updated = await withTenantId(this.ds, tenantId, async (m) => {
       const asset = await this.find(m, tenantId, ref);
       const classBefore = asset.equipmentClassSlug;
 
@@ -172,6 +214,12 @@ export class EquipmentService {
         if (input[key] !== undefined) (asset as any)[key] = input[key] ?? null;
       }
       if (input.tier !== undefined) asset.tier = input.tier;
+      // A change of class re-checks the model the machine names: a pump model left on a
+      // machine that became a motor would hand it ratings for something it is not.
+      if (asset.equipmentClassSlug !== classBefore) {
+        const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+        if (named) await resolveModel(m, tenantId, named.modelId, asset.equipmentClassSlug);
+      }
       // Only a change of class moves the version. Re-pinning on every edit would quietly
       // move a machine onto a newer template the moment somebody fixed a typo in its name.
       if (asset.equipmentClassSlug !== classBefore) {
@@ -180,7 +228,88 @@ export class EquipmentService {
       // Placement is not edited here. It has its own method because it has its own
       // consequences, and burying it among seven descriptive fields would hide them.
       asset.updatedBy = scope.userId;
+      classChanged = asset.equipmentClassSlug !== classBefore;
       return m.getRepository(EquipmentProfile).save(asset);
+    });
+    if (classChanged) await this.adoptClassScenarios(scope, tenantId, updated);
+    return updated;
+  }
+
+  /**
+   * Switches on the class's scenarios for a machine that has just been given a class
+   * (test report OB-1b: a new machine said "No scenarios adopted", and onboarding stayed
+   * at "no active scenario" until somebody found the activation screen for each one).
+   *
+   * Through the activation service, so it is exactly what a person activating them
+   * would have done: the blockers that still stand (a sensor not bound yet, too little
+   * history) are recorded on the row and in the history, not hidden, and a scenario that
+   * can never run on this machine is refused there and skipped here. A scenario the
+   * account switched off for the class (`enabled = false`), or one this machine already
+   * has a row for in any state, is left alone: a decision somebody made is not undone by
+   * a class change.
+   *
+   * After the machine's own transaction has committed, because activation reads the
+   * machine. A failure here never fails the create: the machine exists either way, and
+   * its scenarios can still be switched on by hand.
+   */
+  private async adoptClassScenarios(scope: RequestScope, tenantId: string, asset: EquipmentProfile): Promise<void> {
+    if (!this.activation || !asset.equipmentClassSlug) return;
+    const candidates = await withTenantId(this.ds, tenantId, async (m) => {
+      const scenarios = await m.getRepository(ClientScenario).find({
+        where: { tenantId, clientEquipmentClassSlug: asset.equipmentClassSlug!, enabled: true, status: 'active' },
+        order: { slug: 'ASC' },
+      });
+      const existing = new Set((await m.getRepository(EquipmentScenario).find({
+        where: { tenantId, sourceSystem: asset.sourceSystem, externalId: asset.externalId },
+      })).map((r) => r.clientScenarioSlug));
+      return scenarios.filter((sc) => !existing.has(sc.slug));
+    });
+    // Staff acting on an account act in it; the history names who did it.
+    const actor: RequestScope = scope.isPlatformRole ? { ...scope, tenantId, isPlatformRole: false } : scope;
+    for (const sc of candidates) {
+      try {
+        await this.activation.apply(actor, 'activate', {
+          sourceSystem: asset.sourceSystem, externalId: asset.externalId, clientScenarioSlug: sc.slug,
+        }, { reason: 'Adopted with the equipment class' });
+      } catch (error) {
+        this.logger.warn(`${sc.slug} not adopted on ${asset.externalId}: ${(error as Error).message}`);
+      }
+    }
+  }
+
+  /** The model this machine names (D57), or null. */
+  async model(scope: RequestScope, ref: AssetRef, onBehalfOfTenantId?: string): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const named = await m.getRepository(EquipmentModel).findOne({ where: { tenantId, equipmentId: asset.id } });
+      return { modelId: named?.modelId ?? null };
+    });
+  }
+
+  /**
+   * Names the machine's model, or clears it with null (D57). Its rated figures, and a
+   * pump's duty curve, are read from the model from the next evaluation on; a value set
+   * on the machine itself still wins. Idempotent: naming the model it already has
+   * changes nothing.
+   */
+  async setModel(
+    scope: RequestScope, ref: AssetRef, modelId: string | null, onBehalfOfTenantId?: string,
+  ): Promise<{ modelId: string | null }> {
+    const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    return withTenantId(this.ds, tenantId, async (m) => {
+      const asset = await this.find(m, tenantId, ref);
+      const resolved = await resolveModel(m, tenantId, modelId, asset.equipmentClassSlug);
+      const repo = m.getRepository(EquipmentModel);
+      if (resolved === null) {
+        await repo.delete({ tenantId, equipmentId: asset.id });
+      } else {
+        await repo.upsert(
+          { tenantId, equipmentId: asset.id, modelId: resolved, assignedBy: scope.userId },
+          ['tenantId', 'equipmentId'],
+        );
+      }
+      return { modelId: resolved };
     });
   }
 

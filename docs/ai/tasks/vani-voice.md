@@ -2,7 +2,7 @@
 
 Source: *Vani × Things Alive IoT Platform — Integration Guide*, 3 Nov 2026 (Vani side live).
 Since 5 Nov also Deepak's *Phase 0 Answers*, *Scope Review* and the *Machine Lane Spec* v0.1
-(3 Nov), whose §3 is the contract the live service was tested against. Decisions: D56, D57.
+(3 Nov), whose §3 is the contract the live service was tested against. Decisions: D60, D61.
 Branch: `feature/vani-voice`, off `origin/main` @ `2360b1b`. Merging is Deepak's.
 Plan page: https://claude.ai/artifact/LwrCLUXqT6vkgqgmY9whYq
 
@@ -14,7 +14,7 @@ Status vocabulary follows `task-register.md`: an item is **Complete** only once 
 | # | Step | State | Evidence |
 |---|---|---|---|
 | 1 | Platform token from Deepak | **Waiting on handover** — it exists (Vani's own `VANI_PLATFORM_TOKEN`); Deepak hands it to the team lead out-of-band | Phase 0 Answers §1 |
-| 2 | Severity mapping for our `high` | **Decided** — `warning` (D56); `VANI_HIGH_SEVERITY` stays unset | `src/vani/vani-severity.ts` |
+| 2 | Severity mapping for our `high` | **Decided** — `warning` (D60); `VANI_HIGH_SEVERITY` stays unset | `src/vani/vani-severity.ts` |
 | 3 | Callback URL and its secret | **Agreed** — `X-Vani-Secret`, Vani adds it before the live test. Left: we generate the secret, hand it over out-of-band, send the final URL | `src/vani/vani-outcome.service.ts` |
 | 4 | `vani_account_link` | In progress (on branch) | `1763600000000-VaniVoice.ts`, `test/vani-voice.spec.ts` |
 | 5 | `vani_machine_link` | In progress (on branch) | same |
@@ -34,7 +34,7 @@ Status vocabulary follows `task-register.md`: an item is **Complete** only once 
 Commits `cb6a297` (steps 4–9) and the steps 10–12 commit after it. Full suite on the branch
 after steps 10–12: 2597 passed, 1 skipped, 0 failed.
 
-## Lane D — acting on the customer's decision (D57), built 2026-11-06
+## Lane D — acting on the customer's decision (D61), built 2026-11-06
 
 Vani's outcome callback may carry `customer_decision`. `src/vani/vani-decision.ts` acts
 on it after the outcome is stored, once per call (`vani_call_action`, migration
@@ -61,7 +61,7 @@ and the row in one transaction.
 - Vani has not built `customer_decision` yet. The field name and the four values are
   the scope review's; confirm with Deepak before the first live call that uses it.
 
-## Lane B — calls about predictions (D57), built 2026-11-06
+## Lane B — calls about predictions (D61), built 2026-11-06
 
 `src/vani/vani-prediction-queue.ts`, run by the shift runner straight after the alert
 pass. A prediction earns a `trigger_action` call when it is **live, `high` or
@@ -87,7 +87,7 @@ day, held by `uq_vani_call_prediction_day`.
   text, as the guide does, plus a separate `confidence`. Not yet sent to the live
   service: confirm with Deepak that it accepts this `trigger_action` body first.
 
-## Lane C — the fuller snapshot (D57), built 2026-11-06, off by default
+## Lane C — the fuller snapshot (D61), built 2026-11-06, off by default
 
 With `VANI_SNAPSHOT_DETAIL=true`, each machine in `/platform/account-snapshot` also
 carries (`src/vani/vani-snapshot.ts`):
@@ -144,7 +144,7 @@ before setting anything. Nothing is set until the branch is merged and the token
 | `VANI_BASE_URL` | scheduler | `https://vani-service-production.up.railway.app` |
 | `VANI_PLATFORM_TOKEN` | scheduler | From Deepak, out-of-band. Never logged. |
 | `VANI_CALLS_ENABLED` | scheduler | `true` to run the sender. Off by default. |
-| `VANI_HIGH_SEVERITY` | api + scheduler | Leave unset: `warning` is decided (D56) |
+| `VANI_HIGH_SEVERITY` | api + scheduler | Leave unset: `warning` is decided (D60) |
 | `VANI_CALLBACK_SECRET` | api | Shared with Vani; sent as `X-Vani-Secret`. Unset, every callback gets 503. |
 
 Unset, nothing is sent and queued requests wait without spending their attempts. A request
@@ -153,7 +153,7 @@ older than 24 hours is never sent.
 ## Open, and blocking something
 
 - **Token** — blocks every live call (step 17). Exists; waiting on Deepak's handover.
-- ~~`high` → `critical` or `warning`~~ — `warning`, D56.
+- ~~`high` → `critical` or `warning`~~ — `warning`, D60.
 - ~~Callback authentication~~ — agreed 5 Nov: `X-Vani-Secret`, added on Vani's side before
   the live test. Until both hold it the endpoint answers 503 and Vani keeps the outcome.
 - **Railway approval names the wrong service** — see the configuration section.
@@ -187,7 +187,7 @@ older than 24 hours is never sent.
 - ~~Companion spec~~ — the bundle's four PDFs are in `docs/ai/vani/` (2026-11-06). The
   Markdown copies and Deepak's own README have not reached us; add them there if they do.
 
-## Phase 6 — analysis tool: built on branch, approved 5 Nov (D57), live after Phase 5
+## Phase 6 — analysis tool: built on branch, approved 5 Nov (D61), live after Phase 5
 
 Deepak confirmed Vani can send the caller's E.164 number and a `conversation_id` with each
 question. Whether registered numbers are 2.0 users is settled per account at registration.

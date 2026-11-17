@@ -13,7 +13,7 @@ export interface SnapshotMachine {
   machine_id: string;
   name: string;
   status: string;
-  /** The rest only with `VANI_SNAPSHOT_DETAIL=true` (D57, Lane C). */
+  /** The rest only with `VANI_SNAPSHOT_DETAIL=true` (D61, Lane C). */
   recent_alerts?: SnapshotAlert[];
   open_work_orders?: SnapshotWorkOrder[];
   open_predictions?: SnapshotPrediction[];
@@ -160,7 +160,7 @@ export class VaniSnapshotPusher {
  *
  * With `detail`, each machine also carries its recent alerts and what became of them,
  * its open jobs, and the predictions saying something — the spec's §4 named-machine
- * review, so Vani can walk an account before anyone asks a question (D57, Lane C).
+ * review, so Vani can walk an account before anyone asks a question (D61, Lane C).
  * Still only what 2.0 holds: no health card, because there is no health score.
  */
 export async function snapshotMachines(

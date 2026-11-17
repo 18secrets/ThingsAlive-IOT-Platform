@@ -23,11 +23,18 @@ export interface ExecContext {
   siteBoundary?: SiteBoundary | null;
   /** The zone a QGEO2 operator names, already looked up among the machine's zones. */
   zoneShape?: ZoneShape | null;
+  /** The machine's model's duty curve (D58), in point order: [head_m, flow_lpm, input_kw]
+   * per point, indexed by `CURVE_COLUMNS[...].code`. */
+  dutyCurve?: number[][] | null;
 }
 
 export type ExecValue =
   | { ok: true; value: number }
-  | { ok: false; reason: 'no_readings' | 'undefined_result' | BaselineReason };
+  | { ok: false; reason: 'no_readings' | 'undefined_result' | CurveReason | BaselineReason };
+
+/** D58. Outside the printed range there is no answer, not an extrapolated one; and a
+ * column that turns back on itself has two answers at some values, so none is given. */
+export type CurveReason = 'out_of_curve' | 'curve_not_monotonic';
 
 export interface ExecutorEntry {
   /** `args[i]` is a resolved series (window-bounded readings) for a `'series'`
@@ -255,7 +262,70 @@ export const EXECUTOR_REGISTRY: Readonly<Record<string, ExecutorEntry>> = Object
       return t.ok === false ? t : { ok: true, value: t.inside };
     },
   },
+
+  // ---------------------------------------------------------------------- QSCAL1
+  // Arguments arrive already evaluated. If any of them could not be evaluated, the
+  // evaluator has already returned without calling these, `if` included: an untaken
+  // branch whose parameter is unset still makes the formula not_configured. The
+  // workbook's own completeness rule is "a formula activates only when all its
+  // parameters exist", and a formula whose answer depended on which branch ran would
+  // look configured on Monday and not on Tuesday.
+  abs: { run: (_q, [x]) => finite(Math.abs(x)) },
+  least: { run: (_q, [a, b]) => finite(Math.min(a, b)) },
+  greatest: { run: (_q, [a, b]) => finite(Math.max(a, b)) },
+  clamp: {
+    run: (_q, [x, lo, hi]) => {
+      // Literal bounds out of order are refused at compile. Parameter bounds can only be
+      // caught here, and picking either bound would be a confident wrong answer.
+      if (lo > hi) return UNDEFINED_RESULT;
+      return finite(Math.min(Math.max(x, lo), hi));
+    },
+  },
+  and: { run: (_q, [a, b]) => ({ ok: true, value: a !== 0 && b !== 0 ? 1 : 0 }) },
+  or: { run: (_q, [a, b]) => ({ ok: true, value: a !== 0 || b !== 0 ? 1 : 0 }) },
+  if: { run: (_q, [cond, then, otherwise]) => finite(cond !== 0 ? then : otherwise) },
+
+  // ------------------------------------------------------------------------- D58
+  curve_at: {
+    run: (_q, [column, by, x], _d, ctx) => {
+      const points = ctx.dutyCurve;
+      if (!points || points.length < 2) return UNDEFINED_RESULT; // the evaluator refuses this case first
+      return curveAt(points, column, by, x);
+    },
+  },
 });
+
+/**
+ * Linear between the two printed points either side of `x`, in the `by` column. The
+ * curve's own order is rising flow; reading by head walks it backwards, reading by
+ * power may walk either way, and both are fine as long as the `by` column is strictly
+ * one-directional. At exactly a printed value the printed figure is returned.
+ */
+export function curveAt(points: number[][], column: number, by: number, x: number): ExecValue {
+  if (!Number.isFinite(x)) return UNDEFINED_RESULT;
+  const xs = points.map((p) => p[by]);
+  const rising = xs[1] > xs[0];
+  for (let i = 1; i < xs.length; i += 1) {
+    if (rising ? !(xs[i] > xs[i - 1]) : !(xs[i] < xs[i - 1])) return { ok: false, reason: 'curve_not_monotonic' };
+  }
+  const lo = Math.min(xs[0], xs[xs.length - 1]);
+  const hi = Math.max(xs[0], xs[xs.length - 1]);
+  if (x < lo || x > hi) return { ok: false, reason: 'out_of_curve' };
+  for (let i = 1; i < xs.length; i += 1) {
+    const [a, b] = [xs[i - 1], xs[i]];
+    if ((x - a) * (x - b) <= 0) {
+      const t = b === a ? 0 : (x - a) / (b - a);
+      return finite(points[i - 1][column] + t * (points[i][column] - points[i - 1][column]));
+    }
+  }
+  return { ok: false, reason: 'out_of_curve' };
+}
+
+/** A NaN reaching a scalar function came from arithmetic upstream. Passing it on would
+ * print as a number on a KPI tile; `undefined_result` says there is no answer. */
+function finite(value: number): ExecValue {
+  return Number.isFinite(value) ? { ok: true, value } : UNDEFINED_RESULT;
+}
 
 function zonePositions([lat, lng]: Reading[][], ctx: ExecContext): Position[] {
   return pairPositions(windowed(lat, ctx.windowFrom, ctx.windowTo), windowed(lng, ctx.windowFrom, ctx.windowTo));

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Search, Plus, AlertCircle, Radio, Edit2, Ban, Download, Send } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +18,8 @@ import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { SortLabel } from '../common/ListTable';
 import { sortRows, useSort } from '../../lib/useSort';
+import { Skeleton } from '../common/Skeleton';
+import { ClassRequestModal, MyClassRequests, useMyClassRequests } from '../catalog/ClassRequests';
 
 const STATUS_VALUES = ['active', 'retired'];
 
@@ -91,6 +93,10 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
 }) => {
   const { t } = useTranslation('equipment');
   const { t: ts } = useTranslation('shared');
+  const { t: tc } = useTranslation('catalog');
+  // A class the library lacks is asked for here, or from the register form's hint (OB-6).
+  const classRequests = useMyClassRequests();
+  const [requestingClass, setRequestingClass] = useState<{ manufacturer?: string; model?: string } | null>(null);
   const statusOptions = STATUS_VALUES.map((value) => ({ label: t(`status.${value}`), value }));
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -149,17 +155,31 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
   // One definition for both views (cards or list on every list page).
   const viewColumns: ListColumn[] = [
     // Ten columns: past these widths the list scrolls sideways, as the table before it did.
-    { label: t('equipmentList.col.code'), sortKey: 'code', minWidth: 110 },
-    { label: t('equipmentList.col.name'), sortKey: 'name', minWidth: 170 },
-    { label: t('equipmentList.col.class'), sortKey: 'class', minWidth: 190 },
-    { label: t('equipmentList.col.plant'), sortKey: 'plant', minWidth: 170 },
-    { label: t('equipmentList.col.manufacturer'), minWidth: 130 },
-    { label: t('equipmentList.col.model'), minWidth: 110 },
-    { label: t('equipmentList.col.serial'), minWidth: 120 },
-    { label: t('equipmentList.col.tier') },
-    { label: t('equipmentList.col.status'), sortKey: 'status' },
-    { label: ts('listCol.actions'), width: 130 },
+    // Sized to fit a desktop without scrolling sideways (TC_190): eleven columns whose
+    // minimums summed past the panel meant the scrollbar sat under the last row, a page
+    // below the pagination's reach. Only the three names share the room: a minimum on a
+    // flexible column is raised without the excess being taken back from the others, so
+    // the short columns are fixed rather than flexible.
+    { label: t('equipmentList.col.code'), sortKey: 'code', width: 90 },
+    { label: t('equipmentList.col.name'), sortKey: 'name', grow: 2, minWidth: 130 },
+    { label: t('equipmentList.col.class'), sortKey: 'class', grow: 2, minWidth: 130 },
+    { label: t('equipmentList.col.plant'), sortKey: 'plant', grow: 2, minWidth: 120 },
+    { label: t('equipmentList.col.manufacturer'), width: 110 },
+    { label: t('equipmentList.col.model'), width: 90 },
+    { label: t('equipmentList.col.serial'), width: 120 },
+    { label: t('equipmentList.col.tier'), width: 90 },
+    { label: t('equipmentList.col.status'), sortKey: 'status', width: 100 },
+    { label: ts('listCol.actions'), width: 110, align: 'right' },
   ];
+  // The table's tallest, from the screen's height (TC_190): on a screen too narrow for its
+  // eleven columns it scrolls sideways, and that scrollbar has to be on screen with the
+  // pagination, not under the tenth row. The header, toolbar and pagination take ~320 px.
+  const [tableMaxHeight, setTableMaxHeight] = useState(() => Math.max(360, window.innerHeight - 320));
+  useEffect(() => {
+    const onResize = () => setTableMaxHeight(Math.max(360, window.innerHeight - 320));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const viewCells = (item: EquipmentProfile) => [
     <span className="font-mono text-slate-500 dark:text-slate-400">{item.externalId}</span>,
     <span className="font-semibold text-slate-900 dark:text-white">{item.name ?? <span className="text-slate-400 italic">{t('common.unnamed')}</span>}</span>,
@@ -182,7 +202,7 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
                       }`}>
                         {t(`status.${item.status}`, { defaultValue: item.status })}
                       </span></>,
-    <><div className="flex items-center gap-1.5">
+    <><div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => { setEditingEquipment(item); setIsModalOpen(true); }}
                           className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
@@ -327,6 +347,16 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
             <span>{importing ? t('equipmentList.importing') : t('equipmentList.importFromLegacy')}</span>
           </button>
 
+          <button
+            id="request-class-btn"
+            onClick={() => setRequestingClass({})}
+            title={tc('classRequests.askSubtitle')}
+            className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+          >
+            <Send className="w-4 h-4" />
+            <span>{tc('classRequests.askButton')}</span>
+          </button>
+
           {/* Add Equipment Button */}
           <button
             id="add-equipment-btn"
@@ -349,9 +379,9 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
       {/* Main Equipment Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filteredList.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('equipmentList.empty')}</div>
+          loading ? <Skeleton lines={4} className="py-4" /> : <div className="py-8 text-center text-slate-400 text-sm">{t('equipmentList.empty')}</div>
         ) : viewMode === 'list' ? (
-          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} />
+          <ListTable bare columns={viewColumns} sort={sort} onSort={onSort} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} onOpen={openPage} maxHeight={tableMaxHeight} />
         ) : (
           <div className="p-4"><RecordCards columns={viewColumns} rows={paginatedList} rowKey={(item) => item.id} cells={viewCells} actionsIndex={9} onOpen={openPage} /></div>
         )}
@@ -381,7 +411,17 @@ export const EquipmentManagement: React.FC<EquipmentManagementProps> = ({
         </div>
       </Modal>
 
+      <MyClassRequests requests={classRequests.requests} />
+
+      <ClassRequestModal
+        isOpen={!!requestingClass}
+        initial={requestingClass ?? undefined}
+        onClose={() => setRequestingClass(null)}
+        onSent={() => classRequests.reload()}
+      />
+
       <AddEquipmentModal
+        onRequestClass={(prefill) => setRequestingClass(prefill)}
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEquipment(null); }}
         onSave={handleCreate}

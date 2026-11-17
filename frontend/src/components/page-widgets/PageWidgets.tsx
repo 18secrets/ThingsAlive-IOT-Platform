@@ -4,17 +4,18 @@ import { ScrollRows } from '../common/ScrollRows';
 import { useNavigate } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import i18n from '../../i18n';
-import { AlertTriangle, Bell, CheckCircle2, Wrench } from 'lucide-react';
+import { AlertTriangle, Bell, CheckCircle2, ListChecks, Wrench } from 'lucide-react';
 import {
   PageWidget, PageKpiWidgetData, PageSignalChartData, PageForecastChartData, PageReadinessRow, PageAlertRow, PageWorkOrderRow,
   PageServiceDueData, PageFailureModeRow, PageRecommendationRow, PageMachineRow, PageSchematicData,
   PageParameterRow, ParameterScope,
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
+import { PanelRow, PanelRows } from '../common/PanelRow';
 import { RingGauge } from '../common/RingGauge';
 import { Sparkline } from '../dashboard/Sparkline';
 import { severityTone } from '../common/statusTone';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 /** Every widget a composed page (machine or site) can render, shared because the
  *  shape — `PageWidget[]` with a `readiness`/`reason` a widget can't fill — is the
@@ -37,12 +38,17 @@ const Unfilled: React.FC<{ reason?: string }> = ({ reason }) => {
   return <p className="text-xs text-slate-400 dark:text-slate-500">{reasonText(reason, t)}</p>;
 };
 
-const WidgetShell: React.FC<{ title: string | null; children: React.ReactNode; count?: number }> = ({ title, children, count }) => (
+const WidgetShell: React.FC<{
+  title: string | null; children: React.ReactNode; count?: number;
+  /** A panel-style widget's icon, so it heads like the machine page's panels beside it. */
+  icon?: React.FC<{ className?: string }>;
+}> = ({ title, children, count, icon: Icon }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs space-y-2">
     {/* The count with the title: a list that scrolls past ten rows still says how long it is. */}
     {title && (
-      <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-        {title}{count != null && count > 0 && <span className="ml-1.5 font-normal text-slate-500">({count})</span>}
+      <h3 className={`font-semibold text-slate-900 dark:text-white text-sm ${Icon ? 'flex items-center gap-2' : ''}`}>
+        {Icon && <Icon className="w-4 h-4 text-slate-400 shrink-0" />}
+        <span>{title}{count != null && count > 0 && <span className="ml-1.5 font-normal text-slate-500">({count})</span>}</span>
       </h3>
     )}
     {children}
@@ -80,11 +86,11 @@ function WindowNote({ window }: { window: { from: string; to: string } | null })
   const to = Date.parse(window.to);
   const hours = Math.round((to - from) / 3_600_000);
   const endsNow = Math.abs(Date.now() - to) < 2 * 3_600_000;
-  const day = (ms: number) => new Date(ms).toLocaleDateString(appLocale(), { day: 'numeric', month: 'short' });
+  const day = (ms: number) => new Date(ms).toLocaleDateString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short' });
   const label = !endsNow ? t('widgets.windowRange', { from: day(from), to: day(to) })
     : hours < 48 ? t('widgets.windowLastHours', { count: hours })
       : t('widgets.windowLastDays', { count: Math.round(hours / 24) });
-  const exact = `${new Date(from).toLocaleString(appLocale())} – ${new Date(to).toLocaleString(appLocale())}`;
+  const exact = `${new Date(from).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – ${new Date(to).toLocaleString(appLocale(), { timeZone: appTimeZone() })}`;
   return <p className="text-xs text-slate-500" title={exact}>{label}</p>;
 }
 
@@ -202,7 +208,7 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
         )}
       </div>
       <p className="text-xs text-slate-400">
-        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(appLocale()), model: data.model.key })}
+        {t('widgets.forecastAt', { at: new Date(data.generatedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }), model: data.model.key })}
       </p>
     </WidgetShell>
   );
@@ -211,19 +217,20 @@ function ForecastChartWidget({ widget }: { widget: PageWidget }) {
 function ReadinessListWidget({ widget }: { widget: PageWidget }) {
   const { t } = useTranslation('equipment');
   if (widget.readiness !== 'ready' || !widget.data) {
-    return <WidgetShell title={widget.title ?? t('widgets.signalReadiness')}><Unfilled reason={widget.reason} /></WidgetShell>;
+    return <WidgetShell title={widget.title ?? t('widgets.signalReadiness')} icon={ListChecks}><Unfilled reason={widget.reason} /></WidgetShell>;
   }
   const rows = widget.data as PageReadinessRow[];
   return (
-    <WidgetShell title={widget.title ?? t('widgets.signalReadiness')}>
-      <div className="space-y-1.5">
+    <WidgetShell title={widget.title ?? t('widgets.signalReadiness')} icon={ListChecks}>
+      <PanelRows>
         {rows.map((r, i) => (
-          <div key={`${r.signal}-${i}`} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300 truncate">{r.signal}</span>
-            <Chip tone={READINESS_TONE[r.readiness]}>{r.readiness === 'ready' ? t('readiness.ready') : reasonText(r.reason, t)}</Chip>
-          </div>
+          <PanelRow
+            key={`${r.signal}-${i}`}
+            title={<span className="font-mono text-xs">{r.signal}</span>}
+            right={<Chip tone={READINESS_TONE[r.readiness]}>{r.readiness === 'ready' ? t('readiness.ready') : reasonText(r.reason, t)}</Chip>}
+          />
         ))}
-      </div>
+      </PanelRows>
     </WidgetShell>
   );
 }
@@ -243,7 +250,7 @@ function AlertListWidget({ widget }: { widget: PageWidget }) {
             <div key={a.id} className="flex items-start justify-between gap-2 border border-slate-100 dark:border-slate-800 rounded-lg p-2.5">
               <div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{a.message}</p>
-                <p className="text-xs text-slate-500">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale())}</p>
+                <p className="text-xs text-slate-500">{a.signal ?? t('widgets.noSignal')} · {new Date(a.raisedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() })}</p>
               </div>
               <Chip icon={AlertTriangle} tone={severityTone(a.severity)}>{t(`severity.${a.severity}`, { defaultValue: a.severity })}</Chip>
             </div>
@@ -270,7 +277,7 @@ function WorkOrderListWidget({ widget }: { widget: PageWidget }) {
               <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{o.title}</p>
-                <p className="text-xs text-slate-500">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale()) })}` : ''}</p>
+                <p className="text-xs text-slate-500">{t(`workOrderStatus.${o.status}`, { defaultValue: o.status })}{o.dueAt ? ` · ${t('widgets.dueOn', { date: new Date(o.dueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) })}` : ''}</p>
               </div>
             </div>
           ))}
@@ -292,7 +299,7 @@ function ServiceDueWidget({ widget }: { widget: PageWidget }) {
         {data.hoursRemaining != null ? t('widgets.hoursRemaining', { hours: data.hoursRemaining.toFixed(0) }) : '—'}
       </div>
       <p className="text-xs text-slate-400">
-        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString(appLocale()) }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
+        {data.nextDueAt ? t('widgets.due', { date: new Date(data.nextDueAt).toLocaleDateString(appLocale(), { timeZone: appTimeZone() }) }) : t('widgets.noDueDate')} · {data.basis ?? t('widgets.basisUnknown')}
       </p>
     </WidgetShell>
   );

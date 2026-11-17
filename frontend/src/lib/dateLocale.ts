@@ -14,3 +14,21 @@ export function appLocale(): string {
   const lang = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
   return `${lang}-IN`;
 }
+
+/**
+ * The zone every date on screen is written in: the account's own, once it has one
+ * (test report MIN-12). Left unset — staff, who have no account, or an account that
+ * never chose — it is undefined, and Intl keeps the browser's zone as before.
+ *
+ * Module state, not React state, because 73 date calls read it while formatting and
+ * none of them is a component; it is set once at sign-in, before the first screen draws.
+ */
+let accountZone: string | undefined;
+
+export function setAccountTimeZone(zone: string | null | undefined): void {
+  accountZone = zone || undefined;
+}
+
+export function appTimeZone(): string | undefined {
+  return accountZone;
+}

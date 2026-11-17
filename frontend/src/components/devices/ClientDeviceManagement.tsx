@@ -12,7 +12,8 @@ import { Chip } from '../common/Chip';
 import { Modal } from '../common/Modal';
 import { ExportCsvButton } from '../common/ExportCsvButton';
 import { sortRows, useSort } from '../../lib/useSort';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { Skeleton } from '../common/Skeleton';
 
 const STATE_VALUES: MyDevice['state'][] = ['in-stock', 'assigned', 'retired'];
 
@@ -169,7 +170,7 @@ export const ClientDeviceManagement: React.FC<ClientDeviceManagementProps> = ({
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-sm">{loading ? t('common.loading') : t('devices.empty')}</div>
+          loading ? <Skeleton lines={4} className="py-4" /> : <div className="py-8 text-center text-slate-400 text-sm">{t('devices.empty')}</div>
         ) : viewMode === 'list' ? (
           <ListTable bare sort={sort} onSort={(key) => { toggle(key as typeof sort.key); pager.setPage(1); }} columns={viewColumns} rows={pagedRows} rowKey={(d) => d.imei} cells={viewCells} />
         ) : (
@@ -215,7 +216,7 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
   }, [imei]);
 
   if (error) return <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>;
-  if (!windows) return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  if (!windows) return <Skeleton />;
   if (windows.length === 0) {
     return <p className="text-sm text-slate-400">{t('devices.noHealth')}</p>;
   }
@@ -227,8 +228,8 @@ const DeviceHealth: React.FC<{ imei: string }> = ({ imei }) => {
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-600 dark:text-slate-300">
               {/* The end's date too when the window crosses midnight (test report COS-4). */}
-              {new Date(w.windowStart).toLocaleString(appLocale())} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
-                ? new Date(w.windowEnd).toLocaleTimeString(appLocale()) : new Date(w.windowEnd).toLocaleString(appLocale())}
+              {new Date(w.windowStart).toLocaleString(appLocale(), { timeZone: appTimeZone() })} – {new Date(w.windowStart).toDateString() === new Date(w.windowEnd).toDateString()
+                ? new Date(w.windowEnd).toLocaleTimeString(appLocale(), { timeZone: appTimeZone() }) : new Date(w.windowEnd).toLocaleString(appLocale(), { timeZone: appTimeZone() })}
             </span>
             <Chip tone={HEALTH_TONE[w.state] ?? 'slate'}>{t(`linkState.${w.state}`, { defaultValue: w.state })}</Chip>
           </div>

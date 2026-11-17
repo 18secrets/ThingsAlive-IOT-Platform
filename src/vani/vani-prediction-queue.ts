@@ -28,7 +28,7 @@ export interface PredictionWindow {
 }
 
 /**
- * Which predictions earn a phone call (decided 2026-11-06, D57 Lane B): live, high or
+ * Which predictions earn a phone call (decided 2026-11-06, D61 Lane B): live, high or
  * critical, and full confidence. Live because a replay is history being re-scored, not
  * news. Full confidence because "partial" means a signal the scenario needs was
  * missing, and a customer rung on a half-read machine is a customer who stops trusting
@@ -41,7 +41,7 @@ export function worthACall(p: ScoredPrediction): boolean {
 }
 
 /**
- * Asks Vani to call about a prediction that raised no alert (D57, Lane B), as
+ * Asks Vani to call about a prediction that raised no alert (D61, Lane B), as
  * `trigger.kind = trigger_action`. Run by the shift runner after the alert pass, so
  * it can see which predictions an alert already covers.
  *
@@ -105,7 +105,7 @@ export async function queueVaniPredictionCalls(
             alert_title: `${name} risk on ${link.spoken_name}`,
             summary: statement,
             prediction: statement,
-            // Its own field (D57): how much of the machine the prediction was read from.
+            // Its own field (D61): how much of the machine the prediction was read from.
             confidence: p.confidence,
           },
           ...(link.callback_url ? { callback_url: link.callback_url } : {}),

@@ -7,7 +7,7 @@ import {
 } from '../../lib/api';
 import { Chip } from '../common/Chip';
 import { ChatMarkdown } from '../common/ChatMarkdown';
-import { appLocale } from '../../lib/dateLocale';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 const OUTCOME_TONE: Record<RecBundleOutcome, 'rose' | 'amber' | 'slate' | 'emerald'> = {
   attributed: 'rose', unattributed: 'amber', inconclusive: 'slate', nothing_detected: 'emerald',
@@ -118,7 +118,7 @@ export const RecommendationPanel: React.FC<{
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-slate-500 dark:text-slate-400">
               {!loaded ? t('rec.loading')
-                : bundle ? t('rec.asOf', { at: bundle.asOf && !isNaN(new Date(bundle.asOf).getTime()) ? new Date(bundle.asOf).toLocaleString(appLocale()) : '—' })
+                : bundle ? t('rec.asOf', { at: bundle.asOf && !isNaN(new Date(bundle.asOf).getTime()) ? new Date(bundle.asOf).toLocaleString(appLocale(), { timeZone: appTimeZone() }) : '—' })
                   : t('rec.notYet')}
               {bundle && expected > 0 && <> · {t('rec.coverage', { observed, expected })}</>}
             </p>

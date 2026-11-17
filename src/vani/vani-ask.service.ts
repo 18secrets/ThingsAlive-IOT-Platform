@@ -279,7 +279,7 @@ export class VaniAskService {
       });
 
       if (body.event_id) {
-        // By event id, so a prediction call (D57, Lane B) is found too; only an alert
+        // By event id, so a prediction call (D61, Lane B) is found too; only an alert
         // call has an alert to carry into the conversation.
         const [call]: { machine_id: string; alert_event_id: string | null }[] = await m.query(
           `SELECT "machine_id", "alert_event_id" FROM "vani_call" WHERE "tenant_id" = $1 AND "event_id" = $2`,

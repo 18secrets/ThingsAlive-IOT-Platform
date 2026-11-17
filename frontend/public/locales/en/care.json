@@ -241,7 +241,10 @@
     "title_other": "Risk score (0–100) over the last {{count}} scores",
     "caption_one": "risk, last score",
     "caption_other": "risk, last {{count}} scores",
-    "risk": "Risk"
+    "risk": "Risk",
+    "period": "Risk trend",
+    "lastScores_one": "Last score",
+    "lastScores_other": "Last {{count}} scores"
   },
   "drill": {
     "loadError": "Could not load this signal.",

@@ -117,6 +117,10 @@ export const TablePagination: React.FC<{
             cleanable={false}
             size="sm"
             className="w-20"
+            // Upward: the bar is pinned to the bottom of the screen, and a menu opening
+            // below it made the page taller and scrolled it up under the person (TC_180).
+            placement="topStart"
+            preventOverflow
           />
         </div>}
         {/* rsuite's own pager, so every list in the console pages the same way. */}

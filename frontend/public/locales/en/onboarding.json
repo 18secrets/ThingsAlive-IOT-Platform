@@ -35,7 +35,8 @@
     "inProgress": "In progress",
     "class": "class {{slug}}",
     "waitingOn": "Waiting on: {{step}}",
-    "fix": "Fix"
+    "fix": "Fix",
+    "goTo": "Go to {{step}}"
   },
   "siteStatus": {
     "completed": "Completed",
@@ -68,8 +69,8 @@
   "reason": {
     "unclassified": "The machine has no equipment class",
     "no_device_claimed": "No device is fitted to the machine",
-    "unbound": "A required signal is not bound",
-    "mapping_required": "A required signal needs mapping",
+    "unbound": "A required signal is not bound. Bind it on the machine's page.",
+    "mapping_required": "A required signal needs mapping. Map it on the machine's page.",
     "no_requirements": "This machine type has no required signals yet. Things Alive needs to add them",
     "stale": "Readings are stale",
     "no_readings": "No readings yet",

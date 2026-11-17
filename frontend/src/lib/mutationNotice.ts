@@ -31,6 +31,8 @@ const NOT_A_WRITE: RegExp[] = [
   /\/rec-evidence(\/|$)/,
   /^\/intelligence\/chains\/[^/]+\/project$/,
   /^\/fleet-import\/plan(\?|$)/,
+  // Checking a fault code workbook reads it and writes nothing; its Apply is the save.
+  /^\/catalog\/fault-codes\/[^/]+\/import\/check$/,
   // A signed-in tab handing a new tab its session: nothing the person saved.
   /^\/auth\/fork$/,
   // Scoring reports its own result on the page; "Saved successfully" over a run that
