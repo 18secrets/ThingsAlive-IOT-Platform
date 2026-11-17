@@ -8,6 +8,7 @@ import {
 } from '../../lib/api';
 import { appLocale, appTimeZone } from '../../lib/dateLocale';
 import { Chip, ChipTone } from '../common/Chip';
+import { PanelRow, PanelRows } from '../common/PanelRow';
 import { Skeleton } from '../common/Skeleton';
 
 /**
@@ -112,6 +113,12 @@ export const RatedAlertsPanel: React.FC<{
 const EVENT_TONE: Record<MachineEventKind, ChipTone> = {
   start: 'slate', trip_overload: 'rose', trip_overtemp: 'rose', trip_supply: 'amber', voltage_low: 'amber', voltage_high: 'amber',
 };
+/** The icon's badge, in the chip's own colour so a row reads the same at either end. */
+const BADGE: Partial<Record<ChipTone, string>> = {
+  rose: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
+  amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
+  slate: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+};
 const EVENT_ICON: Record<MachineEventKind, React.FC<{ className?: string }>> = {
   start: Power, trip_overload: AlertTriangle, trip_overtemp: AlertTriangle, trip_supply: Zap, voltage_low: Zap, voltage_high: Zap,
 };
@@ -163,7 +170,7 @@ export const MachineEventsPanel: React.FC<{
   const when = (iso: string) => new Date(iso).toLocaleString(appLocale(), { timeZone: appTimeZone(), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className={panel}>
+    <div className={`${panel} flex flex-col`}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h3 className="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
           <History className="w-4 h-4 text-slate-400" /> {t('events.title')}
@@ -187,21 +194,41 @@ export const MachineEventsPanel: React.FC<{
       {!data ? <Skeleton lines={3} /> : shown.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('events.none')}</p>
       ) : (
-        <ul className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
-          {shown.map((e, i) => {
-            const Icon = EVENT_ICON[e.kind];
-            return (
-              <li key={`${e.at}-${e.kind}-${i}`} className="py-1.5 flex items-center gap-3 text-sm">
-                <span className="text-xs text-slate-500 dark:text-slate-400 w-28 shrink-0 tabular-nums">{when(e.at)}</span>
-                <Icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="flex-1 min-w-0 text-slate-700 dark:text-slate-200 break-words">
-                  {t(`events.kind.${e.kind}`, { count: e.value, value: fmt(e.value), limit: e.limit !== undefined ? fmt(e.limit) : '' })}
-                </span>
-                <Chip tone={EVENT_TONE[e.kind]}>{t(`events.tag.${e.kind.startsWith('trip_') ? 'trip' : e.kind.startsWith('voltage_') ? 'voltage' : 'start'}`)}</Chip>
-              </li>
-            );
-          })}
-        </ul>
+        // On desktop the card is as tall as the one beside it (Rated alerts' 16 rules), and
+        // a fixed 20 rem list stopped half way down it (17 Nov). There the list fills the
+        // card and scrolls past it, laid out absolutely so it never makes the row taller
+        // itself; 20 rem is still its least. One per row (phone, tablet): as before.
+        <div className="lg:relative lg:flex-1 lg:min-h-80">
+          {/* Two lines a row, as every panel on the page (PanelRow): what happened in full,
+              then when; the badge and chip in the event's colour (17 Nov). One line, with
+              the time in a fixed column, cramped the event's own words. */}
+          <div className="max-h-80 lg:max-h-none lg:absolute lg:inset-0 overflow-y-auto pr-1">
+            <PanelRows>
+              {shown.map((e, i) => {
+                const Icon = EVENT_ICON[e.kind];
+                const tone = EVENT_TONE[e.kind];
+                return (
+                  <PanelRow
+                    key={`${e.at}-${e.kind}-${i}`}
+                    wrapTitle
+                    title={(
+                      <span className="flex items-start gap-2.5">
+                        <span className={`mt-0.5 shrink-0 rounded-lg p-1.5 ${BADGE[tone] ?? BADGE.slate}`}><Icon className="w-3.5 h-3.5" /></span>
+                        <span className="min-w-0">
+                          <span className="block break-words">
+                            {t(`events.kind.${e.kind}`, { count: e.value, value: fmt(e.value), limit: e.limit !== undefined ? fmt(e.limit) : '' })}
+                          </span>
+                          <span className="block text-xs font-normal text-slate-500 dark:text-slate-400 tabular-nums">{when(e.at)}</span>
+                        </span>
+                      </span>
+                    )}
+                    right={<Chip tone={tone}>{t(`events.tag.${e.kind.startsWith('trip_') ? 'trip' : e.kind.startsWith('voltage_') ? 'voltage' : 'start'}`)}</Chip>}
+                  />
+                );
+              })}
+            </PanelRows>
+          </div>
+        </div>
       )}
       {data?.truncated && <p className="text-xs text-slate-500 dark:text-slate-400">{t('events.truncated')}</p>}
     </div>
