@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
+import { mappedDevicesSql } from '../../onboarding/mapped-devices';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { DeviceLinkHealth } from '../entities/device-link-health.entity';
@@ -143,6 +144,8 @@ export class DeviceHealthService {
         params.push(scope.equipmentIds);
         assetFilter = ` AND "external_id" = ANY($${params.length}::text[])`;
       }
+      params.push(now);
+      const nowParam = `$${params.length}`;
 
       /*
        * The run length is computed with a gaps-and-islands count: for each device,
@@ -164,6 +167,9 @@ export class DeviceHealthService {
                   ) AS rn_state
              FROM "device_link_health"
             WHERE "tenant_id" = $1 AND "window_start" >= $2${assetFilter}
+              -- Mapped loggers only: one on no machine is not onboarded, and counting it
+              -- online or dark is a status for something that has none yet.
+              AND "imei" IN (SELECT "imei" FROM (${mappedDevicesSql('$1', nowParam)}) mapped)
          ),
          latest AS (
            SELECT * FROM windows WHERE rn = 1
