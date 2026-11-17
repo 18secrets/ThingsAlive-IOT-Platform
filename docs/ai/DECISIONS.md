@@ -739,6 +739,55 @@ a class spans motors whose rated current differs six-fold.
 - **Open:** proposal replay passes no ratings, so a rated rule does not fire in a replay;
   and nothing yet shows, per machine, that a rated rule is idle for want of a rating.
 
+## D60 — Our `high` reaches Vani as `warning`; only `critical` calls at night
+
+_Numbered D56 when written; renumbered at the merge with main, which had
+already used D56. Vani's migrations and tests still cite it as D56._
+
+Decided 2026-11-05 by Deepak (Vani's calling policy is his), in *Vani Integration — Phase 0
+Answers*. Platform 2.0 has five severities and Vani three:
+
+| 2.0 | Vani | What Vani does |
+|---|---|---|
+| `critical` | `critical` | Calls at once, quiet hours included |
+| `high`, `medium`, `low` | `warning` | Calls in the customer's business hours; held 8 PM–8 AM their time |
+| `none` | `info` | Never calls; the outcome callback still fires |
+
+- **Night is what `critical` is for.** `high` means "act within the week". When some `high`
+  alerts need a night call, raise those rules to `critical` in the platform; do not remap
+  the tier. The bearing test alert (plan Phase 4) is a `critical` rule for this reason.
+- `VANI_HIGH_SEVERITY` stays unset: the coded default in `src/vani/vani-severity.ts` is
+  already `warning`.
+- The same answers settle the rest of Phase 0: Vani's outcome callback carries
+  `X-Vani-Secret`, which we generate and hand over out-of-band, and Vani adds it before
+  the live test. The platform token is Vani's existing `VANI_PLATFORM_TOKEN`, rotated on
+  both services in the same sitting.
+
+## D61 — Vani covers four lanes on one contract, and acts only on what the customer says
+
+_Numbered D57 when written; renumbered at the merge with main, which had
+already used D57. Vani's migrations and tests still cite it as D57._
+
+Decided 2026-11-05 by Deepak, in *Vani Integration — Scope Review*. The integration is
+not alerts-only:
+
+- **A · Alerts** — the plan's Phases 0–5, unchanged; live first.
+- **B · Predictions and trigger actions** — `trigger.kind = trigger_action` on the same
+  `/platform/alert-call`; Live Predictions and health-band crossings may fire it, with
+  `confidence` as its own packet field. Same idempotency and severity policy as A.
+- **C · Inbound full review** — the Phase 6 ask tool, approved as built, plus a richer
+  snapshot (health card, open predictions, open work orders).
+- **D · Operation loop** — the outcome callback gains `customer_decision`
+  (`inspection_approved`, `call_back_requested`, `declined`, `acknowledged`) and the
+  platform acts on it. Vani acts only on the customer's explicit words, read back before
+  she closes. We act on `customer_decision` only, never on the free-text `summary`.
+
+Vani's admin panel switches each lane per account (`features: { alerts, health,
+predictions, operations }`, alerts on by default). Those switches are Vani's registry, which
+we never write. A trigger for a switched-off feature is accepted and reported as
+`suppressed_by_policy` / `feature_not_enabled`, so the callback accepts the Machine Lane
+Spec's seven outcomes, not the guide's five (`1763900000000-VaniPolicyOutcomes`).
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

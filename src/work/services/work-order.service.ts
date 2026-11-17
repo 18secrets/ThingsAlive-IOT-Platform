@@ -74,6 +74,21 @@ export class WorkOrderService {
   ) {}
 
   async raise(scope: RequestScope, input: RaiseInput, now = new Date()): Promise<WorkOrder> {
+    this.assertRaisable(scope, input, now);
+    return withTenantSession(this.ds, scope, (m) => this.raiseWith(m, scope, input));
+  }
+
+  /**
+   * The same job, raised inside a transaction the caller already holds — for work that
+   * must commit with something else or not at all (Vani acting on what a customer
+   * agreed to on a call, `vani-decision.ts`). `m` must be a tenant session for `scope`.
+   */
+  async raiseIn(m: EntityManager, scope: RequestScope, input: RaiseInput, now = new Date()): Promise<WorkOrder> {
+    this.assertRaisable(scope, input, now);
+    return this.raiseWith(m, scope, input);
+  }
+
+  private assertRaisable(scope: RequestScope, input: RaiseInput, now: Date): void {
     this.assertCanAssign(scope, 'raise a job');
     assertTitle(input.title);
     // Only when raising: an existing job past its date is overdue, and editing its
@@ -81,44 +96,44 @@ export class WorkOrderService {
     if (input.dueAt && input.dueAt.getTime() < now.getTime() - PAST_DUE_GRACE_MS) {
       throw new BadRequestException('A new job cannot be due in the past.');
     }
+  }
 
-    return withTenantSession(this.ds, scope, async (m) => {
-      await this.assertAssetVisible(m, scope, input);
-      if (input.alertId) await this.assertAlertOnMachine(m, scope, input.alertId, input);
-      if (input.assignedToUserId) {
-        await this.assertAssignable(scope, input.assignedToUserId, input);
-      }
+  private async raiseWith(m: EntityManager, scope: RequestScope, input: RaiseInput): Promise<WorkOrder> {
+    await this.assertAssetVisible(m, scope, input);
+    if (input.alertId) await this.assertAlertOnMachine(m, scope, input.alertId, input);
+    if (input.assignedToUserId) {
+      await this.assertAssignable(scope, input.assignedToUserId, input);
+    }
 
-      const repo = m.getRepository(WorkOrder);
-      const order = await repo.save(repo.create({
-        tenantId: scope.tenantId,
-        reference: await this.nextReference(m, scope.tenantId),
-        sourceSystem: input.sourceSystem,
-        externalId: input.externalId,
-        title: input.title.trim(),
-        description: input.description ?? null,
-        status: 'created',
-        priority: input.priority ?? 'normal',
-        assignedToUserId: input.assignedToUserId ?? null,
-        predictionId: input.predictionId ?? null,
-        alertId: input.alertId ?? null,
-        origin: 'manual',
-        raisedForScenario: null,
-        dueAt: input.dueAt ?? null,
-        startedAt: null,
-        endedAt: null,
-        resolution: null,
-        raisedBy: scope.userId,
-      }));
+    const repo = m.getRepository(WorkOrder);
+    const order = await repo.save(repo.create({
+      tenantId: scope.tenantId,
+      reference: await this.nextReference(m, scope.tenantId),
+      sourceSystem: input.sourceSystem,
+      externalId: input.externalId,
+      title: input.title.trim(),
+      description: input.description ?? null,
+      status: 'created',
+      priority: input.priority ?? 'normal',
+      assignedToUserId: input.assignedToUserId ?? null,
+      predictionId: input.predictionId ?? null,
+      alertId: input.alertId ?? null,
+      origin: 'manual',
+      raisedForScenario: null,
+      dueAt: input.dueAt ?? null,
+      startedAt: null,
+      endedAt: null,
+      resolution: null,
+      raisedBy: scope.userId,
+    }));
 
-      await this.record(m, scope, order.id, 'raised', {
-        toStatus: 'created', toAssignee: order.assignedToUserId, note: order.title,
-      });
-      if (order.assignedToUserId) {
-        await this.record(m, scope, order.id, 'assigned', { toAssignee: order.assignedToUserId });
-      }
-      return order;
+    await this.record(m, scope, order.id, 'raised', {
+      toStatus: 'created', toAssignee: order.assignedToUserId, note: order.title,
     });
+    if (order.assignedToUserId) {
+      await this.record(m, scope, order.id, 'assigned', { toAssignee: order.assignedToUserId });
+    }
+    return order;
   }
 
   /**

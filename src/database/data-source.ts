@@ -59,6 +59,7 @@ import { Prediction } from '../prediction/entities/prediction.entity';
 import { PredictionBaseline } from '../prediction/entities/prediction-baseline.entity';
 import { DomainEvent } from '../events/domain-event.entity';
 import { NotificationDelivery } from '../events/notification-delivery.entity';
+import { VaniAccountLink, VaniCall, VaniCallOutcome, VaniConversationTurn, VaniMachineLink } from '../vani/vani.entities';
 import { CatalogImportBatch } from '../catalog-import/entities/catalog-import-batch.entity';
 import { CatalogImportRow } from '../catalog-import/entities/catalog-import-row.entity';
 import { SignalBindingVersion } from '../signal-binding/entities/signal-binding-version.entity';
@@ -132,6 +133,11 @@ export const ENTITIES = [
   ScenarioActivationEvent,
   DomainEvent,
   NotificationDelivery,
+  VaniAccountLink,
+  VaniMachineLink,
+  VaniCall,
+  VaniCallOutcome,
+  VaniConversationTurn,
   Prediction,
   PredictionBaseline,
   DeviceInventory,
