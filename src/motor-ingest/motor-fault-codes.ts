@@ -24,6 +24,12 @@ export async function recordMotorFaults(
 ): Promise<{ opened: number; cleared: number }> {
   return withTenantId(ds, machine.tenantId, async (m) => {
     await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`pcode:${machine.tenantId}:${machine.externalId}`]);
+    // Pump codes are worked out only for an account given them (Account access, fault code
+    // library step 4): an account without the kind has no P-codes to show.
+    const [given] = await m.query(
+      `SELECT 1 FROM "fault_code_type_grant" WHERE "tenant_id" = $1 AND "code_type" = 'motor-pump' AND "revoked_at" IS NULL`,
+      [machine.tenantId]);
+    if (!given) return { opened: 0, cleared: 0 };
     const [profile] = await m.query(
       `SELECT "id", "source_system" AS "sourceSystem", "equipment_class_slug" AS "equipmentClassSlug", "plant_id" AS "plantId"
          FROM "equipment_profile" WHERE "tenant_id" = $1 AND "external_id" = $2

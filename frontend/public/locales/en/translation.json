@@ -34,7 +34,8 @@
     "version": "Version: {{version}}",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "geofence": "Geofence map"
+    "geofence": "Geofence map",
+    "faultCodes": "Fault Codes"
   },
   "header": {
     "goBack": "Go Back",
@@ -219,6 +220,10 @@
     "geofence": {
       "title": "Geofence map",
       "subtitle": "Where every machine is, against its fences"
+    },
+    "faultCodes": {
+      "title": "Fault Codes",
+      "subtitle": "Vehicle and motor fault code library"
     }
   },
   "rsuite": {

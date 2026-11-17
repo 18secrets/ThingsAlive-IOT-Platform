@@ -2525,6 +2525,8 @@ export interface FaultCode {
   lamp: string;
   severity: string;
   description: string;
+  /** A motor code's: what the technician sees at the pump. Vehicle codes have none. */
+  symptom?: string | null;
   causes: string | null;
   remedies: string | null;
   firstSeenAt: string;
@@ -5553,3 +5555,116 @@ export function apiDeleteGeofence(id: string): Promise<{ id: string; deleted: tr
   return authFetch(`/geofences/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+
+// ------------------------------------------------------------------ fault code library
+
+/**
+ * The fault code library (FaultCodeLibrary / FaultCodeEditing migrations): vehicle codes
+ * (1.0's copy, read-only, plus codes 2.0 adds) and motor codes (2.0's own), and which kinds
+ * each account is given. Grants are Master Admin's (`entitlement.grant`); the library's
+ * editors write codes (`catalog.write`).
+ */
+export type FaultCodeType = "vehicle-j1939" | "vehicle-obd2" | "motor-pump";
+export const FAULT_CODE_TYPES: FaultCodeType[] = ["vehicle-j1939", "vehicle-obd2", "motor-pump"];
+
+export interface FaultCodeItem {
+  id: string;
+  code: string;
+  description: string;
+  symptom: string | null;
+  causes: string | null;
+  remedies: string | null;
+  detection: string | null;
+  foundBy: "logger" | "technician" | null;
+  severity: string;
+  lamp: string;
+  spn: number | null;
+  fmi: number | null;
+  /** 1.0's copy (read-only here), or 2.0's own. */
+  source: "1.0" | "2.0";
+  /** A vehicle code's: the unit that raises it (1.0's source_type) and the maker's own code (dtc_code). */
+  system: string | null;
+  oemCode: string | null;
+  retiredAt: string | null;
+}
+export interface FaultCodePage { type: FaultCodeType; total: number; codes: FaultCodeItem[] }
+export interface FaultCodeInput {
+  code?: string; spn?: number | null; fmi?: number | null;
+  description?: string; symptom?: string | null; causes?: string | null; remedies?: string | null;
+  detection?: string | null; foundBy?: "logger" | "technician" | null; severity?: string; lamp?: string;
+}
+export interface FaultCodeRevision {
+  id: string; library: "vehicle" | "motor"; codeId: string; code: string; field: string;
+  oldValue: string | null; newValue: string | null; changedBy: string; changedByName: string | null; changedAt: string;
+}
+export interface FaultCodeGrant {
+  id: string; tenantId: string; codeType: FaultCodeType; grantedBy: string; grantedAt: string;
+  revokedAt: string | null; revokedBy: string | null; note: string | null;
+}
+
+export function apiListFaultCodes(
+  type: FaultCodeType, query: { q?: string; limit?: number; offset?: number; includeRetired?: boolean } = {},
+): Promise<FaultCodePage> {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.offset !== undefined) params.set("offset", String(query.offset));
+  if (query.includeRetired) params.set("includeRetired", "true");
+  const qs = params.toString();
+  return authFetch(`/catalog/fault-codes/${type}${qs ? `?${qs}` : ""}`);
+}
+export function apiCreateFaultCode(type: FaultCodeType, input: FaultCodeInput): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}`, { method: "POST", body: JSON.stringify(input) });
+}
+export function apiUpdateFaultCode(type: FaultCodeType, id: string, input: FaultCodeInput): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export function apiSetFaultCodeRetired(type: FaultCodeType, id: string, retired: boolean): Promise<FaultCodeItem> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}/${retired ? "retire" : "restore"}`, { method: "POST" });
+}
+export function apiFaultCodeHistory(type: FaultCodeType, id: string): Promise<FaultCodeRevision[]> {
+  return authFetch(`/catalog/fault-codes/${type}/${encodeURIComponent(id)}/history`);
+}
+export function apiListFaultCodeGrants(): Promise<FaultCodeGrant[]> {
+  return authFetch("/catalog/fault-codes/grants");
+}
+export function apiGrantFaultCodeType(tenantId: string, codeType: FaultCodeType, note?: string): Promise<FaultCodeGrant> {
+  return authFetch("/catalog/fault-codes/grants", { method: "POST", body: JSON.stringify({ tenantId, codeType, note }) });
+}
+export function apiRevokeFaultCodeGrant(id: string): Promise<FaultCodeGrant> {
+  return authFetch(`/catalog/fault-codes/grants/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+}
+
+export interface FaultCodeImportRow {
+  row: number;
+  code: string;
+  status: "new" | "changed" | "unchanged" | "error";
+  changes?: { field: string; from: string | null; to: string | null }[];
+  error?: string;
+}
+export interface FaultCodeImport {
+  type: FaultCodeType;
+  applied: boolean;
+  summary: { new: number; changed: number; unchanged: number; errors: number };
+  rows: FaultCodeImportRow[];
+}
+
+/** The workbook for one kind: the codes 2.0 holds now, and a read-me of every column. */
+export async function apiDownloadFaultCodeTemplate(type: FaultCodeType): Promise<Blob> {
+  const res = await authFetchRaw(`/catalog/fault-codes/${type}/template`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body?.error?.message ?? "Could not download the template.", res.status);
+  }
+  return res.blob();
+}
+
+/** `check` writes nothing; `apply` is refused whole while any row is in error. */
+export async function apiImportFaultCodes(type: FaultCodeType, step: "check" | "apply", file: File): Promise<FaultCodeImport> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetchRaw(`/catalog/fault-codes/${type}/import/${step}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body?.error?.message ?? "Could not read the workbook.", res.status);
+  return body;
+}

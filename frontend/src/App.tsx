@@ -500,6 +500,8 @@ function AppData() {
       staff: [refreshPlatformStaff],
       devices: [refreshDevicePool, refreshAccounts, refreshToolMappings],
       equipment: [refreshAllEquipment, refreshAccounts],
+      // Account access lists every account: on a fresh load nothing else had fetched them.
+      'fault-codes': [refreshAccounts],
     };
     const forClient: Record<string, (() => Promise<void>)[]> = {
       plant: [refreshPlants],

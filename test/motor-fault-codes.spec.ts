@@ -96,6 +96,11 @@ describeDb('P-codes on the machine page, against the database', () => {
       `INSERT INTO "equipment_profile" ("tenant_id", "source_system", "external_id", "tier", "readiness")
        VALUES ($1, 'ta-2.0', 'PUMP-1', 'basic', '{}') RETURNING "id"`, [TENANT]);
     await owner.query(`INSERT INTO device_inventory (imei, tenant_id, state, equipment_external_id) VALUES ('MOTOR_001', $1, 'assigned', 'PUMP-1')`, [TENANT]);
+    // The account is given pump codes (Account access, fault code library step 4): without
+    // them none are worked out, which the last test below shows (approved, 17 Nov 2026).
+    await owner.query(`TRUNCATE "fault_code_type_grant"`);
+    await owner.query(
+      `INSERT INTO "fault_code_type_grant" ("tenant_id", "code_type", "granted_by") VALUES ($1, 'motor-pump', 'test')`, [TENANT]);
     for (const [name, value, unit] of [['rated_current', 5.5, 'A'], ['rated_voltage', 220, 'V']] as const) {
       await owner.query(
         `INSERT INTO tenant_parameter (tenant_id, scope, scope_ref, name, value, unit, effective_from, created_by)
@@ -188,6 +193,14 @@ describeDb('P-codes on the machine page, against the database', () => {
     const cleared = await faults.sweepClears(TENANT, 'ta-2.0', 'PUMP-1', new Date(NOW.getTime() + 60 * 60_000));
     expect(cleared).toEqual([]);
     expect(await episodes()).toEqual([{ code: 'P401', status: 'active' }]);
+  });
+
+  it('an account not given pump codes gets none worked out, however its pump runs', async () => {
+    await owner.query(`TRUNCATE "fault_code_type_grant"`);
+    await store(simulate('locked-rotor', 10 * 60, END, END - 11 * 60));
+    const pass = await motors.processPending(NOW);
+    expect(pass.faults).toBeUndefined();
+    expect(await episodes()).toEqual([]);
   });
 
   it('another account cannot see the pump\'s codes', async () => {
@@ -284,7 +297,10 @@ describeDb('P-codes on the machine page, against the database', () => {
     expect(await owner.query(`SELECT 1 FROM dtc_master_catalog WHERE protocol = 'pcode'`)).toHaveLength(0);
     await owner.runMigrations({ transaction: 'all' });
     await expect(tryPcode()).resolves.toBeDefined();
-    expect(await owner.query(`SELECT code FROM dtc_master_catalog WHERE protocol = 'pcode' ORDER BY code`))
+    // Where the six end up once every later migration has run too: FaultCodeLibrary
+    // moves them out of the vehicle table into the motor library (approved, 17 Nov 2026).
+    expect(await owner.query(`SELECT code FROM fault_code_motor ORDER BY code`))
       .toEqual(['P101', 'P102', 'P207', 'P401', 'P702', 'P708'].map((code) => ({ code })));
+    expect(await owner.query(`SELECT 1 FROM dtc_master_catalog WHERE protocol = 'pcode'`)).toHaveLength(0);
   });
 });

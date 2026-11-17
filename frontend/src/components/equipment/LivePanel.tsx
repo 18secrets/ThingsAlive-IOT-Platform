@@ -197,9 +197,10 @@ const FaultCodesPanel: React.FC<{
       {open === f.id && (
         <div className="px-3 pb-3 space-y-1.5 text-xs text-slate-600 dark:text-slate-300 break-words">
           <p>{t('faults.firstSeen', { when: when(f.firstSeenAt) })} · {t('faults.occurrences', { count: f.occurrences })}</p>
+          {f.symptom && <p><span className="font-semibold">{t('faults.symptom')}:</span> {f.symptom}</p>}
           {f.causes && <p><span className="font-semibold">{t('faults.causes')}:</span> {f.causes}</p>}
           {f.remedies && <p><span className="font-semibold">{t('faults.remedies')}:</span> {f.remedies}</p>}
-          {!f.causes && !f.remedies && <p className="text-slate-500 dark:text-slate-400">{t('faults.noGuidance')}</p>}
+          {!f.symptom && !f.causes && !f.remedies && <p className="text-slate-500 dark:text-slate-400">{t('faults.noGuidance')}</p>}
         </div>
       )}
     </li>

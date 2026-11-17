@@ -22,6 +22,7 @@
  *   --lost-total N  report this lost_total (records overwritten when flash was full), to
  *                exercise the logger-health signal and alert; default 0
  *   --print      print the first batch instead of sending anything
+ *   --no-faults  leave out each batch's `faults` (below)
  *
  * Every run also prints the fault codes (P-codes) the real logger would raise over these
  * readings, by its own rules (motor-fault-codes.ts), judged against the model's rated
@@ -81,6 +82,8 @@ export interface SimRecord {
 
 /** The receiver's request limit (MOTOR_MAX_BODY_BYTES, default 8192). */
 export const MAX_BODY_BYTES = 8192;
+/** What a batch's `faults` can add: every code, active and seen. */
+export const FAULTS_RESERVE_BYTES = 200;
 
 /** Deterministic noise, so a run can be reproduced: the same second gives the same wobble. */
 const noise = (seed: number, scale: number) => {
@@ -172,7 +175,9 @@ export function simulate(
  * first. With the added sensors a record is ~190 bytes, so 50 no longer fit in 8 KiB;
  * the firmware has to size by bytes as well (or halve on 413, as it does).
  */
-export function batches(deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0, boot = 1) {
+export function batches(
+  deviceId: string, records: SimRecord[], deviceNow: number, size = 50, lostTotal = 0, boot = 1, maxBytes = MAX_BODY_BYTES,
+) {
   const out = [];
   for (let i = 0; i < records.length;) {
     let n = Math.min(size, records.length - i);
@@ -192,7 +197,7 @@ export function batches(deviceId: string, records: SimRecord[], deviceNow: numbe
       };
     };
     let batch = make(n);
-    while (n > 1 && JSON.stringify(batch).length > MAX_BODY_BYTES) batch = make(--n);
+    while (n > 1 && JSON.stringify(batch).length > maxBytes) batch = make(--n);
     out.push(batch);
     i += n;
   }
@@ -252,6 +257,35 @@ export function expectedFaults(records: SimRecord[], ratedCurrent: number) {
   return episodes;
 }
 
+/**
+ * The device's fault codes, in the shape its Bluetooth `/faults` reply has (Motor Logger
+ * Bluetooth API guide, 30 Oct 2026): `active`, the codes active at the batch's last
+ * reading; `seen`, every code raised since the device booted. The HTTP upload does not
+ * carry these today — the receiver stores what it knows and ignores the rest, and 2.0
+ * works the codes out from the readings — so this is what the upload would carry if the
+ * firmware added it, ready for the day it does. `seen` is the caller's, so it lasts
+ * across a live run's sends as the device's does until it restarts.
+ */
+export function withFaults<B extends { last_seq: number }>(
+  list: B[], records: SimRecord[], ratedCurrent: number, seen: Set<string>,
+): (B & { faults?: { active: string[]; seen: string[] } })[] {
+  const rules = pCodeRules();
+  if (!rules) return list;
+  const activeAt = new Map<number, Set<string>>();
+  const timeline = rules.deviceFaults(records.map((r) => ({
+    at: new Date(r.seq * 1000), voltage: r.voltage, current: r.current, temperature: r.temperature,
+  })), ratedCurrent);
+  timeline.forEach(({ active }, i) => activeAt.set(records[i].seq, active));
+  let next = 0;
+  return list.map((b) => {
+    // Everything raised up to this batch's end counts as seen, not only what is active at it.
+    for (; next < records.length && records[next].seq <= b.last_seq; next += 1) {
+      for (const code of activeAt.get(records[next].seq) ?? []) seen.add(code);
+    }
+    return { ...b, faults: { active: [...(activeAt.get(b.last_seq) ?? [])].sort(), seen: [...seen].sort() } };
+  });
+}
+
 // ------------------------------------------------------------------------------ CLI
 
 function arg(name: string, argv: string[]): string | undefined {
@@ -284,7 +318,11 @@ async function send(url: string, key: string, batch: ReturnType<typeof batches>[
       const half = Math.ceil(batch.records.length / 2);
       console.warn(`413 for ${batch.batch_id}; halving to ${half}`);
       await sleep(2000);
-      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total, batch.boot)) await send(url, key, part, maxRetries);
+      // The halves carry the whole batch's codes: what the device knew when it sent it.
+      const faults = (batch as { faults?: unknown }).faults;
+      for (const part of batches(batch.device_id, batch.records, batch.device_now, half, batch.lost_total, batch.boot)) {
+        await send(url, key, faults ? { ...part, faults } : part, maxRetries);
+      }
       return;
     }
     if (res.status === 401) throw new Error(`401: the receiver refused the device (${text})`);
@@ -310,6 +348,8 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     return 1;
   }
   const now = () => Math.floor(Date.now() / 1000);
+  // Codes raised since the simulated device booted: one boot for the whole process.
+  const seen = new Set<string>();
   // The simulated device booted just before its history.
   const bootUnix = now() - endAgo * 60 - backfillMin * 60 - 120;
 
@@ -319,7 +359,11 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     // Each run is its own simulated boot, with its own device clock. A real logger counts
     // its boots; two runs both saying boot 1 had their clocks anchored together, and the
     // second run's readings landed a day early.
-    const list = batches(device, records, now() - bootUnix, 50, lostTotal, bootUnix % 1_000_000);
+    // Room left for the codes when they are added: six codes in both lists fit in 200 bytes.
+    const withCodes = !argv.includes('--no-faults');
+    const plain = batches(device, records, now() - bootUnix, 50, lostTotal, bootUnix % 1_000_000,
+      withCodes ? MAX_BODY_BYTES - FAULTS_RESERVE_BYTES : MAX_BODY_BYTES);
+    const list = withCodes ? withFaults(plain, records, MINI_1HP.ratedCurrent, seen) : plain;
     const faults = expectedFaults(records, MINI_1HP.ratedCurrent);
     const clock = (d: Date) => d.toLocaleTimeString('en-GB', { hour12: false });
     if (faults) console.log(faults.length

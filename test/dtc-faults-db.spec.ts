@@ -65,6 +65,10 @@ describeDb('fault codes (DTC) against the database', () => {
        VALUES ('ACU', '177', '16', 'Transmission oil temperature high', 'Red Stop', 'Cooler blocked', 'Clean the cooler')`,
     );
     await master.syncMasterCatalog(ds);
+    // The account is given J1939 codes, so the page shows their meaning (Account access,
+    // fault code library step 4; approved, 17 Nov 2026).
+    await owner.query(
+      `INSERT INTO "fault_code_type_grant" ("tenant_id", "code_type", "granted_by") VALUES ('acme', 'vehicle-j1939', 'test') ON CONFLICT DO NOTHING`);
   });
 
   const packet = (at: string, errors: { spn: number; fmi: number }[], running = 1) => owner.query(
