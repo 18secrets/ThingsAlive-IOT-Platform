@@ -105,12 +105,19 @@ describeDb('device link health', () => {
   afterAll(async () => { await ds?.destroy(); await owner?.destroy(); });
 
   beforeEach(async () => {
-    for (const t of ['device_link_health', 'equipment_placement_event', 'equipment_profile', 'plant']) {
+    for (const t of ['device_link_health', 'device_inventory', 'equipment_placement_event', 'equipment_profile', 'plant']) {
       await owner.query(`DELETE FROM "${t}"`);
     }
     north = (await plants.create(boss, { code: 'NORTH', name: 'Northern yard' })).id;
     await equipment.create(boss, { code: 'DG-1', name: 'Generator 1', plantId: north });
     await equipment.create(boss, { code: 'DG-2', name: 'Generator 2', plantId: north });
+    // Both loggers mapped: the fleet lists mapped loggers only (mapped-devices.ts), and
+    // these cases are about ordering and counting, not about which loggers are onboarded.
+    await owner.query(
+      `INSERT INTO device_inventory (imei, tenant_id, state, equipment_external_id, claimed_at)
+         VALUES ($1, 'acme', 'assigned', 'DG-1', $3), ($2, 'acme', 'assigned', 'DG-2', $3)`,
+      [IMEI_A, IMEI_B, NOW],
+    );
   });
 
   it('stores the verdict with the site it happened at', async () => {

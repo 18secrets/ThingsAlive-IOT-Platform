@@ -11,6 +11,6 @@ import { InventoryService } from './services/inventory.service';
   imports: [TypeOrmModule.forFeature([DeviceInventory, DeviceInventoryEvent]), DeviceCatalogModule],
   controllers: [InventoryController],
   providers: [InventoryService, FleetOnboardingService],
-  exports: [InventoryService],
+  exports: [InventoryService, FleetOnboardingService],
 })
 export class InventoryModule {}
