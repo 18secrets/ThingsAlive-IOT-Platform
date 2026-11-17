@@ -46,6 +46,11 @@ export const MAX_PROPOSALS_PER_CHAT = 10;
 
 const MAX_LIST_ITEMS = 50;
 const MAX_RESULT_CHARS = 12_000;
+/**
+ * Machines named in full by list_equipment before it switches to counts. 40 short rows
+ * fit well inside MAX_RESULT_CHARS, so the cut below never lands in the middle of them.
+ */
+export const LIST_IN_FULL = 40;
 
 /** What each onboarding reason code means to the person onboarding, and who acts on it. */
 const STEP_REASON_MEANING: Record<string, string> = {
@@ -284,13 +289,27 @@ export class AssistantTools {
       {
         name: 'list_equipment',
         description: 'The machines in this account: code, name, type, site and status. Show people `site` and '
-          + '`type`, the names; the ids and slugs are for other tools.',
-        parameters: { type: 'object', properties: { siteId: { type: 'string', description: 'Only machines at this site id.' } } },
+          + '`type`, the names; the ids and slugs are for other tools. A large fleet comes back as complete '
+          + 'counts (`total`, `byType`, `bySite`, every site listed) with only the first machines named; '
+          + 'answer how-many and which-sites from the counts, and narrow with `type` or `site` to name the rest.',
+        parameters: {
+          type: 'object',
+          properties: {
+            siteId: { type: 'string', description: 'Only machines at this site id.' },
+            site: { type: 'string', description: 'Only machines at sites whose name or code contains this.' },
+            type: { type: 'string', description: 'Only machines whose type contains this, e.g. "excavator" or "crane".' },
+          },
+        },
         capability: 'catalog.read',
         profiles: BOTH,
         run: async (scope, a) => {
-          const [machines, names] = await Promise.all([equipment.list(scope, { plantId: str(a.siteId) }), namesFor(scope)]);
-          return machines.map((e) => {
+          const [machines, names, active] = await Promise.all([
+            equipment.list(scope, { plantId: str(a.siteId) }), namesFor(scope), plants.list(scope),
+          ]);
+          const has = (v: string | null | undefined, q: string | undefined) => !q || (v ?? '').toLowerCase().includes(q.toLowerCase());
+          const siteQ = str(a.site);
+          const typeQ = str(a.type);
+          const rows = machines.map((e) => {
             const site = names.site(e.plantId);
             return {
               sourceSystem: e.sourceSystem, code: e.externalId, name: e.name,
@@ -298,7 +317,35 @@ export class AssistantTools {
               site: site?.name ?? null, siteCode: site?.code ?? null, siteId: e.plantId,
               status: e.status, manufacturer: e.manufacturer, model: e.modelNumber,
             };
-          });
+          }).filter((r) => (has(r.site, siteQ) || has(r.siteCode, siteQ))
+            && (has(r.type, typeQ) || has(r.typeSlug, typeQ) || has(r.name, typeQ)));
+          if (rows.length <= LIST_IN_FULL) return rows;
+
+          // Too many to list whole. Before this, the list was cut to fit and the model
+          // counted what was left: on Dev, 5 Nov, 85 machines came back as "43", then
+          // "69", "3 sites" for 6, and "no excavators" with 25 of them. So the counts are
+          // worked out here, over every machine, and only the naming is cut.
+          const tally = (key: (r: (typeof rows)[number]) => string) =>
+            rows.reduce<Record<string, number>>((acc, r) => { acc[key(r)] = (acc[key(r)] ?? 0) + 1; return acc; }, {});
+          const bySite = tally((r) => r.site ?? 'No site');
+          // A site with nothing on it yet is still a site. Only for a caller who sees the
+          // whole fleet: one limited to some machines is not told about other sites.
+          if (scope.equipmentIds === undefined && !siteQ && !str(a.siteId) && !typeQ) {
+            for (const p of active) {
+              if ((scope.plantIds === undefined || scope.plantIds.includes(p.id)) && !(p.name in bySite)) bySite[p.name] = 0;
+            }
+          }
+          return {
+            total: rows.length,
+            byType: tally((r) => r.type ?? 'Unknown type'),
+            bySite,
+            machines: rows.slice(0, LIST_IN_FULL).map((r) => ({
+              sourceSystem: r.sourceSystem, code: r.code, name: r.name, type: r.type, site: r.site,
+            })),
+            note: `All ${rows.length} machines are counted above; only the first ${LIST_IN_FULL} are named. `
+              + 'Narrow with "type" or "site" to name the others. Never say a machine or type is absent '
+              + 'because it is not among the named ones.',
+          };
         },
       },
       {
@@ -519,5 +566,11 @@ export function bound(value: unknown): unknown {
   const out = shrink(value);
   const json = JSON.stringify(out);
   if (json.length <= MAX_RESULT_CHARS) return out;
-  return { truncated: true, note: 'Result too large; only the start is shown.', start: json.slice(0, MAX_RESULT_CHARS) };
+  // Said plainly, because a model handed a cut list counts it and reports the count.
+  return {
+    truncated: true,
+    note: 'Result too large; only the start is shown, so it is INCOMPLETE. Do not count from it, and do not '
+      + 'say something is missing because it is not in it. Narrow the request with a filter instead.',
+    start: json.slice(0, MAX_RESULT_CHARS),
+  };
 }

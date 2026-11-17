@@ -29,6 +29,15 @@ export interface OnboardingResult extends OnboardingPlan {
   applied: true;
 }
 
+/** Who an onboarding is recorded against: a staff member, or the fleet sync itself. */
+interface Actor { userId: string; roles: readonly string[] }
+
+/**
+ * The fleet sync's own name in the inventory history. Not a user id, so it can never be
+ * mistaken for one, and every row it wrote can be found by it.
+ */
+export const FLEET_SYNC_ACTOR: Actor = { userId: 'system:legacy-fleet-sync', roles: [] };
+
 /**
  * Bulk-registering an existing 1.0 fleet (task QONBOARD1).
  *
@@ -56,7 +65,25 @@ export class FleetOnboardingService {
 
   async apply(scope: RequestScope, tenantId: string, now = new Date()): Promise<OnboardingResult> {
     this.requirePlatform(scope);
-    return runTenantSpanning(this.ds, `fleet onboarding apply for ${tenantId} by ${scope.userId}`, async (m) => {
+    return this.applyAs({ userId: scope.userId, roles: scope.roles }, tenantId, now);
+  }
+
+  /**
+   * The same apply, run by the 1.0 fleet sync after each pass rather than by a person.
+   *
+   * A device mapped to a machine in 1.0 is mapped (17 Nov 2026): it has to show as mapped
+   * in 2.0 without somebody remembering to press apply. Every reader that decides whether
+   * a machine is onboarded asks 2.0's register, so a mapping that waits for a manual
+   * apply is a machine shown "not onboarded" while 1.0 reports on it. Safe to run
+   * unattended for the reason apply already was: it only adds, and leaves conflicts for
+   * a person.
+   */
+  async applyForSync(tenantId: string, now = new Date()): Promise<OnboardingResult> {
+    return this.applyAs(FLEET_SYNC_ACTOR, tenantId, now);
+  }
+
+  private async applyAs(actor: Actor, tenantId: string, now: Date): Promise<OnboardingResult> {
+    return runTenantSpanning(this.ds, `fleet onboarding apply for ${tenantId} by ${actor.userId}`, async (m) => {
       // One onboarding per account at a time. Two at once would both see a device as
       // unregistered and the second insert would fail on the IMEI — or worse, both
       // would create the same machine. The lock makes the second wait and find nothing.
@@ -67,7 +94,7 @@ export class FleetOnboardingService {
       for (const machine of plan.createMachines) {
         await profiles.save(profiles.create({
           tenantId, sourceSystem: machine.sourceSystem, externalId: machine.externalId, name: machine.name,
-          origin: 'mirrored', updatedBy: scope.userId,
+          origin: 'mirrored', updatedBy: actor.userId,
         }));
       }
 
@@ -76,19 +103,19 @@ export class FleetOnboardingService {
         await inventory.save(inventory.create({
           imei: d.imei, tenantId, state: 'assigned', model: null, toolMappingId: null,
           batchRef: 'fleet-onboarding', receivedAt: now, notes: 'Registered from the 1.0 fleet (QONBOARD1).',
-          assignedAt: now, assignedBy: scope.userId,
-          equipmentExternalId: d.equipmentExternalId, claimedAt: now, claimedBy: scope.userId,
+          assignedAt: now, assignedBy: actor.userId,
+          equipmentExternalId: d.equipmentExternalId, claimedAt: now, claimedBy: actor.userId,
         }));
         // The same three events a device walked through by hand would leave.
-        await this.record(m, scope, d.imei, 'register', null, 'in-stock', null, null);
-        await this.record(m, scope, d.imei, 'assign', 'in-stock', 'assigned', tenantId, null);
-        await this.record(m, scope, d.imei, 'claim', 'assigned', 'assigned', tenantId, d.equipmentExternalId);
+        await this.record(m, actor, d.imei, 'register', null, 'in-stock', null, null);
+        await this.record(m, actor, d.imei, 'assign', 'in-stock', 'assigned', tenantId, null);
+        await this.record(m, actor, d.imei, 'claim', 'assigned', 'assigned', tenantId, d.equipmentExternalId);
       }
       for (const d of plan.claimDevices) {
         await inventory.update({ imei: d.imei, tenantId, equipmentExternalId: IsNull() }, {
-          equipmentExternalId: d.equipmentExternalId, claimedAt: now, claimedBy: scope.userId,
+          equipmentExternalId: d.equipmentExternalId, claimedAt: now, claimedBy: actor.userId,
         });
-        await this.record(m, scope, d.imei, 'claim', 'assigned', 'assigned', tenantId, d.equipmentExternalId);
+        await this.record(m, actor, d.imei, 'claim', 'assigned', 'assigned', tenantId, d.equipmentExternalId);
       }
       return { ...plan, applied: true };
     });
@@ -97,8 +124,10 @@ export class FleetOnboardingService {
   /** What 1.0 says against what 2.0 has, for one account. Read-only. */
   private async build(m: EntityManager, tenantId: string): Promise<OnboardingPlan> {
     const [machines, devices, profiles] = await Promise.all([
-      m.getRepository(EquipmentProjection).find({ where: { tenantId }, order: { externalId: 'ASC' } }),
-      m.getRepository(DeviceProjection).find({ where: { tenantId }, order: { imei: 'ASC' } }),
+      // Live rows only. The mirror keeps what 1.0 deleted, marked missing; onboarding it
+      // would bring back a machine or a fitment 1.0 has taken away.
+      m.getRepository(EquipmentProjection).find({ where: { tenantId, status: 'live' }, order: { externalId: 'ASC' } }),
+      m.getRepository(DeviceProjection).find({ where: { tenantId, status: 'live' }, order: { imei: 'ASC' } }),
       m.getRepository(EquipmentProfile).find({ where: { tenantId } }),
     ]);
     const key = (sourceSystem: string, externalId: string) => `${sourceSystem}/${externalId}`;
@@ -151,14 +180,15 @@ export class FleetOnboardingService {
   }
 
   private async record(
-    m: EntityManager, scope: RequestScope, imei: string, action: 'register' | 'assign' | 'claim',
+    m: EntityManager, actor: Actor, imei: string, action: 'register' | 'assign' | 'claim',
     fromState: 'in-stock' | 'assigned' | null, toState: 'in-stock' | 'assigned',
     tenantId: string | null, equipmentExternalId: string | null,
   ): Promise<void> {
     const repo = m.getRepository(DeviceInventoryEvent);
     await repo.save(repo.create({
       imei, action, fromState, toState, tenantId, equipmentExternalId,
-      reason: 'QONBOARD1 fleet onboarding', actorUserId: scope.userId, actorRoles: [...scope.roles],
+      reason: actor === FLEET_SYNC_ACTOR ? 'QONBOARD1 fleet onboarding, after a 1.0 fleet sync' : 'QONBOARD1 fleet onboarding',
+      actorUserId: actor.userId, actorRoles: [...actor.roles],
     }));
   }
 

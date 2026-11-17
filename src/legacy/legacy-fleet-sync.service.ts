@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavail
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { DataSource } from 'typeorm';
+import { FleetOnboardingService } from '../inventory/services/fleet-onboarding.service';
 import {
   DeviceSnapshotItem, EQUIPMENT_SNAPSHOT_V1, EquipmentSnapshotEnvelope, EquipmentSnapshotItem, SensorMapSnapshotItem,
 } from '../projection/contracts/contracts';
@@ -25,6 +26,12 @@ export interface FleetSyncResult {
   /** Rows that did not meet the snapshot contract, recorded in projection_rejection. */
   invalid: { equipment: number; devices: number; sensorMap: number };
   applied: Record<string, SyncResult>;
+  /**
+   * 1.0 mappings carried into 2.0's register after the pass, per account: machines
+   * created, loggers registered or claimed, and conflicts left for a person. Absent
+   * when this process has no onboarding wired.
+   */
+  onboarded?: Record<string, { machines: number; registered: number; claimed: number; conflicts: number } | { error: string }>;
 }
 
 /**
@@ -58,6 +65,7 @@ export class LegacyFleetSyncService {
     private readonly ds: DataSource,
     private readonly projection: ProjectionService,
     @Optional() @Inject(LEGACY_DATA_SOURCE) private readonly legacy?: DataSource | null,
+    @Optional() private readonly onboarding?: FleetOnboardingService | null,
   ) {}
 
   get connected(): boolean {
@@ -169,13 +177,51 @@ export class LegacyFleetSyncService {
       generatedAt: now.toISOString(), equipment, devices, sensorMap,
     });
     const applied = await this.projection.apply(envelope, now);
+    const onboarded = this.onboarding ? await this.onboardMappings(this.onboarding, now) : undefined;
     const count = (k: Kind) => rejected.filter((r) => r.kind === k).length;
     return {
       at: now.toISOString(),
       read: { equipment: fleet.equipment.length, devices: fleet.devices.length, sensorMap: fleet.sensorMap.length },
       invalid: { equipment: count('equipment'), devices: count('device'), sensorMap: count('sensor_map') },
       applied,
+      ...(onboarded ? { onboarded } : {}),
     };
+  }
+
+  /**
+   * Carries every account's 1.0 device-to-machine mappings into 2.0's register.
+   *
+   * The mirror alone is not enough: every reader that decides whether a machine is
+   * onboarded asks 2.0's register, so a mapping that lived only in the mirror showed the
+   * machine "not onboarded" while 1.0 had it reporting. One account at a time, each in
+   * its own transaction, so one account's failure leaves the others onboarded and the
+   * mirror — already applied above — untouched.
+   */
+  private async onboardMappings(onboarding: FleetOnboardingService, now: Date): Promise<NonNullable<FleetSyncResult['onboarded']>> {
+    const tenants: { tenant_id: string }[] = await runTenantSpanning(this.ds, 'legacy fleet sync: accounts with 1.0 mappings', (m) =>
+      m.query(
+        `SELECT DISTINCT tenant_id FROM "device_projection"
+          WHERE source_system = $1 AND status = 'live' AND equipment_external_id IS NOT NULL AND tenant_id IS NOT NULL
+          ORDER BY tenant_id`,
+        [LEGACY_SOURCE_SYSTEM],
+      ));
+    const out: NonNullable<FleetSyncResult['onboarded']> = {};
+    for (const { tenant_id: tenantId } of tenants) {
+      try {
+        const r = await onboarding.applyForSync(tenantId, now);
+        out[tenantId] = {
+          machines: r.createMachines.length, registered: r.registerDevices.length,
+          claimed: r.claimDevices.length, conflicts: r.conflicts.length,
+        };
+        if (r.conflicts.length) {
+          this.logger.warn(`${tenantId}: ${r.conflicts.length} 1.0 mapping(s) conflict with 2.0 and were left for a person.`);
+        }
+      } catch (err) {
+        out[tenantId] = { error: (err as Error).message };
+        this.logger.error(`${tenantId}: carrying 1.0 mappings into 2.0 failed: ${(err as Error).message}`);
+      }
+    }
+    return out;
   }
 
   private async refuseEmptyOverLive(fleet: LegacyFleet): Promise<void> {
