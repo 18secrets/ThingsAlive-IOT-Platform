@@ -30,6 +30,7 @@ import { EquipmentRef, KpiEnvelope } from '../kpi/types';
 import { withTenantSession } from '../scope/tenant-session';
 import { LegacyTelemetryReader } from '../legacy/legacy-telemetry.reader';
 import { MachineLive, readMachineLive } from './live-machine';
+import { onboardedMachines } from '../onboarding/mapped-devices';
 import { ServiceForecastService } from '../service/services/service-forecast.service';
 import { forecastDeclarations } from '../forecast/forecast-inputs';
 import { ForecastReader } from '../forecast/forecast-reader';
@@ -66,10 +67,23 @@ export interface MachinePage {
   equipment: {
     sourceSystem: string; externalId: string; name: string | null;
     classSlug: string | null; classVersion: number | null; plantId: string | null;
+    /** A device is mapped to it. False: its data widgets say `not_onboarded`, not a state. */
+    onboarded: boolean;
   };
   layout: { fallback: boolean };
   widgets: PageWidget[];
 }
+
+/**
+ * The widgets that show a value a machine's devices reported. With no device ever mapped
+ * they are not empty or stale, they are not onboarded (mapped-devices.ts), and say so
+ * instead of a zero or a flat line that reads as a machine gone quiet. A configuration
+ * gap (`not_configured`) still wins: it is what somebody has to fix first. The schematic
+ * and the 3-D twin are left out on purpose: with no device they already draw every
+ * marker without a value, saying why (class-visuals.spec), which is the class's picture,
+ * not a status.
+ */
+const DEVICE_DATA_WIDGETS = new Set<string>(['kpi_number', 'kpi_gauge', 'kpi_chart', 'signal_chart']);
 
 export interface SitePage {
   site: { plantId: string; code: string; name: string; siteClass: { slug: string; version: number } };
@@ -108,6 +122,8 @@ export interface SiteTwinView {
     sourceSystem: string; externalId: string; name: string | null; classSlug: string | null;
     placement: { x: number; z: number; headingDeg: number; route: string[] } | null;
     readiness: PageReadiness; openAlerts: number; status: TwinMachineStatus;
+    /** A device is mapped to it. False: status is `not_configured`, activity unknown, no KPIs. */
+    onboarded: boolean;
     /** What the machine is doing now, from its own engine, utilization and load signals
      * (duty-cycle's `classify`), read no further back than one sample may speak for. */
     activity: DutyState;
@@ -217,6 +233,9 @@ export class PageService {
       where: { tenantId: scope.tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId },
     }));
     if (!profile) throw new NotFoundException('No such equipment in this account.');
+    // Ever mapped by `at`, not mapped now: a machine whose logger moved on keeps its history.
+    const onboarded = (await withTenantSession(this.ds, scope, (m) =>
+      onboardedMachines(m, scope.tenantId, [profile.externalId], at, true))).size > 0;
 
     const { fallback, widgets: layout } = await this.machineLayout(scope, profile);
     const visible = layout.filter((w) => !w.hidden).sort((a, b) => a.position - b.position);
@@ -270,7 +289,7 @@ export class PageService {
     const envelopeByKey = new Map<string, KpiEnvelope>((envelopes ?? []).map((e) => [e.formulaKey, e]));
     const formulaByKey = new Map<string, ClientFormula>((formulas as ClientFormula[]).map((f) => [f.formulaKey, f]));
 
-    const widgets = await Promise.all(visible.map(async (w): Promise<PageWidget> => {
+    const build = async (w: (typeof visible)[number]): Promise<PageWidget> => {
       const h = header(w);
       switch (w.widgetType as WidgetType) {
         case 'kpi_number': case 'kpi_gauge': case 'kpi_chart':
@@ -341,12 +360,18 @@ export class PageService {
         default:
           return unfilled(h, 'not_available', 'not_on_this_page');
       }
+    };
+    const widgets = await Promise.all(visible.map(async (w): Promise<PageWidget> => {
+      const built = await build(w);
+      return !onboarded && DEVICE_DATA_WIDGETS.has(w.widgetType) && built.readiness !== 'not_configured'
+        ? unfilled(header(w), 'not_configured', 'not_onboarded')
+        : built;
     }));
 
     return {
       equipment: {
         sourceSystem: profile.sourceSystem, externalId: profile.externalId, name: profile.name,
-        classSlug, classVersion: profile.classVersion, plantId: profile.plantId,
+        classSlug, classVersion: profile.classVersion, plantId: profile.plantId, onboarded,
       },
       layout: { fallback },
       widgets,
@@ -695,11 +720,12 @@ export class PageService {
     const { machines } = layout;
     const refs: EquipmentRef[] = machines.map((e) => ({ sourceSystem: e.sourceSystem, externalId: e.externalId }));
     const slugs = [...new Set(machines.map((e) => e.equipmentClassSlug).filter((s): s is string => !!s))];
-    const [worst, alerts, models, telemetry] = await Promise.all([
+    const [worst, alerts, models, telemetry, mapped] = await Promise.all([
       this.machineReadiness(scope, machines, at),
       refs.length ? this.openAlerts(scope, refs) : Promise.resolve(null),
       Promise.all(slugs.map(async (slug) => [slug, await this.twinClassModel(scope, slug)] as const)),
       this.machineActivityAndKpis(scope, refs, at),
+      withTenantSession(this.ds, scope, (m) => onboardedMachines(m, scope.tenantId, machines.map((e) => e.externalId), at)),
     ]);
 
     const rows = machines.map((e, i) => {
@@ -707,14 +733,18 @@ export class PageService {
       const openAlerts = alerts?.countByMachine.get(k) ?? 0;
       const readiness = worst[i];
       const placement = layout.placements.get(k) ?? null;
+      const onboarded = mapped.has(e.externalId);
       return {
         sourceSystem: e.sourceSystem, externalId: e.externalId, name: e.name, classSlug: e.equipmentClassSlug,
         placement, readiness, openAlerts,
-        status: twinStatus(readiness, openAlerts),
-        activity: telemetry.activity.get(k) ?? 'unknown',
+        // Not onboarded is not configured, whatever an alert or a stray reading says: a
+        // twin drawn live or quiet for a machine with no device is a status it has not got.
+        status: onboarded ? twinStatus(readiness, openAlerts) : 'not_configured' as const,
+        onboarded,
+        activity: onboarded ? telemetry.activity.get(k) ?? 'unknown' : 'unknown',
         engagedAt: placement ? zoneAt(layout.zones, placement.x, placement.z)?.key ?? null : null,
         breakdown: layout.brokenDown.has(k),
-        kpis: telemetry.kpis.get(k) ?? null,
+        kpis: onboarded ? telemetry.kpis.get(k) ?? null : null,
       };
     });
     const summary = { total: rows.length, placed: 0, alert: 0, live: 0, no_data: 0, blocked: 0, not_configured: 0 };
