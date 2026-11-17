@@ -17,6 +17,7 @@ export type NavigationTab =
   | 'staff'
   | 'devices'
   | 'equipment'
+  | 'fault-codes'
   | 'users'
   | 'settings'
   | 'client-users'
@@ -137,6 +138,7 @@ export type AdminSubTab =
   | 'clients'
   | 'staff'
   | 'telemetry-archive'
+  | 'fault-codes'
   | 'fuel-forecast-accuracy';
 
 /**

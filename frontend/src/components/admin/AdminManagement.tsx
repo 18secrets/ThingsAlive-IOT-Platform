@@ -12,7 +12,8 @@ import {
   Briefcase,
   ShieldCheck,
   FunctionSquare,
-  Fuel
+  Fuel,
+  AlertOctagon
 } from 'lucide-react';
 import { AdminSubTab, CLIENT_ADMIN_SUBTABS, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
@@ -33,6 +34,7 @@ import { CategoryView } from './CategoryView';
 import { NamedFormulaView } from './NamedFormulaView';
 import { IndustryTypeView, PlantView } from './OtherAdminViews';
 import { TelemetryArchiveView } from './TelemetryArchiveView';
+import { FaultCodeLibraryView } from './FaultCodeLibraryView';
 import { ClientDeviceManagement } from '../devices/ClientDeviceManagement';
 import { DevicePoolManagement } from '../devices/DevicePoolManagement';
 import { EquipmentManagement } from '../equipment/EquipmentManagement';
@@ -219,7 +221,7 @@ const CLIENT_VISIBLE_ADMIN_SUBTABS: readonly AdminSubTab[] = CLIENT_ADMIN_SUBTAB
 // ADMIN_PROMOTED_SUBTABS, which this must match. Still rendered by this same
 // component at the same /admin/<subtab> routes; only the sub-tab bar and the
 // sidebar highlighting changed.
-const PROMOTED_SUBTABS: AdminSubTab[] = ['clients', 'staff', 'devices', 'equipment'];
+const PROMOTED_SUBTABS: AdminSubTab[] = ['clients', 'staff', 'devices', 'equipment', 'fault-codes'];
 
 export const AdminManagement: React.FC<AdminManagementProps> = ({
   sensors,
@@ -360,6 +362,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     { id: 'signal-state', label: t('tabs.signalStates'), icon: Disc },
     { id: 'devices', label: t('translation:sidebar.devices'), icon: Cpu },
     { id: 'equipment', label: t('translation:sidebar.equipment'), icon: Wrench },
+    { id: 'fault-codes', label: t('tabs.faultCodes'), icon: AlertOctagon },
     { id: 'telemetry-archive', label: t('tabs.telemetryArchive'), icon: Disc },
     { id: 'fuel-forecast-accuracy', label: t('tabs.fuelForecastAccuracy'), icon: Fuel },
   ];
@@ -455,6 +458,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             onDeleteAlias={onDeleteSignalAlias}
           />
         )}
+
+        {!restrictToClientAdmin && activeSubTab === 'fault-codes' && <FaultCodeLibraryView clients={clients} />}
 
         {!restrictToClientAdmin && activeSubTab === 'telemetry-archive' && (
           <TelemetryArchiveView clientName={(id) => clients.find((c) => c.id === id)?.clientName ?? id} />

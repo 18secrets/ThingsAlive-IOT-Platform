@@ -781,6 +781,7 @@
     "last7Days": "Last 7 days",
     "clearedPeriod": "Cleared between",
     "noneCleared": "No codes cleared in this period.",
-    "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest."
+    "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest.",
+    "symptom": "Symptom"
   }
 }

@@ -18,7 +18,9 @@ interface ShellProps {
   onSidebarNavigate?: () => void;
 }
 
-const ADMIN_PROMOTED_SUBTABS: NavigationTab[] = ['clients', 'staff', 'devices', 'equipment'];
+// Fault Codes joined them on 17 Nov 2026: a library Master Admin opens on its own, not one
+// Administration tab among many.
+const ADMIN_PROMOTED_SUBTABS: NavigationTab[] = ['clients', 'staff', 'devices', 'equipment', 'fault-codes'];
 
 function tabFromPath(pathname: string, state: unknown, role?: UserRole): NavigationTab {
   const first = pathname.split('/')[1];
@@ -48,7 +50,7 @@ function tabFromPath(pathname: string, state: unknown, role?: UserRole): Navigat
 /** Static per-route title/subtitle — a page overrides this via usePageHeader
  *  when it has more than one internal view (AI Onboarding, Alert Agent). */
 const TAB_PAGE_KEY: Partial<Record<NavigationTab, string>> = {
-  admin: 'admin', clients: 'clients', staff: 'staff', devices: 'devices', equipment: 'equipment',
+  admin: 'admin', clients: 'clients', staff: 'staff', devices: 'devices', equipment: 'equipment', 'fault-codes': 'faultCodes',
   'things-care': 'thingsCare', 'things-shield': 'thingsShield', 'incident-management': 'incidentManagement',
   'production-monitoring': 'productionMonitoring', 'ai-onboarding': 'aiOnboarding', 'alert-agent': 'alertAgent',
   alerts: 'alerts', geofence: 'geofence', predictions: 'predictions', scenarios: 'scenarios', 'work-orders': 'workOrders',

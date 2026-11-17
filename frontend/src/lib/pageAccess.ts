@@ -33,6 +33,8 @@ const STAFF_ADMIN_CAPABILITY: Record<AdminSubTab | 'catalog-import', string | nu
   'signal-alias': 'catalog.write',
   'signal-state': 'device-catalog.read',
   'telemetry-archive': 'platform.admin',
+  // The library's editors (catalog.write); giving accounts their kinds is Master Admin's, inside the tab.
+  'fault-codes': 'catalog.write',
   'catalog-import': 'catalog.write',
   clients: 'tenant.provision',
   staff: 'platform.admin',
@@ -130,7 +132,7 @@ export function canOpenPath(user: AuthUser, pathname: string): boolean {
 
 /** The sidebar entry's own address, for the same check. */
 export function pathOfTab(tab: NavigationTab): string {
-  if (tab === 'clients' || tab === 'staff' || tab === 'devices' || tab === 'equipment') return `/admin/${tab}`;
+  if (tab === 'clients' || tab === 'staff' || tab === 'devices' || tab === 'equipment' || tab === 'fault-codes') return `/admin/${tab}`;
   return `/${tab}`;
 }
 
@@ -140,7 +142,7 @@ export function canOpenTab(user: AuthUser, tab: NavigationTab): boolean {
 
 /** Administration's tab bar order, per side — the first one the person may open. */
 const STAFF_ADMIN_ORDER: AdminSubTab[] = [
-  'industry', 'category', 'named-formula', 'model', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
+  'industry', 'category', 'named-formula', 'model', 'fault-codes', 'sensor', 'tool-mapping', 'signal-alias', 'signal-state', 'telemetry-archive',
 ];
 
 export function firstAllowedAdminSubTab(user: AuthUser): AdminSubTab | null {

@@ -37,6 +37,7 @@ const TAB_LABEL_KEYS: Record<NavigationTab, string> = {
   staff: 'translation:sidebar.staff',
   devices: 'translation:sidebar.devices',
   equipment: 'translation:sidebar.equipment',
+  'fault-codes': 'translation:sidebar.faultCodes',
 };
 
 // Administration's own tab names, as its tab bar shows them.
