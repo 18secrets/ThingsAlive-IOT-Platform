@@ -174,6 +174,10 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
   const landing = firstAllowedPath(authUser);
   const isLanding = location.pathname === '/' || location.pathname === '/dashboard';
   const header = override ?? defaultHeaderFor(currentTab, authUser.role === 'master-admin', t);
+  // Ask AI answers inside one client account, and the server refuses everyone else
+  // (assistant.service.ts). Shown to staff, it was a button that failed on every
+  // question (TC_223), so it is offered only where it can answer.
+  const askAiShown = !header.aiIndicator && authUser.role === 'client';
 
   const goToTab = (tab: NavigationTab) => {
     onSidebarNavigate?.();
@@ -244,8 +248,9 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
             controls land. The extra clearance keeps page content from ever
             scrolling in underneath it. Skipped on pages where the widget
             itself is hidden (aiIndicator lit — AI Onboarding's chat, Alert
-            Agent) since there's nothing there to clear. */}
-        <main ref={mainRef} className={`flex-1 overflow-y-auto p-3 bg-[#F4F7FB] dark:bg-slate-950 ${header.aiIndicator ? '' : 'pb-15 md:pb-20'}`}>
+            Agent — or a Master Admin, who never gets it) since there's
+            nothing there to clear. */}
+        <main ref={mainRef} className={`flex-1 overflow-y-auto p-3 bg-[#F4F7FB] dark:bg-slate-950 ${askAiShown ? 'pb-15 md:pb-20' : ''}`}>
           <div className="max-w-7xl 2xl:max-w-[1440px] 3xl:max-w-[1920px] mx-auto space-y-3">
             {/* A page's own translation file loads the first time it opens; only the
                 page waits for it, not the sidebar and header around it. */}
@@ -260,8 +265,9 @@ export const Shell: React.FC<ShellProps> = ({ onSidebarNavigate }) => {
 
       {/* Hidden on whatever page currently has the AI indicator lit — same
           pages that used to hide it (AI Onboarding's chat, Alert Agent's
-          assistant/workflow), since aiIndicator is true on exactly those. */}
-      {!header.aiIndicator && <AskAIWidget />}
+          assistant/workflow), since aiIndicator is true on exactly those —
+          and for Master Admin everywhere (askAiShown above). */}
+      {askAiShown && <AskAIWidget />}
     </div>
   );
 };
