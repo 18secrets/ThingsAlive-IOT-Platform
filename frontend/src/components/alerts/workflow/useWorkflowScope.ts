@@ -46,6 +46,17 @@ export function useWorkflowScope() {
     };
 
     const machineLabel = (m: EquipmentProfile) => `${m.externalId}${m.name ? ` · ${m.name}` : ''}`;
-    return { machines, plants, classes, error, signalsFor, machineLabel };
+    /** Each signal's unit as its class declares it, for a value given in another unit to be converted. */
+    const unitsFor = (scope: WorkflowScope): Record<string, string | null> => {
+      const slugs = scope.appliesTo === 'equipment'
+        ? [machines.find((x) => x.sourceSystem === scope.sourceSystem && x.externalId === scope.externalId)?.equipmentClassSlug]
+        : scope.appliesTo === 'equipment-class' ? [scope.equipmentClassSlug]
+          : scope.appliesTo === 'plant' ? machines.filter((m) => m.plantId === scope.plantId).map((m) => m.equipmentClassSlug)
+            : machines.map((m) => m.equipmentClassSlug);
+      const out: Record<string, string | null> = {};
+      for (const s of slugs) for (const e of (s ? classBySlug.get(s)?.expectedSignals ?? [] : [])) if (!(e.signal in out)) out[e.signal] = e.unit;
+      return out;
+    };
+    return { machines, plants, classes, error, signalsFor, unitsFor, machineLabel };
   }, [machines, plants, classes, error]);
 }

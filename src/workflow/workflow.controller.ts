@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
@@ -15,6 +15,10 @@ export class WorkflowCreateDto {
   @IsOptional() @IsString() description?: string;
   // Shape-checked by the compiler, which names what is wrong rather than a path in a DTO.
   @IsObject() spec: WorkflowSpec;
+}
+
+export class WorkflowRenameDto {
+  @IsString() @IsNotEmpty() name: string;
 }
 
 export class WorkflowSpecDto {
@@ -80,6 +84,13 @@ export class WorkflowController {
   @ApiOperation({ summary: 'A workflow and its draft version 1' })
   create(@CurrentScope() scope: RequestScope, @Body() body: WorkflowCreateDto) {
     return this.workflows.create(scope, body);
+  }
+
+  @Patch(':id')
+  @Requires('alert.author')
+  @ApiOperation({ summary: 'Rename a workflow, in any state. Changes no rule' })
+  rename(@CurrentScope() scope: RequestScope, @Param('id') id: string, @Body() body: WorkflowRenameDto) {
+    return this.workflows.rename(scope, id, body.name);
   }
 
   @Put(':id/versions/:v/spec')

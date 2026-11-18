@@ -28,9 +28,6 @@ const NOT_A_LIST = {
   'components/users/UserManagement.tsx': 'not rendered anywhere',
   'components/onboarding/OnboardingList.tsx': 'not rendered anywhere',
   'components/devices/DeviceManagement.tsx': 'not rendered anywhere',
-  // A real list without the switch: the alert agent's workflows, a plain <table>. Known
-  // and not yet converted (13 Nov 2026); remove this line when it is.
-  'components/views/AlertAgentView.tsx': 'KNOWN GAP: workflow list still a plain table',
 };
 
 const TABLE = /<ListTable\b|<Table[\s>]|<table[\s>]/;

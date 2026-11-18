@@ -115,7 +115,10 @@
       "description": "Description",
       "status": "Status",
       "sensors": "Sensors",
-      "conditions": "Conditions"
+      "conditions": "Conditions",
+      "appliesTo": "Applies to",
+      "lastEdited": "Last edited",
+      "actions": "Actions"
     },
     "empty": "No alert rules found matching criteria.",
     "totalRows": "Total Rows:",
@@ -151,7 +154,13 @@
       "safety": "safety",
       "battery": "battery",
       "voltage": "voltage",
-      "warning": "warning"
+      "warning": "warning",
+      "pump": "pump",
+      "temperature": "temperature",
+      "vibration": "vibration",
+      "current": "current",
+      "engine": "engine",
+      "hydraulic": "hydraulic"
     },
     "building": "Building Your Alert",
     "steps": {
@@ -191,7 +200,30 @@
     "proposeHint": "Replays it over 90 days on this machine and sends it to your super admin to approve, instead of opening it in the editor.",
     "proposeFailed": "Could not propose this workflow.",
     "proposeNeedsInput": "The proposal needs more before it can be made:",
-    "unmatchedSignal": "\"{{what}}\" matches no signal this machine reports. Choose the signal to watch before saving."
+    "unmatchedSignal": "\"{{what}}\" matches no signal this machine reports. Choose the signal to watch before saving.",
+    "draftsHint": "Alerts you started but haven't published. A draft watches nothing until it is published.",
+    "seeAllDrafts": "See all drafts",
+    "noDraftsYet": "No drafts yet",
+    "noDraftsYetHint": "Describe an alert above, or pick a failure mode, and save it as a draft to finish later.",
+    "editedAt": "Edited {{when}}",
+    "continueDraft": "Continue",
+    "moreDrafts_one": "{{count}} more draft — see all drafts",
+    "moreDrafts_other": "{{count}} more drafts — see all drafts",
+    "draftScope": {
+      "plant": "A whole site",
+      "equipment-class": "Every machine of a type",
+      "account": "The whole account"
+    },
+    "noExamplesFit": "None of the examples fits this machine's signals. Describe your own alert, or start from a failure mode above.",
+    "parse": {
+      "converted": "{{from}} converted to {{to}}, the unit {{signal}} is measured in.",
+      "unitMismatch": "The prompt gives {{unit}}, but {{signal}} is measured in {{signalUnit}}. The value was kept as typed: check it before publishing.",
+      "noDataWholeMachine": "No data watches the whole machine: it fires when the machine stops sending any data, not only {{signal}}.",
+      "breachesOverLookback": "{{breaches}} breaches out of {{lookback}} readings can never happen, so the count was left out; set it on the threshold.",
+      "contradiction": "This alert could never fire: {{signal}} cannot be above {{above}} and below {{below}} at the same time. Did you mean either one (\"or\")?",
+      "nothingFound": "No condition was found to build. Name a signal and a comparison with a number, e.g. \"slew drive temperature above 80 °C\" or \"oil pressure below 2 bar\". Words that work: above, over, exceeds, below, under, less than. For no data or prediction alerts, say \"no readings\" or \"prediction severity is high\".",
+      "ambiguousSignal": "\"{{phrase}}\" could mean {{chosen}} or {{others}}; {{chosen}} was used. If you meant another, change it on the Read signal box."
+    }
   },
   "workflow": {
     "name": "Workflow name",

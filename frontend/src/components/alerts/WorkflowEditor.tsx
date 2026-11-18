@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, CheckCircle2, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import {
   ApiError, Workflow, WorkflowCompileResult, WorkflowNodeType, WorkflowScope, WorkflowVersion,
-  apiCompileWorkflow, apiCreateWorkflow, apiNewWorkflowVersion, apiPublishWorkflow, apiReplaceWorkflowSpec,
+  apiCompileWorkflow, apiCreateWorkflow, apiNewWorkflowVersion, apiPublishWorkflow, apiRenameWorkflow, apiReplaceWorkflowSpec,
   apiSetWorkflowLayout,
 } from '../../lib/api';
 import { WorkflowDraft, slugFor } from '../../utils/workflowParser';
@@ -66,6 +66,8 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
   const { t } = useTranslation('alerts');
   const scopeData = useWorkflowScope();
   const [workflowName, setWorkflowName] = useState(draft.name);
+  // The name as stored, once it is: a save renames the workflow when the field differs.
+  const [savedName, setSavedName] = useState<string | null>(draft.workflowId ? draft.name : null);
   const [scope, setScope] = useState<WorkflowScope>(draft.spec.scope);
   const [saved, setSaved] = useState<Saved | null>(
     draft.workflowId && draft.version && draft.status ? { workflowId: draft.workflowId, version: draft.version, status: draft.status } : null,
@@ -131,6 +133,7 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
         slug: slugFor(workflowName), name: workflowName.trim() || 'Alert workflow', spec,
         ...(draft.description ? { description: draft.description } : {}),
       }));
+      setSavedName(workflowName.trim() || 'Alert workflow');
     } else if (saved.status === 'draft') {
       at = current(await apiReplaceWorkflowSpec(saved.workflowId, saved.version, spec));
     } else {
@@ -138,6 +141,12 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
       at = current(await apiReplaceWorkflowSpec(next.workflowId, next.version, spec));
     }
     await apiSetWorkflowLayout(at.workflowId, at.version, flowLayout(nodes));
+    // The name could be set only before the first save (test log S.NO 14); now it is
+    // renamed with the save that follows a change.
+    if (saved && workflowName.trim() && workflowName.trim() !== savedName) {
+      await apiRenameWorkflow(at.workflowId, workflowName.trim());
+      setSavedName(workflowName.trim());
+    }
     setSaved(at);
     return at;
   };
@@ -204,7 +213,7 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
           <label className="block space-y-1 flex-1 min-w-[200px]">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('workflow.name')}</span>
-            <Input value={workflowName} onChange={(value) => setWorkflowName(value)} size="sm" className="w-full" disabled={!!saved} />
+            <Input value={workflowName} onChange={(value) => setWorkflowName(value)} size="sm" className="w-full" />
           </label>
           <div className="block space-y-1 min-w-[160px]">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('workflow.scope.label')}</span>

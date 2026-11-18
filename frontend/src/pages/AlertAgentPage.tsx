@@ -25,6 +25,8 @@ export const AlertAgentPage: React.FC = () => {
   const navState = location.state as AlertAgentNavState | null;
   const backTo = navState?.backTo;
   const [view, setView] = useState<View>(navState?.view ?? 'list');
+  // The list's starting filter: all, or the drafts when the assistant's "Explore more" opens it.
+  const [listStart, setListStart] = useState({ status: 'All', search: '' });
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowDraft | null>(null);
   // Whether the open workflow came from the assistant: its back arrow then returns to the
   // assistant with the class, failure mode and prompt still filled in (testing sheet
@@ -38,14 +40,19 @@ export const AlertAgentPage: React.FC = () => {
       ? { title: t('agent.assistantTitle'), aiIndicator: true, onBack: leaveAssistant }
       : view === 'workflow'
         ? { title: t('agent.workflowTitle'), aiIndicator: true, onBack: fromAssistant ? () => setView('assistant') : leaveAssistant }
-        : { title: t('translation:pages.alertAgent.title'), subtitle: t('translation:pages.alertAgent.subtitle') },
+        // A back arrow to Alerts, the page it is reached from (17 Nov): it has no sidebar entry.
+        : { title: t('translation:pages.alertAgent.title'), subtitle: t('translation:pages.alertAgent.subtitle'), onBack: () => navigate(backTo ?? '/alerts') },
   );
 
   const editing = view === 'workflow' && activeWorkflow;
   // Kept mounted, only hidden, while its workflow is open, so coming back finds it as it was.
   const assistant = (view === 'assistant' || (editing && fromAssistant)) && (
     <div className={view === 'assistant' ? undefined : 'hidden'}>
-      <AlertAIAssistant onGenerate={(draft) => { setActiveWorkflow(draft); setFromAssistant(true); setView('workflow'); }} />
+      <AlertAIAssistant
+        onGenerate={(draft) => { setActiveWorkflow(draft); setFromAssistant(true); setView('workflow'); }}
+        onExploreDrafts={(search) => { setListStart({ status: 'Draft', search }); setView('list'); }}
+        visible={view === 'assistant'}
+      />
     </div>
   );
   if (view === 'assistant' || editing) {
@@ -58,7 +65,11 @@ export const AlertAgentPage: React.FC = () => {
   }
   return (
     <AlertAgentView
-      onAddAlert={() => setView('assistant')}
+      // Keyed so the list takes the new starting filter each time it is opened this way.
+      key={`${listStart.status}:${listStart.search}`}
+      initialStatus={listStart.status}
+      initialSearch={listStart.search}
+      onAddAlert={() => { setListStart({ status: 'All', search: '' }); setView('assistant'); }}
       onOpen={(draft) => { setActiveWorkflow(draft); setFromAssistant(false); setView('workflow'); }}
     />
   );

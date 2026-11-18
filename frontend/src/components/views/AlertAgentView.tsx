@@ -1,11 +1,18 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Sparkles, Cpu } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, Workflow, WorkflowVersion, apiListWorkflows, apiRetireWorkflow } from '../../lib/api';
 import { WorkflowDraft } from '../../utils/workflowParser';
 import { specSignals } from '../alerts/workflow/workflowGraph';
 import { useNavigate } from 'react-router-dom';
+import { ListTable } from '../common/ListTable';
+import { RecordCards } from '../common/RecordCards';
+import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
+import { ViewModeToggle, useViewMode } from '../common/ViewModeToggle';
+import { sortRows, useSort } from '../../lib/useSort';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
+import { useWorkflowScope } from '../alerts/workflow/useWorkflowScope';
 
 type RowStatus = 'Deployed' | 'Draft' | 'Disabled';
 
@@ -62,15 +69,18 @@ interface AlertAgentViewProps {
   onAddAlert: () => void;
   /** Opens a stored workflow in the editor. */
   onOpen: (draft: WorkflowDraft) => void;
+  /** Where the list starts: the assistant's "Explore more" opens it on its drafts (TC_198). */
+  initialStatus?: string;
+  initialSearch?: string;
 }
 
-export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOpen }) => {
+export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOpen, initialStatus = 'All', initialSearch = '' }) => {
   const { t } = useTranslation('alerts');
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [selectedStatus, setSelectedStatus] = useState(initialStatus);
+  const [viewMode, setViewMode] = useViewMode('alert-agent');
+  const scopeData = useWorkflowScope();
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retiring, setRetiring] = useState<string | null>(null);
@@ -110,10 +120,72 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
     });
   }, [rows, searchTerm, selectedStatus]);
 
-  const totalRows = filteredRules.length;
-  const totalPages = Math.ceil(totalRows / rowsPerPage) || 1;
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedRules = filteredRules.slice(startIndex, startIndex + rowsPerPage);
+  // Newest first (17 Nov): sorted by its ID, the draft just saved landed at the bottom.
+  const { sort, toggle } = useSort<'name' | 'status' | 'edited'>({ key: 'edited', dir: 'desc' });
+  const sorted = useMemo(() => sortRows(filteredRules, sort, {
+    name: (r) => r.workflow.name.toLowerCase(),
+    status: (r) => r.status,
+    edited: (r) => r.workflow.updatedAt,
+  }), [filteredRules, sort]);
+  const { pageItems, ...pager } = usePagination(sorted);
+
+  // What it watches, in words: the machine's name, not its scope's ids.
+  const appliesTo = (rule: AlertRuleRow) => {
+    const target = rule.open.spec.scope;
+    if (target.appliesTo !== 'equipment') return t(`assistant.draftScope.${target.appliesTo}`);
+    const m = scopeData.machines.find((x) => x.sourceSystem === target.sourceSystem && x.externalId === target.externalId);
+    return m ? scopeData.machineLabel(m) : target.externalId ?? '—';
+  };
+  const edited = (rule: AlertRuleRow) => new Date(rule.workflow.updatedAt)
+    .toLocaleString(appLocale(), { timeZone: appTimeZone(), dateStyle: 'medium', timeStyle: 'short' });
+  const open = (rule: AlertRuleRow) => onOpen({
+    name: rule.workflow.name, spec: rule.open.spec, workflowId: rule.workflow.id,
+    version: rule.open.version, status: rule.open.status, layout: rule.open.layout,
+  });
+
+  // The name leads, its description under it; the internal id (a slug) is no column of its
+  // own any more: centred and wrapped over three lines, it said nothing a reader uses.
+  const hasActions = pageItems.some((r) => r.status === 'Deployed');
+  const columns = [
+    { label: t('agentList.columns.workflowName'), sortKey: 'name', grow: 3, minWidth: 220 },
+    { label: t('agentList.columns.appliesTo'), grow: 2, minWidth: 170 },
+    { label: t('agentList.columns.status'), sortKey: 'status', width: 150 },
+    { label: t('agentList.columns.conditions'), grow: 3, minWidth: 240 },
+    { label: t('agentList.columns.lastEdited'), sortKey: 'edited', width: 170 },
+    // Retire is the only action besides opening, which the row itself does; it applies to
+    // a deployed workflow only, so the column is there only when one is on the page.
+    ...(hasActions ? [{ label: t('agentList.columns.actions'), width: 110, align: 'right' as const }] : []),
+  ];
+  const cells = (rule: AlertRuleRow): React.ReactNode[] => [
+    <div className="min-w-0">
+      <div className="font-semibold text-slate-900 dark:text-white break-words">{rule.workflow.name}</div>
+      {rule.workflow.description && <div className="text-xs text-slate-500 dark:text-slate-400 break-words line-clamp-2">{rule.workflow.description}</div>}
+    </div>,
+    // Wraps rather than cut: "POC-MINI-01 · POC M…" hid which pump it was.
+    <span className="flex items-start gap-1.5 min-w-0 text-slate-700 dark:text-slate-200">
+      <Cpu className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" /><span className="break-words min-w-0">{appliesTo(rule)}</span>
+    </span>,
+    <div className="space-y-1">
+      <span className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLES[rule.status]}`}>
+        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${STATUS_DOT[rule.status]}`}></span>
+        {t(`agentList.status.${rule.status}`, { defaultValue: rule.status })}
+      </span>
+      {rule.pendingDraft != null && <div className="text-[0.6875rem] text-amber-600 dark:text-amber-400">{t('agentList.pendingDraft', { version: rule.pendingDraft })}</div>}
+      {rule.rulesOff > 0 && <div className="text-[0.6875rem] text-slate-500 dark:text-slate-400">{t('agentList.rulesOff', { count: rule.rulesOff })}</div>}
+    </div>,
+    <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+      {rule.conditions.length ? rule.conditions.map((c, i) => <div key={i} className="break-words">{c}</div>) : <span className="text-slate-400">{rule.sensors.join(', ') || '—'}</span>}
+    </div>,
+    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">{edited(rule)}</span>,
+    ...(hasActions ? [<div className="flex items-center justify-end gap-2 [&>*]:whitespace-nowrap">
+      {rule.status === 'Deployed' && (
+        <button type="button" disabled={retiring === rule.workflow.id} onClick={(e) => { e.stopPropagation(); retire(rule.workflow); }}
+          className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-rose-600 dark:text-rose-400 hover:border-rose-300 disabled:opacity-40 cursor-pointer">
+          {t('agentList.retire')}
+        </button>
+      )}
+    </div>] : []),
+  ];
 
   return (
     <div id="alert-agent-view" className="space-y-4">
@@ -128,7 +200,6 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
               value={searchTerm}
               onChange={(value) => {
                 setSearchTerm(value);
-                setCurrentPage(1);
               }}
               placeholder={t('agentList.searchPlaceholder')}
               size="sm"
@@ -147,7 +218,6 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
             value={selectedStatus}
             onChange={(value) => {
               setSelectedStatus(value ?? 'All');
-              setCurrentPage(1);
             }}
             searchable={false}
             cleanable={false}
@@ -155,7 +225,8 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
           />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
         <button
           type="button"
           onClick={() => navigate('/drafts?kind=workflow')}
@@ -179,148 +250,18 @@ export const AlertAgentView: React.FC<AlertAgentViewProps> = ({ onAddAlert, onOp
         <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{error}</div>
       )}
 
-      {/* Main Table — matches Device Management's table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-              <tr>
-                <th className="py-3 px-4 text-center">{t('agentList.columns.id')}</th>
-                <th className="py-3 px-4">{t('agentList.columns.workflowName')}</th>
-                <th className="py-3 px-4 min-w-[260px]">{t('agentList.columns.description')}</th>
-                <th className="py-3 px-4">{t('agentList.columns.status')}</th>
-                <th className="py-3 px-4">{t('agentList.columns.sensors')}</th>
-                <th className="py-3 px-4 min-w-[220px]">{t('agentList.columns.conditions')}</th>
-                <th className="py-3 px-4" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
-              {paginatedRules.length > 0 ? (
-                paginatedRules.map((rule) => (
-                  <tr
-                    key={rule.workflow.id}
-                    onClick={() => onOpen({
-                      name: rule.workflow.name, spec: rule.open.spec, workflowId: rule.workflow.id,
-                      version: rule.open.version, status: rule.open.status, layout: rule.open.layout,
-                    })}
-                    className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors align-top cursor-pointer"
-                  >
-                    <td className="py-3 px-4 text-center font-mono font-medium text-slate-400 text-xs">
-                      {rule.workflow.slug}
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white max-w-[220px] break-words">
-                      {rule.workflow.name}
-                    </td>
-                    <td className="py-3 px-4 font-normal text-slate-600 dark:text-slate-400 max-w-[320px]">
-                      {rule.workflow.description}
-                    </td>
-                    <td className="py-3 px-4 space-y-1">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 text-[0.6875rem] font-semibold uppercase rounded border ${STATUS_STYLES[rule.status]}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${STATUS_DOT[rule.status]}`}></span>
-                        {t(`agentList.status.${rule.status}`, { defaultValue: rule.status })}
-                      </span>
-                      {rule.pendingDraft != null && (
-                        <div className="text-[0.6875rem] text-amber-600 dark:text-amber-400">{t('agentList.pendingDraft', { version: rule.pendingDraft })}</div>
-                      )}
-                      {rule.rulesOff > 0 && (
-                        <div className="text-[0.6875rem] text-slate-500 dark:text-slate-400">{t('agentList.rulesOff', { count: rule.rulesOff })}</div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 font-normal text-slate-600 dark:text-slate-400">
-                      {rule.sensors.join(', ')}
-                    </td>
-                    <td className="py-3 px-4 font-normal text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                      {rule.conditions.map((c, i) => <div key={i}>{c}</div>)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      {rule.status === 'Deployed' && (
-                        <button
-                          type="button"
-                          disabled={retiring === rule.workflow.id}
-                          onClick={(e) => { e.stopPropagation(); retire(rule.workflow); }}
-                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-40 cursor-pointer"
-                        >
-                          {t('agentList.retire')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 font-sans">
-                    {workflows === null && !error ? t('agentList.loading') : t('agentList.empty')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination — matches Device Management's footer */}
-        <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400 font-sans">
-          <div>
-            {t('agentList.totalRows')} <span className="font-semibold text-slate-800 dark:text-slate-200">{totalRows}</span>
+      <div className={LIST_PANEL}>
+        {pageItems.length === 0 ? (
+          <p className="py-10 text-center text-sm text-slate-400">{workflows === null && !error ? t('agentList.loading') : t('agentList.empty')}</p>
+        ) : viewMode === 'list' ? (
+          <ListTable bare columns={columns} rows={pageItems} rowKey={(r) => r.workflow.id} cells={cells} onOpen={open}
+            sort={sort} onSort={(key) => toggle(key as 'name' | 'status' | 'edited', key === 'edited' ? 'desc' : 'asc')} />
+        ) : (
+          <div className="p-4">
+            <RecordCards columns={columns} rows={pageItems} rowKey={(r) => r.workflow.id} cells={cells} onOpen={open} actionsIndex={hasActions ? 5 : undefined} />
           </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span>{t('agentList.rowsPerPage')}</span>
-              <SelectPicker
-                data={[
-                  { label: '10', value: 10 },
-                  { label: '20', value: 20 },
-                  { label: '50', value: 50 },
-                ]}
-                value={rowsPerPage}
-                onChange={(value) => {
-                  setRowsPerPage(Number(value ?? 10));
-                  setCurrentPage(1);
-                }}
-                searchable={false}
-                cleanable={false}
-                size="sm"
-                className="w-20"
-              />
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                aria-label={t('agentList.previousPage')}
-                className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-7 h-7 rounded text-xs font-semibold flex items-center justify-center transition-colors ${
-                    currentPage === i + 1
-                      ? 'bg-[#0B7285] text-white border border-[#0B7285]'
-                      : 'border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-
-              <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                aria-label={t('agentList.nextPage')}
-                className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+        )}
+        {pageItems.length > 0 && <TablePagination pinToBottom {...pager} />}
       </div>
     </div>
   );
