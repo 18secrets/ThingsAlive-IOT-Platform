@@ -169,12 +169,16 @@ export function compileWorkflow(raw: unknown): CompiledWorkflow {
     const label = `Node "${node.id}" (${node.type})`;
     if (role === 'source') {
       if (ins.length) fail(`${label} reads a signal; nothing feeds into it.`);
-      if (!outs.length || outs.some((o) => o.type !== 'Threshold')) {
-        fail(`${label} has to feed one or more Threshold nodes.`);
+      // A Threshold, or a No data that watches this one signal rather than the whole
+      // machine (17 Nov 2026: "no outrigger pressure readings" could not be said).
+      if (!outs.length || outs.some((o) => o.type !== 'Threshold' && o.type !== 'FreshnessGate')) {
+        fail(`${label} has to feed one or more Threshold or No data nodes.`);
       }
     } else if (role === 'condition') {
       if (node.type === 'Threshold') {
         if (ins.length !== 1 || ins[0].type !== 'ReadSignal') fail(`${label} needs exactly one ReadSignal feeding it.`);
+      } else if (node.type === 'FreshnessGate') {
+        if (ins.length > 1 || ins.some((i) => i.type !== 'ReadSignal')) fail(`${label} takes at most one ReadSignal: the signal whose readings it waits for.`);
       } else if (ins.length) {
         fail(`${label} takes no input.`);
       }
@@ -232,6 +236,14 @@ export function compileWorkflow(raw: unknown): CompiledWorkflow {
     for (const [k, v] of Object.entries(node.params ?? {})) if (v !== undefined && v !== null) params[k] = v;
     let signals: string[] = [];
     if (node.type === 'Threshold') {
+      const source = byId.get(inputs.get(id)![0])!;
+      const signal = source.params?.signal;
+      if (typeof signal !== 'string' || !signal.trim()) fail(`Node "${source.id}" (ReadSignal) needs a signal.`);
+      params.signal = (signal as string).trim();
+      signals = [params.signal as string];
+    }
+    // No data on one signal: its signal, from its ReadSignal, as a Threshold's.
+    if (node.type === 'FreshnessGate' && inputs.get(id)!.length) {
       const source = byId.get(inputs.get(id)![0])!;
       const signal = source.params?.signal;
       if (typeof signal !== 'string' || !signal.trim()) fail(`Node "${source.id}" (ReadSignal) needs a signal.`);

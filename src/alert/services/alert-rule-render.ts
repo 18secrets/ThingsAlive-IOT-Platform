@@ -31,7 +31,10 @@ export const RULE_CLAUSES: Record<AlertTrigger, (params: AlertParams, name: Sign
     return `${p.clientScenarioSlug ? `the "${p.clientScenarioSlug}" scenario` : 'any scenario'} `
       + `scores ${p.atLeast} or worse`;
   },
-  'no-telemetry': () => 'a shift produces no telemetry at all',
+  'no-telemetry': (params, name) => {
+    const signal = (params as { signal?: string } | undefined)?.signal;
+    return signal ? `a shift produces no ${name(signal).displayName} readings` : 'a shift produces no telemetry at all';
+  },
   'fuel-loss': (params) => {
     const p = params as FuelLossParams;
     return `fuel drops by at least ${p.dropAtLeast} within ${p.withinMinutes} minutes `

@@ -6,7 +6,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
 import { describeRule, plainSignalName, SignalNamer } from '../alert/services/alert-rule-render';
 import { ruleCoversMachine } from '../alert/services/alert.service';
-import { ChainOriginParams, PredictionSeverityParams, SignalThresholdParams } from '../alert/services/alert-rules';
+import { ChainOriginParams, NoTelemetryParams, PredictionSeverityParams, SignalThresholdParams } from '../alert/services/alert-rules';
 import { FuelLossParams } from '../alert/services/fuel-loss';
 import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
@@ -297,6 +297,26 @@ export class WorkflowService {
   }
 
   /** Every compiled rule off, and the published version retired. The rules stay, off. */
+  /**
+   * Renames a workflow, in any state: the name is how the list tells workflows apart, and
+   * it could be set only once, before the first save (the AI alert prompt test log, S.NO
+   * 14). It changes no rule — the alert a person receives is named by its Notify node —
+   * so nothing compiled or published is touched. The row is locked so two renames take turns.
+   */
+  async rename(scope: RequestScope, id: string, name: string) {
+    const trimmed = name?.trim();
+    if (!trimmed) throw new BadRequestException('A workflow needs a name.');
+    if (trimmed.length > 200) throw new BadRequestException('A workflow name is at most 200 characters.');
+    return withTenantSession(this.ds, scope, async (m) => {
+      const def = await this.definition(m, scope, id, true);
+      if (def.name !== trimmed) {
+        await m.getRepository(WorkflowDefinition).update({ tenantId: scope.tenantId, id: def.id }, { name: trimmed });
+        def.name = trimmed;
+      }
+      return this.describe(m, scope, def);
+    });
+  }
+
   async retire(scope: RequestScope, id: string) {
     return withTenantSession(this.ds, scope, async (m) => {
       const def = await this.definition(m, scope, id, true);
@@ -567,9 +587,16 @@ function conditionNodes(
     case 'prediction-severity':
       nodes.push({ id, type: 'PredictionSeverity', params: { ...(rule.params as PredictionSeverityParams) } });
       return id;
-    case 'no-telemetry':
+    case 'no-telemetry': {
+      // On one signal, drawn as the editor draws it: its ReadSignal feeding the No data.
+      const { signal } = (rule.params ?? {}) as NoTelemetryParams;
       nodes.push({ id, type: 'FreshnessGate', params: {} });
+      if (signal) {
+        nodes.push({ id: `${id}-signal`, type: 'ReadSignal', params: { signal } });
+        edges.push({ from: `${id}-signal`, to: id });
+      }
       return id;
+    }
     case 'fuel-loss':
       nodes.push({ id, type: 'FuelLoss', params: { ...(rule.params as FuelLossParams) } });
       return id;

@@ -95,6 +95,17 @@ export const MAX_LOOKBACK_READINGS = 1000;
  * machine genuinely running hot stays over the line for most of a five-to-ten
  * minute window; one bad sample among nine clean ones does not. */
 export const DEFAULT_REQUIRED_BREACHES = 6;
+
+/**
+ * The breaches a rule needs when it names none: six, or the whole window when the
+ * window is shorter. A rule asking for the last 3 readings and no count needed six of
+ * three, so it was saved, described as "at least 6 of the last 3 readings" and could
+ * never fire (17 Nov 2026, the AI alert prompt test log). An explicit count above the
+ * window is still refused (validateParams).
+ */
+export function requiredBreachesOf(params: { lookbackReadings?: number; requiredBreaches?: number }): number {
+  return params.requiredBreaches ?? Math.min(DEFAULT_REQUIRED_BREACHES, params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS);
+}
 export const MIN_REQUIRED_BREACHES = 1;
 
 /**
@@ -136,8 +147,12 @@ export const SIGNAL_THRESHOLD_PARAM_SOURCE: Record<keyof SignalThresholdParams, 
 };
 
 export interface NoTelemetryParams {
-  /** Nothing to configure. A shift that produced no readings at all fires it. */
-  reserved?: never;
+  /**
+   * Absent: a shift that produced no readings at all fires it. Set: a shift that produced
+   * none of this one signal fires it, whatever else arrived — a sensor gone quiet on a
+   * machine that is otherwise reporting (17 Nov 2026).
+   */
+  signal?: string;
 }
 
 /**
@@ -374,7 +389,7 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
       const params = resolveRatedBounds(input.params as SignalThresholdParams, input.ratings);
       if (!params) return null;
       const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
-      const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
+      const requiredBreaches = requiredBreachesOf(params);
       // Windows too short to possibly reach requiredBreaches are dropped here, not
       // compared: a rule watches "this equipment", but a window that cannot say
       // anything trustworthy must not fire just because it technically has zero
@@ -505,6 +520,14 @@ export function evaluateRule(input: EvaluationInput): Firing | null {
     }
 
     case 'no-telemetry': {
+      const signal = (input.params as NoTelemetryParams | undefined)?.signal;
+      if (signal) {
+        if (input.readings.some((r) => r.signal === signal)) return null;
+        return {
+          summary: `The shift produced no ${signal.replace(/_/g, ' ')} readings.`,
+          evidence: { readingsInWindow: 0, signal },
+        };
+      }
       if (input.readings.length > 0) return null;
       return {
         summary: 'The shift produced no telemetry at all.',
@@ -621,6 +644,11 @@ export function validateParams(trigger: AlertTrigger, params: AlertParams): stri
     return null;
   }
   if (trigger === 'fuel-loss') return validateFuelLoss(params as FuelLossParams);
+  if (trigger === 'no-telemetry') {
+    const signal = (params as NoTelemetryParams | undefined)?.signal;
+    if (signal !== undefined && (typeof signal !== 'string' || !signal.trim())) return 'A no-data rule on one signal needs the signal.';
+    return null;
+  }
   if (trigger === 'chain-origin') {
     const p = params as ChainOriginParams;
     if (p?.atLeast !== 'warning' && p?.atLeast !== 'critical') {
@@ -750,7 +778,7 @@ export function describeSignalThresholdRule(
   params: SignalThresholdParams, signal: SignalDisplayInfo,
 ): string {
   const lookbackReadings = params.lookbackReadings ?? DEFAULT_LOOKBACK_READINGS;
-  const requiredBreaches = params.requiredBreaches ?? DEFAULT_REQUIRED_BREACHES;
+  const requiredBreaches = requiredBreachesOf(params);
   const unitSuffix = signal.unit ? ` ${signal.unit}` : '';
   // D59: "1.2 × rated current", the multiple and the rating it multiplies, never a
   // number in amps that is right for one model of the class and wrong for the rest.
