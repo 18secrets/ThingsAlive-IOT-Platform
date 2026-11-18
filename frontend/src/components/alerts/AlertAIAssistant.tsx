@@ -119,14 +119,24 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate, 
       setNotice(parsed.contradictions.map((c) => t('assistant.parse.contradiction', { ...c })).join(' '));
       return;
     }
+    // A condition on a signal this machine does not report stops here, before a workflow
+    // is built (TC_201): it opened with "wind speed" kept as typed and only the save
+    // refused it. Said now, with the signals the machine has, so the prompt can be fixed.
+    if (parsed.unmatched.length) {
+      const declared = scopeData.signalsFor(scope());
+      setPrompt(text);
+      setPhase('clarifying');
+      setNotice(t('assistant.parse.unknownSignal', {
+        count: parsed.unmatched.length,
+        what: parsed.unmatched.map((w) => `"${w}"`).join(', '),
+        signals: declared.length ? declared.map((s) => s.replace(/_/g, ' ')).join(', ') : t('assistant.parse.noSignals'),
+      }));
+      return;
+    }
     if (parsed.conditions > 0) {
-      // Said on the canvas: a phrase naming no signal on this machine is kept as typed and
-      // the server refuses it, so the person picks the signal rather than a guess (MIN-9);
-      // and what the reader changed or could not honour — a unit converted, a count dropped.
-      const notes = [
-        ...parsed.unmatched.map((what) => t('assistant.unmatchedSignal', { what })),
-        ...parsed.notes.map((n) => t(`assistant.parse.${n.key}`, n.values)),
-      ];
+      // What the reader changed or could not honour — a unit converted, a count dropped —
+      // said above the canvas.
+      const notes = parsed.notes.map((n) => t(`assistant.parse.${n.key}`, n.values));
       onGenerate(notes.length ? { ...parsed.draft, notes } : parsed.draft);
       return;
     }

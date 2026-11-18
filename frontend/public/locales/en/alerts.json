@@ -200,7 +200,6 @@
     "proposeHint": "Replays it over 90 days on this machine and sends it to your super admin to approve, instead of opening it in the editor.",
     "proposeFailed": "Could not propose this workflow.",
     "proposeNeedsInput": "The proposal needs more before it can be made:",
-    "unmatchedSignal": "\"{{what}}\" matches no signal this machine reports. Choose the signal to watch before saving.",
     "draftsHint": "Alerts you started but haven't published. A draft watches nothing until it is published.",
     "seeAllDrafts": "See all drafts",
     "noDraftsYet": "No drafts yet",
@@ -222,7 +221,10 @@
       "breachesOverLookback": "{{breaches}} breaches out of {{lookback}} readings can never happen, so the count was left out; set it on the threshold.",
       "contradiction": "This alert could never fire: {{signal}} cannot be above {{above}} and below {{below}} at the same time. Did you mean either one (\"or\")?",
       "nothingFound": "No condition was found to build. Name a signal and a comparison with a number, e.g. \"slew drive temperature above 80 °C\" or \"oil pressure below 2 bar\". Words that work: above, over, exceeds, below, under, less than. For no data or prediction alerts, say \"no readings\" or \"prediction severity is high\".",
-      "ambiguousSignal": "\"{{phrase}}\" could mean {{chosen}} or {{others}}; {{chosen}} was used. If you meant another, change it on the Read signal box."
+      "ambiguousSignal": "\"{{phrase}}\" could mean {{chosen}} or {{others}}; {{chosen}} was used. If you meant another, change it on the Read signal box.",
+      "unknownSignal_one": "{{what}} is not a signal this machine reports, so no workflow was built. Its signals: {{signals}}.",
+      "unknownSignal_other": "{{what}} are not signals this machine reports, so no workflow was built. Its signals: {{signals}}.",
+      "noSignals": "none declared yet"
     }
   },
   "workflow": {
