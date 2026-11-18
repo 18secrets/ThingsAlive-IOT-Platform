@@ -12,18 +12,25 @@ import type { FaultCodeType } from '../entities/fault-code-type-grant.entity';
  */
 export const CODES_SHEET = 'Codes';
 
+/**
+ * A vehicle code's text, either protocol: the engine makers' sheets' columns
+ * (VehicleCodesOwned1765600000000), in the order a technician reads them.
+ */
+const VEHICLE_TEXT = {
+  description: 'Fault', system: 'System', oemCode: "Maker's code", sensor: 'Sensor', location: 'Location',
+  causes: 'Likely causes', remedies: 'What to do', diagnosticAids: 'Diagnostic aids', troubleshooting: 'Troubleshooting steps',
+  vehicleReaction: 'Vehicle reaction', pinDetails: 'Pin details', voltageRange: 'Voltage range', signalRange: 'Signal range',
+  severity: 'Severity', lamp: 'Lamp',
+};
+
 /** API field → header, for each kind. The key columns come first. */
 export const COLUMNS: Record<FaultCodeType, Record<string, string>> = {
   'motor-pump': {
     code: 'Code', description: 'Fault', symptom: 'Symptom', causes: 'Likely causes', remedies: 'What to do',
     detection: 'How detected', foundBy: 'Found by', severity: 'Severity', lamp: 'Lamp',
   },
-  'vehicle-j1939': {
-    spn: 'SPN', fmi: 'FMI', description: 'Fault', causes: 'Likely causes', remedies: 'What to do', severity: 'Severity', lamp: 'Lamp',
-  },
-  'vehicle-obd2': {
-    code: 'Code', description: 'Fault', causes: 'Likely causes', remedies: 'What to do', severity: 'Severity', lamp: 'Lamp',
-  },
+  'vehicle-j1939': { spn: 'SPN', fmi: 'FMI', ...VEHICLE_TEXT },
+  'vehicle-obd2': { code: 'Code', ...VEHICLE_TEXT },
 };
 
 /** Far above any real code list; a larger sheet is a mistake, not a library. */
@@ -93,12 +100,16 @@ export const EXAMPLE_ROW: Record<FaultCodeType, Record<string, string>> = {
     detection: 'Voltage varies strongly while logging', foundBy: 'Logger', severity: 'Warning', lamp: 'Amber warning',
   },
   'vehicle-j1939': {
-    spn: '110', fmi: '0', description: 'Engine coolant temperature high', causes: 'Low coolant, blocked radiator, failed thermostat',
-    remedies: 'Stop the engine; check coolant level and radiator', severity: 'Critical', lamp: 'Red stop',
+    spn: '158', fmi: '3', description: 'Battery voltage above range', system: 'Engine', sensor: 'Battery voltage (in ECU)',
+    causes: 'Alternator regulator failure; faulty sensor in ECU', remedies: 'Check battery, wiring harness and alternator',
+    vehicleReaction: 'EGR switched off', severity: 'Warning', lamp: 'Amber warning',
   },
   'vehicle-obd2': {
-    code: 'P0217', description: 'Engine overheat condition', causes: 'Low coolant, failed fan or thermostat',
-    remedies: 'Stop the engine; check coolant and cooling fan', severity: 'Critical', lamp: 'Check engine',
+    code: 'P0117-00', description: 'Coolant temperature sensor signal short circuit to ground', system: 'Engine',
+    sensor: 'Coolant temperature sensor', causes: 'Wiring harness defect; faulty sensor; sensor connector problem',
+    remedies: 'Check the connector, wiring harness and sensor', diagnosticAids: 'Check battery voltage; check wire harness connections',
+    troubleshooting: 'Step 1: check the battery voltage\nStep 2: check the sensor connector is fitted properly',
+    severity: 'Warning', lamp: 'Check engine',
   },
 };
 
@@ -114,7 +125,7 @@ export async function buildCodeTemplate(type: FaultCodeType): Promise<Buffer> {
   const key = type === 'vehicle-j1939'
     ? '  SPN, FMI       the J1939 code: whole numbers, FMI from 0 to 31. Together they name the code.'
     : type === 'vehicle-obd2'
-      ? '  Code           an OBD-II code: a letter (P, C, B or U) and four characters, e.g. P0101.'
+      ? '  Code           an OBD-II code: a letter (P, C, B or U) and four characters, with or without the fault type: P0101 or P0425-85.'
       : '  Code           P and three digits, e.g. P103. The first digit names the area of the pump set.';
   [
     `Fault codes: ${type}. One row per code.`,
@@ -126,7 +137,12 @@ export async function buildCodeTemplate(type: FaultCodeType): Promise<Buffer> {
       '  Symptom        what the technician sees or hears at the pump.',
       '  How detected   the logger\'s rule, or the technician\'s test.',
       '  Found by       Logger or Technician.',
-    ] : []),
+    ] : [
+      "  System, Maker's code   the unit that raises the code (Engine, Transmission ...) and the maker's own name for it.",
+      '  Sensor, Location, Pin details, Voltage range, Signal range   the part to check, where it sits, how to measure it.',
+      '  Diagnostic aids   quick checks before starting. Troubleshooting steps   the numbered steps.',
+      '  Vehicle reaction  what the ECU does meanwhile: torque limit, creep mode, engine shut off.',
+    ]),
     '  Likely causes, What to do   free text.',
     '  Severity       Critical, Warning, Medium, Low or Info.',
     '  Lamp           Red stop, Amber warning, Protect, Check engine or No lamp.',
@@ -134,7 +150,6 @@ export async function buildCodeTemplate(type: FaultCodeType): Promise<Buffer> {
     'The row in the sheet is an example: replace it with your codes, or delete it, before uploading.',
     'One row per code. A row for a code already in the library changes it; a new code is added.',
     'A blank cell leaves that field as it is. A code missing from the sheet is left alone, never deleted.',
-    ...(type === 'motor-pump' ? [] : ['Codes from 1.0 are not in the sheet and cannot be changed here: they are edited in 1.0.']),
     'Check the file first: nothing is written until every row is valid.',
   ].forEach((line) => readMe.addRow([line]));
   readMe.getColumn(1).width = 110;
@@ -145,7 +160,7 @@ export async function buildCodeTemplate(type: FaultCodeType): Promise<Buffer> {
   sheet.getRow(1).font = { bold: true };
   sheet.addRow(fields.map((f) => EXAMPLE_ROW[type][f] ?? ''));
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF64748B' } };
-  fields.forEach((f, i) => { sheet.getColumn(i + 1).width = ['spn', 'fmi', 'code', 'severity', 'lamp', 'foundBy'].includes(f) ? 14 : 40; });
+  fields.forEach((f, i) => { sheet.getColumn(i + 1).width = ['spn', 'fmi', 'code', 'severity', 'lamp', 'foundBy', 'system', 'oemCode'].includes(f) ? 14 : 40; });
   // exceljs returns its own Buffer type; it is a Node Buffer at runtime.
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

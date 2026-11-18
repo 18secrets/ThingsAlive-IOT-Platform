@@ -285,18 +285,23 @@ describeDb('fault code library, against the database', () => {
       await expect(library.create(master, 'vehicle-obd2', { code: 'X1', description: 'x' })).rejects.toThrow(/OBD-II code/);
     });
 
-    it('a 1.0 vehicle code is refused an edit by the service, and by the database however it is written', async () => {
+    // Since VehicleCodesOwned1765600000000 (17 Nov): 1.0 is no longer the vehicle source,
+    // so a 1.0 row is edited here like any other. What stays held is its hands and its life.
+    it('a 1.0 vehicle code takes an edit from the service and the database; a change of hands or a delete is still refused', async () => {
       await asSync(`INSERT INTO dtc_master_catalog (protocol, code, spn, fmi, description) VALUES ('j1939', 'SPN:177:FMI:16', 177, 16, 'From 1.0')`);
       const [{ id }] = await owner.query(`SELECT id FROM dtc_master_catalog WHERE code = 'SPN:177:FMI:16'`);
-      await expect(library.update(master, 'vehicle-j1939', id, { description: 'Mine' })).rejects.toThrow(/is 1.0's/);
-      await expect(owner.query(`UPDATE dtc_master_catalog SET description = 'Mine' WHERE id = $1`, [id])).rejects.toThrow(/is 1.0's/);
+      await expect(library.update(master, 'vehicle-j1939', id, { description: 'Mine' })).resolves.toMatchObject({ description: 'Mine', source: '1.0' });
+      await expect(owner.query(`UPDATE dtc_master_catalog SET description = 'Mine again' WHERE id = $1`, [id])).resolves.toBeDefined();
       await expect(owner.query(`UPDATE dtc_master_catalog SET source_system = '2.0' WHERE id = $1`, [id])).rejects.toThrow(/cannot change hands/);
       await expect(owner.query(`DELETE FROM dtc_master_catalog WHERE id = $1`, [id])).rejects.toThrow(/retired, not deleted/);
     });
 
-    it('the copy from 1.0 is refused a 2.0 vehicle code by the database', async () => {
+    // Since VehicleCodesOwned1765600000000 the sync flag decides nothing: the copy is no
+    // longer scheduled, and its own statement still updates only 1.0 rows (the daily copy
+    // test above).
+    it('the sync flag no longer decides who writes a vehicle row', async () => {
       const added = await library.create(master, 'vehicle-j1939', { spn: 523, fmi: 2, description: 'Gear selector erratic' });
-      await expect(asSync(`UPDATE dtc_master_catalog SET description = 'From 1.0' WHERE id = $1`, [added.id])).rejects.toThrow(/is 2.0's/);
+      await expect(asSync(`UPDATE dtc_master_catalog SET description = 'From 1.0' WHERE id = $1`, [added.id])).resolves.toBeDefined();
     });
 
     it('the history cannot be rewritten from the application', async () => {
@@ -398,20 +403,19 @@ describeDb('fault code library, against the database', () => {
       expect(await owner.query(`SELECT 1 FROM fault_code_revision`)).toHaveLength(2);
     });
 
-    it('a vehicle sheet adds 2.0 codes and refuses a row for a code 1.0 owns', async () => {
+    // Since VehicleCodesOwned1765600000000: a row for a code 1.0 copied changes it, and it stays marked 1.0.
+    it('a vehicle sheet adds 2.0 codes and changes a code 1.0 copied', async () => {
       await asSync(`INSERT INTO dtc_master_catalog (protocol, code, spn, fmi, description) VALUES ('j1939', 'SPN:177:FMI:16', 177, 16, 'From 1.0')`);
-      const refused = await library.importCodes(master, 'vehicle-j1939', await workbook('vehicle-j1939', [
+      const applied = await library.importCodes(master, 'vehicle-j1939', await workbook('vehicle-j1939', [
         { spn: 523, fmi: 2, description: 'Gear selector erratic', severity: 'Critical', lamp: 'Red stop' },
         { spn: 177, fmi: 16, description: 'Mine' },
       ]), true);
-      expect(refused.applied).toBe(false);
-      expect(refused.rows[1].error).toMatch(/is 1.0's/);
-      const applied = await library.importCodes(master, 'vehicle-j1939', await workbook('vehicle-j1939', [
-        { spn: 523, fmi: 2, description: 'Gear selector erratic', severity: 'Critical', lamp: 'Red stop' },
-      ]), true);
       expect(applied.applied).toBe(true);
+      expect(applied.rows.map((r) => r.status)).toEqual(['new', 'changed']);
       expect((await owner.query(`SELECT source_system, severity, lamp FROM dtc_master_catalog WHERE code = 'SPN:523:FMI:2'`))[0])
         .toEqual({ source_system: '2.0', severity: 'critical', lamp: 'red_stop' });
+      expect((await owner.query(`SELECT source_system, description FROM dtc_master_catalog WHERE code = 'SPN:177:FMI:16'`))[0])
+        .toEqual({ source_system: '1.0', description: 'Mine' });
     });
 
     it('a file that is not a workbook, or not this kind\'s, is refused before any row is read', async () => {
@@ -428,7 +432,10 @@ describeDb('fault code library, against the database', () => {
     // No guard: a plain update of a 1.0 row goes through, as it did before.
     await owner.query(`UPDATE dtc_master_catalog SET description = 'edited' WHERE code = 'SPN:9:FMI:9'`);
     await owner.runMigrations({ transaction: 'all' });
-    await expect(owner.query(`UPDATE dtc_master_catalog SET description = 'again' WHERE code = 'SPN:9:FMI:9'`)).rejects.toThrow(/is 1.0's/);
+    // Back on, with every newer migration: VehicleCodesOwned1765600000000 lets a 1.0 row be
+    // edited, and the guard's lasting rule, no delete, is back.
+    await expect(owner.query(`UPDATE dtc_master_catalog SET description = 'again' WHERE code = 'SPN:9:FMI:9'`)).resolves.toBeDefined();
+    await expect(owner.query(`DELETE FROM dtc_master_catalog WHERE code = 'SPN:9:FMI:9'`)).rejects.toThrow(/retired, not deleted/);
   });
 
   it(`${MIGRATION} comes off and goes back on, giving today's accounts what they see today`, async () => {

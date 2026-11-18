@@ -19,11 +19,20 @@ export interface FaultCodeItem {
   lamp: string;
   spn: number | null;
   fmi: number | null;
-  /** 1.0's copy, or 2.0's own. */
+  /** Where it came from: 1.0's copy (before 17 Nov 2026), or 2.0. Both are edited here. */
   source: '1.0' | '2.0';
   /** A vehicle code's: the unit that raises it, and the maker's own code. Null for motor codes. */
   system: string | null;
   oemCode: string | null;
+  /** A vehicle code's, from the engine makers' sheets (VehicleCodesOwned1765600000000). Null for motor codes. */
+  sensor: string | null;
+  location: string | null;
+  pinDetails: string | null;
+  voltageRange: string | null;
+  signalRange: string | null;
+  diagnosticAids: string | null;
+  troubleshooting: string | null;
+  vehicleReaction: string | null;
   retiredAt: string | null;
 }
 
@@ -37,6 +46,9 @@ export interface CodeInput {
   code?: string; spn?: number | null; fmi?: number | null;
   description?: string; symptom?: string | null; causes?: string | null; remedies?: string | null;
   detection?: string | null; foundBy?: 'logger' | 'technician' | null; severity?: string; lamp?: string;
+  system?: string | null; oemCode?: string | null; sensor?: string | null; location?: string | null;
+  pinDetails?: string | null; voltageRange?: string | null; signalRange?: string | null;
+  diagnosticAids?: string | null; troubleshooting?: string | null; vehicleReaction?: string | null;
 }
 
 export interface FaultCodeRevision {
@@ -48,7 +60,12 @@ export interface FaultCodeRevision {
 
 /** What each library lets Master Admin change, by API field and its column. */
 const EDITABLE: Record<'vehicle' | 'motor', Record<string, string>> = {
-  vehicle: { description: 'description', causes: 'causes', remedies: 'remedies', severity: 'severity', lamp: 'lamp' },
+  vehicle: {
+    description: 'description', causes: 'causes', remedies: 'remedies', severity: 'severity', lamp: 'lamp',
+    system: 'source_unit', oemCode: 'oem_code', sensor: 'sensor', location: 'location', pinDetails: 'pin_details',
+    voltageRange: 'voltage_range', signalRange: 'signal_range', diagnosticAids: 'diagnostic_aids',
+    troubleshooting: 'troubleshooting', vehicleReaction: 'vehicle_reaction',
+  },
   motor: {
     description: 'description', symptom: 'symptom', causes: 'causes', remedies: 'remedies', detection: 'detection',
     foundBy: 'found_by', severity: 'severity', lamp: 'lamp',
@@ -68,8 +85,8 @@ export function isFaultCodeType(value: string): value is FaultCodeType {
 
 /**
  * The fault code library (step 1): which kinds of code each account is given, and the
- * codes of a kind. Vehicle codes are read from `dtc_master_catalog` (1.0's copy), motor
- * codes from `fault_code_motor` (2.0's own).
+ * codes of a kind. Vehicle codes are read from `dtc_master_catalog`, motor codes from
+ * `fault_code_motor`; both are 2.0's own since 1.0 stopped being the vehicle source.
  *
  * Grants are written in the tenant-spanning session — the only one the table's row
  * security lets write — and read back in the account's own session, where the same
@@ -162,9 +179,8 @@ export class FaultCodeLibraryService {
   // ------------------------------------------------------------------ editing (step 2)
 
   /**
-   * Adds a code 2.0 owns: a motor code, or a vehicle code 2.0 holds as its own. A vehicle
-   * code 1.0 already has is refused — the two would share one key, and 1.0's copy would
-   * have to give way to one of them silently.
+   * Adds a code. One already in the library under the same key is refused, whichever
+   * system it came from: one key, one meaning, and fault history points at it.
    */
   async create(scope: RequestScope, type: string, input: CodeInput): Promise<FaultCodeItem> {
     const fields = this.validate(libraryOf(type), input, true);
@@ -190,12 +206,15 @@ export class FaultCodeLibraryService {
           );
         } else {
           const { protocol, code, spn, fmi } = vehicleKey(type, input);
+          // The text columns are whichever the input filled; the column names come from
+          // EDITABLE, never from the input.
+          const text = Object.entries(fields).filter(([column]) => !['description', 'severity', 'lamp'].includes(column));
           [{ id }] = await m.query(
-            `INSERT INTO "dtc_master_catalog" ("protocol", "code", "spn", "fmi", "description", "causes", "remedies",
-               "severity", "lamp", "source_system")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'medium'), coalesce($9, 'none'), '2.0') RETURNING "id"`,
-            [protocol, code, spn, fmi, fields.description, fields.causes ?? null, fields.remedies ?? null,
-              fields.severity ?? null, fields.lamp ?? null],
+            `INSERT INTO "dtc_master_catalog" ("protocol", "code", "spn", "fmi", "description", "severity", "lamp", "source_system"
+               ${text.map(([column]) => `, "${column}"`).join('')})
+             VALUES ($1, $2, $3, $4, $5, coalesce($6, 'medium'), coalesce($7, 'none'), '2.0'
+               ${text.map((_, i) => `, $${i + 8}`).join('')}) RETURNING "id"`,
+            [protocol, code, spn, fmi, fields.description, fields.severity ?? null, fields.lamp ?? null, ...text.map(([, v]) => v)],
           );
         }
       } catch (err) {
@@ -227,10 +246,6 @@ export class FaultCodeLibraryService {
       const [current] = await m.query(`SELECT * FROM "${table}" WHERE "id" = $1 FOR UPDATE`, [id]);
       if (!current || (library === 'vehicle' && current.protocol !== VEHICLE_PROTOCOL[type as FaultCodeType])) {
         throw new NotFoundException(`No ${type} code with that id.`);
-      }
-      if (library === 'vehicle' && current.source_system === '1.0') {
-        // The database refuses this too (dtc_master_owner_guard); this says it plainly.
-        throw new BadRequestException(`${current.code} is 1.0's: it is edited in 1.0 and copied here daily.`);
       }
       const changes: [string, string | null, string | null][] = [];
       const sets: string[] = [];
@@ -264,9 +279,6 @@ export class FaultCodeLibraryService {
       const [current] = await m.query(`SELECT * FROM "${table}" WHERE "id" = $1 FOR UPDATE`, [id]);
       if (!current || (library === 'vehicle' && current.protocol !== VEHICLE_PROTOCOL[type as FaultCodeType])) {
         throw new NotFoundException(`No ${type} code with that id.`);
-      }
-      if (library === 'vehicle' && current.source_system === '1.0') {
-        throw new BadRequestException(`${current.code} is 1.0's: 1.0 decides which of its codes are in use.`);
       }
       if ((current.retired_at !== null) !== retired) {
         await m.query(`UPDATE "${table}" SET "retired_at" = ${retired ? 'now()' : 'NULL'} WHERE "id" = $1`, [id]);
@@ -323,9 +335,6 @@ export class FaultCodeLibraryService {
           if (seen.has(code)) throw new BadRequestException(`The same code as row ${seen.get(code)}.`);
           seen.set(code, row);
           const current = byCode.get(code);
-          if (current && current.source_system === '1.0') {
-            throw new BadRequestException(`${code} is 1.0's: it is edited in 1.0 and copied here daily.`);
-          }
           const fields = this.validate(library, input, !current);
           if (!current) {
             planned.push({ row, code, status: 'new', input, fields });
@@ -436,11 +445,16 @@ export class FaultCodeLibraryService {
     const source = protocol
       ? `SELECT "id", "code", "description", NULL::text AS "symptom", "causes", "remedies", NULL::text AS "detection",
                 NULL::text AS "foundBy", "severity", "lamp", "spn", "fmi", "source_system" AS "source",
-                "source_unit" AS "system", "oem_code" AS "oemCode", "retired_at" AS "retiredAt"
+                "source_unit" AS "system", "oem_code" AS "oemCode", "sensor", "location", "pin_details" AS "pinDetails",
+                "voltage_range" AS "voltageRange", "signal_range" AS "signalRange", "diagnostic_aids" AS "diagnosticAids",
+                "troubleshooting", "vehicle_reaction" AS "vehicleReaction", "retired_at" AS "retiredAt"
            FROM "dtc_master_catalog" WHERE "protocol" = $1`
       : `SELECT "id", "code", "description", "symptom", "causes", "remedies", "detection",
                 "found_by" AS "foundBy", "severity", "lamp", NULL::int AS "spn", NULL::int AS "fmi", '2.0'::text AS "source",
-                NULL::text AS "system", NULL::text AS "oemCode", "retired_at" AS "retiredAt"
+                NULL::text AS "system", NULL::text AS "oemCode", NULL::text AS "sensor", NULL::text AS "location",
+                NULL::text AS "pinDetails", NULL::text AS "voltageRange", NULL::text AS "signalRange",
+                NULL::text AS "diagnosticAids", NULL::text AS "troubleshooting", NULL::text AS "vehicleReaction",
+                "retired_at" AS "retiredAt"
            FROM "fault_code_motor" WHERE $1::text IS NULL`; // $1, the protocol, is a vehicle kind's only
     const filter = `WHERE ($2::text IS NULL OR c."code" ILIKE $2 OR c."description" ILIKE $2)
                       AND ($3::boolean OR c."retiredAt" IS NULL) AND ($6::uuid IS NULL OR c."id" = $6)`;
@@ -529,8 +543,12 @@ function vehicleKey(type: string, input: CodeInput): { protocol: 'j1939' | 'obd2
     }
     return { protocol: 'j1939', code: `SPN:${spn}:FMI:${fmi}`, spn, fmi };
   }
+  // With the ECU's fault type (P0425-85) or without (P0119): the makers' sheets use both,
+  // and the same base code with two fault types is two faults, so the suffix is the key.
   const code = (input.code ?? '').trim().toUpperCase();
-  if (!/^[PCBU][0-9A-F]{4}$/.test(code)) throw new BadRequestException('An OBD-II code is a letter (P, C, B or U) and four characters, e.g. P0101.');
+  if (!/^[PCBU][0-9A-F]{4}(-[0-9A-F]{2})?$/.test(code)) {
+    throw new BadRequestException('An OBD-II code is a letter (P, C, B or U) and four characters, with or without a fault type: P0101 or P0425-85.');
+  }
   return { protocol: 'obd2', code, spn: null, fmi: null };
 }
 
@@ -541,7 +559,7 @@ function friendly(err: unknown, type: string): Error {
   if (e.code === '23505') {
     return new ConflictException(type === 'motor-pump'
       ? 'That motor code is already in the library.'
-      : 'That vehicle code is already in the library, from 1.0 or added before.');
+      : 'That vehicle code is already in the library.');
   }
   if (e.code === '23514') return new BadRequestException(e.message ?? 'The database refused that code.');
   return err as Error;

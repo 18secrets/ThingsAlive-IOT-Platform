@@ -38,6 +38,17 @@ export class FaultCodeDto implements CodeInput {
   @IsOptional() @IsIn(['logger', 'technician']) foundBy?: 'logger' | 'technician' | null;
   @IsOptional() @IsString() severity?: string;
   @IsOptional() @IsString() lamp?: string;
+  // A vehicle code's (VehicleCodesOwned1765600000000); a motor code ignores them.
+  @IsOptional() @IsString() system?: string | null;
+  @IsOptional() @IsString() oemCode?: string | null;
+  @IsOptional() @IsString() sensor?: string | null;
+  @IsOptional() @IsString() location?: string | null;
+  @IsOptional() @IsString() pinDetails?: string | null;
+  @IsOptional() @IsString() voltageRange?: string | null;
+  @IsOptional() @IsString() signalRange?: string | null;
+  @IsOptional() @IsString() diagnosticAids?: string | null;
+  @IsOptional() @IsString() troubleshooting?: string | null;
+  @IsOptional() @IsString() vehicleReaction?: string | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
