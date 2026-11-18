@@ -199,8 +199,7 @@
     "poolUnreadableDot": "Could not read the device pool.",
     "assigned": "Assigned",
     "inStock": "In stock",
-    "retired": "Retired",
-    "notShown": "Device connectivity and onboarding activity across clients are not shown: the backend answers both per account only, with no cross-tenant read for Master Admin yet."
+    "retired": "Retired"
   },
   "thingLive": {
     "subtitle": "Machine summary",

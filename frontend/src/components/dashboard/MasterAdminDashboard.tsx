@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Building2, Cpu, Info, Wrench } from 'lucide-react';
+import { Building2, Cpu, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ClientAccount } from '../../types';
 import { apiListAllEquipment, apiListDevicePool } from '../../lib/api';
@@ -94,7 +94,10 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
           ) : byClient.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">{t('master.noClients')}</p>
           ) : (
-            <div className="space-y-3">
+            // Down to the bottom of the screen and no further, scrolling inside: one client
+            // is three lines, and with twenty accounts the page ran on past everything else.
+            // Never under 18rem, so a short laptop screen still shows a useful list.
+            <div className="space-y-3 max-h-[max(18rem,calc(100dvh-22rem))] overflow-y-auto overscroll-contain pr-2">
               {byClient.map((c) => (
                 <div key={c.id} className="space-y-1">
                   <div className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{c.name}</div>
@@ -117,11 +120,6 @@ export const MasterAdminDashboard: React.FC<MasterAdminDashboardProps> = ({ clie
             </div>
           )}
         </Panel>
-      </div>
-
-      <div className="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
-        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-        <span>{t('master.notShown')}</span>
       </div>
     </div>
   );
