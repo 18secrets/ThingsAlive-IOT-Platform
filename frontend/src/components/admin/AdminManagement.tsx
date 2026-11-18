@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -13,7 +13,10 @@ import {
   ShieldCheck,
   FunctionSquare,
   Fuel,
-  AlertOctagon
+  AlertOctagon,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import { AdminSubTab, CLIENT_ADMIN_SUBTABS, SensorItem, ToolMappingItem, CategoryItem, PlantItem, ClientAccount } from '../../types';
 import {
@@ -388,35 +391,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const isPromotedTab = !restrictToClientAdmin && PROMOTED_SUBTABS.includes(activeSubTab);
 
   return (
-    <div id="admin-module" className="space-y-5">
+    <div id="admin-module" className="space-y-3">
 
       {/* Admin Navigation Sub-Tabs */}
-      {!isPromotedTab && (
-      <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
-        {subTabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSubTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              id={`admin-subtab-${tab.id}`}
-              onClick={() => onChangeSubTab(tab.id)}
-              className={`px-4 py-2 text-base font-medium rounded-lg border transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
-                isActive
-                  ? 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 shadow-xs font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      )}
+      {!isPromotedTab && <AdminTabBar tabs={subTabs} active={activeSubTab} onChange={onChangeSubTab} />}
 
       {/* Sub-tab Views */}
-      <div className="pt-1">
+      <div>
 
         {!restrictToClientAdmin && activeSubTab === 'sensor' && (
           <SensorTable
@@ -630,5 +611,105 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       </div>
 
     </div>
+  );
+};
+
+type TabDef = { id: AdminSubTab; label: string; icon: React.FC<{ className?: string }> };
+
+/**
+ * The sub-tab bar (17 Nov). Eleven bordered buttons ran off the right edge with nothing
+ * saying there were more ("Signal Ali…"), and on a phone one and a half showed. Now one
+ * slim bar of underlined tabs, as Fault Codes' own; when they do not all fit, the edges
+ * fade and arrows scroll it, and the open tab is always scrolled into view. On a phone
+ * a single dropdown names the open section instead: eleven tabs do not scroll usefully
+ * at 390 px.
+ */
+const AdminTabBar: React.FC<{ tabs: TabDef[]; active: AdminSubTab; onChange: (tab: AdminSubTab) => void }> = ({ tabs, active, onChange }) => {
+  const { t } = useTranslation('admin');
+  const rail = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  const measure = () => {
+    const el = rail.current;
+    if (!el) return;
+    setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    measure();
+    const el = rail.current;
+    if (!el) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tabs.length]);
+  // Centred, not just brought into view: at the edge the open tab sat under the arrow.
+  useEffect(() => {
+    const el = rail.current;
+    const tab = el?.querySelector<HTMLElement>(`[data-tab="${active}"]`);
+    if (el && tab) el.scrollLeft = tab.offsetLeft - (el.clientWidth - tab.offsetWidth) / 2;
+    measure();
+  }, [active]);
+  const scroll = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * rail.current.clientWidth * 0.7, behavior: 'smooth' });
+
+  const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
+  const CurrentIcon = current?.icon;
+  const arrow = 'absolute top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-[#0B7285] dark:hover:text-sky-400 cursor-pointer';
+
+  return (
+    <>
+      <div className="sm:hidden relative">
+        {CurrentIcon && <CurrentIcon className="w-4 h-4 text-[#0B7285] dark:text-sky-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />}
+        <select
+          id="admin-subtab-select"
+          aria-label={t('tabs.section')}
+          value={current?.id}
+          onChange={(e) => onChange(e.target.value as AdminSubTab)}
+          className="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs pl-9 pr-9 py-2.5 text-sm font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0B7285]/30"
+        >
+          {tabs.map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+        </select>
+        <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      </div>
+
+      <div className="hidden sm:block relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs">
+        {edges.left && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-16 rounded-l-xl bg-gradient-to-r from-white dark:from-slate-900 to-transparent z-[5]" />
+            <button type="button" onClick={() => scroll(-1)} aria-label={t('tabs.scrollBack')} className={`${arrow} left-2`}><ChevronLeft className="w-4 h-4" /></button>
+          </>
+        )}
+        <div ref={rail} onScroll={measure} role="tablist" className="flex items-stretch gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = active === tab.id;
+            return (
+              <button
+                key={tab.id}
+                id={`admin-subtab-${tab.id}`}
+                data-tab={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => onChange(tab.id)}
+                className={`relative shrink-0 flex items-center gap-2 px-3 py-3 text-sm whitespace-nowrap transition-colors cursor-pointer ${
+                  isActive
+                    ? 'text-[#0B7285] dark:text-sky-400 font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-slate-100'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+                <span className={`absolute left-2 right-2 bottom-0 h-0.5 rounded-full ${isActive ? 'bg-[#0B7285] dark:bg-sky-400' : 'bg-transparent'}`} />
+              </button>
+            );
+          })}
+        </div>
+        {edges.right && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-16 rounded-r-xl bg-gradient-to-l from-white dark:from-slate-900 to-transparent z-[5]" />
+            <button type="button" onClick={() => scroll(1)} aria-label={t('tabs.scrollMore')} className={`${arrow} right-2`}><ChevronRight className="w-4 h-4" /></button>
+          </>
+        )}
+      </div>
+    </>
   );
 };

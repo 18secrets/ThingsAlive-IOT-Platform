@@ -278,6 +278,21 @@ export class EquipmentService {
   }
 
   /** The model this machine names (D57), or null. */
+  /**
+   * One account's models, for Master Admin naming a machine's model on the account's
+   * behalf (17 Nov): the Add equipment form of the cross-tenant Equipment page offered a
+   * free-text model number only, so a pump created there had no model, and its rated
+   * alerts idled until the client set one. Here, beside the other on-behalf-of reads, not
+   * on `/my-equipment-templates`, which refuses platform roles so that a client's own
+   * models are reached from Things Alive only on this audited path.
+   */
+  async accountModels(scope: RequestScope, tenantId: string): Promise<ClientEquipmentTemplate[]> {
+    this.requirePlatform(scope, 'read another account\'s models');
+    if (!tenantId?.trim()) throw new BadRequestException('tenantId is required: whose models?');
+    return withTenantId(this.ds, tenantId, (m) =>
+      m.getRepository(ClientEquipmentTemplate).find({ where: { tenantId }, order: { name: 'ASC' } }));
+  }
+
   async model(scope: RequestScope, ref: AssetRef, onBehalfOfTenantId?: string): Promise<{ modelId: string | null }> {
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
     return withTenantId(this.ds, tenantId, async (m) => {

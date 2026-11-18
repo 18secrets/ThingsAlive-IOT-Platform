@@ -46,7 +46,33 @@ export class DtcMasterCatalog {
   @Column({ name: 'oem_code', type: 'text', nullable: true })
   oemCode: string | null;
 
-  /** 1.0's copy, or a vehicle code 2.0 holds as its own (FaultCodeLibrary1765300000000). */
+  // From the engine makers' sheets (VehicleCodesOwned1765600000000): what a technician
+  // needs at the machine, beyond the fault's cause and fix.
+  @Column({ type: 'text', nullable: true })
+  sensor: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  location: string | null;
+
+  @Column({ name: 'pin_details', type: 'text', nullable: true })
+  pinDetails: string | null;
+
+  @Column({ name: 'voltage_range', type: 'text', nullable: true })
+  voltageRange: string | null;
+
+  @Column({ name: 'signal_range', type: 'text', nullable: true })
+  signalRange: string | null;
+
+  @Column({ name: 'diagnostic_aids', type: 'text', nullable: true })
+  diagnosticAids: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  troubleshooting: string | null;
+
+  @Column({ name: 'vehicle_reaction', type: 'text', nullable: true })
+  vehicleReaction: string | null;
+
+  /** Where the code came from: 1.0's copy (before 17 Nov), or 2.0 (FaultCodeLibrary1765300000000). */
   @Column({ name: 'source_system', type: 'text', default: '1.0' })
   sourceSystem: string;
 

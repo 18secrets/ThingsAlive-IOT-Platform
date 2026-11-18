@@ -3,8 +3,10 @@ import { X, Check } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import {
-  ApiError, EquipmentInput, EquipmentProfile, Plant, ServiceTier, apiListEntitlements, apiListEquipmentClasses,
+  ApiError, EquipmentInput, EquipmentModel, EquipmentProfile, Plant, ServiceTier, apiGetMachineModel, apiListAccountModels,
+  apiListEntitlements, apiListEquipmentClasses, apiSetMachineModel,
 } from '../../lib/api';
+import { ModelField } from './ModelField';
 import { ClientAccount } from '../../types';
 
 interface MasterAddEquipmentModalProps {
@@ -30,7 +32,7 @@ const TIERS: ServiceTier[] = ['basic', 'standard', 'advanced', 'full'];
 export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = ({
   isOpen, onClose, onCreate, onUpdate, onMove, clients, onListPlantsForTenant, existingEquipment, allEquipment = [],
 }) => {
-  const { t } = useTranslation(['devices', 'shared']);
+  const { t } = useTranslation(['devices', 'shared', 'equipment']);
   const TIER_OPTIONS = TIERS.map((tier) => ({ label: t(`equipment.tier.${tier}`), value: tier }));
   const [tenantId, setTenantId] = useState('');
   const [code, setCode] = useState('');
@@ -42,6 +44,12 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
   const [serialNumber, setSerialNumber] = useState('');
   const [tier, setTier] = useState<ServiceTier>('basic');
   const [equipmentClassSlug, setEquipmentClassSlug] = useState('');
+  // The machine's model (D57), one of the chosen client's own: where a pump's rated
+  // current, voltage band and duty curve come from. The form offered only a free-text
+  // model number, so a pump made here had no model and its rated alerts idled (17 Nov).
+  const [models, setModels] = useState<EquipmentModel[]>([]);
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [initialModelId, setInitialModelId] = useState<string | null>(null);
   // Machine types granted to each client, read once per opening (tester bug TC_145):
   // a machine may only run a class its account was granted (decision D04), so the
   // picker offers that client's grants, never the whole library.
@@ -67,6 +75,8 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
     setSerialNumber('');
     setTier('basic');
     setEquipmentClassSlug('');
+    setModelId(null);
+    setInitialModelId(null);
     setPlants([]);
     setError(undefined);
   };
@@ -84,6 +94,8 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
       setSerialNumber(existingEquipment.serialNumber ?? '');
       setTier(existingEquipment.tier);
       setEquipmentClassSlug(existingEquipment.equipmentClassSlug ?? '');
+      apiGetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId, existingEquipment.tenantId)
+        .then((r) => { setModelId(r.modelId); setInitialModelId(r.modelId); }).catch(() => {});
     } else {
       reset();
     }
@@ -107,6 +119,18 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
   const classOptions = grants
     .filter((g) => g.tenantId === tenantId)
     .map((g) => ({ label: classNames[g.slug] ?? g.slug, value: g.slug }));
+
+  // The chosen client's models, fetched when the client changes.
+  useEffect(() => {
+    if (!tenantId) { setModels([]); return; }
+    let live = true;
+    apiListAccountModels(tenantId).then((r) => { if (live) setModels(r); }).catch(() => { if (live) setModels([]); });
+    return () => { live = false; };
+  }, [tenantId]);
+  // A model of another machine type cannot be this machine's (the server refuses it too).
+  useEffect(() => {
+    if (modelId && models.length && !models.some((m) => m.id === modelId && m.equipmentClassSlug === equipmentClassSlug)) setModelId(null);
+  }, [equipmentClassSlug, models]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The site picker is per-client — fetched fresh whenever the chosen client
   // changes, never preloaded for every account up front.
@@ -156,8 +180,11 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
           equipmentClassSlug: equipmentClassSlug || null,
           tenantId,
         });
+        if (modelId !== initialModelId) {
+          await apiSetMachineModel(existingEquipment.sourceSystem, existingEquipment.externalId, modelId, tenantId);
+        }
       } else {
-        await onCreate({
+        const created = await onCreate({
           code: finalCode,
           name: finalName,
           description: description.trim() || undefined,
@@ -169,6 +196,7 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
           equipmentClassSlug: equipmentClassSlug || undefined,
           tenantId,
         });
+        if (modelId && created) await apiSetMachineModel(created.sourceSystem, created.externalId, modelId, tenantId);
       }
       reset();
       onClose();
@@ -273,6 +301,10 @@ export const MasterAddEquipmentModal: React.FC<MasterAddEquipmentModalProps> = (
               <p className="text-xs text-slate-400 mt-1">{t('equipment.noGrantedTypes')}</p>
             )}
           </div>
+
+          {equipmentClassSlug && (
+            <ModelField models={models} classSlug={equipmentClassSlug} value={modelId} onChange={setModelId} forClient />
+          )}
 
           <div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">

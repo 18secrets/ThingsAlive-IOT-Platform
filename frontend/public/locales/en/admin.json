@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "Fuel forecast accuracy",
     "models": "Models",
     "serviceRoster": "Service roster",
-    "faultCodes": "Fault Codes"
+    "faultCodes": "Fault Codes",
+    "section": "Section",
+    "scrollBack": "Earlier tabs",
+    "scrollMore": "More tabs"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",
@@ -115,7 +118,6 @@
     "search": "Search code or fault…",
     "showRetired": "Show retired",
     "add": "Add code",
-    "vehicleHint": "These codes come from 1.0 and are copied here every day. They are edited in 1.0, so here they can be read but not changed.",
     "empty": "No codes match.",
     "retired": "Retired",
     "edit": "Edit",
@@ -154,11 +156,18 @@
       "severity": "Severity",
       "lamp": "Lamp",
       "system": "System",
-      "oemCode": "Maker's code"
+      "oemCode": "Maker's code",
+      "sensor": "Sensor",
+      "location": "Location",
+      "pinDetails": "Pin details",
+      "voltageRange": "Voltage range",
+      "signalRange": "Signal range",
+      "diagnosticAids": "Diagnostic aids",
+      "troubleshooting": "Troubleshooting steps",
+      "vehicleReaction": "Vehicle reaction"
     },
     "codeHintMotor": "P and three digits, e.g. P103",
-    "codeHintObd2": "e.g. P0101",
-    "readOnly10": "This code comes from 1.0 and is edited there. It is copied here every day.",
+    "codeHintObd2": "e.g. P0101, P0425-85",
     "lamp": {
       "red_stop": "Red stop",
       "amber_warning": "Amber warning",
@@ -187,7 +196,17 @@
       "found_by": "Found by",
       "severity": "Severity",
       "lamp": "Lamp",
-      "retired": "Retired"
+      "retired": "Retired",
+      "source_unit": "System",
+      "oem_code": "Maker's code",
+      "sensor": "Sensor",
+      "location": "Location",
+      "pin_details": "Pin details",
+      "voltage_range": "Voltage range",
+      "signal_range": "Signal range",
+      "diagnostic_aids": "Diagnostic aids",
+      "troubleshooting": "Troubleshooting steps",
+      "vehicle_reaction": "Vehicle reaction"
     },
     "access": {
       "loadFailed": "Account access could not be loaded.",

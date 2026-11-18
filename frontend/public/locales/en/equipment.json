@@ -337,7 +337,10 @@
     "requestClass": "Request this class from Things Alive →",
     "model": "Model",
     "modelPlaceholder": "Choose the machine’s model",
-    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models."
+    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models.",
+    "noModelsOfType": "No model of this machine type yet",
+    "modelMissing": "No model chosen: this machine's rated alerts and load figures will wait until one is.",
+    "noModelsForClient": "This client has no model of this machine type yet. The client copies one from the library under Administration → Models."
   },
   "bindings": {
     "title": "Signal Bindings",
@@ -782,6 +785,14 @@
     "clearedPeriod": "Cleared between",
     "noneCleared": "No codes cleared in this period.",
     "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest.",
-    "symptom": "Symptom"
+    "symptom": "Symptom",
+    "sensor": "Sensor",
+    "location": "Location",
+    "pinDetails": "Pin details",
+    "voltageRange": "Voltage range",
+    "signalRange": "Signal range",
+    "diagnosticAids": "Diagnostic aids",
+    "troubleshooting": "Troubleshooting steps",
+    "vehicleReaction": "Vehicle reaction"
   }
 }

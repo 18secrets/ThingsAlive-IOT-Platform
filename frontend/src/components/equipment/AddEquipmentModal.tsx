@@ -6,6 +6,7 @@ import {
   ApiError, EquipmentClass, EquipmentInput, EquipmentProfile, Plant, ServiceTier, ClassOption, ShiftTemplate,
   apiApplyShiftTemplate, apiListMyCatalogScenarios, apiListShiftTemplates, EquipmentModel, apiGetMachineModel, apiListModels, apiSetMachineModel,
 } from '../../lib/api';
+import { ModelField } from './ModelField';
 
 interface AddEquipmentModalProps {
   isOpen: boolean;
@@ -325,18 +326,7 @@ export const AddEquipmentModal: React.FC<AddEquipmentModalProps> = ({
             </div>
 
             {equipmentClassSlug && (
-              <div>
-                <span className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">{t('equipmentForm.model')}</span>
-                <SelectPicker
-                  data={models.filter((m) => m.equipmentClassSlug === equipmentClassSlug)
-                    .map((m) => ({ label: [m.manufacturer, m.name].filter(Boolean).join(' '), value: m.id }))}
-                  value={modelId}
-                  onChange={setModelId}
-                  placeholder={t('equipmentForm.modelPlaceholder')}
-                  block
-                />
-                <p className="text-xs text-slate-400 mt-1">{t('equipmentForm.modelHint')}</p>
-              </div>
+              <ModelField models={models} classSlug={equipmentClassSlug} value={modelId} onChange={setModelId} />
             )}
 
             <div>

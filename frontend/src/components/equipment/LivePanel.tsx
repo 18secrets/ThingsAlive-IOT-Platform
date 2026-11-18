@@ -160,6 +160,11 @@ export const LivePanel: React.FC<{
   );
 };
 
+/** A vehicle code's fields from the engine makers' sheets, in the order a technician works. */
+const MAKER_FIELDS = [
+  'vehicleReaction', 'sensor', 'location', 'diagnosticAids', 'troubleshooting', 'pinDetails', 'voltageRange', 'signalRange',
+] as const;
+
 /**
  * Active fault codes, red lamp first, one card each that opens to its causes and what to
  * do. The chip says how serious the code is (Critical, Warning) in the words the pump
@@ -200,7 +205,11 @@ const FaultCodesPanel: React.FC<{
           {f.symptom && <p><span className="font-semibold">{t('faults.symptom')}:</span> {f.symptom}</p>}
           {f.causes && <p><span className="font-semibold">{t('faults.causes')}:</span> {f.causes}</p>}
           {f.remedies && <p><span className="font-semibold">{t('faults.remedies')}:</span> {f.remedies}</p>}
-          {!f.symptom && !f.causes && !f.remedies && <p className="text-slate-500 dark:text-slate-400">{t('faults.noGuidance')}</p>}
+          {/* A vehicle code's, from the engine makers' sheets. Steps keep their line breaks. */}
+          {MAKER_FIELDS.map((k) => f[k] && (
+            <p key={k} className="whitespace-pre-line"><span className="font-semibold">{t(`faults.${k}`)}:</span> {f[k]}</p>
+          ))}
+          {!f.symptom && !f.causes && !f.remedies && !MAKER_FIELDS.some((k) => f[k]) && <p className="text-slate-500 dark:text-slate-400">{t('faults.noGuidance')}</p>}
         </div>
       )}
     </li>

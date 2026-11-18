@@ -2,13 +2,11 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { DtcSyncService } from './dtc-sync.service';
 
 export const DEFAULT_DTC_TICK_SECONDS = 60; // Check every 60 seconds for active packets
-export const DEFAULT_MASTER_SYNC_SECONDS = 86_400; // Daily master catalog mirror
 
 @Injectable()
 export class DtcSyncScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DtcSyncScheduler.name);
   private timer: NodeJS.Timeout | null = null;
-  private masterTimer: NodeJS.Timeout | null = null;
   private running = false;
 
   constructor(private readonly sync: DtcSyncService) {}
@@ -23,20 +21,16 @@ export class DtcSyncScheduler implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => void this.tick(), tickSeconds * 1000);
     this.timer.unref?.();
 
-    // Daily master catalog sync
-    this.masterTimer = setInterval(() => void this.syncMaster(), DEFAULT_MASTER_SYNC_SECONDS * 1000);
-    this.masterTimer.unref?.();
+    // No daily copy of 1.0's dtc_master any more (VehicleCodesOwned1765600000000): vehicle
+    // codes are made in 2.0's library, and a copy would write over what was edited there.
+    // `syncMaster` stays for a deliberate one-off run; nothing schedules it.
 
     this.logger.log(`DTC telemetry pull scheduler running every ${tickSeconds}s.`);
-    // Initial master sync
-    void this.syncMaster();
   }
 
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
-    if (this.masterTimer) clearInterval(this.masterTimer);
     this.timer = null;
-    this.masterTimer = null;
   }
 
   async tick(now = new Date()): Promise<void> {

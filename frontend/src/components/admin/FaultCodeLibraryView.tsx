@@ -100,10 +100,9 @@ const CodesView: React.FC<{ type: FaultCodeType; canEdit: boolean }> = ({ type, 
 
   const total = data?.total ?? 0;
   const motor = type === 'motor-pump';
-  // Vehicle codes are 1.0's, sent here every day: their tabs are for reading (17 Nov).
-  // Adding and importing are for motor codes, which only 2.0 holds. The API still takes a
-  // 2.0 vehicle code, for the day a vehicle device reports to 2.0 itself.
-  const canWrite = canEdit && motor;
+  // Every kind is 2.0's own since 1.0 stopped being the vehicle source (17 Nov): each tab
+  // adds, imports and edits alike.
+  const canWrite = canEdit;
   const columns = [
     { label: t('faultCodes.col.code'), width: 150 },
     { label: t('faultCodes.col.fault'), grow: 3, minWidth: 180 },
@@ -131,17 +130,14 @@ const CodesView: React.FC<{ type: FaultCodeType; canEdit: boolean }> = ({ type, 
     <Chip tone={SEVERITY_TONE[c.severity] ?? 'slate'}>{t(`faultCodes.severity.${c.severity}`, { defaultValue: c.severity })}</Chip>,
     <Chip tone={c.source === '1.0' ? 'slate' : 'sky'}>{t(`faultCodes.source.${c.source === '1.0' ? 'v1' : 'v2'}`)}</Chip>,
     <div className={`flex items-center gap-1.5 ${card ? '' : 'justify-end'}`}>
-      <button onClick={() => setOpen({ code: c, tab: 'details' })} title={canEdit && c.source === '2.0' ? t('faultCodes.edit') : t('faultCodes.view')}
-        aria-label={canEdit && c.source === '2.0' ? t('faultCodes.edit') : t('faultCodes.view')} className={ACTION}>
-        {canEdit && c.source === '2.0' ? <Edit2 className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+      <button onClick={() => setOpen({ code: c, tab: 'details' })} title={canEdit ? t('faultCodes.edit') : t('faultCodes.view')}
+        aria-label={canEdit ? t('faultCodes.edit') : t('faultCodes.view')} className={ACTION}>
+        {canEdit ? <Edit2 className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
       </button>
-      {/* 1.0's codes are edited in 1.0: they have no history here, and are not retired here. */}
-      {c.source === '2.0' && (
-        <button onClick={() => setOpen({ code: c, tab: 'history' })} title={t('faultCodes.tab.history')} aria-label={t('faultCodes.tab.history')} className={ACTION}>
-          <History className="w-3.5 h-3.5" />
-        </button>
-      )}
-      {canEdit && c.source === '2.0' && (
+      <button onClick={() => setOpen({ code: c, tab: 'history' })} title={t('faultCodes.tab.history')} aria-label={t('faultCodes.tab.history')} className={ACTION}>
+        <History className="w-3.5 h-3.5" />
+      </button>
+      {canEdit && (
         <button onClick={() => void setRetired(c, !c.retiredAt)} disabled={busyId === c.id}
           title={c.retiredAt ? t('faultCodes.restore') : t('faultCodes.retire')} aria-label={c.retiredAt ? t('faultCodes.restore') : t('faultCodes.retire')}
           className={`${ACTION} ${c.retiredAt ? '' : 'hover:text-rose-600! hover:border-rose-300!'} disabled:opacity-50`}>
@@ -212,13 +208,10 @@ const CodesView: React.FC<{ type: FaultCodeType; canEdit: boolean }> = ({ type, 
             aria-label={t('faultCodes.search')} className="w-full pl-9!" />
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {/* Retiring is 2.0's: 1.0 decides which of its vehicle codes are in use. */}
-          {motor && (
-            <label className={`inline-flex items-center gap-2 text-xs ${MUTED} cursor-pointer`}>
-              <input id={`fault-codes-retired-${type}`} type="checkbox" checked={showRetired} onChange={(e) => { setShowRetired(e.target.checked); setPage(1); }} />
-              {t('faultCodes.showRetired')}
-            </label>
-          )}
+          <label className={`inline-flex items-center gap-2 text-xs ${MUTED} cursor-pointer`}>
+            <input id={`fault-codes-retired-${type}`} type="checkbox" checked={showRetired} onChange={(e) => { setShowRetired(e.target.checked); setPage(1); }} />
+            {t('faultCodes.showRetired')}
+          </label>
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           {canWrite && (
             <>
@@ -240,7 +233,6 @@ const CodesView: React.FC<{ type: FaultCodeType; canEdit: boolean }> = ({ type, 
           )}
         </div>
       </div>
-      {type !== 'motor-pump' && <p className={`text-xs ${MUTED}`}>{t('faultCodes.vehicleHint')}</p>}
 
       {error && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
@@ -296,14 +288,14 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
 }) => {
   const { t } = useTranslation('admin');
   const motor = type === 'motor-pump';
-  // 1.0's codes are edited in 1.0 and copied here daily: shown, never editable.
-  const editable = canEdit && (!code || code.source === '2.0');
+  const editable = canEdit;
   const [key, setKey] = useState(code?.code ?? '');
   const [spn, setSpn] = useState<number | null>(code?.spn ?? null);
   const [fmi, setFmi] = useState<number | null>(code?.fmi ?? null);
   const [form, setForm] = useState<FaultCodeInput>({
     description: code?.description ?? '', symptom: code?.symptom ?? '', causes: code?.causes ?? '', remedies: code?.remedies ?? '',
     detection: code?.detection ?? '', foundBy: code?.foundBy ?? null, severity: code?.severity ?? 'medium', lamp: code?.lamp ?? 'none',
+    ...Object.fromEntries(VEHICLE_FIELDS.map((f) => [f, code?.[f] ?? ''])),
   });
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -315,8 +307,12 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
   const save = async () => {
     setBusy(true);
     try {
-      // Vehicle codes carry no motor fields; an edit sends what the form shows.
-      const body: FaultCodeInput = motor ? form : { description: form.description, causes: form.causes, remedies: form.remedies, severity: form.severity, lamp: form.lamp };
+      // Each kind sends only its own fields; an edit sends what the form shows.
+      const body: FaultCodeInput = motor
+        ? { description: form.description, symptom: form.symptom, causes: form.causes, remedies: form.remedies, detection: form.detection,
+            foundBy: form.foundBy, severity: form.severity, lamp: form.lamp }
+        : { description: form.description, causes: form.causes, remedies: form.remedies, severity: form.severity, lamp: form.lamp,
+            ...Object.fromEntries(VEHICLE_FIELDS.map((f) => [f, form[f]])) };
       const result = code
         ? await apiUpdateFaultCode(type, code.id, body)
         : await apiCreateFaultCode(type, { ...body, ...(type === 'vehicle-j1939' ? { spn, fmi } : { code: key.trim() }) });
@@ -325,7 +321,7 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
     } catch { /* the red toast says why */ } finally { setBusy(false); }
   };
 
-  const text = (field: 'description' | 'symptom' | 'causes' | 'remedies' | 'detection', rows = 2, required = false) => (
+  const text = (field: 'description' | 'symptom' | 'causes' | 'remedies' | 'detection' | VehicleField, rows = 2, required = false) => (
     <label className="block">
       <span className={label}>{t(`faultCodes.field.${field}`)}{required && <span className="text-rose-500"> *</span>}</span>
       <Input as="textarea" rows={rows} value={(form[field] as string) ?? ''} onChange={(v) => set({ [field]: v })} disabled={!editable} />
@@ -334,17 +330,6 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
 
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (ready) void save(); }}>
-      {code && !motor && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className={MUTED}>{t('faultCodes.field.system')}</dt><dd className="text-slate-700 dark:text-slate-200 break-words">{code.system ?? '—'}</dd>
-          <dt className={MUTED}>{t('faultCodes.field.oemCode')}</dt><dd className="font-mono text-slate-700 dark:text-slate-200 break-all">{code.oemCode ?? '—'}</dd>
-        </dl>
-      )}
-      {code?.source === '1.0' && (
-        <p className="text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-slate-600 dark:text-slate-300">
-          {t('faultCodes.readOnly10')}
-        </p>
-      )}
       {!code && (type === 'vehicle-j1939' ? (
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className={label}>{t('faultCodes.field.spn')} <span className="text-rose-500">*</span></span>
@@ -359,10 +344,30 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
         </label>
       ))}
       {text('description', 1, true)}
+      {!motor && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {text('system', 1)}
+          {text('oemCode', 1)}
+          {text('sensor', 1)}
+          {text('location', 1)}
+        </div>
+      )}
       {motor && text('symptom')}
       {text('causes')}
       {text('remedies')}
       {motor && text('detection')}
+      {!motor && (
+        <>
+          {text('diagnosticAids')}
+          {text('troubleshooting', 5)}
+          {text('vehicleReaction')}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {text('pinDetails')}
+            {text('voltageRange')}
+            {text('signalRange')}
+          </div>
+        </>
+      )}
       <div className={`grid grid-cols-1 ${motor ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
         {/* Divs, not labels: a label hands its click to the picker again and it closes. */}
         <div><span className={label}>{t('faultCodes.field.severity')}</span>
@@ -392,6 +397,12 @@ const CodeForm: React.FC<{ type: FaultCodeType; code: FaultCodeItem | null; canE
     </form>
   );
 };
+
+/** A vehicle code's text fields beyond fault, causes and fix: the engine makers' sheets' columns. */
+const VEHICLE_FIELDS = [
+  'system', 'oemCode', 'sensor', 'location', 'diagnosticAids', 'troubleshooting', 'vehicleReaction', 'pinDetails', 'voltageRange', 'signalRange',
+] as const;
+type VehicleField = typeof VEHICLE_FIELDS[number];
 
 const STATUS_TONE: Record<string, ChipTone> = { new: 'emerald', changed: 'sky', unchanged: 'slate', error: 'rose' };
 
