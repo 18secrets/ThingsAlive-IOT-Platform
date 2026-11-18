@@ -31,6 +31,9 @@ function tabFromPath(pathname: string, state: unknown, role?: UserRole): Navigat
   // not a route, so it never changes the URL and needs no entry here.)
   const backTo = (state as { backTo?: string } | null)?.backTo;
   if (first === 'alert-agent' && backTo) return tabFromPath(backTo, null, role);
+  // Opened any other way, Alert Agent and Drafts for review are Alerts' own pages: they
+  // highlighted nothing, and Drafts fell through to Dashboard (17 Nov).
+  if (first === 'alert-agent' || first === 'drafts') return 'alerts';
   // Master Admin's Clients/Staff/Devices/Equipment are still served by
   // AdminPage at /admin/<subtab> (task: move them to the sidebar, 2026-10-10)
   // — only their nav highlighting is promoted above 'Administration'. A

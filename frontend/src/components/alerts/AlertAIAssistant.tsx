@@ -7,7 +7,9 @@ import {
   Plus,
   ListChecks,
   Check,
-  Thermometer,
+  FilePen,
+  Cpu,
+  Clock,
 } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
@@ -16,38 +18,42 @@ import { ApiError, Workflow, WorkflowScope, apiAssembleWorkflow, apiListWorkflow
 import { useNavigate } from 'react-router-dom';
 import { completeAssembled, starterSpec } from './workflow/workflowGraph';
 import { machineKey, useWorkflowScope } from './workflow/useWorkflowScope';
+import { Chip } from '../common/Chip';
+import { severityTone } from '../common/statusTone';
+import { appLocale, appTimeZone } from '../../lib/dateLocale';
 
 interface AlertAIAssistantProps {
   onGenerate: (draft: WorkflowDraft) => void;
+  /** "Explore more": every draft in the alert list, filtered to drafts, with the search carried over. */
+  onExploreDrafts?: (search: string) => void;
+  /** False while a workflow opened from here is on screen; the assistant stays mounted, hidden. */
+  visible?: boolean;
 }
 
 type StatusState = 'done' | 'active' | 'pending';
 
-interface CardItem {
-  id: string;
-  title: string;
-  description: string;
-  prompt: string;
-  icon: React.FC<{ className?: string }>;
-  iconBg: string;
-  iconColor: string;
-}
+/** Drafts shown on the card; the rest are a click away in the full list. */
+const DRAFTS_SHOWN = 6;
 
 // Kept in English on purpose: the text is fed straight to parsePromptToWorkflow,
 // which only understands English. The tags are display-only and are translated.
+/**
+ * Example prompts. Only those whose every condition names a signal the chosen machine
+ * declares are offered (17 Nov): a pump was offered "pump energy consumption" and
+ * "battery voltage", and the server refused the draft for a signal its class does not
+ * have. So the list holds examples for pumps and for vehicles both, and filters.
+ */
 const QUICK_EXAMPLES: { text: string; tags: string[] }[] = [
-  {
-    text: 'Notify me if pump energy consumption spikes above 55kWh in a 1 hour window',
-    tags: ['energy', 'efficiency', 'alert'],
-  },
-  {
-    text: 'Alert team if pressure drop exceeds 15% across all valves in the system',
-    tags: ['pressure', 'cluster', 'safety'],
-  },
-  {
-    text: 'Warn me when battery voltage drops below 11.5V for more than 3 minutes',
-    tags: ['battery', 'voltage', 'warning'],
-  },
+  { text: 'Warn me when supply voltage drops below 190 V', tags: ['voltage', 'pump', 'warning'] },
+  { text: 'Alert me if supply voltage goes above 250 V', tags: ['voltage', 'pump', 'safety'] },
+  { text: 'Raise an alarm when motor temperature is above 75 C', tags: ['temperature', 'pump', 'alert'] },
+  { text: 'Notify me when vibration velocity goes above 7 mm/s', tags: ['vibration', 'pump', 'warning'] },
+  { text: 'Alert me if motor current goes above 8 A', tags: ['current', 'pump', 'alert'] },
+  { text: 'Warn me when engine coolant temperature is above 105 C', tags: ['temperature', 'engine', 'warning'] },
+  { text: 'Alert me when engine oil pressure drops below 150 kPa', tags: ['pressure', 'engine', 'safety'] },
+  { text: 'Notify me if hydraulic oil temperature goes above 90 C', tags: ['temperature', 'hydraulic', 'alert'] },
+  { text: 'Notify me if pump energy consumption spikes above 55kWh in a 1 hour window', tags: ['energy', 'efficiency', 'alert'] },
+  { text: 'Warn me when battery voltage drops below 11.5V for more than 3 minutes', tags: ['battery', 'voltage', 'warning'] },
 ];
 
 // Labels live in the alerts namespace under assistant.steps.<id>.
@@ -65,35 +71,7 @@ const STATUS_CARD_STYLES: Record<StatusState, string> = {
   pending: 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800',
 };
 
-const ItemCard: React.FC<{ item: CardItem; tag: string; tagClass: string; buttonLabel: string; onUse: () => void }> = ({
-  item,
-  tag,
-  tagClass,
-  buttonLabel,
-  onUse,
-}) => {
-  const Icon = item.icon;
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${item.iconBg}`}>
-          <Icon className={`w-4 h-4 ${item.iconColor}`} />
-        </div>
-        <span className={`px-2 py-0.5 rounded text-[0.6875rem] font-bold uppercase border ${tagClass}`}>{tag}</span>
-      </div>
-      <div className="font-semibold text-sm text-slate-800 dark:text-slate-100 mb-1 break-words">{item.title}</div>
-      <p className="text-xs text-slate-500 dark:text-slate-400 flex-1 leading-relaxed line-clamp-3">{item.description}</p>
-      <button
-        onClick={onUse}
-        className="mt-4 w-full py-2 bg-slate-50 dark:bg-slate-800/60 hover:bg-sky-50 dark:hover:bg-sky-950/30 border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-700 rounded-lg text-xs font-semibold text-sky-700 dark:text-sky-400 transition-colors cursor-pointer"
-      >
-        {buttonLabel}
-      </button>
-    </div>
-  );
-};
-
-export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }) => {
+export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate, onExploreDrafts, visible = true }) => {
   const { t } = useTranslation('alerts');
   const scopeData = useWorkflowScope();
   const [prompt, setPrompt] = useState('');
@@ -119,9 +97,12 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   }, [equipmentId, scopeData.machines, scopeData.classes]);
   const chosenMode = failureModes.find((f) => f.code === modeCode) ?? null;
 
+  // Read again each time it is shown, not once: it stays mounted while a workflow opened
+  // from it is edited, and a draft saved there was missing until a reload (17 Nov).
   useEffect(() => {
+    if (!visible) return;
     apiListWorkflows().then(setWorkflows).catch(() => setWorkflows([]));
-  }, []);
+  }, [visible]);
 
   const scope = (): WorkflowScope => {
     const [sourceSystem, externalId] = equipmentId.split('|');
@@ -130,19 +111,30 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
 
   const runPrompt = (text: string) => {
     if (!canAct) return;
-    const parsed = parsePromptToWorkflow(text, scope(), scopeData.signalsFor(scope()));
+    const parsed = parsePromptToWorkflow(text, scope(), scopeData.signalsFor(scope()), undefined, scopeData.unitsFor(scope()));
+    // A rule that can never fire is not built (the AI alert prompt test log, S.NO 10–11).
+    if (parsed.contradictions.length) {
+      setPrompt(text);
+      setPhase('clarifying');
+      setNotice(parsed.contradictions.map((c) => t('assistant.parse.contradiction', { ...c })).join(' '));
+      return;
+    }
     if (parsed.conditions > 0) {
       // Said on the canvas: a phrase naming no signal on this machine is kept as typed and
-      // the server refuses it, so the person picks the signal rather than a guess (MIN-9).
-      onGenerate(parsed.unmatched.length
-        ? { ...parsed.draft, notes: parsed.unmatched.map((what) => t('assistant.unmatchedSignal', { what })) }
-        : parsed.draft);
+      // the server refuses it, so the person picks the signal rather than a guess (MIN-9);
+      // and what the reader changed or could not honour — a unit converted, a count dropped.
+      const notes = [
+        ...parsed.unmatched.map((what) => t('assistant.unmatchedSignal', { what })),
+        ...parsed.notes.map((n) => t(`assistant.parse.${n.key}`, n.values)),
+      ];
+      onGenerate(notes.length ? { ...parsed.draft, notes } : parsed.draft);
       return;
     }
     setPrompt(text);
     setPhase('clarifying');
-    // Say why nothing was built, rather than only showing the checklist again.
-    setNotice(parsed.unsupported.length ? t('assistant.unsupportedChange', { what: parsed.unsupported.join(', ') }) : null);
+    // Say why nothing was built, always: it sat on "Identifying sensors" with no word
+    // (S.NO 9, 12, 18, 20), and the person could not tell what to change.
+    setNotice(parsed.unsupported.length ? t('assistant.unsupportedChange', { what: parsed.unsupported.join(', ') }) : t('assistant.parse.nothingFound'));
   };
 
   const handleGenerate = () => {
@@ -207,6 +199,18 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
     onGenerate({ name, spec: starterSpec(scope(), scopeData.signalsFor(scope())[0] ?? '', name) });
   };
 
+  // The examples this machine can take: every condition parsed, every one a signal it declares.
+  const examples = useMemo(() => {
+    if (!canAct) return QUICK_EXAMPLES;
+    const declared = scopeData.signalsFor(scope());
+    const units = scopeData.unitsFor(scope());
+    return QUICK_EXAMPLES.filter((ex) => {
+      const parsed = parsePromptToWorkflow(ex.text, scope(), declared, undefined, units);
+      return parsed.conditions > 0 && parsed.unmatched.length === 0 && parsed.unsupported.length === 0
+        && parsed.contradictions.length === 0 && !parsed.notes.some((n) => n.key === 'unitMismatch');
+    });
+  }, [canAct, equipmentId, scopeData]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const steps = useMemo(() => {
     const sensorsFound = mentionsSensorKeyword(prompt);
     return CREATION_STEPS.map((id) => {
@@ -220,7 +224,8 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
   // Workflows whose newest version is still a draft: started here or in the editor, never published.
   const drafts = useMemo(() => workflows
     .map((wf) => ({ wf, v: wf.versions[wf.versions.length - 1] }))
-    .filter(({ v }) => v?.status === 'draft'), [workflows]);
+    .filter(({ v }) => v?.status === 'draft')
+    .sort((a, b) => b.wf.updatedAt.localeCompare(a.wf.updatedAt)), [workflows]);
 
   const filteredDrafts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -334,7 +339,9 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
       )}
 
       {/* AI Prompt + Right Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start">
+      {/* One height for both cards from desktop width (17 Nov): the prompt card sets it, and
+          the examples scroll inside it rather than running past the prompt's bottom edge. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 items-start lg:items-stretch">
         {/* AI Prompt */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
@@ -375,12 +382,16 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
 
         {/* Right Panel — prompt suggestions until the AI has enough to build, then the build checklist */}
         {phase === 'suggest' ? (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col">
+          <div className="relative">
+          <div className="lg:absolute lg:inset-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5 flex flex-col">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
               {t('assistant.quickExamples')}
             </div>
-            <div className={`space-y-3 overflow-y-auto max-h-72 pr-1 -mr-1 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
-              {QUICK_EXAMPLES.map((ex) => (
+            <div className={`space-y-3 overflow-y-auto max-h-72 lg:max-h-none lg:flex-1 lg:min-h-0 pr-1 -mr-1 ${!canAct ? 'opacity-40 pointer-events-none' : ''}`}>
+              {canAct && examples.length === 0 && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('assistant.noExamplesFit')}</p>
+              )}
+              {examples.map((ex) => (
                 <button
                   key={ex.text}
                   type="button"
@@ -402,6 +413,7 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
                 </button>
               ))}
             </div>
+          </div>
           </div>
         ) : (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs p-5">
@@ -445,52 +457,98 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate }
         )}
       </div>
 
-      {/* Draft search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-xs">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            placeholder={t('assistant.searchDrafts')}
-            size="sm"
-            className="pl-9!"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setSearchTerm('')}
-          className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:text-sky-700 flex items-center gap-1 shrink-0 cursor-pointer"
-        >
-          {t('assistant.exploreMore')} <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Drafts */}
-      {filteredDrafts.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">{t('assistant.drafts')}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredDrafts.map(({ wf, v }) => (
-              <ItemCard
-                key={wf.id}
-                item={{
-                  id: wf.id, title: wf.name, description: v.rendering.join(' ') || wf.description || '', prompt: '',
-                  icon: Thermometer, iconBg: 'bg-amber-50 dark:bg-amber-950/40', iconColor: 'text-amber-600 dark:text-amber-400',
-                }}
-                tag={t('assistant.draftTag')}
-                tagClass="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                buttonLabel={t('assistant.resumeDraft')}
-                onUse={() => onGenerate({ name: wf.name, spec: v.spec, workflowId: wf.id, version: v.version, status: v.status, layout: v.layout })}
-              />
-            ))}
+      {/* Drafts, as one card (17 Nov): a loose search box, a link far to the right and a
+          line of grey text said nothing of what a draft is. The newest six, each saying which
+          machine it is for and what it checks; "See all drafts" opens the full list on its
+          drafts (TC_198 — it only cleared the search box, and so seemed to do nothing). */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <FilePen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              {t('assistant.drafts')}
+              {drafts.length > 0 && <Chip tone="amber">{drafts.length}</Chip>}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('assistant.draftsHint')}</p>
           </div>
+          {drafts.length > 0 && (
+            <div className="flex items-center gap-3 w-full lg:w-auto">
+              <div className="relative flex-1 lg:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+                <Input value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder={t('assistant.searchDrafts')}
+                  aria-label={t('assistant.searchDrafts')} size="sm" className="pl-9!" />
+              </div>
+              <button
+                type="button"
+                onClick={() => onExploreDrafts?.(searchTerm.trim())}
+                className="text-xs font-semibold text-sky-700 dark:text-sky-400 hover:text-sky-800 flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                {t('assistant.seeAllDrafts')} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
-
-      {filteredDrafts.length === 0 && (
-        <div className="text-center text-sm text-slate-400 py-8">{t('assistant.noDrafts')}</div>
-      )}
+        <div className="p-4">
+          {drafts.length === 0 ? (
+            <div className="text-center py-6 space-y-1">
+              <FilePen className="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto" />
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{t('assistant.noDraftsYet')}</p>
+              <p className="text-xs text-slate-400">{t('assistant.noDraftsYetHint')}</p>
+            </div>
+          ) : filteredDrafts.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-6">{t('assistant.noDrafts')}</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredDrafts.slice(0, DRAFTS_SHOWN).map(({ wf, v }) => {
+                const severity = String(v.spec.nodes.find((n) => n.type === 'Notify')?.params?.severity ?? '');
+                const target = v.spec.scope;
+                const machine = target.appliesTo === 'equipment'
+                  ? scopeData.machines.find((m) => m.sourceSystem === target.sourceSystem && m.externalId === target.externalId)
+                  : undefined;
+                const forWhat = target.appliesTo === 'equipment'
+                  ? (machine ? scopeData.machineLabel(machine) : target.externalId ?? '')
+                  : t(`assistant.draftScope.${target.appliesTo}`);
+                const checks = v.rendering[0] ?? wf.description ?? '';
+                return (
+                  <article key={wf.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 p-4 flex flex-col gap-2.5 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      {severity ? <Chip tone={severityTone(severity)}>{t(`severity.${severity}`, { defaultValue: severity })}</Chip> : <span />}
+                      <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold uppercase border bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                        {t('assistant.draftTag')}
+                      </span>
+                    </div>
+                    <h4 className="font-semibold text-sm text-slate-900 dark:text-white break-words">{wf.name}</h4>
+                    {forWhat && (
+                      <p className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 min-w-0">
+                        <Cpu className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate" title={forWhat}>{forWhat}</span>
+                      </p>
+                    )}
+                    {checks && <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3 break-words" title={checks}>{checks}</p>}
+                    <div className="mt-auto pt-2 flex items-center justify-between gap-2 border-t border-slate-200/70 dark:border-slate-700/70">
+                      <span className="flex items-center gap-1 text-[0.6875rem] text-slate-400 min-w-0">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{t('assistant.editedAt', { when: new Date(wf.updatedAt).toLocaleString(appLocale(), { timeZone: appTimeZone(), dateStyle: 'medium', timeStyle: 'short' }) })}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onGenerate({ name: wf.name, spec: v.spec, workflowId: wf.id, version: v.version, status: v.status, layout: v.layout })}
+                        className="px-3 py-1.5 bg-[#0B7285] hover:bg-[#095C6B] text-white rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
+                      >
+                        {t('assistant.continueDraft')}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+          {filteredDrafts.length > DRAFTS_SHOWN && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 text-center">
+              {t('assistant.moreDrafts', { count: filteredDrafts.length - DRAFTS_SHOWN })}
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   );
 };

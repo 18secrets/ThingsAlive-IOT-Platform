@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, ExternalLink, RotateCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, ExternalLink, RotateCw } from 'lucide-react';
 import { SelectPicker } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import {
@@ -39,7 +39,13 @@ const machineOf = (p: Proposal) => {
 export const DraftsPage: React.FC = () => {
   const { t } = useTranslation('drafts');
   const [viewMode, setViewMode] = useViewMode('drafts');
-  usePageHeader({ title: t('page.title'), subtitle: t('page.subtitle') });
+  // Back to the page that opened it (Alert Agent, a machine's Propose a KPI); opened from a
+  // link with nothing before it, to Alert Agent (17 Nov: there was no way back but the sidebar).
+  const goBack = useNavigate();
+  usePageHeader({
+    title: t('page.title'), subtitle: t('page.subtitle'),
+    onBack: () => ((window.history.state as { idx?: number } | null)?.idx ? goBack(-1) : goBack('/alert-agent')),
+  });
   const [params, setParams] = useSearchParams();
   const [drafts, setDrafts] = useState<Proposal[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -83,25 +89,31 @@ export const DraftsPage: React.FC = () => {
   return (
     <div className="space-y-4">
       <div className="bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Each picker in a box of its own width (17 Nov): the width on the picker itself
+            sized only its frame, and the first ended in a wide gap before the second. */}
         <div className="flex items-center gap-3 flex-wrap">
-          <SelectPicker
-            data={[{ label: t('filter.allKinds'), value: 'all' }, { label: t('kind.workflow'), value: 'workflow' }, { label: t('kind.kpi'), value: 'kpi' }]}
-            value={kind}
-            onChange={(v) => setKind((v ?? 'all') as ProposalKind | 'all')}
-            searchable={false}
-            cleanable={false}
-            size="sm"
-            className="w-48"
-          />
-          <SelectPicker
-            data={[{ label: t('filter.allStatuses'), value: 'all' }, ...STATUSES.map((s) => ({ label: t(`status.${s}`), value: s }))]}
-            value={status}
-            onChange={(v) => setStatus((v ?? 'all') as ProposalStatus | 'all')}
-            searchable={false}
-            cleanable={false}
-            size="sm"
-            className="w-52"
-          />
+          <div className="w-44">
+            <SelectPicker
+              data={[{ label: t('filter.allKinds'), value: 'all' }, { label: t('kind.workflow'), value: 'workflow' }, { label: t('kind.kpi'), value: 'kpi' }]}
+              value={kind}
+              onChange={(v) => setKind((v ?? 'all') as ProposalKind | 'all')}
+              searchable={false}
+              cleanable={false}
+              size="sm"
+              block
+            />
+          </div>
+          <div className="w-44">
+            <SelectPicker
+              data={[{ label: t('filter.allStatuses'), value: 'all' }, ...STATUSES.map((s) => ({ label: t(`status.${s}`), value: s }))]}
+              value={status}
+              onChange={(v) => setStatus((v ?? 'all') as ProposalStatus | 'all')}
+              searchable={false}
+              cleanable={false}
+              size="sm"
+              block
+            />
+          </div>
         </div>
         <div className="flex items-center gap-3 self-start">
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
@@ -119,7 +131,18 @@ export const DraftsPage: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {filtered.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-xs">{drafts === null && !error ? t('loading') : t('empty')}</div>
+          drafts === null && !error ? (
+            <div className="py-10 text-center text-slate-400 text-xs">{t('loading')}</div>
+          ) : drafts?.length ? (
+            <div className="py-10 text-center text-slate-400 text-sm">{t('empty')}</div>
+          ) : (
+            // Nothing proposed yet: say what this page is for, not only that it is empty.
+            <div className="py-12 px-6 text-center space-y-2 max-w-lg mx-auto">
+              <ClipboardCheck className="w-7 h-7 text-slate-300 dark:text-slate-600 mx-auto" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('emptyNone')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{t('emptyNoneHint')}</p>
+            </div>
+          )
         ) : viewMode === 'list' ? (
           <ListTable bare columns={viewColumns} rows={pageItems} rowKey={(d) => d.id} cells={viewCells} onOpen={(d) => open(d.id)} />
         ) : (

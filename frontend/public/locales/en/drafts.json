@@ -9,7 +9,7 @@
   },
   "refresh": "Refresh",
   "loading": "Loading…",
-  "empty": "No drafts match.",
+  "empty": "No drafts match these filters.",
   "unvalidatedShort": "Not enough history to replay — approving creates its rules switched off.",
   "kind": {
     "workflow": "Alert workflow",
@@ -89,5 +89,7 @@
     "failed": "Could not propose this KPI.",
     "proposing": "Proposing…",
     "submit": "Propose"
-  }
+  },
+  "emptyNone": "Nothing waiting for review",
+  "emptyNoneHint": "When the platform proposes an alert (Propose on the Alert Agent) or a KPI (Propose a KPI on a machine page), it waits here until someone allowed to approve it does."
 }

@@ -4933,32 +4933,10 @@ export function apiRejectAssistantProposal(id: string): Promise<AssistantProposa
  * Reads need `prediction.read`, writes `alert.author`. Only a draft version can change;
  * editing a published workflow starts a new draft from it.
  */
-export type WorkflowNodeType =
-  | "ReadSignal" | "Threshold" | "FreshnessGate" | "PredictionSeverity" | "FuelLoss" | "ChainOrigin"
-  | "AllOf" | "AnyOf" | "Notify";
-
-export interface WorkflowSpecNode {
-  id: string;
-  type: WorkflowNodeType;
-  params?: Record<string, string | number | boolean | null>;
-}
-
-export interface WorkflowScope {
-  appliesTo: "account" | "plant" | "equipment" | "equipment-class";
-  plantId?: string | null;
-  sourceSystem?: string | null;
-  externalId?: string | null;
-  equipmentClassSlug?: string | null;
-}
-
-export interface WorkflowSpec {
-  kind: "alert";
-  scope: WorkflowScope;
-  nodes: WorkflowSpecNode[];
-  edges: { from: string; to: string }[];
-}
-
-export type WorkflowVersionStatus = "draft" | "published" | "superseded" | "retired";
+// The graph's own types live in utils/workflowTypes.ts, beside the prompt reader that builds
+// them: the reader's tests run in the backend's suite, which cannot compile this file.
+import type { WorkflowNodeType, WorkflowSpecNode, WorkflowScope, WorkflowSpec, WorkflowVersionStatus } from "../utils/workflowTypes";
+export type { WorkflowNodeType, WorkflowSpecNode, WorkflowScope, WorkflowSpec, WorkflowVersionStatus };
 
 export interface WorkflowVersion {
   id: string;
@@ -5012,6 +4990,11 @@ export function apiGetWorkflow(id: string): Promise<Workflow> {
 }
 
 /** The workflow and its draft version 1. The spec must already compile. */
+/** Renames a workflow in any state; changes no rule (the alert is named by its Notify). */
+export function apiRenameWorkflow(id: string, name: string): Promise<Workflow> {
+  return authFetch(`/workflows/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name }) });
+}
+
 export function apiCreateWorkflow(input: { slug: string; name: string; description?: string; spec: WorkflowSpec }): Promise<Workflow> {
   return authFetch("/workflows", { method: "POST", body: JSON.stringify(input) });
 }

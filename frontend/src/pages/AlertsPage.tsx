@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles, Edit2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Plus, Sparkles, Edit2, ExternalLink } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { usePageHeader } from '../lib/PageHeaderContext';
 import { Modal } from '../components/common/Modal';
@@ -196,7 +196,9 @@ export const AlertsPage: React.FC = () => {
     const tier = tierOf(e);
     return tier ? <Chip tone={tier === 'critical' ? 'rose' : tier === 'warning' ? 'amber' : 'emerald'} title={t('tier.title')}>{t(`tier.${tier}`)}</Chip> : null;
   };
-  const eventActions = (e: Event) => (
+  // `compact` in the table: "View machine" as an icon (its words the tooltip and the label),
+  // so a row's buttons fit one line; three labelled buttons wrapped most rows onto two.
+  const eventActions = (e: Event, compact = false) => (
     <>
       {e.state === 'open' && (
         <button disabled={busyId === e.id} onClick={() => acknowledge(e.id)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 disabled:opacity-50 cursor-pointer">
@@ -208,9 +210,11 @@ export const AlertsPage: React.FC = () => {
       </button>
       <button
         onClick={() => navigate(`/admin/equipment/${encodeURIComponent(e.sourceSystem)}/${encodeURIComponent(e.externalId)}/page`)}
-        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer ml-auto"
+        title={t('events.viewMachine')}
+        aria-label={t('events.viewMachine')}
+        className={`${compact ? 'p-1.5 text-slate-500 hover:text-sky-600' : 'px-2.5 py-1.5 text-xs font-semibold ml-auto'} rounded-lg border border-slate-200 dark:border-slate-700 hover:border-sky-300 cursor-pointer`}
       >
-        {t('events.viewMachine')}
+        {compact ? <ExternalLink className="w-3.5 h-3.5" /> : t('events.viewMachine')}
       </button>
     </>
   );
@@ -295,10 +299,15 @@ export const AlertsPage: React.FC = () => {
         </div>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
-          <span className="flex items-center gap-2">
+      {/* One card, as Configured alert rules above it (17 Nov): the heading, counts and
+          controls sat loose on the page background, the table a separate box below. */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 dark:text-white text-base">{t('events.heading')}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
+          </div>
+          <span className="flex flex-wrap items-center gap-2">
           <SelectPicker
             size="sm"
             data={(['all', 'open', 'acknowledged'] as const).map((s) => ({ label: s === 'all' ? t('events.allStates') : t(`state.${s}`), value: s }))}
@@ -306,7 +315,11 @@ export const AlertsPage: React.FC = () => {
             onChange={(v) => setStateFilter((v ?? 'all') as 'all' | 'open' | 'acknowledged')}
             searchable={false}
             cleanable={false}
-            className="min-w-[150px]"
+            // Nothing to filter with no alerts at all (TC_197); with some, it stays usable
+            // even when the chosen state shows none, so the reader can switch back.
+            disabled={!loading && events.length === 0}
+            // The theme's own disabled look is too faint to read as off; dimmed like Export CSV beside it.
+            className={`min-w-[150px] ${!loading && events.length === 0 ? 'opacity-50' : ''}`}
           />
           <ExportCsvButton
             name="alerts"
@@ -319,7 +332,6 @@ export const AlertsPage: React.FC = () => {
           />
           </span>
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{loading ? t('loading') : t('events.counts', { open: openCount, acknowledged: events.length - openCount })}</p>
 
         <div className={LIST_PANEL}>
           {loading ? (
@@ -335,13 +347,15 @@ export const AlertsPage: React.FC = () => {
               // Chips and the time need little room; the summary, the longest text, gets the
               // most, so it no longer wraps to six lines beside two half-empty chip columns.
               columns={[
-                { label: ts('listCol.severity'), sortKey: 'severity', width: 120 },
-                { label: ts('listCol.state'), sortKey: 'state', width: 130 },
+                { label: ts('listCol.severity'), sortKey: 'severity', width: 110 },
+                { label: ts('listCol.state'), sortKey: 'state', width: 125 },
                 { label: ts('listCol.name'), sortKey: 'name', grow: 2, minWidth: 110 },
-                { label: ts('listCol.machine'), sortKey: 'machine', grow: 2, minWidth: 100 },
+                // A larger share, not only a larger minimum: a minimum above its share widened the
+                // table past its card and clipped the actions.
+                { label: ts('listCol.machine'), sortKey: 'machine', grow: 3, minWidth: 140 },
                 { label: ts('listCol.summary'), grow: 4, minWidth: 160 },
-                { label: ts('listCol.firedAt'), sortKey: 'fired', width: 160 },
-                { label: ts('listCol.actions'), width: 220, align: 'right' },
+                { label: ts('listCol.firedAt'), sortKey: 'fired', width: 150 },
+                { label: ts('listCol.actions'), width: 245, align: 'right' },
               ]}
               rows={eventPage.pageItems}
               rowKey={(e) => e.id}
@@ -354,7 +368,7 @@ export const AlertsPage: React.FC = () => {
                 new Date(e.firedAt).toLocaleString(appLocale(), { timeZone: appTimeZone() }),
                 // A button never breaks inside its label; when they do not all fit they wrap,
                 // right-aligned like the column.
-                <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">{eventActions(e)}</div>,
+                <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">{eventActions(e, true)}</div>,
               ]}
             />
           ) : (
