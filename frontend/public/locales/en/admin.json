@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "Fuel forecast accuracy",
     "models": "Models",
     "serviceRoster": "Service roster",
-    "faultCodes": "Fault Codes"
+    "faultCodes": "Fault Codes",
+    "section": "Section",
+    "scrollBack": "Earlier tabs",
+    "scrollMore": "More tabs"
   },
   "archive": {
     "loadFailed": "Could not load the telemetry archive.",

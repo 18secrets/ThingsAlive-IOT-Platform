@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "எரிபொருள் முன்கணிப்புத் துல்லியம்",
     "models": "மாடல்கள்",
     "serviceRoster": "சேவைப் பட்டியல்",
-    "faultCodes": "பிழைக் குறியீடுகள்"
+    "faultCodes": "பிழைக் குறியீடுகள்",
+    "section": "பிரிவு",
+    "scrollBack": "முந்தைய தாவல்கள்",
+    "scrollMore": "மேலும் தாவல்கள்"
   },
   "archive": {
     "loadFailed": "டெலிமெட்ரி காப்பகத்தை ஏற்ற முடியவில்லை.",

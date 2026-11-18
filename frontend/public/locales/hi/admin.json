@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "ईंधन पूर्वानुमान की सटीकता",
     "models": "मॉडल",
     "serviceRoster": "सर्विस रोस्टर",
-    "faultCodes": "फ़ॉल्ट कोड"
+    "faultCodes": "फ़ॉल्ट कोड",
+    "section": "अनुभाग",
+    "scrollBack": "पिछले टैब",
+    "scrollMore": "और टैब"
   },
   "archive": {
     "loadFailed": "टेलीमेट्री आर्काइव लोड नहीं हो सका।",

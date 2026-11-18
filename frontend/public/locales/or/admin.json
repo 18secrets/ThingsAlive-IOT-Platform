@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "ଇନ୍ଧନ ପୂର୍ବାନୁମାନ ସଠିକତା",
     "models": "ମଡେଲ୍",
     "serviceRoster": "ସର୍ଭିସ୍ ରୋଷ୍ଟର",
-    "faultCodes": "ଫଲ୍ଟ କୋଡ୍"
+    "faultCodes": "ଫଲ୍ଟ କୋଡ୍",
+    "section": "ବିଭାଗ",
+    "scrollBack": "ପୂର୍ବ ଟ୍ୟାବ୍",
+    "scrollMore": "ଅଧିକ ଟ୍ୟାବ୍"
   },
   "archive": {
     "loadFailed": "ଟେଲିମେଟ୍ରି ଆର୍କାଇଭ୍ ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ।",

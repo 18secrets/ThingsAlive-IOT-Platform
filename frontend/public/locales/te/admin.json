@@ -12,7 +12,10 @@
     "fuelForecastAccuracy": "ఇంధన అంచనా ఖచ్చితత్వం",
     "models": "మోడల్‌లు",
     "serviceRoster": "సర్వీస్ రోస్టర్",
-    "faultCodes": "ఫాల్ట్ కోడ్‌లు"
+    "faultCodes": "ఫాల్ట్ కోడ్‌లు",
+    "section": "విభాగం",
+    "scrollBack": "మునుపటి ట్యాబ్‌లు",
+    "scrollMore": "మరిన్ని ట్యాబ్‌లు"
   },
   "archive": {
     "loadFailed": "టెలిమెట్రీ ఆర్కైవ్‌ను లోడ్ చేయలేకపోయాం.",
