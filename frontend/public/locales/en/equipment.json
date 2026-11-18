@@ -337,7 +337,10 @@
     "requestClass": "Request this class from Things Alive →",
     "model": "Model",
     "modelPlaceholder": "Choose the machine’s model",
-    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models."
+    "modelHint": "Its rated figures and duty curve feed the motor KPIs and rated alerts. Models are under Administration → Models.",
+    "noModelsOfType": "No model of this machine type yet",
+    "modelMissing": "No model chosen: this machine's rated alerts and load figures will wait until one is.",
+    "noModelsForClient": "This client has no model of this machine type yet. The client copies one from the library under Administration → Models."
   },
   "bindings": {
     "title": "Signal Bindings",

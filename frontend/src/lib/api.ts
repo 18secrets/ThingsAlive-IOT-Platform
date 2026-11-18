@@ -1469,16 +1469,25 @@ export function apiReplaceDutyCurve(scope: ModelScope, id: string, curve: { sour
   });
 }
 
-/** Which of the account's models a machine is. */
-export function apiGetMachineModel(sourceSystem: string, externalId: string): Promise<{ modelId: string | null }> {
-  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`);
+/** Which of the account's models a machine is. `tenantId`: Master Admin, for that account. */
+export function apiGetMachineModel(sourceSystem: string, externalId: string, tenantId?: string): Promise<{ modelId: string | null }> {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : "";
+  return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model${query}`);
 }
 
-/** Names the machine's model (one of the account's, of the machine's class), or clears it. */
-export function apiSetMachineModel(sourceSystem: string, externalId: string, modelId: string | null): Promise<{ modelId: string | null }> {
+/** Names the machine's model (one of the account's, of the machine's class), or clears it.
+ *  `tenantId`: Master Admin, for that account. */
+export function apiSetMachineModel(
+  sourceSystem: string, externalId: string, modelId: string | null, tenantId?: string,
+): Promise<{ modelId: string | null }> {
   return authFetch(`/equipment/${encodeURIComponent(sourceSystem)}/${encodeURIComponent(externalId)}/model`, {
-    method: "PUT", body: JSON.stringify({ modelId }),
+    method: "PUT", body: JSON.stringify(tenantId ? { modelId, tenantId } : { modelId }),
   });
+}
+
+/** One account's models, for Master Admin naming a machine's model on its behalf. */
+export function apiListAccountModels(tenantId: string): Promise<EquipmentModel[]> {
+  return authFetch(`/equipment/account-models?tenantId=${encodeURIComponent(tenantId)}`);
 }
 
 // ------------------------------------------------------------------ class requests
