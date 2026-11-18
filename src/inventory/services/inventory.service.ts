@@ -102,7 +102,10 @@ export class InventoryService {
 
       for (const raw of imeis) {
         const imei = raw.trim();
-        const device = await repo.findOne({ where: { imei } });
+        // Locked, as the IMEI correction is. Read unlocked, the row could be corrected and
+        // committed between this read and the save below, and the save (by id, not IMEI)
+        // would land on the corrected device: both changes win, which neither caller asked for.
+        const device = await repo.findOne({ where: { imei }, lock: { mode: 'pessimistic_write' } });
 
         if (!device) { results.push({ imei, outcome: 'unknown' }); continue; }
         if (device.state === 'retired') { results.push({ imei, outcome: 'retired' }); continue; }
@@ -166,7 +169,10 @@ export class InventoryService {
 
       for (const raw of imeis) {
         const imei = raw.trim();
-        const device = await repo.findOne({ where: { imei } });
+        // Locked, as the IMEI correction is. Read unlocked, the row could be corrected and
+        // committed between this read and the save below, and the save (by id, not IMEI)
+        // would land on the corrected device: both changes win, which neither caller asked for.
+        const device = await repo.findOne({ where: { imei }, lock: { mode: 'pessimistic_write' } });
         if (!device) { results.push({ imei, outcome: 'unknown' }); continue; }
 
         const from = device.state;
@@ -261,7 +267,9 @@ export class InventoryService {
   ): Promise<DeviceInventory> {
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(DeviceInventory);
-      const device = await repo.findOne({ where: { imei: imei.trim() } });
+      // Locked for the same reason as assign: a release committing between read and save
+      // must not leave a device back in stock still marked as fitted here.
+      const device = await repo.findOne({ where: { imei: imei.trim() }, lock: { mode: 'pessimistic_write' } });
       if (!device) throw new NotFoundException(`No device "${imei}" in this account.`);
 
       inventoryTransition('claim', device.state, null);
@@ -294,7 +302,9 @@ export class InventoryService {
   ): Promise<DeviceInventory> {
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(DeviceInventory);
-      const device = await repo.findOne({ where: { imei: imei.trim() } });
+      // Locked for the same reason as assign: a release committing between read and save
+      // must not leave a device back in stock still marked as fitted here.
+      const device = await repo.findOne({ where: { imei: imei.trim() }, lock: { mode: 'pessimistic_write' } });
       if (!device) throw new NotFoundException(`No device "${imei}" in this account.`);
 
       inventoryTransition('unclaim', device.state, reason);

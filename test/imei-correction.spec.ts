@@ -97,6 +97,53 @@ describeDb('correcting a device IMEI', () => {
     }
   });
 
+  /**
+   * The race above, made to happen every time rather than now and then. It failed once
+   * in a full test:db run (18 Nov 2026) with both writes landed: assign read the row
+   * unlocked, the correction committed, and assign's save (by id) assigned the corrected
+   * device. Here a transaction holds the row as an in-flight correction would, the
+   * transition is fired and seen waiting on that lock, then the correction commits.
+   * Unlocked, the transition still waits — at its write, not its read — so without the
+   * fix this fails on every run, not one in three.
+   */
+  async function correctionCommitsUnder<T>(transition: () => Promise<T>): Promise<T> {
+    const held = owner.createQueryRunner();
+    await held.connect();
+    await held.startTransaction();
+    try {
+      await held.query(`SELECT 1 FROM device_inventory WHERE imei = '35000000000001X' FOR UPDATE`);
+      const pending = transition();
+      pending.catch(() => undefined); // judged after the commit below, not here
+      for (let i = 0; ; i++) {
+        const [{ n }] = await owner.query(
+          `SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()`);
+        if (n > 0) break;
+        if (i > 200) throw new Error('The transition never reached the held row.');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      await held.query(`UPDATE device_inventory SET imei = '350000000000001' WHERE imei = '35000000000001X'`);
+      await held.commitTransaction();
+      return await pending;
+    } finally {
+      if (held.isTransactionActive) await held.rollbackTransaction();
+      await held.release();
+    }
+  }
+
+  it('an assign waiting on a correction finds the old number gone, and assigns nothing', async () => {
+    const results = await correctionCommitsUnder(() => inventory.assign(master, ['35000000000001X'], 'acme'));
+    expect(results).toEqual([{ imei: '35000000000001X', outcome: 'unknown' }]);
+    const device = await owner.getRepository(DeviceInventory).findOneByOrFail({ imei: '350000000000001' });
+    expect(device).toMatchObject({ tenantId: null, state: 'in-stock' });
+  });
+
+  it('a retire waiting on a correction finds the old number gone, and retires nothing', async () => {
+    const results = await correctionCommitsUnder(() => inventory.retire(master, ['35000000000001X'], 'damaged'));
+    expect(results).toEqual([{ imei: '35000000000001X', outcome: 'unknown' }]);
+    const device = await owner.getRepository(DeviceInventory).findOneByOrFail({ imei: '350000000000001' });
+    expect(device.state).toBe('in-stock');
+  });
+
   it(`${MIGRATION} comes off and goes back on`, async () => {
     await undoMigrationNamed(owner, MIGRATION);
     const cols = await owner.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'device_inventory_event' AND column_name = 'previous_imei'`);
