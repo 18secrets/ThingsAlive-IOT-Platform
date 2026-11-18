@@ -782,6 +782,14 @@
     "clearedPeriod": "ଏହି ଅବଧିରେ ହଟିଥିବା",
     "noneCleared": "ଏହି ଅବଧିରେ କୌଣସି କୋଡ୍ ହଟିନାହିଁ।",
     "truncated": "ନୂଆ {{n}} ଦେଖାଯାଉଛି। ବାକି ଦେଖିବାକୁ ଛୋଟ ଅବଧି ବାଛନ୍ତୁ।",
-    "symptom": "ଲକ୍ଷଣ"
+    "symptom": "ଲକ୍ଷଣ",
+    "sensor": "ସେନ୍ସର",
+    "location": "ସ୍ଥାନ",
+    "pinDetails": "ପିନ୍ ବିବରଣୀ",
+    "voltageRange": "ଭୋଲ୍ଟେଜ୍ ପରିସର",
+    "signalRange": "ସିଗନାଲ୍ ପରିସର",
+    "diagnosticAids": "ନିର୍ଣ୍ଣୟ ସହାୟକ",
+    "troubleshooting": "ସମସ୍ୟା ସମାଧାନ ପଦକ୍ଷେପ",
+    "vehicleReaction": "ଗାଡ଼ିର ପ୍ରତିକ୍ରିୟା"
   }
 }

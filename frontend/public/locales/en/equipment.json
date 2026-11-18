@@ -782,6 +782,14 @@
     "clearedPeriod": "Cleared between",
     "noneCleared": "No codes cleared in this period.",
     "truncated": "Showing the newest {{n}}. Pick a shorter period to see the rest.",
-    "symptom": "Symptom"
+    "symptom": "Symptom",
+    "sensor": "Sensor",
+    "location": "Location",
+    "pinDetails": "Pin details",
+    "voltageRange": "Voltage range",
+    "signalRange": "Signal range",
+    "diagnosticAids": "Diagnostic aids",
+    "troubleshooting": "Troubleshooting steps",
+    "vehicleReaction": "Vehicle reaction"
   }
 }

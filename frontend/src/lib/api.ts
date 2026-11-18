@@ -2529,6 +2529,15 @@ export interface FaultCode {
   symptom?: string | null;
   causes: string | null;
   remedies: string | null;
+  /** A vehicle code's, from the engine makers' sheets; null for motor codes. */
+  sensor?: string | null;
+  location?: string | null;
+  pinDetails?: string | null;
+  voltageRange?: string | null;
+  signalRange?: string | null;
+  diagnosticAids?: string | null;
+  troubleshooting?: string | null;
+  vehicleReaction?: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   clearedAt?: string | null;
@@ -5580,11 +5589,20 @@ export interface FaultCodeItem {
   lamp: string;
   spn: number | null;
   fmi: number | null;
-  /** 1.0's copy (read-only here), or 2.0's own. */
+  /** Where it came from: 1.0's copy (before 17 Nov 2026), or 2.0. Both are edited here. */
   source: "1.0" | "2.0";
-  /** A vehicle code's: the unit that raises it (1.0's source_type) and the maker's own code (dtc_code). */
+  /** A vehicle code's: the unit that raises it and the maker's own code. */
   system: string | null;
   oemCode: string | null;
+  /** A vehicle code's, from the engine makers' sheets; null for motor codes. */
+  sensor: string | null;
+  location: string | null;
+  pinDetails: string | null;
+  voltageRange: string | null;
+  signalRange: string | null;
+  diagnosticAids: string | null;
+  troubleshooting: string | null;
+  vehicleReaction: string | null;
   retiredAt: string | null;
 }
 export interface FaultCodePage { type: FaultCodeType; total: number; codes: FaultCodeItem[] }
@@ -5592,6 +5610,9 @@ export interface FaultCodeInput {
   code?: string; spn?: number | null; fmi?: number | null;
   description?: string; symptom?: string | null; causes?: string | null; remedies?: string | null;
   detection?: string | null; foundBy?: "logger" | "technician" | null; severity?: string; lamp?: string;
+  system?: string | null; oemCode?: string | null; sensor?: string | null; location?: string | null;
+  pinDetails?: string | null; voltageRange?: string | null; signalRange?: string | null;
+  diagnosticAids?: string | null; troubleshooting?: string | null; vehicleReaction?: string | null;
 }
 export interface FaultCodeRevision {
   id: string; library: "vehicle" | "motor"; codeId: string; code: string; field: string;

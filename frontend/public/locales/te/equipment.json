@@ -782,6 +782,14 @@
     "clearedPeriod": "ఈ వ్యవధిలో తొలగినవి",
     "noneCleared": "ఈ వ్యవధిలో ఏ కోడ్ తొలగలేదు.",
     "truncated": "తాజా {{n}} చూపిస్తున్నాం. మిగతావి చూడటానికి చిన్న వ్యవధిని ఎంచుకోండి.",
-    "symptom": "లక్షణం"
+    "symptom": "లక్షణం",
+    "sensor": "సెన్సార్",
+    "location": "స్థానం",
+    "pinDetails": "పిన్ వివరాలు",
+    "voltageRange": "వోల్టేజ్ పరిధి",
+    "signalRange": "సిగ్నల్ పరిధి",
+    "diagnosticAids": "నిర్ధారణ సహాయాలు",
+    "troubleshooting": "సమస్య పరిష్కార దశలు",
+    "vehicleReaction": "వాహన ప్రతిస్పందన"
   }
 }
