@@ -1,5 +1,6 @@
 import { EntityManager } from 'typeorm';
 import { LegacyTelemetryReader } from '../legacy/legacy-telemetry.reader';
+import { mappedImeisFor } from '../onboarding/mapped-devices';
 
 /**
  * One machine as it is now (the Live view, 13 Nov 2026): each signal's newest value, how
@@ -61,17 +62,9 @@ export async function readMachineLive(
   now: Date,
 ): Promise<MachineLive> {
   const since = new Date(now.getTime() - LIVE_LOOKBACK_MS);
-  // The machine's devices: those the fleet sync recorded as fitted to it, and loggers
-  // assigned to it in the inventory (the motor loggers report to 2.0 directly).
-  const devices: { imei: string }[] = await m.query(
-    `SELECT imei FROM "device_projection"
-      WHERE tenant_id = $1 AND source_system = $2 AND equipment_external_id = $3
-     UNION
-     SELECT imei FROM "device_inventory"
-      WHERE tenant_id = $1 AND equipment_external_id = $3`,
-    [tenantId, ref.sourceSystem, ref.externalId],
-  );
-  const imeis = devices.map((d) => d.imei);
+  // The machine's mapped devices, as every status reader asks (mapped-devices.ts). None
+  // is "no-device": not onboarded, so no connection state and no values.
+  const imeis = await mappedImeisFor(m, tenantId, ref.externalId, now);
   const base = { asOf: now.toISOString(), legacyAsked: !!legacy?.connected };
   if (imeis.length === 0) {
     return { ...base, connection: 'no-device', lastReadingAt: null, running: null, location: null, signals: [] };
@@ -88,6 +81,9 @@ export async function readMachineLive(
   }));
   const fromLegacy: Reading[] = legacy?.connected
     ? (await legacy.latestReadings({ tenantId, sourceSystem: ref.sourceSystem, externalId: ref.externalId }, since))
+      // 1.0's sensor map can still list a logger since moved off this machine in 2.0; its
+      // values are that logger's, not this machine's.
+      .filter((r) => imeis.includes(r.imei))
       .map((r) => ({ ...r, source: '1.0' as const }))
     : [];
 
