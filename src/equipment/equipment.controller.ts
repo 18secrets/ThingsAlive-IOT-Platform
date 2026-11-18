@@ -165,6 +165,14 @@ export class EquipmentController {
     return this.equipment.listAcrossTenants(scope);
   }
 
+  // Declared before `:sourceSystem/:externalId/...`; one segment, so no clash either way.
+  @Get('account-models')
+  @Requires('catalog.read')
+  @ApiOperation({ summary: 'One account\'s models (D57), to name a machine\'s model on its behalf — Master Admin only' })
+  accountModels(@CurrentScope() scope: RequestScope, @Query('tenantId') tenantId: string) {
+    return this.equipment.accountModels(scope, tenantId);
+  }
+
   @Get()
   @Requires('catalog.read')
   @ApiOperation({ summary: 'The equipment register for this account' })
