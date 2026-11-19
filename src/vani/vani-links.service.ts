@@ -67,6 +67,7 @@ export class VaniLinksService {
   async putAccount(tenantId: string, input: AccountLinkInput): Promise<AccountLinkView> {
     const accountId = input.vaniAccountId.trim();
     return this.refusalsAsSentences(() => withTenantId(this.ds, tenantId, async (m) => {
+      await lockLinks(m, tenantId);
       await m.query(
         `INSERT INTO "vani_account_link" ("tenant_id", "vani_account_id", "customer_phone", "callback_url", "enabled")
            VALUES ($1, $2, $3, $4, $5)
@@ -104,6 +105,7 @@ export class VaniLinksService {
     const machineId = input.machineId.trim();
     const spokenName = input.spokenName.trim();
     return this.refusalsAsSentences(() => withTenantId(this.ds, tenantId, async (m) => {
+      await lockLinks(m, tenantId);
       const [row] = await m.query(
         `INSERT INTO "vani_machine_link" ("tenant_id", "source_system", "external_id", "machine_id", "spoken_name")
            VALUES ($1, $2, $3, $4, $5)
@@ -192,6 +194,20 @@ export class VaniLinksService {
       }
     }
   }
+}
+
+/**
+ * One link write per tenant at a time, until its transaction ends.
+ *
+ * Each link table has two unique keys and an upsert's ON CONFLICT names only one. Two
+ * identical PUTs at once could therefore collide on the other key — the second refused
+ * as "already linked to another machine" when it was the same link, sent twice. Found by
+ * the concurrent-call test, failing about one run in six. Serialised here, the second
+ * waits, then finds the row and updates it. Tenant-wide rather than per row because the
+ * conflict is between rows: the key being raced for is not known before the insert.
+ */
+async function lockLinks(m: EntityManager, tenantId: string): Promise<void> {
+  await m.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`vani-links|${tenantId}`]);
 }
 
 function machineView(r: { source_system: string; external_id: string; machine_id: string; spoken_name: string }): MachineLinkView {
