@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
-  IsArray, IsBoolean, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested,
+  IsArray, IsBoolean, IsIn, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength, ValidateNested,
 } from 'class-validator';
 import { SEVERITY_VALUES } from '../catalog-import/template-schema';
 import { Severity } from '../common/severity';
@@ -82,6 +82,8 @@ export class AlertTemplateDto {
   @IsOptional() @IsString() equipmentClassSlug?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
+  // Said aloud on a Vani call. Null clears it.
+  @IsOptional() @IsString() @MaxLength(300) recommendedAction?: string | null;
   @IsOptional() @IsString() trigger?: any;
   @IsOptional() params?: any;
   @IsOptional() @IsString() severity?: any;

@@ -38,7 +38,7 @@ type ScenarioDraft = Partial<Pick<ScenarioDefinition,
   | 'minimumHistoryDays' | 'parameters' | 'equipmentClassSlug'>>;
 
 type AlertTemplateDraft = Partial<Pick<AlertRuleTemplate,
-  'name' | 'description' | 'trigger' | 'params' | 'severity' | 'enabledOnCopy'
+  'name' | 'description' | 'recommendedAction' | 'trigger' | 'params' | 'severity' | 'enabledOnCopy'
   | 'equipmentClassSlug'>>;
 
 /**
@@ -533,6 +533,7 @@ export class CatalogAuthoringService {
       equipmentClassSlug: draft.equipmentClassSlug,
       name: draft.name ?? slug,
       description: draft.description ?? null,
+      recommendedAction: draft.recommendedAction ?? null,
       trigger: draft.trigger,
       params: draft.params ?? ({} as any),
       severity: draft.severity ?? ('high' as any),

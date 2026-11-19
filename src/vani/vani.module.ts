@@ -13,6 +13,8 @@ import { VaniDecisionService } from './vani-decision';
 import { VaniOutcomeService } from './vani-outcome.service';
 import { VaniSnapshotPusher } from './vani-snapshot';
 import { VaniController } from './vani.controller';
+import { VaniLinksController } from './vani-links.controller';
+import { VaniLinksService } from './vani-links.service';
 
 /**
  * Phoning customers about alerts through Vani. The request is queued by the alert
@@ -21,8 +23,9 @@ import { VaniController } from './vani.controller';
  */
 @Module({
   imports: [AssistantModule, IdentityModule, AlertModule, WorkModule],
-  controllers: [VaniController],
+  controllers: [VaniController, VaniLinksController],
   providers: [
+    VaniLinksService,
     VaniOutcomeService,
     VaniDecisionService,
     VaniAskService,
