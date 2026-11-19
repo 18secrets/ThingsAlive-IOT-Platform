@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { healthIn, healthKey } from '../machine-health/machine-health';
 import { runTenantSpanning } from '../scope/tenant-session';
 import { VaniBreaker } from './vani-breaker';
 import { VaniTransport } from './vani-client';
@@ -13,6 +14,8 @@ export interface SnapshotMachine {
   machine_id: string;
   name: string;
   status: string;
+  /** 0–100 (D63), only when 2.0 can score the machine; left out when it cannot, never 0 or 100. */
+  health_score?: number;
   /** The rest only with `VANI_SNAPSHOT_DETAIL=true` (D61, Lane C). */
   recent_alerts?: SnapshotAlert[];
   open_work_orders?: SnapshotWorkOrder[];
@@ -71,8 +74,9 @@ export interface SnapshotResult {
  * is linked always pushes, which is the guide's "once right after Step 2".
  *
  * The status line is what Vani reads out, so it says only what 2.0 actually knows —
- * which alerts are open on the machine. There is no `health_score`: 2.0 does not keep
- * one, and a number made up to fill the field would be read to a customer as fact.
+ * which alerts are open on the machine. `health_score` is the machine's score (D63) when
+ * 2.0 can work one out, and is left out when it cannot — not onboarded, logger dark or
+ * stale — because a number filling the field would be read to a customer as fact.
  */
 export class VaniSnapshotPusher {
   private readonly logger = new Logger(VaniSnapshotPusher.name);
@@ -161,13 +165,14 @@ export class VaniSnapshotPusher {
  * With `detail`, each machine also carries its recent alerts and what became of them,
  * its open jobs, and the predictions saying something — the spec's §4 named-machine
  * review, so Vani can walk an account before anyone asks a question (D61, Lane C).
- * Still only what 2.0 holds: no health card, because there is no health score.
+ * Still only what 2.0 holds; the health score, when there is one, is on every machine.
  */
 export async function snapshotMachines(
   m: EntityManager, tenantId: string, detail = false, now = new Date(),
 ): Promise<SnapshotMachine[]> {
-  const rows: { machine_id: string; spoken_name: string; open: number; worst: string | null }[] = await m.query(
-    `SELECT l."machine_id", l."spoken_name",
+  const rows: { machine_id: string; spoken_name: string; source_system: string; external_id: string;
+    open: number; worst: string | null }[] = await m.query(
+    `SELECT l."machine_id", l."spoken_name", l."source_system", l."external_id",
             count(a."id")::int AS "open",
             (array_agg(a."rule_name" ORDER BY
                CASE a."severity" WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
@@ -177,10 +182,12 @@ export async function snapshotMachines(
          ON a."tenant_id" = l."tenant_id" AND a."source_system" = l."source_system"
         AND a."external_id" = l."external_id" AND a."state" IN ('open', 'acknowledged')
       WHERE l."tenant_id" = $1
-      GROUP BY l."machine_id", l."spoken_name"
+      GROUP BY l."machine_id", l."spoken_name", l."source_system", l."external_id"
       ORDER BY l."machine_id"`,
     [tenantId],
   );
+  const health = await healthIn(m, tenantId,
+    rows.map((r) => ({ sourceSystem: r.source_system, externalId: r.external_id })), now);
   const machines: SnapshotMachine[] = rows.map((r) => ({
     machine_id: r.machine_id,
     name: r.spoken_name,
@@ -189,6 +196,10 @@ export async function snapshotMachines(
       : r.open === 1
         ? `One open alert: ${r.worst}`
         : `${r.open} open alerts, the most serious: ${r.worst}`,
+    ...(() => {
+      const score = health.get(healthKey({ sourceSystem: r.source_system, externalId: r.external_id }))?.score;
+      return score === null || score === undefined ? {} : { health_score: score };
+    })(),
   }));
   if (!detail) return machines;
 

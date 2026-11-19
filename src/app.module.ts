@@ -30,6 +30,7 @@ import { OnboardingStatusModule } from './onboarding/onboarding-status.module';
 import { PageModule } from './page/page.module';
 import { SiteTwinModule } from './site-twin/site-twin.module';
 import { VaniModule } from './vani/vani.module';
+import { MachineHealthModule } from './machine-health/machine-health.module';
 import { MotorIngestModule } from './motor-ingest/motor-ingest.module';
 import { AssetsModule } from './assets/assets.module';
 import { WorkModule } from './work/work.module';
@@ -122,6 +123,7 @@ export class AppModule {
       PageModule,
       SiteTwinModule,
       VaniModule,
+      MachineHealthModule,
       MotorIngestModule,
       IncidentModule,
       ShieldModule,

@@ -81,8 +81,10 @@ day, held by `uq_vani_call_prediction_day`.
 - Lane D works on prediction calls: an approved inspection raises the job on the
   machine, linked to the prediction; "acknowledged" is recorded (no alert to acknowledge).
 - `GET /api/v1/vani/calls` returns `eventId`, `kind`, `predictionId` and `scenarioName`.
-- **Health-band calls are not built.** 2.0 keeps no machine health score, so there is no
-  band to cross; tell Deepak rather than invent one (decided 2026-11-06).
+- **Health-band calls are not built.** Since D63 (2026-11-19) there is a score and bands
+  (good 80+, watch 60–79, act under 60), computed on request and not stored, so there is
+  no history to see a band crossed in. A crossing call needs the score kept per machine
+  first; the call packet already carries `health_card` on alert calls.
 - Vani's guide shows `context.prediction` as text; the spec shows an object. We send
   text, as the guide does, plus a separate `confidence`. Not yet sent to the live
   service: confirm with Deepak that it accepts this `trigger_action` body first.
@@ -162,9 +164,9 @@ older than 24 hours is never sent.
   TypeORM records migrations by name, so both run, but their order is not defined. With
   `main` merged in (2026-11-06) both ran and the full suite passed; the two touch unrelated
   tables. Left as is rather than renaming a committed migration.
-- **Snapshot `health_score`** — 2.0 keeps no health score, so the snapshot sends none.
-  The status line is the open alerts on the machine. Confirm Vani accepts a snapshot
-  without `health_score`.
+- **Snapshot `health_score`** — since 2026-11-19 (D63) each machine carries the health
+  score when 2.0 can work one out, and leaves it off when it cannot (not onboarded,
+  logger dark or stale). Confirm Vani accepts a machine without `health_score`.
 - **One tenant per Vani account** — not enforced. Needs a unique index on
   `vani_account_link.vani_account_id`, which `test/rls-coverage.spec.ts` refuses until it
   is added to `GLOBAL_UNIQUE` there. That is an edit to an existing test, so it waits for

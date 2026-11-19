@@ -808,6 +808,27 @@ alert to a failure mode.
   what the customer could have been told.
 - The Excel catalog import has no column for it yet.
 
+## D63 — A machine's health score is 100 less listed deductions, and unknown without data
+
+Decided 2026-11-19 by Tapas, from three options (penalty score, bands only, risk only).
+Vani's guide expects a `health_score` in the snapshot and a `health_card` on calls; 2.0
+had none. `src/machine-health/health-score.ts`.
+
+- **100, less:** each unresolved alert by severity (critical 40, high 25, medium 10,
+  low 5; the worst in full, each further one at half); 0.3 × the highest risk among this
+  week's live predictions with any confidence; service overdue 15, due 5. Clamped to
+  0–100. Every deduction is returned with what it is about.
+- **Bands:** good 80+, watch 60–79, act under 60.
+- **No number without data:** no device mapped, no logger measurement, one older than 48
+  hours, or a dark or unknown logger → `unknown`, with the reason. A partial or
+  intermittent logger still scores, marked `partialData`.
+- **Computed on request, not stored.** `GET /api/v1/equipment/:sourceSystem/:externalId/health`
+  (`prediction.read`), Vani's snapshot (`health_score`), and the alert call packet
+  (`health_card`, one spoken sentence). Health-band crossing calls need a stored history
+  and are not built.
+- Bands-only was set aside because the guide's field is a number; risk-only because a
+  machine with an open critical alert and no prediction would score 100.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.
