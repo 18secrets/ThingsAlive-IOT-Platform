@@ -159,6 +159,12 @@ Decisions taken for this phase (2026-11-04):
   Run after !271–!273 are merged and deployed, so the schema has `recommended_action`.
   The tenant it creates cannot be removed; its queued call is never sent unless the
   scheduler has `VANI_CALLS_ENABLED`, and not at all once a day old.
+- **Which alert story** (2026-11-19): the seed tells the guide's bearing story where the
+  published `diesel-generator` declares `vibration_velocity` (the full library, locally),
+  and a coolant story where it declares only coolant — Development's v1, `coolant_temp_c`
+  with a 105 °C critical limit. The coolant rule uses the class's own limit and the
+  library's own overheat recommendation. A class with neither is refused before anything
+  is written. `test/seed-vani-test-coolant.spec.ts`.
 
 ## Configuration this needs on Railway (not yet set — set after the merge, decided 2026-11-06)
 
