@@ -20,12 +20,13 @@ export const HISTORY_TURNS = 6;
  */
 export const DEFAULT_MAX_IN_FLIGHT = 4;
 /**
- * Assistant tools that do not yet narrow to a person's assigned machines, withheld from
- * a caller whose access is limited to some of them. `list_equipment` reads
- * `EquipmentService.list`, which filters by account only; withheld until that honours
- * the caller's equipment scope (fix/equipment-list-scope), then this list empties.
+ * Assistant tools that do not narrow to a person's assigned machines, withheld from a
+ * caller whose access is limited to some of them. Empty since `EquipmentService.list`
+ * honours the caller's equipment scope (fix/equipment-list-scope): `list_equipment`,
+ * the one tool that did not, now does. Kept rather than removed so a tool found not
+ * to narrow has one obvious place to go while it is fixed.
  */
-export const UNSCOPED_TOOLS: readonly string[] = ['list_equipment'];
+export const UNSCOPED_TOOLS: readonly string[] = [];
 
 export type RefusalReason =
   | 'unknown_caller' | 'caller_not_active' | 'unknown_machine' | 'not_your_machine'

@@ -91,8 +91,8 @@ function scenarioOf(r: CatalogImportRow): ScenarioContent {
 }
 
 interface AlertContent {
-  equipmentClassSlug: string; name: string; description: string | null; trigger: AlertTrigger;
-  params: AlertParams; severity: Severity; enabledOnCopy: boolean;
+  equipmentClassSlug: string; name: string; description: string | null; recommendedAction: string | null;
+  trigger: AlertTrigger; params: AlertParams; severity: Severity; enabledOnCopy: boolean;
 }
 
 function alertOf(r: CatalogImportRow): AlertContent {
@@ -112,7 +112,8 @@ function alertOf(r: CatalogImportRow): AlertContent {
     };
   }
   return {
-    equipmentClassSlug: text(p.class_slug), name: text(p.name), description: textOrNull(p.description), trigger,
+    equipmentClassSlug: text(p.class_slug), name: text(p.name), description: textOrNull(p.description),
+    recommendedAction: textOrNull(p.recommended_action), trigger,
     params: params as unknown as AlertParams,
     severity: (text(p.severity) || Severity.High) as Severity,
     // The parser gives a boolean column true/false, or undefined when blank.
@@ -321,6 +322,11 @@ export async function validateRuleRows(
     if (severity && !SEVERITY_VALUES.includes(severity)) { invalidate(r, `${at(r)}: "${severity}" is not a severity.`); continue; }
     const notNumber = ['min', 'max'].find((c) => Number.isNaN(num(p[c]) as number));
     if (notNumber) { invalidate(r, `${at(r)}: ${notNumber} must be a number.`); continue; }
+    // The database refuses it too (ck_alert_rule_template_recommended_action), but there
+    // it would abort the whole apply; here it refuses this row and says which.
+    if ((textOrNull(p.recommended_action) ?? '').length > 300) {
+      invalidate(r, `${at(r)}: recommended_action is read aloud on a call, so keep it to 300 characters.`); continue;
+    }
     if (trigger === 'chain-origin' && text(p.at_least) && !CHAIN_ALERT_LEVELS.includes(text(p.at_least))) {
       invalidate(r, `${at(r)}: a chain rule's at_least must be warning or critical.`); continue;
     }
@@ -380,7 +386,7 @@ const canonical = (v: unknown): string => JSON.stringify(v, (_k, x) => (
 const pick = <T extends object>(row: T, keys: (keyof T)[]) => Object.fromEntries(keys.map((k) => [k, row[k] ?? null]));
 
 const SCENARIO_KEYS: (keyof ScenarioContent)[] = ['equipmentClassSlug', 'name', 'description', 'severity', 'tier', 'requiredSignals', 'minimumHistoryDays', 'parameters'];
-const ALERT_KEYS: (keyof AlertContent)[] = ['equipmentClassSlug', 'name', 'description', 'trigger', 'params', 'severity', 'enabledOnCopy'];
+const ALERT_KEYS: (keyof AlertContent)[] = ['equipmentClassSlug', 'name', 'description', 'recommendedAction', 'trigger', 'params', 'severity', 'enabledOnCopy'];
 const CHAIN_KEYS: (keyof ChainContent)[] = ['equipmentClassSlug', 'scenarioSlug', 'name', 'description', 'outcome', 'nodes', 'alignmentSeconds', 'provenance'];
 
 /** What applying the valid rule rows would do, slug by slug. Read-only. */
