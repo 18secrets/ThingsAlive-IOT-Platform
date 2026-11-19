@@ -360,6 +360,7 @@ export class CopyOnGrantService {
         slug: t.slug,
         name: t.name,
         description: t.description,
+        recommendedAction: t.recommendedAction,
         trigger: t.trigger,
         params: t.params,
         // Scoped to the class it came from, not to the account. A rule authored about

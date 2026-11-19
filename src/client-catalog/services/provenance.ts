@@ -53,9 +53,9 @@ export function scenarioContentChecksum(
  * thing that mattered.
  */
 export function alertRuleContentChecksum(
-  r: Pick<AlertRule, 'name' | 'description' | 'trigger' | 'params' | 'severity' | 'enabled'>
+  r: (Pick<AlertRule, 'name' | 'description' | 'trigger' | 'params' | 'severity' | 'enabled'>
     | Pick<AlertRuleTemplate, 'name' | 'description' | 'trigger' | 'params' | 'severity'>
-      & { enabled: boolean },
+      & { enabled: boolean }) & { recommendedAction?: string | null },
 ): string {
   return checksumOf({
     name: r.name,
@@ -64,6 +64,9 @@ export function alertRuleContentChecksum(
     params: r.params,
     severity: r.severity,
     enabled: r.enabled,
+    // Only when set. Every rule copied before the field existed was hashed without
+    // it; including a null here would make all of them read as edited overnight.
+    ...(r.recommendedAction != null ? { recommendedAction: r.recommendedAction } : {}),
   });
 }
 

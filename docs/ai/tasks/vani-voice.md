@@ -169,10 +169,11 @@ older than 24 hours is never sent.
   `vani_account_link.vani_account_id`, which `test/rls-coverage.spec.ts` refuses until it
   is added to `GLOBAL_UNIQUE` there. That is an edit to an existing test, so it waits for
   approval. Until then, accounts are linked by platform staff only.
-- **What Vani can say** — the packet carries the alert's rule name and summary only.
-  Prediction window, recommended action and health score are not stored on an alert as
-  speakable text, and are not invented. For the §7 call, the alert rule's summary has to
-  say it.
+- **What Vani can say** — the packet carries the rule name, the spoken summary and,
+  since 2026-11-19, `recommended_action` when the rule has one (D62,
+  `1765800000000-AlertRecommendedAction`, `test/alert-recommended-action.spec.ts`). The
+  seed's test rule carries the guide's advice. Prediction window, health score and
+  machine status are still not sent: 2.0 records none of them as speakable fact.
 - ~~Suppressed/deferred callbacks~~ — the Machine Lane Spec §3.4 sends
   `held_for_inbound_review` and `suppressed_by_policy`; both accepted since
   `1763900000000-VaniPolicyOutcomes` (`test/vani-policy-outcomes.spec.ts`). Vani's `reason`
