@@ -106,6 +106,7 @@ describeDb('row-level security coverage', () => {
     uq_device_projection_external: 'mirrors one upstream system, whose ids are its own',
     uq_sensor_map_projection_external: 'mirrors one upstream system, whose ids are its own',
     uq_telemetry_reading_dedupe: 'keyed by IMEI, which comes from the globally unique pool',
+    uq_vani_account_link_account: 'a Vani account is one customer; a second tenant claiming it would hear the first one\'s alerts',
   };
 
   it('does not let one account\'s choice of code block another\'s', async () => {
