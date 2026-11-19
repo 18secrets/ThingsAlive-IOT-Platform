@@ -188,14 +188,14 @@ describeDb('one enabled alert rule of a name per machine', () => {
     });
   });
 
-  describe('AlertRuleNamePerMachine1765700000000', () => {
+  describe('AlertRuleNamePerMachine1765800000000', () => {
     afterAll(async () => {
       // Leave the schema whole for anything after this block.
       await owner.runMigrations({ transaction: 'all' });
     });
 
     it('renames the duplicates already there — the oldest keeps the name, the rest take the next free number — and both still fire', async () => {
-      await undoMigrationNamed(owner, 'AlertRuleNamePerMachine1765700000000');
+      await undoMigrationNamed(owner, 'AlertRuleNamePerMachine1765800000000');
       const first = await alerts.createRule(acme, rule('coolant-hot', 'Coolant hot'));
       await owner.query(`UPDATE alert_rule SET created_at = '2026-11-01' WHERE id = $1`, [first.id]);
       const [{ id: second }] = await copyRow(first.id, 'dup-2', 'coolant hot ', true, '2026-11-02');
@@ -219,7 +219,7 @@ describeDb('one enabled alert rule of a name per machine', () => {
 
     it('down drops the rule, so a duplicate goes in again', async () => {
       const first = await alerts.createRule(acme, rule('coolant-hot', 'Coolant hot'));
-      await undoMigrationNamed(owner, 'AlertRuleNamePerMachine1765700000000');
+      await undoMigrationNamed(owner, 'AlertRuleNamePerMachine1765800000000');
       await copyRow(first.id, 'dup', 'Coolant hot', true);
       expect(await enabledNamed('Coolant hot')).toBe(2);
       await owner.query(`DELETE FROM alert_rule WHERE slug = 'dup'`);

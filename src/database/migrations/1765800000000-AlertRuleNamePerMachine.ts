@@ -22,8 +22,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * somebody relies on. The oldest keeps the name; the rest become "Name (2)", "Name (3)"
  * — the next free one — so each still fires and each can now be told apart.
  */
-export class AlertRuleNamePerMachine1765700000000 implements MigrationInterface {
-  name = 'AlertRuleNamePerMachine1765700000000';
+export class AlertRuleNamePerMachine1765800000000 implements MigrationInterface {
+  name = 'AlertRuleNamePerMachine1765800000000';
 
   public async up(q: QueryRunner): Promise<void> {
     // alert_rule forces row-level security; without the bypass a migration that is not
