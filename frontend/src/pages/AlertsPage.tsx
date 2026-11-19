@@ -12,6 +12,7 @@ import { LIST_PANEL, TablePagination, usePagination } from '../components/common
 import { ViewModeToggle, useViewMode } from '../components/common/ViewModeToggle';
 import { statusTone, severityTone } from '../components/common/statusTone';
 import { ExportCsvButton } from '../components/common/ExportCsvButton';
+import { FILTER_PICKER } from '../lib/filterPicker';
 import {
   AlertEvent, AlertRule, AlertRuleInput, AlertRuleSeverity, AlertTrigger, ApiError,
   EquipmentProfile, Plant, SignalThresholdParams, PredictionSeverityParams,
@@ -319,7 +320,9 @@ export const AlertsPage: React.FC = () => {
             // even when the chosen state shows none, so the reader can switch back.
             disabled={!loading && events.length === 0}
             // The theme's own disabled look is too faint to read as off; dimmed like Export CSV beside it.
-            className={`min-w-[150px] ${!loading && events.length === 0 ? 'opacity-50' : ''}`}
+            // Held to one width like the other filter rows: a min-width alone let the toggle
+            // shrink to "Open" and leave a gap before Export CSV.
+            className={`w-full sm:w-52 ${FILTER_PICKER} ${!loading && events.length === 0 ? 'opacity-50' : ''}`}
           />
           <ExportCsvButton
             name="alerts"
