@@ -806,7 +806,9 @@ alert to a failure mode.
   read as edited.
 - **Frozen at alert time** in `vani_call.request`: editing the rule later does not change
   what the customer could have been told.
-- The Excel catalog import has no column for it yet.
+- The Excel catalog import reads it from an optional `recommended_action` column on the
+  `alert_rule` sheet (2026-11-19, no template bump). A template still in draft is skipped
+  there as a conflict, as for any other column; publish it first, or edit it on the page.
 
 ## D63 — A machine's health score is 100 less listed deductions, and unknown without data
 
