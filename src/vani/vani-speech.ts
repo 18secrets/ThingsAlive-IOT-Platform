@@ -83,6 +83,8 @@ export function spokenUnit(unit: string | null | undefined): string | null {
 const SIGNALS: Record<string, string> = {
   engine_rpm: 'engine speed',
   vibration_velocity: 'bearing vibration',
+  // Read as "coolant temp c" otherwise: the unit suffix is not a word.
+  coolant_temp_c: 'coolant temperature',
 };
 
 export function spokenSignal(signal: string): string {

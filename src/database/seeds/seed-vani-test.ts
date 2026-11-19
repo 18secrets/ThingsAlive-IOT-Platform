@@ -72,6 +72,8 @@ export interface SeedVaniTestResult {
   alertsRaised: number;
   callsQueued: number;
   invitationToken: string | null;
+  /** Which alert story the library allowed: the guide's bearing one, or coolant. */
+  story?: VaniTestStory['name'];
 }
 
 export function requireEnabled(env: NodeJS.ProcessEnv = process.env): void {
@@ -124,6 +126,83 @@ export function vaniTestReadings(now: Date): { signal: string; unit: string; tim
   ];
 }
 
+/** The coolant signal, under whichever key this library declares it. */
+const COOLANT_SIGNALS = ['coolant_temp_c', 'coolant_temp'];
+/** Used only when the class sets no coolant limit of its own: the published library's on Development. */
+const FALLBACK_COOLANT_LIMIT_C = 105;
+
+/** The test alert's story: what the machine reports and the rule that catches it. */
+export interface VaniTestStory {
+  name: 'bearing' | 'coolant';
+  readings: { signal: string; unit: string; times: Date[]; values: number[] }[];
+  rule: { slug: string; name: string; description: string; recommendedAction: string; signal: string; max: number };
+}
+
+/**
+ * Which story the library can tell (decided 2026-11-19). The guide's bearing story needs
+ * `vibration_velocity`, which the full library declares and Development's published
+ * `diesel-generator` v1 does not: there the class declares one signal, coolant. So the
+ * seed tells the bearing story where it can and a coolant story where it cannot, and
+ * says which. Chosen before anything is written — the seed commits in several steps and
+ * is not undone, so a refusal half-way would strand a tenant on a shared database.
+ */
+export function chooseVaniStory(
+  declared: ReadonlySet<string>, thresholds: Record<string, { max?: number } | undefined>, now: Date,
+): VaniTestStory {
+  const keep = <T extends { signal: string }>(rows: T[]) => rows.filter((r) => declared.has(r.signal));
+  if (declared.has('vibration_velocity')) {
+    return {
+      name: 'bearing',
+      readings: keep(vaniTestReadings(now)),
+      rule: {
+        slug: RULE_SLUG,
+        // Read aloud by Vani as the alert's title, so it is a sentence, not a code.
+        name: 'Main bearing vibration on Diesel Generator DG-01 is rising. Schedule an inspection within the week',
+        description: 'Vani test alert (seed:vani-test). Fires when bearing vibration passes the ISO 10816-3 zone C/D limit.',
+        // The guide's §5 advice for this story, word for word in meaning; Vani reads it out.
+        recommendedAction: 'Schedule a bearing inspection within the week. No immediate shutdown is needed.',
+        signal: 'vibration_velocity', max: VIBRATION_LIMIT_MM_S,
+      },
+    };
+  }
+  const coolant = COOLANT_SIGNALS.find((s) => declared.has(s));
+  if (!coolant) {
+    throw new Error(
+      `The published "${LIBRARY_CLASS}" declares neither vibration_velocity nor a coolant signal, so the seed has no `
+      + 'alert story it can tell here. Nothing was written.',
+    );
+  }
+  // The library's own limit for this class, not one chosen here.
+  const limit = thresholds[coolant]?.max ?? FALLBACK_COOLANT_LIMIT_C;
+  return {
+    name: 'coolant',
+    readings: keep([
+      { signal: coolant, unit: 'degC', ...trend(now, (p, w) => Math.round((84 + (limit + 3 - 84) * p + w(0.3)) * 10) / 10) },
+      { signal: 'engine_rpm', unit: 'rpm', ...trend(now, (_p, w) => 1500 + w(4)) },
+      { signal: 'engine_load', unit: 'percent', ...trend(now, (_p, w) => 62 + w(2.5)) },
+    ]),
+    rule: {
+      slug: 'coolant-temperature-high',
+      name: 'Coolant temperature on Diesel Generator DG-01 is running hot',
+      description: `Vani test alert (seed:vani-test). Fires above the library's own coolant limit, ${limit} °C.`,
+      // The library's own recommendation for this class's overheat failure mode, as a sentence.
+      recommendedAction: 'Check the coolant level and clear the radiator fins before the next shift.',
+      signal: coolant, max: limit,
+    },
+  };
+}
+
+/** 72 hours at ten-minute steps; `value(progress 0..1, wobble)` draws each reading. */
+function trend(now: Date, value: (progress: number, wobble: (scale: number) => number) => number) {
+  const end = Math.floor(now.getTime() / STEP_MS) * STEP_MS;
+  const times: Date[] = [];
+  for (let t = end - HISTORY_MS; t <= end; t += STEP_MS) times.push(new Date(t));
+  return {
+    times,
+    values: times.map((_, i) => value(i / (times.length - 1), (scale) => Math.sin(i * 1.7) * scale)),
+  };
+}
+
 const services = (ds: DataSource) => ({
   entitlements: new EntitlementService(
     ds.getRepository(ClientCatalogEntitlement), ds.getRepository(EquipmentClassProfile), new CopyOnGrantService(ds),
@@ -146,8 +225,10 @@ export async function seedVaniTest(
     return { created: false, tenantId: VANI_TEST_TENANT, alertsRaised: 0, callsQueued: 0, invitationToken: null };
   }
 
-  const [libraryClass]: { version: number }[] = await ds.query(
-    `SELECT version FROM equipment_class_profile WHERE slug = $1 AND status = 'published' ORDER BY version DESC LIMIT 1`,
+  const [libraryClass]: { version: number; expected_signals: { signal: string }[] | null;
+    default_thresholds: Record<string, { max?: number }> | null }[] = await ds.query(
+    `SELECT version, expected_signals, default_thresholds FROM equipment_class_profile
+      WHERE slug = $1 AND status = 'published' ORDER BY version DESC LIMIT 1`,
     [LIBRARY_CLASS],
   );
   if (!libraryClass) {
@@ -156,6 +237,9 @@ export async function seedVaniTest(
       + 'database: npx ts-node src/database/seeds/seed-catalog.ts --publish, then run this again.',
     );
   }
+
+  const story = chooseVaniStory(
+    new Set((libraryClass.expected_signals ?? []).map((x) => x.signal)), libraryClass.default_thresholds ?? {}, now);
 
   const s = services(ds);
   const provisioned = await s.provisioning.provision(PLATFORM, {
@@ -168,7 +252,7 @@ export async function seedVaniTest(
   }, now);
   await s.entitlements.grant(PLATFORM, VANI_TEST_TENANT, LIBRARY_CLASS, 'Vani integration test client (seed:vani-test).');
 
-  const readings = vaniTestReadings(now);
+  const readings = story.readings;
   const commissionedAt = new Date(now.getTime() - 30 * 24 * HOUR_MS);
 
   await runTenantSpanning(ds, 'seed:vani-test machine', async (m) => {
@@ -229,14 +313,12 @@ export async function seedVaniTest(
 
   const tenantAdmin: RequestScope = { tenantId: VANI_TEST_TENANT, userId: SEEDER, roles: ['super admin'], isPlatformRole: false };
   await s.alerts.createRule(tenantAdmin, {
-    slug: RULE_SLUG,
-    // Read aloud by Vani as the alert's title, so it is a sentence, not a code.
-    name: 'Main bearing vibration on Diesel Generator DG-01 is rising. Schedule an inspection within the week',
-    description: 'Vani test alert (seed:vani-test). Fires when bearing vibration passes the ISO 10816-3 zone C/D limit.',
-    // The guide's §5 advice for this story, word for word in meaning; Vani reads it out.
-    recommendedAction: 'Schedule a bearing inspection within the week. No immediate shutdown is needed.',
+    slug: story.rule.slug,
+    name: story.rule.name,
+    description: story.rule.description,
+    recommendedAction: story.rule.recommendedAction,
     trigger: 'signal-threshold',
-    params: { signal: 'vibration_velocity', max: VIBRATION_LIMIT_MM_S },
+    params: { signal: story.rule.signal, max: story.rule.max },
     appliesTo: 'equipment',
     sourceSystem: VANI_TEST_SOURCE,
     externalId: VANI_TEST_MACHINE,
@@ -264,7 +346,7 @@ export async function seedVaniTest(
     `SELECT count(*)::int AS calls FROM vani_call WHERE tenant_id = $1`, [VANI_TEST_TENANT]));
   return {
     created: true, tenantId: VANI_TEST_TENANT, alertsRaised: fired.length, callsQueued: calls,
-    invitationToken: provisioned.invitationToken,
+    invitationToken: provisioned.invitationToken, story: story.name,
   };
 }
 
