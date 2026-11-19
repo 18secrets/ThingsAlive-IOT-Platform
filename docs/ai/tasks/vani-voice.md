@@ -287,9 +287,12 @@ manager or operator every machine in the account.
 - Real fix on its own branch, `fix/equipment-list-scope`, for Deepak: `EquipmentService.list`
   honours the caller's assigned machines (`test/equipment-list-scope.spec.ts`). Written
   2026-11-04 but never committed; recovered from its worktree and pushed 2026-11-19.
-  `UNSCOPED_TOOLS` stays as it is after the merge: `test/vani-ask.spec.ts` asserts a
-  limited caller is not offered `list_equipment`, and emptying the list means changing
-  that test, which waits for approval.
+  Merged as !274 on 2026-11-19.
+- Stopgap removed on `fix/vani-ask-list-equipment`, stacked on !274 (2026-11-19):
+  `UNSCOPED_TOOLS` is empty, so a limited caller is offered `list_equipment` and hears
+  only their own machines. The `test/vani-ask.spec.ts` case that asserted the tool was
+  withheld now asserts the narrowed list instead — an existing test changed, approved by
+  Tapas on 2026-11-19. The `withhold` mechanism stays, empty.
 - Audited 2026-11-04, the seven tools Vani can reach (the assistant's "ask" profile):
   `list_alerts`, `list_incidents` (built from the caller's alerts and work orders),
   `list_work_orders`, `logger_health`, `machine_page` and `machine_geofences` (both refuse a
