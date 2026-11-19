@@ -110,6 +110,28 @@ of Lane C and is unchanged; `VANI_ASK_ENABLED` turns it on at go-live.
 |---|---|---|
 | `VANI_SNAPSHOT_DETAIL` | scheduler | `true` adds the Lane C fields. Off by default. |
 
+## Linking accounts and machines — staff API, built 2026-11-19
+
+Once Vani operations have registered a customer (guide §3.3), master admin links them
+here instead of by seed or SQL (`src/vani/vani-links.controller.ts`,
+`test/vani-account-links-http.spec.ts`). `platform.admin` on every route.
+
+| Route | Does |
+|---|---|
+| `GET /api/v1/platform/vani/accounts/:tenantId` | The link and its machines; 404 if unlinked |
+| `PUT /api/v1/platform/vani/accounts/:tenantId` | `{ vaniAccountId, customerPhone?, callbackUrl?, enabled? }`. Creates or replaces; omitted fields are cleared. Idempotent |
+| `DELETE /api/v1/platform/vani/accounts/:tenantId` | Unlinks, with every machine link. Past calls are kept |
+| `PUT …/:tenantId/machines/:sourceSystem/:externalId` | `{ machineId, spokenName }`, exactly as Vani registered them. Idempotent |
+| `DELETE …/:tenantId/machines/:sourceSystem/:externalId` | Unlinks one machine |
+
+- Writes run in the tenant's own session as `ta_app`; the database's rules refuse a
+  shared Vani account (409), a Vani machine id on two machines (409), a non-E.164
+  phone or plain-http callback (400), a machine before its account (404).
+- Changing `vaniAccountId` forgets the last snapshot hash, so the new account gets
+  the picture on the next pass; resending the same id does not.
+- No list across tenants: that would need the tenant-spanning escape hatch, and staff
+  know which tenant they are linking.
+
 ## Running the test client locally
 
 ```bash
