@@ -129,7 +129,12 @@ Decisions taken for this phase (2026-11-04):
 - **1a** — the library `diesel-generator` class has no bearing-temperature signal, so the
   test alert is a critical threshold rule on `vibration_velocity` (ISO 10816-3 zone C/D,
   4.5 mm/s), named in plain words.
-- **Local only for now** — not seeded on Railway Development.
+- ~~Local only for now~~ — seeding Development approved 2026-11-19 (Tapas). The seed
+  writes to a shared host only when the run names it exactly:
+  `SEED_VANI_TEST_ALLOW_HOST=<host> SEED_VANI_TEST_ENABLED=true DATABASE_URL=… npm run seed:vani-test`.
+  Run after !271–!273 are merged and deployed, so the schema has `recommended_action`.
+  The tenant it creates cannot be removed; its queued call is never sent unless the
+  scheduler has `VANI_CALLS_ENABLED`, and not at all once a day old.
 
 ## Configuration this needs on Railway (not yet set — set after the merge, decided 2026-11-06)
 
