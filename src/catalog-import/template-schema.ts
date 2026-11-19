@@ -395,6 +395,9 @@ export const CONTENT_SHEETS: SheetSchema[] = [
       { name: 'slug', requiredCell: true },
       { name: 'name', requiredCell: true },
       { name: 'description', requiredCell: false },
+      // D62: what the customer should do, said aloud by Vani on the call. Optional, so
+      // no template bump (QCE3's precedent). Blank means the rule carries none.
+      { name: 'recommended_action', requiredCell: false },
       { name: 'trigger', requiredCell: true },
       { name: 'severity', requiredCell: false },
       { name: 'enabled_on_copy', requiredCell: false, boolean: true },
@@ -411,7 +414,9 @@ export const CONTENT_SHEETS: SheetSchema[] = [
     // validation: the scenario it names is in the same batch.
     example: {
       class_slug: 'diesel-generator', slug: 'diesel-generator-coolant-drift-alert', name: 'Coolant drifting hot',
-      description: 'Raised when the coolant drift prediction reaches high', trigger: 'prediction-severity',
+      description: 'Raised when the coolant drift prediction reaches high',
+      recommended_action: 'Check the coolant level and clean the radiator fins before the next shift.',
+      trigger: 'prediction-severity',
       severity: 'high', enabled_on_copy: 'TRUE', signal: '', min: '', max: '', rating: '',
       at_least: 'high', scenario_slug: 'diesel-generator-coolant-drift', chain_slug: '', stage_signal: '',
     },
