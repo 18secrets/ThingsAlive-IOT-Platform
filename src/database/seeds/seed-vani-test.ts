@@ -20,10 +20,12 @@ import { dataSourceOptions } from '../data-source';
  *
  *   SEED_VANI_TEST_ENABLED=true npm run seed:vani-test
  *
- * **Local databases only, for now.** The script refuses any database host but
- * localhost. Seeding a shared environment writes a customer-shaped tenant into it and
- * queues a call to a real phone (Deepak's), so it waits for a decision rather than a
- * flag somebody might leave set.
+ * **Local databases, and one named shared host.** The script refuses any database host
+ * but localhost unless the run names that exact host (`requireLocal`). Seeding a shared
+ * environment writes a customer-shaped tenant into it that cannot be removed, and queues
+ * a call to a real phone (Deepak's) — sent only where the scheduler has
+ * VANI_CALLS_ENABLED, and never once it is a day old. Decided for Development on
+ * 2026-11-19.
  *
  * **The machine comes from the library.** `diesel-generator` is granted and the machine
  * is that class, not a hand-built record. The library class has no bearing-temperature
@@ -81,12 +83,24 @@ export function requireEnabled(env: NodeJS.ProcessEnv = process.env): void {
   }
 }
 
-/** Local only until somebody decides otherwise. Read from the same settings the connection uses. */
+/**
+ * Local unless the run names the one shared host it may write to. Read from the same
+ * settings the connection uses.
+ *
+ * Seeding a shared environment was decided on 2026-11-19 (Tapas), for the §7 acceptance
+ * call on Development. The exception is the exact host, given on the command line each
+ * time — not a switch that stays on: `SEED_VANI_TEST_ALLOW_HOST` set to `true` or to a
+ * different host still refuses, so a value left in an environment file cannot quietly
+ * aim the seed at some other database.
+ */
 export function requireLocal(env: NodeJS.ProcessEnv = process.env): void {
   const host = env.DATABASE_URL ? new URL(env.DATABASE_URL).hostname : (env.DB_HOST ?? 'localhost');
-  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
-    throw new Error(`Refused: seed:vani-test runs against a local database only, and this one is "${host}".`);
-  }
+  if (['localhost', '127.0.0.1', '::1'].includes(host)) return;
+  if (env.SEED_VANI_TEST_ALLOW_HOST && env.SEED_VANI_TEST_ALLOW_HOST === host) return;
+  throw new Error(
+    `Refused: seed:vani-test runs against a local database only, and this one is "${host}". `
+      + `To seed this shared database deliberately, set SEED_VANI_TEST_ALLOW_HOST=${host} for this run.`,
+  );
 }
 
 /** The machine's last 72 hours: a generator running steadily while its bearing vibration climbs. */
