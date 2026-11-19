@@ -165,10 +165,11 @@ older than 24 hours is never sent.
 - **Snapshot `health_score`** — 2.0 keeps no health score, so the snapshot sends none.
   The status line is the open alerts on the machine. Confirm Vani accepts a snapshot
   without `health_score`.
-- **One tenant per Vani account** — not enforced. Needs a unique index on
-  `vani_account_link.vani_account_id`, which `test/rls-coverage.spec.ts` refuses until it
-  is added to `GLOBAL_UNIQUE` there. That is an edit to an existing test, so it waits for
-  approval. Until then, accounts are linked by platform staff only.
+- ~~One tenant per Vani account~~ — enforced 2026-11-19 by `uq_vani_account_link_account`
+  (`1765700000000-VaniAccountOneTenant`), listed in `rls-coverage.spec.ts`'s `GLOBAL_UNIQUE`
+  with Tapas's approval. A disabled link still holds its account. The migration refuses
+  to run while any account is already shared, and names it.
+  `test/vani-account-one-tenant.spec.ts`.
 - **What Vani can say** — the packet carries the alert's rule name and summary only.
   Prediction window, recommended action and health score are not stored on an alert as
   speakable text, and are not invented. For the §7 call, the alert rule's summary has to
