@@ -110,6 +110,28 @@ of Lane C and is unchanged; `VANI_ASK_ENABLED` turns it on at go-live.
 |---|---|---|
 | `VANI_SNAPSHOT_DETAIL` | scheduler | `true` adds the Lane C fields. Off by default. |
 
+## Linking accounts and machines — staff API, built 2026-11-19
+
+Once Vani operations have registered a customer (guide §3.3), master admin links them
+here instead of by seed or SQL (`src/vani/vani-links.controller.ts`,
+`test/vani-account-links-http.spec.ts`). `platform.admin` on every route.
+
+| Route | Does |
+|---|---|
+| `GET /api/v1/platform/vani/accounts/:tenantId` | The link and its machines; 404 if unlinked |
+| `PUT /api/v1/platform/vani/accounts/:tenantId` | `{ vaniAccountId, customerPhone?, callbackUrl?, enabled? }`. Creates or replaces; omitted fields are cleared. Idempotent |
+| `DELETE /api/v1/platform/vani/accounts/:tenantId` | Unlinks, with every machine link. Past calls are kept |
+| `PUT …/:tenantId/machines/:sourceSystem/:externalId` | `{ machineId, spokenName }`, exactly as Vani registered them. Idempotent |
+| `DELETE …/:tenantId/machines/:sourceSystem/:externalId` | Unlinks one machine |
+
+- Writes run in the tenant's own session as `ta_app`; the database's rules refuse a
+  shared Vani account (409), a Vani machine id on two machines (409), a non-E.164
+  phone or plain-http callback (400), a machine before its account (404).
+- Changing `vaniAccountId` forgets the last snapshot hash, so the new account gets
+  the picture on the next pass; resending the same id does not.
+- No list across tenants: that would need the tenant-spanning escape hatch, and staff
+  know which tenant they are linking.
+
 ## Running the test client locally
 
 ```bash
@@ -165,10 +187,11 @@ older than 24 hours is never sent.
 - **Snapshot `health_score`** — 2.0 keeps no health score, so the snapshot sends none.
   The status line is the open alerts on the machine. Confirm Vani accepts a snapshot
   without `health_score`.
-- **One tenant per Vani account** — not enforced. Needs a unique index on
-  `vani_account_link.vani_account_id`, which `test/rls-coverage.spec.ts` refuses until it
-  is added to `GLOBAL_UNIQUE` there. That is an edit to an existing test, so it waits for
-  approval. Until then, accounts are linked by platform staff only.
+- ~~One tenant per Vani account~~ — enforced 2026-11-19 by `uq_vani_account_link_account`
+  (`1765700000000-VaniAccountOneTenant`), listed in `rls-coverage.spec.ts`'s `GLOBAL_UNIQUE`
+  with Tapas's approval. A disabled link still holds its account. The migration refuses
+  to run while any account is already shared, and names it.
+  `test/vani-account-one-tenant.spec.ts`.
 - **What Vani can say** — the packet carries the rule name, the spoken summary and,
   since 2026-11-19, `recommended_action` when the rule has one (D62,
   `1765800000000-AlertRecommendedAction`, `test/alert-recommended-action.spec.ts`). The
@@ -262,7 +285,14 @@ manager or operator every machine in the account.
   limited (`UNSCOPED_TOOLS`), and refused if the model calls it anyway. `AssistantService`
   gained an optional `withhold` list for this; the console passes none.
 - Real fix on its own branch, `fix/equipment-list-scope`, for Deepak: `EquipmentService.list`
-  honours the caller's assigned machines. Once merged, `UNSCOPED_TOOLS` empties.
+  honours the caller's assigned machines (`test/equipment-list-scope.spec.ts`). Written
+  2026-11-04 but never committed; recovered from its worktree and pushed 2026-11-19.
+  Merged as !274 on 2026-11-19.
+- Stopgap removed on `fix/vani-ask-list-equipment`, stacked on !274 (2026-11-19):
+  `UNSCOPED_TOOLS` is empty, so a limited caller is offered `list_equipment` and hears
+  only their own machines. The `test/vani-ask.spec.ts` case that asserted the tool was
+  withheld now asserts the narrowed list instead — an existing test changed, approved by
+  Tapas on 2026-11-19. The `withhold` mechanism stays, empty.
 - Audited 2026-11-04, the seven tools Vani can reach (the assistant's "ask" profile):
   `list_alerts`, `list_incidents` (built from the caller's alerts and work orders),
   `list_work_orders`, `logger_health`, `machine_page` and `machine_geofences` (both refuse a

@@ -238,15 +238,15 @@ describeDb('vani ask: answered as the person on the phone', () => {
       await owner.query(`DELETE FROM alert_event WHERE rule_name = 'Low fuel'`);
     });
 
-    it('withholds a tool that would list machines the caller is not assigned to', async () => {
-      // list_equipment reads every machine in the account (EquipmentService.list
-      // ignores the caller's assignment), so a limited caller is not offered it — and
-      // if the model calls it anyway, it is refused rather than run.
-      const model = new ScriptedModel((_, n) => (n === 0 ? call('list_equipment') : say('I cannot list them.')));
+    it('lists a limited caller\'s own machines, and not the rest of the account', async () => {
+      // list_equipment was withheld from a limited caller while EquipmentService.list
+      // ignored the assignment. It now narrows (fix/equipment-list-scope), so the caller
+      // is offered it and hears only their own machine.
+      const model = new ScriptedModel((_, n) => (n === 0 ? call('list_equipment') : say('You have DG-02.')));
       await service(model).ask(body({ caller_phone: '+12025550111', question: 'What machines do I have?' }), env);
-      expect(model.seen[0].tools.map((t) => t.name)).not.toContain('list_equipment');
+      expect(model.seen[0].tools.map((t) => t.name)).toContain('list_equipment');
       const seen = JSON.stringify(model.seen[1].turns[model.seen[1].turns.length - 1]);
-      expect(seen).toContain('No tool \\"list_equipment\\" is available.');
+      expect(seen).toContain('DG-02');
       expect(seen).not.toContain('DG-01');
     });
 
