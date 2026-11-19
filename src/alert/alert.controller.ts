@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { CurrentScope } from '../auth/decorators/current-scope.decorator';
 import { Requires } from '../auth/guards/capability.guard';
 import { RequestScope } from '../auth/types/request-scope';
@@ -16,6 +16,8 @@ export class RuleDto {
   @IsString() @IsNotEmpty() slug: string;
   @IsString() @IsNotEmpty() name: string;
   @IsOptional() @IsString() description?: string;
+  // Said aloud on a Vani call about this rule's alerts.
+  @IsOptional() @IsString() @MaxLength(300) recommendedAction?: string;
   @IsIn(TRIGGERS) trigger: AlertTrigger;
   @IsObject() params: AlertParams;
   @IsOptional() @IsIn(APPLIES) appliesTo?: AlertAppliesTo;
@@ -29,6 +31,8 @@ export class RulePatchDto {
   @IsOptional() @IsString() slug?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
+  // Null clears it.
+  @IsOptional() @IsString() @MaxLength(300) recommendedAction?: string | null;
   @IsOptional() @IsIn(TRIGGERS) trigger?: AlertTrigger;
   @IsOptional() @IsObject() params?: AlertParams;
   @IsOptional() @IsIn(APPLIES) appliesTo?: AlertAppliesTo;
