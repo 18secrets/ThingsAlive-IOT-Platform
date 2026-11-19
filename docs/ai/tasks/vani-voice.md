@@ -192,10 +192,11 @@ older than 24 hours is never sent.
   with Tapas's approval. A disabled link still holds its account. The migration refuses
   to run while any account is already shared, and names it.
   `test/vani-account-one-tenant.spec.ts`.
-- **What Vani can say** — the packet carries the alert's rule name and summary only.
-  Prediction window, recommended action and health score are not stored on an alert as
-  speakable text, and are not invented. For the §7 call, the alert rule's summary has to
-  say it.
+- **What Vani can say** — the packet carries the rule name, the spoken summary and,
+  since 2026-11-19, `recommended_action` when the rule has one (D62,
+  `1765800000000-AlertRecommendedAction`, `test/alert-recommended-action.spec.ts`). The
+  seed's test rule carries the guide's advice. Prediction window, health score and
+  machine status are still not sent: 2.0 records none of them as speakable fact.
 - ~~Suppressed/deferred callbacks~~ — the Machine Lane Spec §3.4 sends
   `held_for_inbound_review` and `suppressed_by_policy`; both accepted since
   `1763900000000-VaniPolicyOutcomes` (`test/vani-policy-outcomes.spec.ts`). Vani's `reason`
@@ -284,7 +285,11 @@ manager or operator every machine in the account.
   limited (`UNSCOPED_TOOLS`), and refused if the model calls it anyway. `AssistantService`
   gained an optional `withhold` list for this; the console passes none.
 - Real fix on its own branch, `fix/equipment-list-scope`, for Deepak: `EquipmentService.list`
-  honours the caller's assigned machines. Once merged, `UNSCOPED_TOOLS` empties.
+  honours the caller's assigned machines (`test/equipment-list-scope.spec.ts`). Written
+  2026-11-04 but never committed; recovered from its worktree and pushed 2026-11-19.
+  `UNSCOPED_TOOLS` stays as it is after the merge: `test/vani-ask.spec.ts` asserts a
+  limited caller is not offered `list_equipment`, and emptying the list means changing
+  that test, which waits for approval.
 - Audited 2026-11-04, the seven tools Vani can reach (the assistant's "ask" profile):
   `list_alerts`, `list_incidents` (built from the caller's alerts and work orders),
   `list_work_orders`, `logger_health`, `machine_page` and `machine_geofences` (both refuse a

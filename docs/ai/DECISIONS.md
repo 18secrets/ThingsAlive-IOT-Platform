@@ -788,6 +788,26 @@ we never write. A trigger for a switched-off feature is accepted and reported as
 `suppressed_by_policy` / `feature_not_enabled`, so the callback accepts the Machine Lane
 Spec's seven outcomes, not the guide's five (`1763900000000-VaniPolicyOutcomes`).
 
+## D62 — A rule's recommended action is written on the rule, never inferred
+
+Decided 2026-11-19 by Tapas. Vani's packet has a `recommended_action` field (guide §6.2)
+and 2.0 sent none: library recommendations hang off failure modes, and nothing links an
+alert to a failure mode.
+
+- **Written, not matched.** `alert_rule_template.recommended_action`, copied to
+  `alert_rule` with the rest of the rule and the account's to edit after that. NULL means
+  the call carries no action; nothing is composed in its place.
+- **Matching by signal was set aside.** 487 of 557 failure modes watch one signal, so it
+  would usually find something — and sometimes the wrong thing: a "coolant below 0 °C"
+  alert would borrow the overheat fix. Linking a template to a failure mode by code was
+  also set aside: it reuses the 493 authored recommendations but ties a rule to a class
+  version, and every rule still needs linking by hand.
+- **In the checksum only when set**, so rules copied before the column existed do not
+  read as edited.
+- **Frozen at alert time** in `vani_call.request`: editing the rule later does not change
+  what the customer could have been told.
+- The Excel catalog import has no column for it yet.
+
 ## Open, and blocking something
 
 - **`LEGACY_DB_*` credentials** — nothing is scored without them; the largest open item.

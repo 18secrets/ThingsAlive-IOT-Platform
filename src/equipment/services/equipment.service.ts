@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { ActivationService } from '../../activation/services/activation.service';
 import { EquipmentScenario } from '../../activation/entities/equipment-scenario.entity';
 import { RequestScope } from '../../auth/types/request-scope';
@@ -126,12 +126,18 @@ export class EquipmentService {
     onBehalfOfTenantId?: string,
   ): Promise<EquipmentProfile[]> {
     const tenantId = this.resolveTenant(scope, onBehalfOfTenantId);
+    // The person's own machines, read the way the alert list reads them: undefined is
+    // the whole account, [] is nothing. Until this, a site manager or operator saw the
+    // whole register here — and so did the assistant's list_equipment tool, which reads
+    // through this method — while every other list narrowed to their assignment.
+    if (scope.equipmentIds !== undefined && scope.equipmentIds.length === 0) return [];
     return withTenantId(this.ds, tenantId, (m) =>
       m.getRepository(EquipmentProfile).find({
         where: {
           tenantId,
           ...(filters.plantId ? { plantId: filters.plantId } : {}),
           ...(filters.includeRetired ? {} : { status: 'active' as EquipmentStatus }),
+          ...(scope.equipmentIds !== undefined ? { externalId: In([...scope.equipmentIds]) } : {}),
         },
         order: { externalId: 'ASC' },
       }));
