@@ -22,6 +22,7 @@ export interface RuleInput {
   slug: string;
   name: string;
   description?: string | null;
+  recommendedAction?: string | null;
   trigger: AlertTrigger;
   params: AlertParams;
   appliesTo?: AlertAppliesTo;
@@ -131,6 +132,7 @@ export class AlertService {
         slug: input.slug,
         name: input.name.trim(),
         description: input.description ?? null,
+        recommendedAction: input.recommendedAction ?? null,
         trigger: input.trigger,
         params: input.params,
         appliesTo: input.appliesTo ?? 'account',
@@ -164,6 +166,8 @@ export class AlertService {
         slug: input.slug ?? rule.slug,
         name: input.name ?? rule.name,
         description: input.description ?? rule.description,
+        // Undefined keeps it; null clears it. `??` would make clearing impossible.
+        recommendedAction: input.recommendedAction !== undefined ? input.recommendedAction : rule.recommendedAction,
         trigger: input.trigger ?? rule.trigger,
         params: input.params ?? rule.params,
         appliesTo: input.appliesTo ?? rule.appliesTo,

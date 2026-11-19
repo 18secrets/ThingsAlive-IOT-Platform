@@ -46,6 +46,14 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
   );
   if (!link) return 0;
 
+  // Read now, not at send time: the request is the record of what the customer could
+  // have been told, so an edit to the rule after the alert fired must not change it.
+  const [rule]: { recommended_action: string | null }[] = await m.query(
+    `SELECT "recommended_action" FROM "alert_rule" WHERE "tenant_id" = $1 AND "id" = $2`,
+    [tenantId, alert.ruleId],
+  );
+  const recommendedAction = rule?.recommended_action?.trim() || null;
+
   const severity = vaniSeverity(alert.severity);
   const request = {
     // The alert id is Vani's idempotency key: resending this body can never ring twice.
@@ -60,13 +68,15 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
       ...(alert.firedAt ? { fired_at: alert.firedAt.toISOString() } : {}),
     },
     // Vani speaks only from this. It carries what the alert actually says and nothing
-    // more: a prediction window, a recommended action or a health score that 2.0 did
-    // not record on the alert would be words put in Vani's mouth.
+    // more: a prediction window or a health score that 2.0 did not record would be
+    // words put in Vani's mouth. The recommended action is sent only when someone
+    // wrote one on the rule (`1765800000000-AlertRecommendedAction.ts`).
     context: {
       alert_title: alert.ruleName,
       // Said aloud, so composed from the alert's evidence rather than the engine's
       // screen wording (`vani-speech.ts`).
       summary: speakableSummary(alert, link.spoken_name),
+      ...(recommendedAction ? { recommended_action: recommendedAction } : {}),
     },
     ...(link.callback_url ? { callback_url: link.callback_url } : {}),
   };

@@ -219,6 +219,8 @@ export async function seedVaniTest(
     // Read aloud by Vani as the alert's title, so it is a sentence, not a code.
     name: 'Main bearing vibration on Diesel Generator DG-01 is rising. Schedule an inspection within the week',
     description: 'Vani test alert (seed:vani-test). Fires when bearing vibration passes the ISO 10816-3 zone C/D limit.',
+    // The guide's §5 advice for this story, word for word in meaning; Vani reads it out.
+    recommendedAction: 'Schedule a bearing inspection within the week. No immediate shutdown is needed.',
     trigger: 'signal-threshold',
     params: { signal: 'vibration_velocity', max: VIBRATION_LIMIT_MM_S },
     appliesTo: 'equipment',

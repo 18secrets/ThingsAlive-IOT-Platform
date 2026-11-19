@@ -50,6 +50,14 @@ export class AlertRule {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  /**
+   * What the customer should do about this rule's alerts, said aloud by Vani as the call's recommended action.
+   * NULL when nobody wrote one; nothing is composed in its place.
+   * `1765800000000-AlertRecommendedAction.ts`.
+   */
+  @Column({ name: 'recommended_action', type: 'text', nullable: true })
+  recommendedAction: string | null;
+
   @Column({ type: 'text' })
   trigger: AlertTrigger;
 
