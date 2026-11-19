@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { AlertEvent } from '../alert/entities/alert-event.entity';
 import { vaniSeverity } from './vani-severity';
+import { healthCardSentence } from '../machine-health/health-score';
+import { healthIn, healthKey } from '../machine-health/machine-health';
 import { speakableSummary } from './vani-speech';
 
 const logger = new Logger('VaniQueue');
@@ -53,6 +55,7 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
     [tenantId, alert.ruleId],
   );
   const recommendedAction = rule?.recommended_action?.trim() || null;
+  const healthCard = await healthCardFor(m, tenantId, alert);
 
   const severity = vaniSeverity(alert.severity);
   const request = {
@@ -77,6 +80,9 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
       // screen wording (`vani-speech.ts`).
       summary: speakableSummary(alert, link.spoken_name),
       ...(recommendedAction ? { recommended_action: recommendedAction } : {}),
+      // The machine's health score now, with this alert in it (D63). Left out when the
+      // machine cannot be scored: Vani says nothing about health rather than a guess.
+      ...(healthCard ? { health_card: healthCard } : {}),
     },
     ...(link.callback_url ? { callback_url: link.callback_url } : {}),
   };
@@ -89,4 +95,23 @@ async function queueOne(m: EntityManager, tenantId: string, alert: AlertEvent): 
     [tenantId, alert.id, link.vani_account_id, link.machine_id, severity, JSON.stringify(request)],
   );
   return inserted.length;
+}
+
+/**
+ * The health card for the call, in its own savepoint: the score reads the service
+ * forecast and the logger state, and a fault in either must cost the card, never the
+ * call request beside it.
+ */
+async function healthCardFor(m: EntityManager, tenantId: string, alert: AlertEvent): Promise<string | null> {
+  await m.query('SAVEPOINT vani_health');
+  try {
+    const ref = { sourceSystem: alert.sourceSystem, externalId: alert.externalId };
+    const health = (await healthIn(m, tenantId, [ref])).get(healthKey(ref));
+    await m.query('RELEASE SAVEPOINT vani_health');
+    return health ? healthCardSentence(health) : null;
+  } catch (err) {
+    await m.query('ROLLBACK TO SAVEPOINT vani_health');
+    logger.warn(`No health card for the call about alert ${alert.id}: ${(err as Error).message}`);
+    return null;
+  }
 }

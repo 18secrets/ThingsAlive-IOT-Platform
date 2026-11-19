@@ -1,7 +1,7 @@
 import { absorbAlerts } from '../../incident/incident-absorb';
 import { queueVaniCalls } from '../../vani/vani-queue';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not } from 'typeorm';
+import { Between, DataSource, EntityManager, In, LessThan, MoreThanOrEqual, Not, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { Severity } from '../../common/severity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -60,6 +60,47 @@ export interface WindowContext {
 }
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
+/**
+ * The enabled machine rule already holding this name, if any (TC_199).
+ *
+ * The sentence; `uq_alert_rule_machine_name` is the rule, and this matches it exactly —
+ * enabled, machine-scoped, trimmed and case-blind — so the two never disagree about
+ * what a duplicate is. `except.workflowId` is for a republish, whose old rules are
+ * switched off in the same transaction before the new ones land.
+ */
+export async function machineRuleNameClash(
+  m: EntityManager,
+  tenantId: string,
+  rule: { name: string; sourceSystem?: string | null; externalId?: string | null },
+  except: { ruleId?: string; workflowId?: string } = {},
+): Promise<AlertRule | null> {
+  if (!rule.sourceSystem || !rule.externalId || !rule.name?.trim()) return null;
+  const qb = m.getRepository(AlertRule).createQueryBuilder('r')
+    .where('r.tenant_id = :tenantId', { tenantId })
+    .andWhere(`r.applies_to = 'equipment' AND r.enabled`)
+    .andWhere('r.source_system = :ss AND r.external_id = :ext', { ss: rule.sourceSystem, ext: rule.externalId })
+    .andWhere('lower(btrim(r.name)) = lower(btrim(:name))', { name: rule.name });
+  if (except.ruleId) qb.andWhere('r.id <> :ruleId', { ruleId: except.ruleId });
+  if (except.workflowId) {
+    qb.andWhere('(r.compiled_from_workflow_id IS NULL OR r.compiled_from_workflow_id <> :wf)', { wf: except.workflowId });
+  }
+  return qb.getOne();
+}
+
+export function machineRuleNameMessage(name: string): string {
+  return `This machine already has an alert rule called "${name.trim()}". `
+    + 'Give this one another name, or edit the one that is there.';
+}
+
+/** A concurrent writer that got past the check finds the index instead; same sentence. */
+export function mapRuleNameClash(error: unknown, name: string): never {
+  const e = error as QueryFailedError & { code?: string; constraint?: string };
+  if (error instanceof QueryFailedError && e.code === '23505' && e.constraint === 'uq_alert_rule_machine_name') {
+    throw new ConflictException(machineRuleNameMessage(name));
+  }
+  throw error;
+}
 
 /**
  * Alerts: the client's own standing requests to be told something (task P1-119).
@@ -127,6 +168,9 @@ export class AlertService {
       if (await repo.findOne({ where: { tenantId: scope.tenantId, slug: input.slug } })) {
         throw new ConflictException(`A rule called "${input.slug}" already exists.`);
       }
+      if (input.appliesTo === 'equipment' && await machineRuleNameClash(m, scope.tenantId, input)) {
+        throw new ConflictException(machineRuleNameMessage(input.name));
+      }
       return repo.save(repo.create({
         tenantId: scope.tenantId,
         slug: input.slug,
@@ -145,10 +189,11 @@ export class AlertService {
         createdBy: scope.userId,
         updatedBy: scope.userId,
       }));
-    });
+    }).catch((e) => mapRuleNameClash(e, input.name));
   }
 
   async updateRule(scope: RequestScope, id: string, input: Partial<RuleInput>): Promise<AlertRule> {
+    let attempted = input.name ?? '';
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(AlertRule);
       const rule = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
@@ -179,28 +224,41 @@ export class AlertService {
         severity: input.severity ?? rule.severity,
       };
       await this.validate(scope, merged);
+      attempted = merged.name;
       if (merged.slug !== rule.slug) {
         const clash = await repo.findOne({
           where: { tenantId: scope.tenantId, slug: merged.slug, id: Not(id) },
         });
         if (clash) throw new ConflictException(`A rule called "${merged.slug}" already exists.`);
       }
+      // A rule that is off may share a name; it is checked when it is switched back on.
+      if (rule.enabled && merged.appliesTo === 'equipment'
+        && await machineRuleNameClash(m, scope.tenantId, merged, { ruleId: rule.id })) {
+        throw new ConflictException(machineRuleNameMessage(merged.name));
+      }
 
       Object.assign(rule, merged, { name: merged.name.trim(), updatedBy: scope.userId });
       return repo.save(rule);
-    });
+    }).catch((e) => mapRuleNameClash(e, attempted));
   }
 
   /** Off rather than deleted: the alerts it raised still have to be explainable. */
   async setEnabled(scope: RequestScope, id: string, enabled: boolean): Promise<AlertRule> {
+    let name = '';
     return withTenantSession(this.ds, scope, async (m) => {
       const repo = m.getRepository(AlertRule);
       const rule = await repo.findOne({ where: { tenantId: scope.tenantId, id } });
       if (!rule) throw new NotFoundException('No such alert rule in this account.');
+      name = rule.name;
+      // Switching on is where an old version's rule meets the one that replaced it.
+      if (enabled && !rule.enabled && rule.appliesTo === 'equipment'
+        && await machineRuleNameClash(m, scope.tenantId, rule, { ruleId: rule.id })) {
+        throw new ConflictException(machineRuleNameMessage(rule.name));
+      }
       rule.enabled = enabled;
       rule.updatedBy = scope.userId;
       return repo.save(rule);
-    });
+    }).catch((e) => mapRuleNameClash(e, name));
   }
 
   async listEvents(

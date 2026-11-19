@@ -5,7 +5,9 @@ import { DataSource, EntityManager, In, IsNull, Not } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { AlertRule } from '../alert/entities/alert-rule.entity';
 import { describeRule, plainSignalName, SignalNamer } from '../alert/services/alert-rule-render';
-import { ruleCoversMachine } from '../alert/services/alert.service';
+import {
+  machineRuleNameClash, machineRuleNameMessage, mapRuleNameClash, ruleCoversMachine,
+} from '../alert/services/alert.service';
 import { ChainOriginParams, NoTelemetryParams, PredictionSeverityParams, SignalThresholdParams } from '../alert/services/alert-rules';
 import { FuelLossParams } from '../alert/services/fuel-loss';
 import { ClientEquipmentClassFailureMode } from '../client-catalog/entities/client-equipment-class-failure-mode.entity';
@@ -269,7 +271,7 @@ export class WorkflowService {
       }
       if (v.status !== 'draft') throw new ConflictException(`Version ${version} is ${v.status} and cannot be published.`);
 
-      const plan = await this.plan(m, scope, def, v, at);
+      const plan = await this.plan(m, scope, def, v, at, opts.enabled ?? true);
       if (plan.publishRefusal) throw new ConflictException({ message: plan.publishRefusal, readiness: plan.readiness });
 
       // The version before is switched off, not rewritten: alert events point at its
@@ -290,7 +292,7 @@ export class WorkflowService {
         equipmentClassSlug: compiled.scope.equipmentClassSlug ?? null,
         enabled: opts.enabled ?? true, compiledFromWorkflowId: def.id, compiledFromVersionId: v.id, graphHash: compiled.graphHash,
         createdBy: scope.userId, updatedBy: scope.userId,
-      })));
+      }))).catch((e) => mapRuleNameClash(e, plan.rules[0]?.name ?? ''));
       await m.getRepository(WorkflowVersion).update({ id: v.id }, { status: 'published', publishedBy: scope.userId, publishedAt: at });
       return { version: v.version, status: 'published', alreadyPublished: false, rules: written, readiness: plan.readiness };
     }
@@ -444,12 +446,19 @@ export class WorkflowService {
   }
 
   private async plan(
-    m: EntityManager, scope: RequestScope, def: WorkflowDefinition, v: WorkflowVersion, at: Date,
+    m: EntityManager, scope: RequestScope, def: WorkflowDefinition, v: WorkflowVersion, at: Date, checkNames = true,
   ): Promise<CompileResult> {
-    return this.planSpec(m, scope, v.spec, `wf-${def.slug.slice(0, 40)}-v${v.version}`, at);
+    return this.planSpec(m, scope, v.spec, `wf-${def.slug.slice(0, 40)}-v${v.version}`, at, { ownWorkflowId: def.id, checkNames });
   }
 
-  private async planSpec(m: EntityManager, scope: RequestScope, spec: WorkflowSpec, base: string, at: Date): Promise<CompileResult> {
+  /**
+   * `checkNames` is off only for rules published switched off (D28): the database lets an
+   * off rule share a name, and the clash is refused when it is switched on instead.
+   */
+  private async planSpec(
+    m: EntityManager, scope: RequestScope, spec: WorkflowSpec, base: string, at: Date,
+    opts: { ownWorkflowId?: string; checkNames?: boolean } = {},
+  ): Promise<CompileResult> {
     const compiled = await this.validate(m, scope, spec);
     const namer = await this.namerFor(m, scope, compiled.scope);
     const rules: PlannedRule[] = compiled.rules.map((r, i) => ({
@@ -473,6 +482,21 @@ export class WorkflowService {
       publishRefusal = machines.length
         ? 'No machine this workflow covers is ready: every one is missing or not receiving a signal it reads.'
         : 'This workflow covers no machine in the account.';
+    }
+    // TC_199: a second enabled rule of the same name on the machine. Said in the dry run
+    // too, so Check warns before Publish refuses. The workflow's own published rules are
+    // not a clash — publish switches them off first.
+    if (!publishRefusal && (opts.checkNames ?? true) && compiled.scope.appliesTo === 'equipment') {
+      const seen = new Set<string>();
+      for (const r of compiled.rules) {
+        const key = r.name.trim().toLowerCase();
+        const clash = seen.has(key) || await machineRuleNameClash(
+          m, scope.tenantId, { name: r.name, sourceSystem: compiled.scope.sourceSystem, externalId: compiled.scope.externalId },
+          { workflowId: opts.ownWorkflowId },
+        );
+        if (clash) { publishRefusal = machineRuleNameMessage(r.name); break; }
+        seen.add(key);
+      }
     }
     return { graphHash: compiled.graphHash, rules, rendering: rules.map((r) => r.rendering), readiness, publishRefusal };
   }

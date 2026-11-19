@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { SIGNALS } from '../../common/signals';
@@ -130,25 +130,7 @@ export class ServiceForecastService {
 
   /** What the meter is counting in, across this account's fleet. */
   async calibration(scope: RequestScope, now = new Date()): Promise<Calibration> {
-    return withTenantSession(this.ds, scope, async (m) => {
-      const since = new Date(now.getTime() - RATE_WINDOW_DAYS * 86400_000);
-      const rows = await m.query(
-        `SELECT "engine_on_seconds", "coverage", "runtime_delta", "runtime_counter_reset",
-                "external_id", "local_date"
-           FROM "utilization_shift"
-          WHERE "tenant_id" = $1 AND "window_start" >= $2 AND "runtime_delta" IS NOT NULL
-          LIMIT 5000`,
-        [scope.tenantId, since],
-      );
-      return calibrateRuntimeUnit(rows.map((r: Record<string, unknown>) => ({
-        engineOnSeconds: Number(r.engine_on_seconds),
-        coverage: Number(r.coverage),
-        runtimeDelta: r.runtime_delta === null ? null : Number(r.runtime_delta),
-        runtimeCounterReset: r.runtime_counter_reset === true,
-        externalId: String(r.external_id),
-        localDate: String(r.local_date),
-      })));
-    });
+    return withTenantSession(this.ds, scope, (m) => calibrationIn(m, scope.tenantId, now));
   }
 
   /**
@@ -161,188 +143,222 @@ export class ServiceForecastService {
   async fleetForecast(
     scope: RequestScope, now = new Date(),
   ): Promise<{ calibration: Calibration; assets: AssetForecast[] }> {
-    const calibration = await this.calibration(scope, now);
+    return withTenantSession(this.ds, scope, (m) => fleetForecastIn(m, scope.tenantId, scope.equipmentIds, now));
+  }
+}
 
-    return withTenantSession(this.ds, scope, async (m) => {
-      const since = new Date(now.getTime() - RATE_WINDOW_DAYS * 86400_000);
+type Queryable = { query: (sql: string, p: unknown[]) => Promise<Record<string, unknown>[]> };
 
-      const assets = await m.getRepository(EquipmentProfile).find({
-        where: { tenantId: scope.tenantId },
-      });
-      const visible = scope.equipmentIds === undefined
-        ? assets
-        : assets.filter((a) => scope.equipmentIds!.includes(a.externalId));
-      if (!visible.length) return { calibration, assets: [] };
+/**
+ * The calibration, inside a transaction the caller already holds for this tenant.
+ * Split out (19 Nov) so a health score built without a signed-in person — Vani's
+ * snapshot, a call packet — reads service status from the same code the screen does.
+ */
+export async function calibrationIn(m: Queryable, tenantId: string, now = new Date()): Promise<Calibration> {
+  const since = new Date(now.getTime() - RATE_WINDOW_DAYS * 86400_000);
+  const rows = await m.query(
+    `SELECT "engine_on_seconds", "coverage", "runtime_delta", "runtime_counter_reset",
+            "external_id", "local_date"
+       FROM "utilization_shift"
+      WHERE "tenant_id" = $1 AND "window_start" >= $2 AND "runtime_delta" IS NOT NULL
+      LIMIT 5000`,
+    [tenantId, since],
+  );
+  return calibrateRuntimeUnit(rows.map((r: Record<string, unknown>) => ({
+    engineOnSeconds: Number(r.engine_on_seconds),
+    coverage: Number(r.coverage),
+    runtimeDelta: r.runtime_delta === null ? null : Number(r.runtime_delta),
+    runtimeCounterReset: r.runtime_counter_reset === true,
+    externalId: String(r.external_id),
+    localDate: String(r.local_date),
+  })));
+}
 
-      const classes = new Map<string, number | null>();
-      for (const c of await m.getRepository(EquipmentClassProfile).find()) {
-        // Latest published version wins; the catalog keeps every version, and an
-        // older one's interval is not the current answer.
-        const seen = classes.get(c.slug);
-        if (seen === undefined || c.serviceIntervalHours !== null) {
-          classes.set(c.slug, c.serviceIntervalHours ?? seen ?? null);
-        }
-      }
+/**
+ * The fleet forecast, inside a transaction the caller already holds for this tenant.
+ * `equipmentIds` narrows it the way a person's scope does: undefined is every machine.
+ */
+export async function fleetForecastIn(
+  m: EntityManager, tenantId: string, equipmentIds: readonly string[] | undefined, now = new Date(),
+): Promise<{ calibration: Calibration; assets: AssetForecast[] }> {
+  const calibration = await calibrationIn(m as unknown as Queryable, tenantId, now);
+  const since = new Date(now.getTime() - RATE_WINDOW_DAYS * 86400_000);
 
-      // Engine hours per machine over the rate window, from the duty-cycle rows. Days
-      // are counted from the windows actually measured rather than from the calendar:
-      // a machine only registered a week ago has a week of history, not thirty days,
-      // and dividing its hours by thirty would report it at a third of its real rate.
-      const rateRows = await m.query(
-        `SELECT "external_id",
-                sum("engine_on_seconds") AS engine_on_seconds,
-                count(DISTINCT "local_date")::int AS days
-           FROM "utilization_shift"
-          WHERE "tenant_id" = $1 AND "window_start" >= $2
-          GROUP BY "external_id"`,
-        [scope.tenantId, since],
-      );
-      const rates = new Map<string, { engineOnSeconds: number; days: number }>(
-        rateRows.map((r: Record<string, unknown>) => [
-          String(r.external_id),
-          { engineOnSeconds: Number(r.engine_on_seconds ?? 0), days: Number(r.days ?? 0) },
-        ]),
-      );
+  const assets = await m.getRepository(EquipmentProfile).find({
+    where: { tenantId },
+  });
+  const visible = equipmentIds === undefined
+    ? assets
+    : assets.filter((a) => equipmentIds!.includes(a.externalId));
+  if (!visible.length) return { calibration, assets: [] };
 
-      const meters = await this.latestMeterReadings(m, scope.tenantId);
-      const data = await this.latestServiceRecords(m, scope.tenantId);
+  const classes = new Map<string, number | null>();
+  for (const c of await m.getRepository(EquipmentClassProfile).find()) {
+    // Latest published version wins; the catalog keeps every version, and an
+    // older one's interval is not the current answer.
+    const seen = classes.get(c.slug);
+    if (seen === undefined || c.serviceIntervalHours !== null) {
+      classes.set(c.slug, c.serviceIntervalHours ?? seen ?? null);
+    }
+  }
 
-      // Pass one: everything that does not need the fleet.
-      const partial = visible.map((asset) => {
-        const rate = rates.get(asset.externalId) ?? { engineOnSeconds: 0, days: 0 };
-        const meter = meters.get(asset.externalId) ?? null;
-        const record = data.get(asset.externalId) ?? null;
+  // Engine hours per machine over the rate window, from the duty-cycle rows. Days
+  // are counted from the windows actually measured rather than from the calendar:
+  // a machine only registered a week ago has a week of history, not thirty days,
+  // and dividing its hours by thirty would report it at a third of its real rate.
+  const rateRows = await m.query(
+    `SELECT "external_id",
+            sum("engine_on_seconds") AS engine_on_seconds,
+            count(DISTINCT "local_date")::int AS days
+       FROM "utilization_shift"
+      WHERE "tenant_id" = $1 AND "window_start" >= $2
+      GROUP BY "external_id"`,
+    [tenantId, since],
+  );
+  const rates = new Map<string, { engineOnSeconds: number; days: number }>(
+    rateRows.map((r: Record<string, unknown>) => [
+      String(r.external_id),
+      { engineOnSeconds: Number(r.engine_on_seconds ?? 0), days: Number(r.days ?? 0) },
+    ]),
+  );
 
-        // A replaced meter is not a service, but it is the event that makes every
-        // earlier reading incomparable — so it is still the datum, and the hours since
-        // it are counted from there.
-        const usableRecord = record && record.meterReading !== null ? record : null;
-        const datum: Datum | null = usableRecord ? 'service-record'
-          : asset.commissionedAt ? 'commissioning' : null;
+  const meters = await latestMeterReadings(m, tenantId);
+  const data = await latestServiceRecords(m, tenantId);
 
-        // Commissioning has no meter reading beside it, so the honest assumption is a
-        // meter that started at zero. Stated rather than silent: a machine whose logger
-        // was fitted years into its life will read high, and the forecast will say it
-        // is overdue — which is visibly wrong and fixed by recording one service.
-        const meterAtDatum = usableRecord ? usableRecord.meterReading
-          : datum === 'commissioning' ? 0 : null;
+  // Pass one: everything that does not need the fleet.
+  const partial = visible.map((asset) => {
+    const rate = rates.get(asset.externalId) ?? { engineOnSeconds: 0, days: 0 };
+    const meter = meters.get(asset.externalId) ?? null;
+    const record = data.get(asset.externalId) ?? null;
 
-        const forecast = forecastService({
-          interval: resolveInterval({
-            equipmentHours: asset.serviceIntervalHours,
-            classHours: asset.equipmentClassSlug ? classes.get(asset.equipmentClassSlug) ?? null : null,
-            classSlug: asset.equipmentClassSlug,
-          }),
-          meterReading: meter?.value ?? null,
-          meterUnit: calibration.unit,
-          meterAtDatum,
-          datum,
-          datumAt: usableRecord?.performedAt ?? asset.commissionedAt ?? null,
-          engineOnSeconds: rate.engineOnSeconds,
-          rateDays: rate.days,
-          now,
-        });
+    // A replaced meter is not a service, but it is the event that makes every
+    // earlier reading incomparable — so it is still the datum, and the hours since
+    // it are counted from there.
+    const usableRecord = record && record.meterReading !== null ? record : null;
+    const datum: Datum | null = usableRecord ? 'service-record'
+      : asset.commissionedAt ? 'commissioning' : null;
 
-        return {
-          asset, forecast,
-          lastServiceAt: record?.performedAt ?? null,
-          meterReadingAt: meter?.at ?? null,
-        };
-      });
+    // Commissioning has no meter reading beside it, so the honest assumption is a
+    // meter that started at zero. Stated rather than silent: a machine whose logger
+    // was fitted years into its life will read high, and the forecast will say it
+    // is overdue — which is visibly wrong and fixed by recording one service.
+    const meterAtDatum = usableRecord ? usableRecord.meterReading
+      : datum === 'commissioning' ? 0 : null;
 
-      // Pass two: the comparison, which needs every peer of the same class. Built from
-      // the whole fleet rather than from the visible slice — an operator seeing two
-      // machines should still be told how theirs compares to the other thirty.
-      const byClass = new Map<string, { hoursPerDay: number | null }[]>();
-      for (const asset of assets) {
-        const slug = asset.equipmentClassSlug;
-        if (!slug) continue;
-        const rate = rates.get(asset.externalId);
-        const hoursPerDay = rate && rate.days >= 7
-          ? Math.round((rate.engineOnSeconds / 3600 / rate.days) * 100) / 100
-          : null;
-        byClass.set(slug, [...(byClass.get(slug) ?? []), { hoursPerDay }]);
-      }
-
-      const out: AssetForecast[] = partial.map(({ asset, forecast, lastServiceAt, meterReadingAt }) => ({
-        ...forecast,
-        sourceSystem: asset.sourceSystem,
-        externalId: asset.externalId,
-        name: asset.name,
-        equipmentClassSlug: asset.equipmentClassSlug,
-        plantId: asset.plantId,
-        lastServiceAt,
-        meterReadingAt,
-        fleet: compareToFleet(
-          forecast,
-          asset.equipmentClassSlug
-            ? (byClass.get(asset.equipmentClassSlug) ?? []).filter((p) => p !== undefined)
-            : [],
-        ),
-      }));
-
-      // Overdue first, then due, then by hours remaining. The order the list is
-      // actually read in; alphabetical by asset code would bury the urgent ones.
-      const RANK: Record<string, number> = { overdue: 0, due: 1, approaching: 2, ok: 3 };
-      out.sort((a, b) => {
-        const ra = RANK[a.status ?? ''] ?? 4;
-        const rb = RANK[b.status ?? ''] ?? 4;
-        if (ra !== rb) return ra - rb;
-        return (a.hoursRemaining ?? Infinity) - (b.hoursRemaining ?? Infinity);
-      });
-
-      return { calibration, assets: out };
+    const forecast = forecastService({
+      interval: resolveInterval({
+        equipmentHours: asset.serviceIntervalHours,
+        classHours: asset.equipmentClassSlug ? classes.get(asset.equipmentClassSlug) ?? null : null,
+        classSlug: asset.equipmentClassSlug,
+      }),
+      meterReading: meter?.value ?? null,
+      meterUnit: calibration.unit,
+      meterAtDatum,
+      datum,
+      datumAt: usableRecord?.performedAt ?? asset.commissionedAt ?? null,
+      engineOnSeconds: rate.engineOnSeconds,
+      rateDays: rate.days,
+      now,
     });
+
+    return {
+      asset, forecast,
+      lastServiceAt: record?.performedAt ?? null,
+      meterReadingAt: meter?.at ?? null,
+    };
+  });
+
+  // Pass two: the comparison, which needs every peer of the same class. Built from
+  // the whole fleet rather than from the visible slice — an operator seeing two
+  // machines should still be told how theirs compares to the other thirty.
+  const byClass = new Map<string, { hoursPerDay: number | null }[]>();
+  for (const asset of assets) {
+    const slug = asset.equipmentClassSlug;
+    if (!slug) continue;
+    const rate = rates.get(asset.externalId);
+    const hoursPerDay = rate && rate.days >= 7
+      ? Math.round((rate.engineOnSeconds / 3600 / rate.days) * 100) / 100
+      : null;
+    byClass.set(slug, [...(byClass.get(slug) ?? []), { hoursPerDay }]);
   }
 
-  /** The newest hour-meter reading per machine, via the sensor map. */
-  private async latestMeterReadings(
-    m: { query: (sql: string, p: unknown[]) => Promise<Record<string, unknown>[]> },
-    tenantId: string,
-  ): Promise<Map<string, { value: number; at: Date }>> {
-    const rows = await m.query(
-      // Machine to device to reading, through the bindings (task QFIX-DEVICES-2): an
-      // hour-meter reading belongs to the machine its device was bound to when it was
-      // taken, so a logger moved between machines does not carry one machine's hours
-      // onto the other. `sensor_map_projection.external_id` is the upstream
-      // *measurement* id, never the machine's, and `device_projection` is where 1.0
-      // thinks a device is.
-      `SELECT DISTINCT ON (b."external_id")
-              b."external_id" AS external_id, r."value", r."source_timestamp"
-         FROM "telemetry_reading" r
-         JOIN "signal_binding_version" b
-           ON b."imei" = r."imei" AND b."tenant_id" = r."tenant_id"
-          AND b."is_primary" AND b."status" = 'active'
-          AND r."source_timestamp" >= b."valid_from"
-          AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to")
-        WHERE r."tenant_id" = $1 AND r."signal" = $2
-        ORDER BY b."external_id", r."source_timestamp" DESC`,
-      [tenantId, SIGNALS.engineRuntime],
-    );
-    return new Map(rows.map((r) => [
-      String(r.external_id),
-      { value: Number(r.value), at: new Date(r.source_timestamp as string) },
-    ]));
-  }
+  const out: AssetForecast[] = partial.map(({ asset, forecast, lastServiceAt, meterReadingAt }) => ({
+    ...forecast,
+    sourceSystem: asset.sourceSystem,
+    externalId: asset.externalId,
+    name: asset.name,
+    equipmentClassSlug: asset.equipmentClassSlug,
+    plantId: asset.plantId,
+    lastServiceAt,
+    meterReadingAt,
+    fleet: compareToFleet(
+      forecast,
+      asset.equipmentClassSlug
+        ? (byClass.get(asset.equipmentClassSlug) ?? []).filter((p) => p !== undefined)
+        : [],
+    ),
+  }));
 
-  /** The newest service record per machine that carries a meter reading. */
-  private async latestServiceRecords(
-    m: { query: (sql: string, p: unknown[]) => Promise<Record<string, unknown>[]> },
-    tenantId: string,
-  ): Promise<Map<string, { performedAt: Date; meterReading: number | null }>> {
-    const rows = await m.query(
-      `SELECT DISTINCT ON ("external_id") "external_id", "performed_at", "meter_reading"
-         FROM "equipment_service_record"
-        WHERE "tenant_id" = $1
-        ORDER BY "external_id", "performed_at" DESC`,
-      [tenantId],
-    );
-    return new Map(rows.map((r) => [
-      String(r.external_id),
-      {
-        performedAt: new Date(r.performed_at as string),
-        meterReading: r.meter_reading === null ? null : Number(r.meter_reading),
-      },
-    ]));
-  }
+  // Overdue first, then due, then by hours remaining. The order the list is
+  // actually read in; alphabetical by asset code would bury the urgent ones.
+  const RANK: Record<string, number> = { overdue: 0, due: 1, approaching: 2, ok: 3 };
+  out.sort((a, b) => {
+    const ra = RANK[a.status ?? ''] ?? 4;
+    const rb = RANK[b.status ?? ''] ?? 4;
+    if (ra !== rb) return ra - rb;
+    return (a.hoursRemaining ?? Infinity) - (b.hoursRemaining ?? Infinity);
+  });
+
+  return { calibration, assets: out };
+}
+
+/** The newest hour-meter reading per machine, via the sensor map. */
+async function latestMeterReadings(
+  m: { query: (sql: string, p: unknown[]) => Promise<Record<string, unknown>[]> },
+  tenantId: string,
+): Promise<Map<string, { value: number; at: Date }>> {
+  const rows = await m.query(
+    // Machine to device to reading, through the bindings (task QFIX-DEVICES-2): an
+    // hour-meter reading belongs to the machine its device was bound to when it was
+    // taken, so a logger moved between machines does not carry one machine's hours
+    // onto the other. `sensor_map_projection.external_id` is the upstream
+    // *measurement* id, never the machine's, and `device_projection` is where 1.0
+    // thinks a device is.
+    `SELECT DISTINCT ON (b."external_id")
+            b."external_id" AS external_id, r."value", r."source_timestamp"
+       FROM "telemetry_reading" r
+       JOIN "signal_binding_version" b
+         ON b."imei" = r."imei" AND b."tenant_id" = r."tenant_id"
+        AND b."is_primary" AND b."status" = 'active'
+        AND r."source_timestamp" >= b."valid_from"
+        AND (b."valid_to" IS NULL OR r."source_timestamp" < b."valid_to")
+      WHERE r."tenant_id" = $1 AND r."signal" = $2
+      ORDER BY b."external_id", r."source_timestamp" DESC`,
+    [tenantId, SIGNALS.engineRuntime],
+  );
+  return new Map(rows.map((r) => [
+    String(r.external_id),
+    { value: Number(r.value), at: new Date(r.source_timestamp as string) },
+  ]));
+}
+
+/** The newest service record per machine that carries a meter reading. */
+async function latestServiceRecords(
+  m: { query: (sql: string, p: unknown[]) => Promise<Record<string, unknown>[]> },
+  tenantId: string,
+): Promise<Map<string, { performedAt: Date; meterReading: number | null }>> {
+  const rows = await m.query(
+    `SELECT DISTINCT ON ("external_id") "external_id", "performed_at", "meter_reading"
+       FROM "equipment_service_record"
+      WHERE "tenant_id" = $1
+      ORDER BY "external_id", "performed_at" DESC`,
+    [tenantId],
+  );
+  return new Map(rows.map((r) => [
+    String(r.external_id),
+    {
+      performedAt: new Date(r.performed_at as string),
+      meterReading: r.meter_reading === null ? null : Number(r.meter_reading),
+    },
+  ]));
 }
