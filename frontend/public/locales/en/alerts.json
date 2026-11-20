@@ -141,7 +141,16 @@
     "selectThingFirst": "Select a Thing before describing or generating an alert.",
     "aiPrompt": "AI PROMPT",
     "promptPlaceholder": "e.g. \"{{example}}\"",
-    "voiceTitle": "Dictate your alert (demo only)",
+    "voiceTitle": "Dictate your alert in English",
+    "voiceStop": "Stop",
+    "voiceStopTitle": "Stop dictation",
+    "voiceListening": "Listening… speak your alert in English, then press Stop.",
+    "voiceUnsupported": "This browser cannot take dictation. Use Chrome, Edge or Safari.",
+    "voiceError": {
+      "blocked": "The microphone is blocked. Allow it for this site in the browser settings, then try again.",
+      "noSpeech": "No speech was heard. Press Voice and try again.",
+      "failed": "Dictation stopped unexpectedly. Press Voice to try again."
+    },
     "voice": "Voice",
     "generate": "Generate Workflow",
     "quickExamples": "Quick Try Examples",

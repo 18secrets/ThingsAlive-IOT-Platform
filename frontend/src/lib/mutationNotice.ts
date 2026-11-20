@@ -51,6 +51,32 @@ export function mutationKind(path: string, method: string | undefined): Mutation
   return m === "DELETE" ? "delete" : "save";
 }
 
+// Notices held back while one action's several calls run (see `asOneAction`).
+let held: MutationNotice[] | null = null;
+
 export function reportMutation(notice: MutationNotice): void {
+  if (held) { held.push(notice); return; }
   for (const listener of listeners) listener(notice);
+}
+
+/**
+ * One click, one toast. Publishing an alert workflow is a create, a layout save and a
+ * publish: three green toasts for one Publish, and on a refused publish two greens beside
+ * the red (TC_224). Inside `action` the calls report nothing; afterwards one notice says
+ * how the whole thing went: the first failure if anything failed, else one success.
+ * Not nested and not for actions that run alongside other writes on the page: any write
+ * that lands while one is running is folded into it.
+ */
+export async function asOneAction<T>(action: () => Promise<T>): Promise<T> {
+  if (held) return action();
+  const mine: MutationNotice[] = [];
+  held = mine;
+  try {
+    return await action();
+  } finally {
+    held = null;
+    const failed = mine.find((n) => !n.ok);
+    const outcome = failed ?? mine[mine.length - 1];
+    if (outcome) reportMutation(outcome);
+  }
 }

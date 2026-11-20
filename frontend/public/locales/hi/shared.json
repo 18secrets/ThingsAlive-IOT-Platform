@@ -24,6 +24,7 @@
     "findEquipment": "मशीन खोजें",
     "findPlaceholder": "नाम या मशीन कोड",
     "clear": "चयन साफ़ करें",
+    "clearField": "{{field}} साफ़ करें",
     "apply": "फ़िल्टर लागू करें"
   },
   "connection": {

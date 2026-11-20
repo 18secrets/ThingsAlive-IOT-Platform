@@ -24,6 +24,7 @@
     "findEquipment": "ମେସିନ୍ ଖୋଜନ୍ତୁ",
     "findPlaceholder": "ନାମ କିମ୍ବା ମେସିନ୍ କୋଡ୍",
     "clear": "ଚୟନ ସଫା କରନ୍ତୁ",
+    "clearField": "{{field}} ସଫା କରନ୍ତୁ",
     "apply": "ଫିଲ୍ଟର୍ ପ୍ରୟୋଗ କରନ୍ତୁ"
   },
   "connection": {

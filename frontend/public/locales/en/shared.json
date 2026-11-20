@@ -24,6 +24,7 @@
     "findEquipment": "Find a machine",
     "findPlaceholder": "Name or machine code",
     "clear": "Clear selections",
+    "clearField": "Clear {{field}}",
     "apply": "Apply filters"
   },
   "connection": {

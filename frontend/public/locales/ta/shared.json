@@ -24,6 +24,7 @@
     "findEquipment": "இயந்திரத்தைத் தேடு",
     "findPlaceholder": "பெயர் அல்லது இயந்திரக் குறியீடு",
     "clear": "தேர்வுகளை அழி",
+    "clearField": "{{field}} அழி",
     "apply": "வடிகட்டிகளைப் பயன்படுத்து"
   },
   "connection": {

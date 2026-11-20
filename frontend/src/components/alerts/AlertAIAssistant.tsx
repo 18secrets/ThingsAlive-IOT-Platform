@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles,
   Mic,
+  MicOff,
   Search,
   ChevronRight,
   Plus,
@@ -21,6 +22,70 @@ import { machineKey, useWorkflowScope } from './workflow/useWorkflowScope';
 import { Chip } from '../common/Chip';
 import { severityTone } from '../common/statusTone';
 import { appLocale, appTimeZone } from '../../lib/dateLocale';
+
+// The browser's own speech recognition: Chrome and Edge as `webkitSpeechRecognition`,
+// Safari as either name, none in Firefox. Typed here because the DOM library has no type for it.
+interface SpeechResultList { length: number; [i: number]: { isFinal: boolean; 0: { transcript: string } } }
+interface Recognizer {
+  lang: string; continuous: boolean; interimResults: boolean;
+  onresult: ((e: { resultIndex: number; results: SpeechResultList }) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start(): void; stop(): void; abort(): void;
+}
+type RecognizerCtor = new () => Recognizer;
+const SpeechRecognizer: RecognizerCtor | undefined = typeof window === 'undefined' ? undefined
+  : (window as unknown as { SpeechRecognition?: RecognizerCtor; webkitSpeechRecognition?: RecognizerCtor }).SpeechRecognition
+    ?? (window as unknown as { webkitSpeechRecognition?: RecognizerCtor }).webkitSpeechRecognition;
+
+/**
+ * Dictation into the prompt box. Spoken words land after whatever is already typed; the
+ * words still being heard show as they come and settle when the browser is sure of them.
+ * Always English (India): the prompt reader understands English signal names, units and
+ * comparisons, not the console's other languages, so Hindi speech would give a prompt it
+ * cannot read whatever the screen language is.
+ */
+function useDictation(prompt: string, setPrompt: (text: string) => void) {
+  const recognizer = useRef<Recognizer | null>(null);
+  const [listening, setListening] = useState(false);
+  const [error, setError] = useState<'blocked' | 'noSpeech' | 'failed' | null>(null);
+
+  const stop = () => recognizer.current?.stop();
+
+  const start = () => {
+    if (!SpeechRecognizer || recognizer.current) return;
+    const before = prompt.trimEnd();
+    const r = new SpeechRecognizer();
+    r.lang = 'en-IN';
+    r.continuous = true;
+    r.interimResults = true;
+    r.onresult = (e) => {
+      let heard = '';
+      for (let i = 0; i < e.results.length; i++) heard += e.results[i][0].transcript;
+      heard = heard.trim();
+      setPrompt(heard ? (before ? `${before} ${heard}` : heard) : before);
+    };
+    r.onerror = (e) => {
+      if (e.error === 'aborted') return;
+      setError(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'blocked' : e.error === 'no-speech' ? 'noSpeech' : 'failed');
+    };
+    r.onend = () => { recognizer.current = null; setListening(false); };
+    setError(null);
+    recognizer.current = r;
+    try {
+      r.start();
+      setListening(true);
+    } catch {
+      recognizer.current = null;
+      setError('failed');
+    }
+  };
+
+  // Never left listening behind the screen: on leaving it, the microphone is let go.
+  useEffect(() => () => recognizer.current?.abort(), []);
+
+  return { supported: !!SpeechRecognizer, listening, error, start, stop };
+}
 
 interface AlertAIAssistantProps {
   onGenerate: (draft: WorkflowDraft) => void;
@@ -88,6 +153,9 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate, 
   const [proposing, setProposing] = useState(false);
   const [proposeMissing, setProposeMissing] = useState<string[]>([]);
   const navigate = useNavigate();
+  const dictation = useDictation(prompt, (text) => { setPrompt(text); if (phase === 'clarifying' && !text.trim()) setPhase('suggest'); });
+  // A workflow opened from here hides the assistant; the microphone stops with it.
+  useEffect(() => { if (!visible) dictation.stop(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The chosen machine's failure modes, from its class in this account's catalog.
   const failureModes = useMemo(() => {
@@ -369,14 +437,21 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate, 
             placeholder={t('assistant.promptPlaceholder', { example: 'Raise a critical alarm if the average temperature is above 75C for 10 minutes and vibration increases by 20% in the last 1 hour. Ignore when maintenance mode is ON.' })}
             className="flex-1 min-h-[140px] resize-none bg-transparent"
           />
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
-              className="px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
-              title={t('assistant.voiceTitle')}
+              onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+              disabled={!dictation.supported}
+              aria-pressed={dictation.listening}
+              className={`px-3.5 py-2 border rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                dictation.listening
+                  ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/60'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+              title={!dictation.supported ? t('assistant.voiceUnsupported') : dictation.listening ? t('assistant.voiceStopTitle') : t('assistant.voiceTitle')}
             >
-              <Mic className="w-3.5 h-3.5" />
-              {t('assistant.voice')}
+              {dictation.listening ? <MicOff className="w-3.5 h-3.5 animate-pulse" /> : <Mic className="w-3.5 h-3.5" />}
+              {dictation.listening ? t('assistant.voiceStop') : t('assistant.voice')}
             </button>
             <button
               type="button"
@@ -388,6 +463,13 @@ export const AlertAIAssistant: React.FC<AlertAIAssistantProps> = ({ onGenerate, 
               {t('assistant.generate')}
             </button>
           </div>
+          {(dictation.listening || dictation.error || !dictation.supported) && (
+            <p role="status" className={`mt-2 text-xs ${dictation.error || !dictation.supported ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              {!dictation.supported ? t('assistant.voiceUnsupported')
+                : dictation.listening ? t('assistant.voiceListening')
+                  : t(`assistant.voiceError.${dictation.error}`)}
+            </p>
+          )}
         </div>
 
         {/* Right Panel — prompt suggestions until the AI has enough to build, then the build checklist */}

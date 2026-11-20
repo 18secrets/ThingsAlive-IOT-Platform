@@ -92,6 +92,12 @@ export const TablePagination: React.FC<{
 }> = ({ page, setPage, pageSize, setPageSize, total, totalPages, bare, compact, pinToBottom = false, loading }) => {
   const { t } = useTranslation('shared');
   const pin = usePinToBottom(pinToBottom);
+  // Sizes past the first that holds every row show the same page: with 8 rows, 50 and 100
+  // are 10 again (TC_226). Offered only up to that one, and the picker is off when that
+  // leaves nothing to choose. The size in use always stays selectable.
+  const fits = PAGE_SIZES.findIndex((n) => n >= total);
+  const useful = fits === -1 ? PAGE_SIZES : PAGE_SIZES.slice(0, fits + 1);
+  const sizeChoices = useful.includes(pageSize) ? useful : [...useful, pageSize];
   return (
     <div
       ref={pin.ref}
@@ -111,6 +117,8 @@ export const TablePagination: React.FC<{
           <span>{t('pagination.rowsPerPage')}</span>
           <SelectPicker
             data={PAGE_SIZES.map((n) => ({ label: String(n), value: n }))}
+            disabledItemValues={PAGE_SIZES.filter((n) => !sizeChoices.includes(n))}
+            disabled={loading || sizeChoices.length < 2}
             value={pageSize}
             onChange={(value) => setPageSize(Number(value ?? 10))}
             searchable={false}
