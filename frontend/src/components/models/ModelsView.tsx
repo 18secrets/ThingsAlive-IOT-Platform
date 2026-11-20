@@ -285,6 +285,33 @@ const DetailsForm: React.FC<{
   );
 };
 
+/**
+ * A number box that takes a decimal. Turning each keystroke into a number and handing it
+ * back as the value made "1." read as 1, so the point vanished as it was typed and 0.75
+ * could not be entered at all (TC_228). The text stays as typed; the number goes up.
+ */
+const parseDecimal = (text: string): number | null => {
+  const n = Number(text);
+  return text.trim() === '' || !Number.isFinite(n) ? null : n;
+};
+
+const DecimalInput: React.FC<{ value: number | null; onChange: (value: number | null) => void; disabled?: boolean; className?: string }> = ({ value, onChange, disabled, className }) => {
+  const [text, setText] = useState(value === null ? '' : String(value));
+  // A value from outside (loaded, pasted, saved) replaces the text. Text that already reads
+  // as that value stays as typed: "1.50" for 1.5, and a lone "-" on the way to -3.
+  useEffect(() => {
+    setText((current) => (parseDecimal(current) === value ? current : value === null ? '' : String(value)));
+  }, [value]);
+  return (
+    <InputNumber size="sm" className={className} value={text} disabled={disabled}
+      onChange={(v) => {
+        const typed = v === null ? '' : String(v);
+        setText(typed);
+        onChange(parseDecimal(typed));
+      }} />
+  );
+};
+
 interface RatingRow { name: string | null; value: number | null; source: string }
 
 /** Every rated figure with the page it came from (D57: `source` is required). Saved whole. */
@@ -337,8 +364,8 @@ const RatingsEditor: React.FC<{ scope: ModelScope; modelId: string; canEdit: boo
                 {meta?.description && <span className="block text-[0.6875rem] text-slate-400 mt-1 leading-snug">{meta.description}</span>}
               </div>
               <div className="flex items-center gap-1.5">
-                <InputNumber size="sm" className={cellInput} value={r.value ?? ''} disabled={!canEdit}
-                  onChange={(v) => set(i, { value: v === '' || v === null ? null : Number(v) })} />
+                <DecimalInput className={cellInput} value={r.value} disabled={!canEdit}
+                  onChange={(v) => set(i, { value: v })} />
                 <span className="text-xs text-slate-500 shrink-0 min-w-8">{meta ? (meta.unit ?? '—') : ''}</span>
               </div>
               <Input size="sm" value={r.source} onChange={(v) => set(i, { source: v })} disabled={!canEdit} placeholder={t('models.sourcePlaceholder')} />
@@ -437,8 +464,8 @@ const CurveEditor: React.FC<{ scope: ModelScope; modelId: string; canEdit: boole
         {rows.map((r, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
             {(['headM', 'flowLpm', 'inputKw'] as const).map((k) => (
-              <InputNumber key={k} size="sm" value={r[k] ?? ''} disabled={!canEdit}
-                onChange={(v) => set(i, { [k]: v === '' || v === null ? null : Number(v) })} />
+              <DecimalInput key={k} value={r[k]} disabled={!canEdit}
+                onChange={(v) => set(i, { [k]: v })} />
             ))}
             {canEdit ? (
               <button onClick={() => { setSaved(false); setRows((rs) => rs!.filter((_, j) => j !== i)); }} title={t('models.removeRow')}

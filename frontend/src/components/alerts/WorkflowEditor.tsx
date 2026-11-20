@@ -23,6 +23,7 @@ import {
   apiCompileWorkflow, apiCreateWorkflow, apiNewWorkflowVersion, apiPublishWorkflow, apiRenameWorkflow, apiReplaceWorkflowSpec,
   apiSetWorkflowLayout,
 } from '../../lib/api';
+import { asOneAction } from '../../lib/mutationNotice';
 import { WorkflowDraft, slugFor } from '../../utils/workflowParser';
 import { Chip } from '../common/Chip';
 import { WorkflowFlowNode } from './workflow/WorkflowFlowNode';
@@ -156,7 +157,13 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
     setStatusNote(null);
     let at: Saved | null = null;
     try {
-      at = await save();
+      // A save is up to four calls and a publish one more; the person clicked once.
+      // `at` is set before the publish, so a refused publish can still be checked below.
+      at = await asOneAction(async () => {
+        at = await save();
+        if (what === 'publish') await apiPublishWorkflow(at.workflowId, at.version);
+        return at;
+      });
       if (what === 'save') {
         setStatusNote({ message: t('workflow.saved', { version: at.version }), tone: 'ok' });
       } else if (what === 'check') {
@@ -166,7 +173,6 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
           ? { message: t('workflow.wouldBeRefused'), tone: 'error' }
           : { message: t('workflow.checkPassed', { count: compiled.rules.length }), tone: 'ok' });
       } else {
-        await apiPublishWorkflow(at.workflowId, at.version);
         onDone();
       }
     } catch (err) {

@@ -24,6 +24,7 @@
     "findEquipment": "యంత్రాన్ని వెతకండి",
     "findPlaceholder": "పేరు లేదా మెషిన్ కోడ్",
     "clear": "ఎంపికలను తొలగించండి",
+    "clearField": "{{field}} తొలగించండి",
     "apply": "ఫిల్టర్లు వర్తింపజేయండి"
   },
   "connection": {

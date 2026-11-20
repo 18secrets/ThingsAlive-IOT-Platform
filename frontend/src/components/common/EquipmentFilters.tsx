@@ -78,6 +78,17 @@ export const EquipmentFilters: React.FC<{
     setOpen(false);
   }
 
+  /**
+   * One filter off, straight away, the rest left as they are (TC_225: four filters set,
+   * and the only way to drop one was to clear all four). Applied at once, like Clear
+   * selections, rather than waiting for Apply; anything still being edited stays a draft.
+   */
+  function clearOne<K extends keyof EquipmentFilterScope>(key: K) {
+    const off = DEFAULT_EQUIPMENT_FILTER_SCOPE[key];
+    setDraft((d) => ({ ...d, [key]: off }));
+    onChange({ ...scope, [key]: off });
+  }
+
   function clearAll() {
     setDraft(DEFAULT_EQUIPMENT_FILTER_SCOPE);
     onChange(DEFAULT_EQUIPMENT_FILTER_SCOPE);
@@ -137,9 +148,9 @@ export const EquipmentFilters: React.FC<{
                 <SelectPicker
                   data={[{ label: t('filters.allSitesPlants'), value: 'all' }, ...plants.map((p) => ({ label: p.name, value: p.id }))]}
                   value={draft.plantId}
-                  onChange={(value) => setDraft({ ...draft, plantId: value ?? 'all' })}
+                  onChange={(value) => (value === null ? clearOne('plantId') : setDraft({ ...draft, plantId: value }))}
                   searchable={false}
-                  cleanable={false}
+                  cleanable={draft.plantId !== 'all'}
                   block
                   container={() => containerRef.current ?? document.body}
                 />
@@ -149,9 +160,9 @@ export const EquipmentFilters: React.FC<{
                 <SelectPicker
                   data={[{ label: t('filters.allClasses'), value: 'all' }, ...classes.map((c) => ({ label: c, value: c }))]}
                   value={draft.classSlug}
-                  onChange={(value) => setDraft({ ...draft, classSlug: value ?? 'all' })}
+                  onChange={(value) => (value === null ? clearOne('classSlug') : setDraft({ ...draft, classSlug: value }))}
                   searchable={false}
-                  cleanable={false}
+                  cleanable={draft.classSlug !== 'all'}
                   block
                   container={() => containerRef.current ?? document.body}
                 />
@@ -165,9 +176,9 @@ export const EquipmentFilters: React.FC<{
                     { label: t('connection.offline'), value: 'offline' },
                   ]}
                   value={draft.connection}
-                  onChange={(value) => setDraft({ ...draft, connection: (value ?? 'all') as EquipmentConnection })}
+                  onChange={(value) => (value === null ? clearOne('connection') : setDraft({ ...draft, connection: value as EquipmentConnection }))}
                   searchable={false}
-                  cleanable={false}
+                  cleanable={draft.connection !== 'all'}
                   block
                   container={() => containerRef.current ?? document.body}
                 />
@@ -180,8 +191,19 @@ export const EquipmentFilters: React.FC<{
                     value={draft.query}
                     onChange={(value) => setDraft({ ...draft, query: value })}
                     placeholder={findPlaceholder ?? t('filters.findPlaceholder')}
-                    className="pl-8!"
+                    className={draft.query ? 'pl-8! pr-8!' : 'pl-8!'}
                   />
+                  {draft.query && (
+                    <button
+                      type="button"
+                      onClick={() => clearOne('query')}
+                      aria-label={t('filters.clearField', { field: findLabel ?? t('filters.findEquipment') })}
+                      title={t('filters.clearField', { field: findLabel ?? t('filters.findEquipment') })}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </label>
             </div>
