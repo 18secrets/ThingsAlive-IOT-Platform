@@ -103,6 +103,7 @@ import { SHIFT_FUEL_ENTITIES } from '../shift-fuel/shift-fuel.entities';
 import { ClientEquipmentClassVisualAnchor } from '../client-catalog/entities/client-equipment-class-visual-anchor.entity';
 import { DtcMasterCatalog } from '../diagnostics/entities/dtc-master.entity';
 import { FaultCodeTypeGrant } from '../diagnostics/entities/fault-code-type-grant.entity';
+import { EquipmentTemplateGrant } from '../equipment-template/entities/equipment-template-grant.entity';
 import { MotorFaultCode } from '../diagnostics/entities/motor-fault-code.entity';
 import { DeviceDtcEpisode } from '../diagnostics/entities/device-dtc-episode.entity';
 import { DtcPullWatermark } from '../diagnostics/entities/dtc-pull-watermark.entity';
@@ -223,6 +224,7 @@ export const ENTITIES = [
   DtcMasterCatalog,
   MotorFaultCode,
   FaultCodeTypeGrant,
+  EquipmentTemplateGrant,
   DeviceDtcEpisode,
   DtcPullWatermark,
   ...FORECAST_ENTITIES,

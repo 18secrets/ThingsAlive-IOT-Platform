@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Trash2, DownloadCloud, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Building2, RotateCw, Edit2, UserRound, Phone, Mail, AlertCircle, Copy, CheckCheck, X, Layers, Package, Trash2, DownloadCloud, FileSpreadsheet } from 'lucide-react';
 import { Input, SelectPicker } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import { LIST_PANEL, TablePagination, usePagination } from '../common/TablePagination';
@@ -10,6 +10,7 @@ import { Account, ApiError, CreateAccountResult, Entitlement, EquipmentClass, Re
 import { copyToClipboard } from '../../lib/clipboard';
 import { AddClientModal } from './AddClientModal';
 import { ClientEntitlementsModal } from './ClientEntitlementsModal';
+import { ClientModelGrantsModal } from './ClientModelGrantsModal';
 import { FleetOnboardingModal } from './FleetOnboardingModal';
 import { FleetImportModal } from './FleetImportModal';
 import { appLocale, appTimeZone } from '../../lib/dateLocale';
@@ -72,6 +73,7 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
   const [reissued, setReissued] = useState<ResendInvitationResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [entitlementsClient, setEntitlementsClient] = useState<ClientAccount | null>(null);
+  const [modelGrantsClient, setModelGrantsClient] = useState<ClientAccount | null>(null);
 
   const handleResetPasswordClick = async (client: ClientAccount) => {
     setResendingId(client.id);
@@ -153,6 +155,15 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
                     title={t('clients.grantedClasses')}
                   >
                     <Layers className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setModelGrantsClient(c)}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-sky-600 hover:border-sky-300 transition-colors cursor-pointer"
+                    title={t('clients.grantedModels')}
+                    aria-label={t('clients.grantedModels')}
+                  >
+                    <Package className="w-3.5 h-3.5" />
                   </button>
 
                   <button
@@ -381,6 +392,8 @@ export const ClientManagement: React.FC<ClientManagementProps> = ({
         onGrant={onGrantEntitlement}
         onRevoke={onRevokeEntitlement}
       />
+
+      <ClientModelGrantsModal client={modelGrantsClient} onClose={() => setModelGrantsClient(null)} />
 
       {reissued && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
@@ -52,6 +52,13 @@ export class CreateEquipmentTemplateDto extends EquipmentTemplateDto {
   @IsString() @IsNotEmpty() declare name: string;
 }
 
+/** Give an account one library model (TC_234). */
+export class GrantEquipmentTemplateDto {
+  @IsString() @IsNotEmpty() tenantId: string;
+  @IsString() @IsNotEmpty() templateId: string;
+  @IsOptional() @IsString() note?: string;
+}
+
 /**
  * Common onboarding fields for a named/categorised kind of equipment — separate from
  * the prediction catalog (`/catalog/equipment-classes`), which this never touches.
@@ -63,9 +70,32 @@ export class EquipmentTemplateController {
 
   @Get()
   @Requires('equipment-template.read')
-  @ApiOperation({ summary: 'Every equipment template' })
-  list() {
-    return this.templates.list();
+  @ApiOperation({ summary: 'Master Admin: every library model. An account: only the models it was given (TC_234)' })
+  list(@CurrentScope() scope: RequestScope) {
+    return this.templates.list(scope);
+  }
+
+  // Granting is entitlement.grant, as classes and fault codes are: what an account is
+  // given is Master Admin's to say, not the library editor's.
+  @Get('grants')
+  @Requires('entitlement.grant')
+  @ApiOperation({ summary: 'Which library models each account is given, or one account with ?tenantId — master admin only' })
+  listGrants(@Query('tenantId') tenantId?: string) {
+    return this.templates.listGrants(tenantId || undefined);
+  }
+
+  @Post('grants')
+  @Requires('entitlement.grant')
+  @ApiOperation({ summary: 'Give an account a library model. Granting what it has changes nothing' })
+  grant(@CurrentScope() scope: RequestScope, @Body() dto: GrantEquipmentTemplateDto) {
+    return this.templates.grant(scope, dto.tenantId, dto.templateId, dto.note);
+  }
+
+  @Post('grants/:id/revoke')
+  @Requires('entitlement.grant')
+  @ApiOperation({ summary: 'Withdraw a library model from an account. The row stays, and so do copies the account made' })
+  revoke(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.templates.revoke(scope, id);
   }
 
   // Read by Master Admin's model form and by an account's own (tenant roles hold
@@ -94,8 +124,8 @@ export class EquipmentTemplateController {
   @Get(':id/ratings')
   @Requires('equipment-template.read')
   @ApiOperation({ summary: 'The model\'s rated figures, each with its unit and source (D57)' })
-  ratings(@Param('id') id: string) {
-    return this.templates.ratings(id);
+  ratings(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.templates.ratingsFor(scope, id);
   }
 
   @Put(':id/ratings')
@@ -108,8 +138,8 @@ export class EquipmentTemplateController {
   @Get(':id/duty-curve')
   @Requires('equipment-template.read')
   @ApiOperation({ summary: 'The model\'s catalogue duty curve: head, flow, input power per point (D58)' })
-  dutyCurve(@Param('id') id: string) {
-    return this.templates.dutyCurve(id);
+  dutyCurve(@CurrentScope() scope: RequestScope, @Param('id') id: string) {
+    return this.templates.dutyCurveFor(scope, id);
   }
 
   @Put(':id/duty-curve')

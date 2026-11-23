@@ -189,6 +189,10 @@ async function platformSteps(master: Api, deviceId: string): Promise<{ masterMod
     await master.post('/api/v1/catalog/entitlements', { tenantId: POC.tenantId, equipmentClassSlug: c.slug, note: 'Motor library (Crompton POC)' });
     step(`Granted ${c.slug} to ${POC.tenantId}.`);
   }
+  // The account copies the model below, and the database refuses a copy of a model the
+  // account was not given (ModelGrants1766000000000). Idempotent: a second run changes nothing.
+  await master.post('/api/v1/equipment-templates/grants', { tenantId: POC.tenantId, templateId: model.id, note: 'Motor library (Crompton POC)' });
+  step(`Model "${MINI_1HP_MODEL.name}" given to ${POC.tenantId}.`);
 
   const pool: Json[] = (await master.get('/api/v1/inventory/pool')).body?.devices ?? (await master.get('/api/v1/inventory/pool')).body;
   const device = (Array.isArray(pool) ? pool : []).find((d) => d.imei === deviceId);

@@ -192,6 +192,8 @@ describeDb('D58: duty curves end to end', () => {
 
     it('the account\'s copy is idempotent under concurrency too', async () => {
       const t = await library.create({ name: 'Mini 1 HP' });
+      // Copying a library model needs the account to have been given it (ModelGrants1766000000000, TC_234).
+      await owner.query(`INSERT INTO equipment_template_grant (tenant_id, template_id, granted_by) VALUES ($1, $2, 'test') ON CONFLICT DO NOTHING`, [acme.tenantId, t.id]);
       const copy = await models.copyFromMaster(acme, t.id);
       const results = await Promise.allSettled([
         models.replaceDutyCurve(acme, copy.id, { source: SOURCE, points: CURVE }),
@@ -239,6 +241,8 @@ describeDb('D58: duty curves end to end', () => {
     const machineWithCurve = async () => {
       const t = await library.create({ name: 'Mini 1 HP', equipmentClassSlug: CLASS });
       await library.replaceDutyCurve(master, t.id, { source: SOURCE, points: CURVE });
+      // Copying a library model needs the account to have been given it (ModelGrants1766000000000, TC_234).
+      await owner.query(`INSERT INTO equipment_template_grant (tenant_id, template_id, granted_by) VALUES ($1, $2, 'test') ON CONFLICT DO NOTHING`, [acme.tenantId, t.id]);
       const copy = await models.copyFromMaster(acme, t.id);
       await equipment.create(acme, { code: 'PUMP-C', name: 'Pump C', equipmentClassSlug: CLASS });
       await equipment.setModel(acme, EQUIPMENT, copy.id);
