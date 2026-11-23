@@ -17,6 +17,8 @@ export const MAX_VISUAL_BYTES = 50 * 1024 * 1024;
 
 export const UPLOAD_URL_TTL_SECONDS = 15 * 60;
 export const READ_URL_TTL_SECONDS = 15 * 60;
+/** Reads in the same window share one URL; a third of the lifetime, so one is always good for two thirds of it. */
+export const READ_URL_WINDOW_SECONDS = 5 * 60;
 
 export interface ObjectHead { contentType: string | null; size: number }
 
@@ -106,10 +108,19 @@ export class S3AssetStorage implements AssetStorage {
     }), { expiresIn: UPLOAD_URL_TTL_SECONDS });
   }
 
-  readUrl(key: string): Promise<string> {
+  /**
+   * Signed against the start of a five-minute window, not the moment of the read. Signed
+   * per read, the URL changed every time a page was opened or refreshed, so the browser
+   * could not cache it and fetched the whole 3-D model again each time (testing notes,
+   * 5 Nov). Within a window every read gets the same URL; signed at the window's start
+   * with the full lifetime, it is good for at least ten more minutes when handed out.
+   */
+  readUrl(key: string, now: Date = new Date()): Promise<string> {
     if (this.config.publicBaseUrl) return Promise.resolve(`${this.config.publicBaseUrl}/${this.at(key)}`);
+    const windowMs = READ_URL_WINDOW_SECONDS * 1000;
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.config.bucket, Key: this.at(key) }), {
       expiresIn: READ_URL_TTL_SECONDS,
+      signingDate: new Date(Math.floor(now.getTime() / windowMs) * windowMs),
     });
   }
 
