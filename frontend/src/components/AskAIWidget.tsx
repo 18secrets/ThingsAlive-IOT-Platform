@@ -36,6 +36,9 @@ type ChatMessage = {
 // The server takes at most 20 messages of up to 2,000 characters each.
 const MAX_SENT = 20;
 const MAX_CHARS = 2000;
+// The count shows from here, so a long message is seen nearing the limit before it is
+// refused, not after.
+const SHOW_COUNT_FROM = 1800;
 
 function errorKey(err: unknown): string {
   if (err instanceof ApiError) {
@@ -57,6 +60,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     { role: 'assistant', text: '', key: 'askAI.welcome' },
   ]);
   const feedRef = useRef<HTMLDivElement>(null);
+  const tooLong = inputQuery.trim().length > MAX_CHARS;
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
@@ -64,8 +68,10 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
 
   const handleSend = async (e?: React.FormEvent, prompt?: string) => {
     if (e) e.preventDefault();
-    const userText = (prompt ?? inputQuery).trim().slice(0, MAX_CHARS);
-    if (!userText || isTyping) return;
+    // Refused, not cut: a long message cut at 2,000 characters lost its question, which
+    // came last, and nobody was told (TC #45).
+    const userText = (prompt ?? inputQuery).trim();
+    if (!userText || isTyping || userText.length > MAX_CHARS) return;
 
     // A question whose answer failed is left out too, or the next request would carry
     // two questions in a row with nothing between them.
@@ -203,14 +209,15 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
             </div>
           </div>
 
-          {/* Quick prompt chips */}
-          <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto">
+          {/* Quick prompt chips. Wrapped, not scrolled: in a scrolling row the second was cut
+              and the third hidden, and only a thin bar said there was more (TC #9). */}
+          <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-1.5">
             {QUICK_PROMPTS.map((prompt) => (
               <button
                 key={prompt}
                 onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
                 disabled={isTyping}
-                className="shrink-0 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer whitespace-nowrap"
+                className="max-w-full px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-medium text-left break-words hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {t(`askAI.prompts.${prompt}`)}
               </button>
@@ -267,24 +274,34 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
           {/* Input Footer */}
           <form
             onSubmit={handleSend}
-            className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 shrink-0"
+            className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0"
           >
-            <Input
-              value={inputQuery}
-              onChange={(value) => setInputQuery(value)}
-              placeholder={t('askAI.placeholder')}
-              maxLength={MAX_CHARS}
-              size="sm"
-              className="flex-1"
-            />
-            <button
-              type="submit"
-              aria-label={t('askAI.send')}
-              className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 transition-colors cursor-pointer"
-              disabled={!inputQuery.trim() || isTyping}
-            >
-              <Send className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* No maxLength: it cut a pasted message silently. The count below says so instead. */}
+              <Input
+                value={inputQuery}
+                onChange={(value) => setInputQuery(value)}
+                placeholder={t('askAI.placeholder')}
+                size="sm"
+                className="flex-1"
+                aria-invalid={tooLong}
+              />
+              <button
+                type="submit"
+                aria-label={t('askAI.send')}
+                className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 transition-colors cursor-pointer"
+                disabled={!inputQuery.trim() || isTyping || tooLong}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+            {inputQuery.length >= SHOW_COUNT_FROM && (
+              <p className={`mt-1.5 px-1 text-[0.6875rem] ${tooLong ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+                {tooLong
+                  ? t('askAI.tooLong', { length: inputQuery.length, max: MAX_CHARS })
+                  : t('askAI.charCount', { length: inputQuery.length, max: MAX_CHARS })}
+              </p>
+            )}
           </form>
         </div>
       )}

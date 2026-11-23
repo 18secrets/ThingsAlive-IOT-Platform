@@ -47,7 +47,8 @@ export class AssistantController {
   @Requires('catalog.read')
   @ApiOperation({ summary: 'Answer the last question from this account\'s own data. Read-only; nothing is stored but the day\'s spend' })
   chat(@CurrentScope() scope: RequestScope, @Body() body: ChatDto) {
-    return this.assistant.chat(scope, body.messages);
+    // The console's chat sits beside the person's menu, so it follows it (TC #61).
+    return this.assistant.chat(scope, body.messages, new Date(), { followMenu: true });
   }
 
   /**

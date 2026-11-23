@@ -5,6 +5,7 @@ import { RequestScope } from '../auth/types/request-scope';
 import { AlertService } from '../alert/services/alert.service';
 import { DeviceHealthService } from '../device-health/services/device-health.service';
 import { LinkState } from '../device-health/services/link-health';
+import { DEFAULT_LOOK_BACK_DAYS } from '../device-health/services/device-health.service';
 import { EquipmentService } from '../equipment/services/equipment.service';
 import { GeofenceTracker } from '../geofence/geofence-tracker.service';
 import { GeofenceService } from '../geofence/geofence.service';
@@ -17,6 +18,7 @@ import { OnboardingStatusService } from '../onboarding/onboarding-status.service
 import { PageService } from '../page/page.service';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
+import { TenantRole } from '../identity/entities/tenant-role.entity';
 import { withTenantSession } from '../scope/tenant-session';
 import { ToolDeclaration } from './assistant-model';
 import { AssistantProposal, ProposalKind } from './assistant-proposal.entity';
@@ -35,12 +37,26 @@ export interface RunContext {
    * does not yet honour a person's assigned machines). Empty for the console.
    */
   withheld?: readonly string[];
+  /**
+   * The pages the caller's role is granted, for a tool that answers from part of a page
+   * (machine_page's alert and job lists). Null when the caller has no role row to read
+   * them from, as a static-table caller does: there is nothing to narrow by.
+   */
+  pages?: readonly string[] | null;
 }
 
 interface AssistantTool extends ToolDeclaration {
   /** The capability the matching HTTP route requires. The same one, not a new one. */
   capability: Capability;
   profiles: AssistantProfile[];
+  /**
+   * In Ask AI, offered only to a role granted one of these pages (TC #61, 22 Nov). A role
+   * can hold a capability and still have the page that shows its data hidden from its
+   * menu, and the chat answered from the capability: a user with no Work Orders menu read
+   * every job through it. The HTTP API is unchanged; pages stay a matter of what a role
+   * is shown, and the chat is something it is shown.
+   */
+  pages?: readonly string[];
   run(scope: RequestScope, args: Record<string, unknown>, ctx: RunContext): Promise<unknown>;
 }
 
@@ -100,6 +116,7 @@ const STEP_REASON_MEANING: Record<string, string> = {
 @Injectable()
 export class AssistantTools {
   private readonly tools: AssistantTool[];
+  private readonly ds: DataSource;
 
   constructor(
     equipment: EquipmentService,
@@ -116,6 +133,7 @@ export class AssistantTools {
     geofences: GeofenceService,
     visits: GeofenceTracker,
   ) {
+    this.ds = ds;
     /**
      * Site and machine-type names, keyed by the id and slug a machine carries. Without
      * them the chat printed "4ee4adc1-…" for a site and "ashokleyland-genset-180-test"
@@ -129,11 +147,11 @@ export class AssistantTools {
         withTenantSession(ds, scope, (m) => m.getRepository(ClientEquipmentClass).find({ where: { tenantId: scope.tenantId } })),
       ]);
       const visible = sites.filter((p) => scope.plantIds === undefined || scope.plantIds.includes(p.id));
-      const site = new Map(visible.map((p) => [p.id, { code: p.code, name: p.name }]));
+      const site = new Map(visible.map((p) => [p.id, { code: p.code, name: p.name, address: p.address ?? null }]));
       const type = new Map(classes.map((c) => [c.slug, c.name]));
       return {
         site: (id: string | null) => (id ? site.get(id) ?? null : null),
-        sites: () => [...site.values()],
+        sites: () => [...site.values()].map(({ code, name }) => ({ code, name })),
         type: (slug: string | null) => (slug ? type.get(slug) ?? slug : null),
       };
     };
@@ -294,7 +312,8 @@ export class AssistantTools {
       }, ['imei', 'equipmentCode']),
       {
         name: 'list_equipment',
-        description: 'The machines in this account: code, name, type, site and status. Show people `site` and '
+        description: 'The machines in this account (not loggers: logger_health lists those): code, name, type, '
+          + 'site, the site\'s address, and the machine\'s registration status. Show people `site` and '
           + '`type`, the names; the ids and slugs are for other tools. A large fleet comes back as complete '
           + 'counts (`total`, `byType`, `bySite`, every site listed) with only the first machines named; '
           + 'answer how-many and which-sites from the counts, and narrow with `type` or `site` to name the rest.',
@@ -321,6 +340,9 @@ export class AssistantTools {
               sourceSystem: e.sourceSystem, code: e.externalId, name: e.name,
               type: names.type(e.equipmentClassSlug), typeSlug: e.equipmentClassSlug,
               site: site?.name ?? null, siteCode: site?.code ?? null, siteId: e.plantId,
+              // Asked "which site is in Chennai?", the chat had only site names and answered
+              // "neither" as if it had looked (TC #3). The address is what says where.
+              siteAddress: site?.address ?? null,
               status: e.status, manufacturer: e.manufacturer, model: e.modelNumber,
             };
           }).filter((r) => (has(r.site, siteQ) || has(r.siteCode, siteQ))
@@ -368,6 +390,7 @@ export class AssistantTools {
         },
         capability: 'prediction.read',
         profiles: ASK,
+        pages: ['alerts'],
         run: async (scope, a) => {
           // Without a window "how many alerts this week" could not be answered (Dev, 29
           // Oct). A date the model garbled goes back to it as an error: dropping it would
@@ -390,24 +413,57 @@ export class AssistantTools {
         // The states named, and counted here: given only the list, the model answered
         // "which devices are offline?" correctly but hedged and gave no number, not knowing
         // which state meant offline nor wanting to count (test report MIN-10).
-        description: 'The newest link verdict per logger, worst first, with how many loggers are in each state. '
-          + 'States: "dark" is offline (nothing received); "partial" reports but some sensors are silent; '
-          + '"intermittent" keeps dropping; "buffering" is holding data that will arrive late; "weak-signal" '
-          + 'reports on a poor link; "healthy" is online and complete; "unknown" has no verdict yet. Every '
-          + 'state except "dark" and "unknown" is reporting.',
-        parameters: { type: 'object', properties: { state: { type: 'array', items: { type: 'string' } } } },
+        description: 'Every logger (device, identified by its IMEI) in this account, whether it is fitted to a '
+          + 'machine, and its newest link state, worst first, with how many loggers are in each state. Loggers '
+          + 'are not machines: list_equipment lists machines. States: "offline" (nothing received); "partial" '
+          + 'reports but some sensors are silent; "intermittent" keeps dropping; "buffering" is holding data '
+          + 'that will arrive late; "weak-signal" reports on a poor link; "healthy" is online and complete; '
+          + '"no verdict yet" cannot be told yet; "not fitted" is on no machine and has no status. A fitted '
+          + 'logger that sent nothing all week is offline, as the Dashboard counts it. `offline`, `online` and '
+          + '`notFitted` are the counts to answer from.',
+        parameters: {
+          type: 'object',
+          properties: { state: { type: 'array', items: { type: 'string' }, description: 'Only loggers in these states.' } },
+        },
         capability: 'device.read',
         profiles: BOTH,
+        pages: ['dashboard', 'admin-devices'],
         run: async (scope, a) => {
-          const rows = await health.fleet(scope, { states: strs(a.state) as LinkState[] | undefined });
+          const wanted = strs(a.state)?.map((x) => STATE_FROM_LABEL[x] ?? x);
+          const [verdicts, devices] = await Promise.all([health.fleet(scope), inventory.mine(scope)]);
+          // A logger with no verdict was left out, so seven silent loggers came back as
+          // "total 0" and the chat said "no devices are offline" while the Dashboard said
+          // seven were (TC #5, #48), and "list all devices" listed machines instead (TC #4).
+          // Every logger the person can see is listed now, read as the Dashboard reads it
+          // (LiveDashboardPage, MAJ-8): fitted and silent all week is offline; not fitted
+          // has no status yet.
+          const visible = devices.filter((d) => scope.equipmentIds === undefined
+            || (d.equipmentExternalId !== null && scope.equipmentIds.includes(d.equipmentExternalId)));
+          const byImei = new Map(verdicts.map((r) => [r.imei, r]));
+          const rows = visible.map((d) => {
+            const v = byImei.get(d.imei);
+            const machine = d.equipmentExternalId ?? v?.externalId ?? null;
+            const raw: string = v ? v.state : machine ? 'dark' : NOT_FITTED;
+            return {
+              imei: d.imei, machine, fitted: machine !== null,
+              state: STATE_LABEL[raw as LinkState] ?? raw,
+              rawState: raw,
+              detail: v?.detail ?? (machine ? `nothing received in the last ${DEFAULT_LOOK_BACK_DAYS} days` : 'not fitted to a machine, so it has no status yet'),
+              since: v?.windowStart ?? null,
+              longestGapSeconds: v?.longestGapSeconds ?? null, missingSignals: v?.missingSignals ?? null,
+            };
+          });
+          const shown = rows.filter((r) => !wanted || wanted.includes(r.rawState));
           const byState: Record<string, number> = {};
-          for (const r of rows) byState[r.state] = (byState[r.state] ?? 0) + 1;
+          for (const r of shown) byState[r.state] = (byState[r.state] ?? 0) + 1;
+          // Said outright, over every logger, whatever the filter: with only a count by
+          // state, a missing "offline" read as zero (live check, 23 Nov).
           return {
-            total: rows.length, byState,
-            loggers: rows.map((r) => ({
-              imei: r.imei, machine: r.externalId, state: r.state, detail: r.detail, since: r.windowStart,
-              longestGapSeconds: r.longestGapSeconds, missingSignals: r.missingSignals,
-            })),
+            offline: rows.filter((r) => r.rawState === 'dark').length,
+            online: rows.filter((r) => r.fitted && r.rawState !== 'dark' && r.rawState !== 'unknown').length,
+            notFitted: rows.filter((r) => !r.fitted).length,
+            total: shown.length, byState,
+            loggers: shown.map(({ rawState: _raw, ...r }) => r),
           };
         },
       },
@@ -423,6 +479,7 @@ export class AssistantTools {
         },
         capability: 'prediction.read',
         profiles: ASK,
+        pages: ['incident-management'],
         run: async (scope, a) => (await incidents.list(scope, {
           status: str(a.status) as IncidentStatus | 'live' | undefined, externalId: str(a.equipmentCode),
         })).map((i) => ({
@@ -432,23 +489,40 @@ export class AssistantTools {
       },
       {
         name: 'list_work_orders',
-        description: 'Jobs on the machines the person can see.',
+        description: 'Jobs (work orders) on the machines the person can see, with whether each is overdue. '
+          + 'Status is as the Work Orders page says it: "open" (not started), "in-progress", "completed", '
+          + '"cancelled". For unfinished jobs pass both "open" and "in-progress".',
         parameters: {
           type: 'object',
           properties: {
-            status: { type: 'array', items: { type: 'string' } },
+            status: { type: 'array', items: { type: 'string', enum: ['open', 'in-progress', 'completed', 'cancelled'] } },
             equipmentCode: { type: 'string' },
-            overdue: { type: 'boolean' },
+            overdue: { type: 'boolean', description: 'Only unfinished jobs past their due date.' },
           },
         },
         capability: 'action.work',
         profiles: ASK,
-        run: async (scope, a) => (await work.list(scope, {
-          status: strs(a.status), externalId: str(a.equipmentCode), overdue: a.overdue === true,
-        })).map((w) => ({
-          reference: w.reference, machine: w.externalId, title: w.title, status: w.status,
-          priority: w.priority, dueAt: w.dueAt, origin: w.origin,
-        })),
+        pages: ['work-orders'],
+        run: async (scope, a) => {
+          // The database calls a job nobody has started "created" and the page says "Open";
+          // asked for open jobs the model passed "open", matched nothing, and said there were
+          // none while three were open (TC #29). The tool speaks the page's word both ways.
+          const status = strs(a.status)?.map((x) => (x === 'open' ? 'created' : x));
+          const now = Date.now();
+          return (await work.list(scope, {
+            status, externalId: str(a.equipmentCode), overdue: a.overdue === true,
+          })).map((w) => {
+            const unfinished = w.status === 'created' || w.status === 'in-progress';
+            return {
+              reference: w.reference, machine: w.externalId, title: w.title,
+              status: w.status === 'created' ? 'open' : w.status,
+              priority: w.priority, dueAt: w.dueAt, origin: w.origin,
+              // Said here, not left to date arithmetic: "due for service" answers missed that
+              // both jobs were a month overdue (TC #7).
+              overdue: unfinished && w.dueAt !== null && new Date(w.dueAt).getTime() < now,
+            };
+          });
+        },
       },
       {
         name: 'machine_page',
@@ -464,7 +538,18 @@ export class AssistantTools {
         },
         capability: 'catalog.read',
         profiles: ASK,
-        run: (scope, a) => pages.machinePage(scope, { sourceSystem: str(a.sourceSystem) ?? '', externalId: str(a.code) ?? '' }),
+        run: async (scope, a, ctx) => {
+          const page = await pages.machinePage(scope, { sourceSystem: str(a.sourceSystem) ?? '', externalId: str(a.code) ?? '' });
+          // The page carries the machine's open alerts and jobs; a role whose menu hides
+          // Alerts or Work Orders is not shown them here either (TC #61).
+          const granted = ctx.pages;
+          if (!granted) return page;
+          const hidden = new Set([
+            ...(granted.includes('alerts') ? [] : ['alert_list']),
+            ...(granted.includes('work-orders') ? [] : ['work_order_list']),
+          ]);
+          return { ...page, widgets: page.widgets.filter((w) => !hidden.has(w.widgetType)) };
+        },
       },
       {
         name: 'machine_geofences',
@@ -505,6 +590,20 @@ export class AssistantTools {
     ];
   }
 
+  /**
+   * The Ask AI tools this caller's role is not shown the pages for, and the pages it is
+   * (TC #61). A caller with no role row (`capabilities` absent: the static table answered
+   * for them) has no page grants to honour and is narrowed by capability alone, as before.
+   */
+  async pageNarrowing(scope: RequestScope, profile: AssistantProfile): Promise<{ withheld: string[]; pages: string[] | null }> {
+    if (profile !== 'ask' || scope.capabilities === undefined) return { withheld: [], pages: null };
+    const slug = scope.roles[0];
+    const pages: string[] = slug ? await withTenantSession(this.ds, scope, async (m) =>
+      (await m.getRepository(TenantRole).findOne({ where: { tenantId: scope.tenantId, slug } }))?.allowedTabs ?? []) : [];
+    const withheld = this.tools.filter((t) => t.pages && !t.pages.some((p) => pages.includes(p))).map((t) => t.name);
+    return { withheld, pages };
+  }
+
   /** The declarations this caller may use in this chat. */
   available(scope: RequestScope, profile: AssistantProfile = 'ask', withheld: readonly string[] = []): ToolDeclaration[] {
     return this.tools.filter((t) => t.profiles.includes(profile) && can(scope, t.capability) && !withheld.includes(t.name))
@@ -533,6 +632,14 @@ export class AssistantTools {
     }
   }
 }
+
+/**
+ * Link states as a person says them. "dark" reached the Tamil and Hindi answers word for
+ * word (TC #48); the model repeats what it is handed, so it is handed "offline".
+ */
+const STATE_LABEL: Partial<Record<LinkState, string>> = { dark: 'offline', unknown: 'no verdict yet' };
+const STATE_FROM_LABEL: Record<string, string> = { offline: 'dark', 'no verdict yet': 'unknown' };
+const NOT_FITTED = 'not fitted';
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;

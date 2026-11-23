@@ -54,7 +54,9 @@
     "justNow": "Just now",
     "placeholder": "Ask about telematics, sensors, errors...",
     "send": "Send",
-    "welcome": "Hello! I am your ThingsAlive Telematics AI Assistant. You can ask me about sensor telemetry thresholds, equipment health, CAN-bus mapping, or device onboarding status.",
+    "charCount": "{{length}} / {{max}} characters",
+    "tooLong": "{{length}} / {{max}} characters. Shorten your message to send it.",
+    "welcome": "Hello! I am your ThingsAlive AI Assistant. Ask me about your machines and sites, your loggers and whether they are reporting, alerts, incidents, and work orders. I can only read; I can't make changes.",
     "prompts": {
       "offline": "Which devices are offline?",
       "dust": "Show Dust Collector status",
