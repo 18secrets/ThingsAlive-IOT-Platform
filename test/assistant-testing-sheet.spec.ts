@@ -1,7 +1,9 @@
 import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AssistantModel, AssistantTurn, ModelReply, ToolDeclaration } from '../src/assistant/assistant-model';
-import { AssistantTools } from '../src/assistant/assistant-tools';
+import { AssistantTools, forMenu } from '../src/assistant/assistant-tools';
+import { InventoryService } from '../src/inventory/services/inventory.service';
+import { MachinePage } from '../src/page/page.service';
 import { AssistantService } from '../src/assistant/assistant.service';
 import { RequestScope } from '../src/auth/types/request-scope';
 import { createApp } from '../src/main';
@@ -138,10 +140,43 @@ describeDb('Ask AI testing sheet, 22 Nov 2026', () => {
       expect(out.offline).toBe(1);
     });
 
-    it('a user limited to one machine sees only the logger fitted to it', async () => {
+    it('a user limited to one machine sees the logger on it and the free one, never one on another machine', async () => {
+      await owner.query(`INSERT INTO device_inventory (imei, tenant_id, state, equipment_external_id) VALUES ('753753753951953', 'acme', 'assigned', 'TRAC-1')`);
       const out = await tools.run(oneMachine, 'logger_health', {}) as Record<string, any>;
-      expect(out.loggers.map((l: any) => l.imei)).toEqual(['753753753951951']);
+      expect(out.loggers.map((l: any) => l.imei)).toEqual(['753753753951951', '753753753951952']);
+      // The Devices register itself, not only the chat.
+      expect((await app.get(InventoryService).mine(oneMachine)).map((d) => d.imei)).toEqual(['753753753951951', '753753753951952']);
+      expect((await app.get(InventoryService).mine(admin)).map((d) => d.imei)).toHaveLength(3);
     });
+  });
+
+  it('asked for sites, every site comes back with its address, one with no machines included (TC #2)', async () => {
+    await owner.query(`INSERT INTO plant (tenant_id, code, name, address) VALUES ('acme', 'BLR', 'Bangalore Test Plant', 'Bengaluru')`);
+    const out = await tools.run(admin, 'list_equipment', { sites: true }) as Record<string, any>;
+    expect(out.sites).toEqual(expect.arrayContaining([
+      { name: 'Device Manufacturing unit', code: 'DMU', address: 'Guindy, Chennai, Tamilnadu', machines: 1 },
+      { name: 'Bangalore Test Plant', code: 'BLR', address: 'Bengaluru', machines: 0 },
+    ]));
+    // Without asking, the list is the machines, as before.
+    expect(Array.isArray(await tools.run(admin, 'list_equipment', {}))).toBe(true);
+  });
+
+  it('an incident says who owns it, by name, never by id (TC #30)', async () => {
+    const [user] = await owner.query(
+      `INSERT INTO app_user (tenant_id, email, full_name, role_slug, status) VALUES ('acme', 'owner@acme.test', 'Asha Rao', 'site-lead', 'active') RETURNING id`,
+    );
+    try {
+      await owner.query(
+        `INSERT INTO incident (tenant_id, source_system, external_id, severity, opened_at, owner_user_id)
+           VALUES ('acme', 'ta-2.0', 'GEN-1', 'high', now(), $1), ('acme', 'ta-2.0', 'TRAC-1', 'low', now(), NULL)`, [user.id],
+      );
+      const rows = await tools.run(admin, 'list_incidents', {}) as Record<string, unknown>[];
+      expect(rows.map((r) => [r.machine, r.owner]).sort()).toEqual([['GEN-1', 'Asha Rao'], ['TRAC-1', null]]);
+      expect(JSON.stringify(rows)).not.toContain(user.id);
+    } finally {
+      await owner.query(`DELETE FROM incident WHERE tenant_id = 'acme'`);
+      await owner.query(`DELETE FROM app_user WHERE email = 'owner@acme.test'`);
+    }
   });
 
   it('a machine\'s site comes with its address, so "which is in Chennai?" can be answered (TC #3)', async () => {
@@ -179,6 +214,24 @@ describeDb('Ask AI testing sheet, 22 Nov 2026', () => {
       expect(page.widgets.map((w) => w.widgetType)).not.toEqual(expect.arrayContaining(['alert_list']));
     });
 
+    it('a failure mode\'s status, which comes from open alerts, is left off for a menu without Alerts', () => {
+      const page = {
+        equipment: {}, layout: { fallback: false },
+        widgets: [
+          { widgetKey: 'fm', widgetType: 'failure_modes', readiness: 'ready', data: [{ code: 'OH', name: 'Overheat', status: 'active' }] },
+          { widgetKey: 'al', widgetType: 'alert_list', readiness: 'ready', data: [] },
+          { widgetKey: 'wo', widgetType: 'work_order_list', readiness: 'ready', data: [] },
+        ],
+      } as unknown as MachinePage;
+      const noAlerts = forMenu(page, ['dashboard', 'work-orders']);
+      expect(noAlerts.widgets.map((w) => w.widgetType)).toEqual(['failure_modes', 'work_order_list']);
+      expect(noAlerts.widgets[0].data).toEqual([{ code: 'OH', name: 'Overheat' }]);
+      const withAlerts = forMenu(page, ['alerts']);
+      expect(withAlerts.widgets.map((w) => w.widgetType)).toEqual(['failure_modes', 'alert_list']);
+      expect(withAlerts.widgets[0].data).toEqual([{ code: 'OH', name: 'Overheat', status: 'active' }]);
+      expect(forMenu(page, null)).toBe(page);
+    });
+
     it('Vani, which does not ask to follow the menu, is unchanged', async () => {
       const model = new ScriptedModel(() => say('ok'));
       await service(model).chat(noJobsMenu, ask('Any jobs?'));
@@ -207,5 +260,7 @@ describeDb('Ask AI testing sheet, 22 Nov 2026', () => {
     expect(system).toMatch(/Missing data is not good news/);
     expect(system).toMatch(/never "you cannot"/);
     expect(system).not.toMatch(/- You cannot change anything/);
+    // Names as stored, in full: the chat shortened an odd site name to "Test Plant" (TC #49).
+    expect(system).toMatch(/exactly as they are stored, in full/);
   });
 });

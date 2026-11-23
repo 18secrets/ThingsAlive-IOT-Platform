@@ -242,12 +242,17 @@ export class InventoryService {
    * the pool is invisible from inside an account without a rule anyone maintains.
    */
   async mine(scope: RequestScope, claimedOnly = false): Promise<DeviceInventory[]> {
-    return withTenantSession(this.ds, scope, (m) =>
+    const devices = await withTenantSession(this.ds, scope, (m) =>
       m.getRepository(DeviceInventory).find({
         where: claimedOnly ? { tenantId: scope.tenantId } : {},
         order: { imei: 'ASC' },
       }),
     );
+    // A person limited to some machines saw every logger in the account, the ones on
+    // other people's machines included (Ask AI testing sheet, 22 Nov). They see the
+    // loggers on their own machines and the free ones, which they need to fit one.
+    if (scope.equipmentIds === undefined) return devices;
+    return devices.filter((d) => d.equipmentExternalId === null || scope.equipmentIds!.includes(d.equipmentExternalId));
   }
 
   /**

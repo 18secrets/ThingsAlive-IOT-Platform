@@ -33,7 +33,8 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
   const { t } = useTranslation('catalog');
   const { t: ts } = useTranslation('shared');
   const [models, setModels] = useState<EquipmentModel[] | null>(null);
-  const [library, setLibrary] = useState<EquipmentModel[]>([]);
+  // Null until loaded, so "none given" is not said while the list is still on its way.
+  const [library, setLibrary] = useState<EquipmentModel[] | null>(null);
   const [classes, setClasses] = useState<{ slug: string; name: string }[]>([]);
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState('');
@@ -50,7 +51,8 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
     void load();
     (scope === 'library' ? apiListEquipmentClasses() : apiListMyEquipmentClasses())
       .then((c) => setClasses(c.map((x) => ({ slug: x.slug, name: x.name })))).catch(() => {});
-    if (scope === 'account') apiListModels('library').then(setLibrary).catch(() => setLibrary([]));
+    // A failed load stays null: "none given" would be a claim the page cannot make.
+    if (scope === 'account') apiListModels('library').then(setLibrary).catch(() => setLibrary(null));
   }, [scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const className = (slug: string | null) => (slug ? classes.find((c) => c.slug === slug)?.name ?? slug : '—');
@@ -109,12 +111,15 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
           {scope === 'account' && canEdit && (
             <>
+              {/* Only the models Things Alive gave this account (TC_234). With none, the picker
+                  says so rather than opening on an empty list. */}
               <SelectPicker
                 size="sm"
-                data={library.map((m) => ({ label: [m.manufacturer, m.name].filter(Boolean).join(' '), value: m.id }))}
+                data={(library ?? []).map((m) => ({ label: [m.manufacturer, m.name].filter(Boolean).join(' '), value: m.id }))}
                 value={copyFrom}
                 onChange={setCopyFrom}
-                placeholder={t('models.copyPick')}
+                disabled={library !== null && library.length === 0}
+                placeholder={library !== null && library.length === 0 ? t('models.noneGiven') : t('models.copyPick')}
                 className={`w-full sm:w-64 ${FILTER_PICKER}`}
               />
               <button
@@ -137,6 +142,11 @@ export const ModelsView: React.FC<{ scope: ModelScope; canEdit: boolean }> = ({ 
           )}
         </div>
       </div>
+      {/* Said in words too: a disabled picker's placeholder is easy to miss, and a tooltip
+          never shows on a phone. */}
+      {scope === 'account' && canEdit && library !== null && library.length === 0 && (
+        <p className="px-1 text-xs text-slate-500">{t('models.noneGivenHint')}</p>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">

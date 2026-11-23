@@ -15,7 +15,8 @@ import { IncidentStatus } from '../incident/entities/incident.entity';
 import { IncidentRecordService } from '../incident/incident-record.service';
 import { InventoryService } from '../inventory/services/inventory.service';
 import { OnboardingStatusService } from '../onboarding/onboarding-status.service';
-import { PageService } from '../page/page.service';
+import { MachinePage, PageService } from '../page/page.service';
+import { FailureModeRow } from '../page/page-widgets';
 import { WorkOrderService } from '../work/services/work-order.service';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { TenantRole } from '../identity/entities/tenant-role.entity';
@@ -323,6 +324,7 @@ export class AssistantTools {
             siteId: { type: 'string', description: 'Only machines at this site id.' },
             site: { type: 'string', description: 'Only machines at sites whose name or code contains this.' },
             type: { type: 'string', description: 'Only machines whose type contains this, e.g. "excavator" or "crane".' },
+            sites: { type: 'boolean', description: 'Also return every site with its address and machine count, sites with no machines included. Use it to count or list sites.' },
           },
         },
         capability: 'catalog.read',
@@ -347,6 +349,17 @@ export class AssistantTools {
             };
           }).filter((r) => (has(r.site, siteQ) || has(r.siteCode, siteQ))
             && (has(r.type, typeQ) || has(r.typeSlug, typeQ) || has(r.name, typeQ)));
+          // Counted from the machines, a site with none on it was missed (TC #2). Asked
+          // for, every site the person may see comes back, empty ones included. A person
+          // limited to some machines is told only the sites of those machines.
+          const allSites = () => {
+            const count = (name: string | null) => rows.filter((r) => r.site === name).length;
+            const seen = scope.equipmentIds === undefined
+              ? active.filter((p) => scope.plantIds === undefined || scope.plantIds.includes(p.id))
+              : active.filter((p) => rows.some((r) => r.siteId === p.id));
+            return seen.map((p) => ({ name: p.name, code: p.code, address: p.address ?? null, machines: count(p.name) }));
+          };
+          if (a.sites === true) return { sites: allSites(), machines: rows.length <= LIST_IN_FULL ? rows : rows.slice(0, LIST_IN_FULL) };
           if (rows.length <= LIST_IN_FULL) return rows;
 
           // Too many to list whole. Before this, the list was cut to fit and the model
@@ -437,8 +450,9 @@ export class AssistantTools {
           // Every logger the person can see is listed now, read as the Dashboard reads it
           // (LiveDashboardPage, MAJ-8): fitted and silent all week is offline; not fitted
           // has no status yet.
-          const visible = devices.filter((d) => scope.equipmentIds === undefined
-            || (d.equipmentExternalId !== null && scope.equipmentIds.includes(d.equipmentExternalId)));
+          // The register already keeps a person limited to some machines to their own
+          // loggers and the free ones (InventoryService.mine).
+          const visible = devices;
           const byImei = new Map(verdicts.map((r) => [r.imei, r]));
           const rows = visible.map((d) => {
             const v = byImei.get(d.imei);
@@ -480,12 +494,23 @@ export class AssistantTools {
         capability: 'prediction.read',
         profiles: ASK,
         pages: ['incident-management'],
-        run: async (scope, a) => (await incidents.list(scope, {
-          status: str(a.status) as IncidentStatus | 'live' | undefined, externalId: str(a.equipmentCode),
-        })).map((i) => ({
-          machine: i.machine.externalId, severity: i.severity, status: i.status, openedAt: i.openedAt,
-          escalationLevel: i.escalationLevel, sla: i.sla,
-        })),
+        run: async (scope, a) => {
+          const rows = await incidents.list(scope, {
+            status: str(a.status) as IncidentStatus | 'live' | undefined, externalId: str(a.equipmentCode),
+          });
+          // Described "with owner" and returned without one, so "who owns the latest
+          // incident?" could never be answered (TC #30). The owner by name, read in the
+          // person's own session; an id would be the uuid the chat must never show.
+          const ids = [...new Set(rows.map((i) => i.ownerUserId).filter((x): x is string => !!x))];
+          const names = new Map<string, string>(ids.length ? (await withTenantSession(this.ds, scope, (m) => m.query(
+            `SELECT id::text AS id, full_name AS name FROM app_user WHERE id::text = ANY($1)`, [ids],
+          )) as { id: string; name: string }[]).map((u) => [u.id, u.name]) : []);
+          return rows.map((i) => ({
+            machine: i.machine.externalId, severity: i.severity, status: i.status, openedAt: i.openedAt,
+            owner: i.ownerUserId ? names.get(i.ownerUserId) ?? 'a user no longer in this account' : null,
+            escalationLevel: i.escalationLevel, sla: i.sla,
+          }));
+        },
       },
       {
         name: 'list_work_orders',
@@ -540,15 +565,7 @@ export class AssistantTools {
         profiles: ASK,
         run: async (scope, a, ctx) => {
           const page = await pages.machinePage(scope, { sourceSystem: str(a.sourceSystem) ?? '', externalId: str(a.code) ?? '' });
-          // The page carries the machine's open alerts and jobs; a role whose menu hides
-          // Alerts or Work Orders is not shown them here either (TC #61).
-          const granted = ctx.pages;
-          if (!granted) return page;
-          const hidden = new Set([
-            ...(granted.includes('alerts') ? [] : ['alert_list']),
-            ...(granted.includes('work-orders') ? [] : ['work_order_list']),
-          ]);
-          return { ...page, widgets: page.widgets.filter((w) => !hidden.has(w.widgetType)) };
+          return forMenu(page, ctx.pages ?? null);
         },
       },
       {
@@ -640,6 +657,28 @@ export class AssistantTools {
 const STATE_LABEL: Partial<Record<LinkState, string>> = { dark: 'offline', unknown: 'no verdict yet' };
 const STATE_FROM_LABEL: Record<string, string> = { offline: 'dark', 'no verdict yet': 'unknown' };
 const NOT_FITTED = 'not fitted';
+
+/**
+ * A machine's page as a role's menu shows it (TC #61). The page carries the machine's open
+ * alerts and jobs; a role whose menu hides Alerts or Work Orders is not shown them here
+ * either, and a failure mode's status, which reads "active" because an alert is open on
+ * its signal, is left off for a role that cannot see alerts. Null pages: no menu to follow.
+ */
+export function forMenu(page: MachinePage, granted: readonly string[] | null): MachinePage {
+  if (!granted) return page;
+  const alertsShown = granted.includes('alerts');
+  const hidden = new Set([
+    ...(alertsShown ? [] : ['alert_list']),
+    ...(granted.includes('work-orders') ? [] : ['work_order_list']),
+  ]);
+  return {
+    ...page,
+    widgets: page.widgets.filter((w) => !hidden.has(w.widgetType)).map((w) =>
+      (w.widgetType === 'failure_modes' && !alertsShown && Array.isArray(w.data)
+        ? { ...w, data: (w.data as FailureModeRow[]).map(({ status: _s, ...f }) => f) as unknown as typeof w.data }
+        : w)),
+  };
+}
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;

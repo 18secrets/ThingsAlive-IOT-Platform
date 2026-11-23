@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2 } from 'lucide-react';
+import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2, RotateCw } from 'lucide-react';
 import { Input } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, AssistantMessage, apiAssistantChat } from '../lib/api';
@@ -31,6 +31,8 @@ type ChatMessage = {
   /** The lookups an answer rests on, shown under it. */
   toolsUsed?: string[];
   error?: boolean;
+  /** On an error note: the question that failed, so Retry sends it again without retyping. */
+  retry?: string;
 };
 
 // The server takes at most 20 messages of up to 2,000 characters each.
@@ -45,8 +47,11 @@ function errorKey(err: unknown): string {
     if (err.status === 503) return 'askAI.error.notConfigured';
     if (err.status === 403) return 'askAI.error.notInAccount';
     if (err.status === 429) return 'askAI.error.allowanceUsed';
+    return 'askAI.error.generic';
   }
-  return 'askAI.error.generic';
+  // No response at all (fetch threw): the connection, not the assistant. Said as such,
+  // or the person waits for an assistant that never got the question (TC #47).
+  return 'askAI.error.offline';
 }
 
 export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
@@ -87,10 +92,18 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
       const answer = await apiAssistantChat(history);
       setMessages((prev) => [...prev, { role: 'assistant', text: answer.reply, toolsUsed: answer.toolsUsed }]);
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', text: '', key: errorKey(err), error: true }]);
+      setMessages((prev) => [...prev, { role: 'assistant', text: '', key: errorKey(err), error: true, retry: userText }]);
     } finally {
       setIsTyping(false);
     }
+  };
+
+  // The failed question and its error note go, and the question is sent again as new.
+  const retry = (idx: number) => {
+    const text = messages[idx]?.retry;
+    if (!text || isTyping) return;
+    setMessages((prev) => prev.filter((_, i) => i !== idx && i !== idx - 1));
+    void handleSend(undefined, text);
   };
 
   return (
@@ -245,6 +258,16 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                   >
                     {m.key ? t(m.key, m.values) : m.role === 'assistant' ? <ChatMarkdown text={m.text} /> : m.text}
                   </div>
+                  {m.error && m.retry && (
+                    <button
+                      type="button"
+                      onClick={() => retry(idx)}
+                      disabled={isTyping}
+                      className="mt-1.5 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium flex items-center gap-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" /> {t('askAI.retry')}
+                    </button>
+                  )}
                   {m.toolsUsed && m.toolsUsed.length > 0 && (
                     <span className="text-[0.6875rem] text-slate-400 dark:text-slate-500 mt-1 px-1">
                       {t('askAI.sources', {
