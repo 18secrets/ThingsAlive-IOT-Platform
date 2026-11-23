@@ -65,6 +65,8 @@
       "highestRisk": "Which machine has the highest risk right now?",
       "serviceDue": "Which machines are due for service?"
     },
+    "promptsBack": "Earlier suggestions",
+    "promptsMore": "More suggestions",
     "topics": {
       "admin": {
         "title": "Admin Console & Sub-tabs",

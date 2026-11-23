@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2, RotateCw } from 'lucide-react';
+import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Input } from 'rsuite';
 import { useTranslation } from 'react-i18next';
 import { ApiError, AssistantMessage, apiAssistantChat } from '../lib/api';
@@ -65,6 +65,25 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     { role: 'assistant', text: '', key: 'askAI.welcome' },
   ]);
   const feedRef = useRef<HTMLDivElement>(null);
+  // The suggestions keep to one row, as Administration's tabs do: wrapped onto three lines
+  // they took the chat's room. When they do not all fit, the edges fade and arrows scroll.
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [chipEdges, setChipEdges] = useState({ left: false, right: false });
+  const measureChips = () => {
+    const el = chipsRef.current;
+    if (!el) return;
+    setChipEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    measureChips();
+    const observer = new ResizeObserver(measureChips);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isOpen, isExpanded]);
+  const scrollChips = (dir: 1 | -1) =>
+    chipsRef.current?.scrollBy({ left: dir * chipsRef.current.clientWidth * 0.7, behavior: 'smooth' });
   const tooLong = inputQuery.trim().length > MAX_CHARS;
 
   useEffect(() => {
@@ -105,6 +124,46 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     setMessages((prev) => prev.filter((_, i) => i !== idx && i !== idx - 1));
     void handleSend(undefined, text);
   };
+
+  // Quick prompt chips: one row, scrolled by arrows when they do not all fit, as the
+  // Administration tab bar is (wrapped, they took three lines from the chat; a bare
+  // scrolling row hid the third behind a thin bar nobody noticed, TC #9). They open the
+  // conversation, above the welcome, and scroll away with it after the first question,
+  // so the whole panel is the chat. They never change, so nothing is lost by that.
+  const chips = (
+          <div className="relative -mx-4">
+            {chipEdges.left && (
+              <>
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-50 dark:from-slate-900 to-transparent z-[5]" />
+                <button type="button" onClick={() => scrollChips(-1)} aria-label={t('askAI.promptsBack')} title={t('askAI.promptsBack')}
+                  className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer">
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+            <div ref={chipsRef} onScroll={measureChips} className="flex gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
+                  disabled={isTyping}
+                  className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-medium hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {t(`askAI.prompts.${prompt}`)}
+                </button>
+              ))}
+            </div>
+            {chipEdges.right && (
+              <>
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-slate-50 dark:from-slate-900 to-transparent z-[5]" />
+                <button type="button" onClick={() => scrollChips(1)} aria-label={t('askAI.promptsMore')} title={t('askAI.promptsMore')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+  );
 
   return (
     <>
@@ -222,25 +281,12 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
             </div>
           </div>
 
-          {/* Quick prompt chips. Wrapped, not scrolled: in a scrolling row the second was cut
-              and the third hidden, and only a thin bar said there was more (TC #9). */}
-          <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-1.5">
-            {QUICK_PROMPTS.map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
-                disabled={isTyping}
-                className="max-w-full px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-medium text-left break-words hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {t(`askAI.prompts.${prompt}`)}
-              </button>
-            ))}
-          </div>
-
           {/* Messages Feed */}
           <div ref={feedRef} className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50 dark:bg-slate-950/30">
+            {chips}
             {messages.map((m, idx) => (
-              <div key={idx} className={`flex items-end gap-2 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <React.Fragment key={idx}>
+              <div className={`flex items-end gap-2 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 {m.role === 'assistant' && (
                   <div className="w-6 h-6 rounded-full bg-sky-600 text-white flex items-center justify-center shrink-0 mb-0.5">
                     <Bot className="w-3.5 h-3.5" />
@@ -278,6 +324,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
                   <span className="text-[0.6875rem] text-slate-400 dark:text-slate-500 mt-1 px-1">{t('askAI.justNow')}</span>
                 </div>
               </div>
+              </React.Fragment>
             ))}
 
             {isTyping && (
