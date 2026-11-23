@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager, In, IsNull, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Not, QueryFailedError } from 'typeorm';
 import { RequestScope } from '../auth/types/request-scope';
 import { Plant } from '../equipment/entities/plant.entity';
 import { EquipmentProfile } from '../equipment/equipment-profile.entity';
@@ -7,6 +7,7 @@ import { withTenantSession } from '../scope/tenant-session';
 import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { BreakdownEvent } from '../utilization/entities/breakdown-event.entity';
 import { composeAround, composeLayout, Draft } from './compose';
+import { SIMULATED_TENANTS } from './simulated';
 import { EQUIPMENT_BACKED, PROGRESS_KINDS, SiteTwin, SiteTwinPlacement, SiteTwinZone, ZoneKind } from './site-twin.entity';
 
 /** What a site that has never been laid out is drawn as. A yard, not a guess at the
@@ -111,8 +112,23 @@ export class SiteTwinService {
         .map((z) => [z.key, z]));
 
       // Only what the caller can see is replaced. A user scoped to some machines on a
-      // shared site saves their part of the picture; the rest stays where it was.
-      await m.getRepository(SiteTwinZone).delete({ tenantId: scope.tenantId, plantId });
+      // shared site saves their part of the picture; the rest stays where it was. That
+      // holds for structures too: a generator room is drawn only for a caller who sees a
+      // generator (readIn), so one scoped to the excavators never had it to send back, and
+      // replacing every zone deleted it (testing notes, 5 Nov). A structure the caller was
+      // not shown, and did not send, is kept.
+      const unseen = scope.equipmentIds === undefined ? new Set<string>() : await (async () => {
+        const mine = await this.categoriesOf(m, scope, machines);
+        const sent = new Set(input.zones.map((z) => z.key));
+        return new Set([...before.values()].filter((z) => {
+          const backed = EQUIPMENT_BACKED[z.kind];
+          return backed && !backs(backed.test, mine) && backs(backed.test, categories) && !sent.has(z.key);
+        }).map((z) => z.key));
+      })();
+      await m.getRepository(SiteTwinZone).delete({
+        tenantId: scope.tenantId, plantId,
+        ...(unseen.size ? { key: Not(In([...unseen])) } : {}),
+      });
       await m.getRepository(SiteTwinPlacement).delete({
         tenantId: scope.tenantId, plantId,
         ...(scope.equipmentIds === undefined ? {} : { externalId: In([...scope.equipmentIds]) }),
@@ -158,7 +174,17 @@ export class SiteTwinService {
         category: layout.categories.get(k) ?? null, attention: attention.has(k) || layout.brokenDown.has(k),
       };
     });
-    return draft ? composeAround(machines, draft, layout.version) : composeLayout(machines, layout.version);
+    const proposal = draft ? composeAround(machines, draft, layout.version) : composeLayout(machines, layout.version);
+    // The composer stages the roads (100 / 45 / 0 %) and the access road (100 %) so the
+    // demo site looks lived in. On a real account that is a figure nobody reported, saved
+    // as soon as the editor is (testing notes, 5 Nov): its new zones start with no
+    // progress, and a zone the person drew keeps theirs.
+    if (SIMULATED_TENANTS.has(scope.tenantId)) return proposal;
+    const drawn = new Set((draft?.zones ?? []).map((z) => z.key));
+    return {
+      ...proposal,
+      zones: proposal.zones.map((z) => (drawn.has(z.key) ? z : { ...z, progressPct: null })),
+    };
   }
 
   /** One structure's progress, as reported by the site. Not idempotent for the same
