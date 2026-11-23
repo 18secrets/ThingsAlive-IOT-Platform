@@ -1440,6 +1440,37 @@ export function apiCopyModelFromLibrary(masterId: string, name?: string): Promis
   });
 }
 
+/**
+ * Which library models an account is given (TC_234), as classes are granted: Master Admin
+ * only (`entitlement.grant`). An account lists and copies only these. Revoked rows are
+ * kept, and revoking leaves the account's own copies alone.
+ */
+export interface ModelGrant {
+  id: string;
+  tenantId: string;
+  templateId: string;
+  grantedBy: string;
+  grantedAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  note: string | null;
+}
+
+export function apiListModelGrants(tenantId: string): Promise<ModelGrant[]> {
+  return authFetch(`/equipment-templates/grants?tenantId=${encodeURIComponent(tenantId)}`);
+}
+
+/** Granting a model the account already has changes nothing; a revoked one comes back. */
+export function apiGrantModel(tenantId: string, templateId: string, note?: string): Promise<ModelGrant> {
+  return authFetch("/equipment-templates/grants", {
+    method: "POST", body: JSON.stringify({ tenantId, templateId, note }),
+  });
+}
+
+export function apiRevokeModelGrant(id: string): Promise<ModelGrant> {
+  return authFetch(`/equipment-templates/grants/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+}
+
 export function apiGetRatingNames(): Promise<RatingName[]> {
   return authFetch("/equipment-templates/rating-names");
 }

@@ -180,6 +180,8 @@ describeDb('D59: rated bounds end to end', () => {
       const library = new EquipmentTemplateService(ds.getRepository(EquipmentTemplate), ds);
       const t = await library.create({ name: 'Motor 1 HP', equipmentClassSlug: 'motor-1ph' });
       await library.replaceRatings(master, t.id, [{ name: 'rated_current', value: 5.5, source: 'Datasheet p.2' }]);
+      // Copying a library model needs the account to have been given it (ModelGrants1766000000000, TC_234).
+      await owner.query(`INSERT INTO equipment_template_grant (tenant_id, template_id, granted_by) VALUES ($1, $2, 'test') ON CONFLICT DO NOTHING`, [acme.tenantId, t.id]);
       const copy = await new ClientEquipmentTemplateService(ds).copyFromMaster(acme, t.id);
       await equipment.setModel(acme, EQUIPMENT, copy.id);
       const fired = await shift();

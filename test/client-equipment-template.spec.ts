@@ -50,6 +50,8 @@ describeDb('client equipment templates', () => {
       `INSERT INTO equipment_template (name, category, manufacturer, engine_type, fuel_tank_capacity_liters, service_interval_hours, description)
          VALUES ('CAT 320', 'Excavator', 'Caterpillar', 'C7.1', 410, 250, 'Master default') RETURNING id`,
     );
+    // Copying a library model needs the account to have been given it (ModelGrants1766000000000, TC_234).
+    await owner.query(`INSERT INTO equipment_template_grant (tenant_id, template_id, granted_by) VALUES ($1, $2, 'test') ON CONFLICT DO NOTHING`, ['acme', row.id]);
     return row.id as string;
   };
 

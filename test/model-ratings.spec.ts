@@ -83,6 +83,8 @@ describeDb('D57: model ratings', () => {
   const libraryModel = async (name = 'Mini 1 HP', classSlug = CLASS) => {
     const t = await library.create({ name, equipmentClassSlug: classSlug });
     await library.replaceRatings(master, t.id, ONE_HP);
+    // Copying a library model needs the account to have been given it (ModelGrants1766000000000, TC_234).
+    for (const tenant of [acme.tenantId, other.tenantId]) await owner.query(`INSERT INTO equipment_template_grant (tenant_id, template_id, granted_by) VALUES ($1, $2, 'test') ON CONFLICT DO NOTHING`, [tenant, t.id]);
     return t;
   };
 

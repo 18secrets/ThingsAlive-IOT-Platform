@@ -9,6 +9,7 @@ import { EquipmentTemplate } from '../entities/equipment-template.entity';
 import { EquipmentTemplateCurvePoint } from '../entities/equipment-template-curve-point.entity';
 import { EquipmentTemplateRating } from '../entities/equipment-template-rating.entity';
 import { CurveInput, CurveView, toCurveView, validateCurve } from './curves';
+import { isGranted } from './equipment-template.service';
 import { RatingInput, RatingView, toView, validateRatings } from './ratings';
 
 export type ClientTemplateDraft = Partial<Pick<ClientEquipmentTemplate,
@@ -60,7 +61,12 @@ export class ClientEquipmentTemplateService {
     if (!isUuid(masterId)) throw new NotFoundException(`No equipment template "${masterId}".`);
     return withTenantSession(this.ds, scope, async (m) => {
       const master = await m.getRepository(EquipmentTemplate).findOne({ where: { id: masterId } });
-      if (!master) throw new NotFoundException(`No equipment template "${masterId}".`);
+      // A model the account was not given is "not found", the same answer as one that
+      // does not exist (TC_234). The database refuses the insert too
+      // (client_equipment_template_granted); this says so before any work is done.
+      if (!master || !(await isGranted(m, scope.tenantId, master.id))) {
+        throw new NotFoundException(`No equipment template "${masterId}".`);
+      }
       const fields = pick(master);
       const copy = await insert(m, scope, { ...fields, name: name?.trim() || master.name }, master.id);
       const ratings = await m.getRepository(EquipmentTemplateRating).find({ where: { templateId: master.id } });
@@ -221,11 +227,18 @@ function mapWriteError(error: unknown): never {
     if (e.code === '23505' && e.constraint === 'uq_client_equipment_template_name') {
       throw new ConflictException('This account already has a template with that name.');
     }
-    if (e.code === '23503' && e.constraint === 'fk_equipment_model_template') {
+    // RESTRICT answers 23001 (restrict_violation), NO ACTION 23503; the key is RESTRICT,
+    // so only checking 23503 let the raw database error through to the person.
+    if ((e.code === '23503' || e.code === '23001') && e.constraint === 'fk_equipment_model_template') {
       throw new ConflictException(
         'Machines name this template as their model and read their rated figures from it. '
           + 'Give them another model, or none, before deleting it.',
       );
+    }
+    // The trigger's refusal, reached only if a grant was revoked mid-copy: answered as
+    // the service answers an ungranted model, so the two cannot tell different stories.
+    if (e.code === '42501' && e.constraint === 'model_not_granted') {
+      throw new NotFoundException('No equipment template with that id.');
     }
     if (e.code === '23514' || e.code === '22P02') throw new BadRequestException(`Refused by the database: ${error.message}`);
   }

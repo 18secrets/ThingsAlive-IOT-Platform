@@ -54,7 +54,10 @@
     "justNow": "Just now",
     "placeholder": "Ask about telematics, sensors, errors...",
     "send": "Send",
-    "welcome": "Hello! I am your ThingsAlive Telematics AI Assistant. You can ask me about sensor telemetry thresholds, equipment health, CAN-bus mapping, or device onboarding status.",
+    "charCount": "{{length}} / {{max}} characters",
+    "tooLong": "{{length}} / {{max}} characters. Shorten your message to send it.",
+    "retry": "Try again",
+    "welcome": "Hello! I am your ThingsAlive AI Assistant. Ask me about your machines and sites, your loggers and whether they are reporting, alerts, incidents, and work orders. I can only read; I can't make changes.",
     "prompts": {
       "offline": "Which devices are offline?",
       "dust": "Show Dust Collector status",
@@ -62,6 +65,8 @@
       "highestRisk": "Which machine has the highest risk right now?",
       "serviceDue": "Which machines are due for service?"
     },
+    "promptsBack": "Earlier suggestions",
+    "promptsMore": "More suggestions",
     "topics": {
       "admin": {
         "title": "Admin Console & Sub-tabs",
@@ -81,7 +86,8 @@
       "notConfigured": "The assistant isn't set up on this server yet. Ask your administrator to configure it.",
       "notInAccount": "Ask AI answers inside a client account. Sign in as a user of that account to use it.",
       "allowanceUsed": "This account has used today's assistant allowance. It resets at 05:30 IST (00:00 UTC).",
-      "generic": "The assistant couldn't answer just now. Try again in a moment."
+      "generic": "The assistant couldn't answer just now. Try again in a moment.",
+      "offline": "Couldn't reach the server. Check your connection, then try again."
     },
     "tools": {
       "onboarding_status": "onboarding progress",

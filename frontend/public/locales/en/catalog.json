@@ -669,6 +669,8 @@
     "new": "New model",
     "search": "Search models",
     "copyPick": "Copy a library model…",
+    "noneGiven": "No library models given yet",
+    "noneGivenHint": "Things Alive has not given this account any library models yet. Ask Things Alive to grant the models you need, or add your own with New model.",
     "copy": "Copy to my models",
     "loadFailed": "Models could not be loaded.",
     "empty": "No models yet. Add one with its rated figures and duty curve.",
