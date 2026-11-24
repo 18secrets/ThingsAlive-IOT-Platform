@@ -42,7 +42,7 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   { signal: 'motor_current', unit: 'A', required: true, description: 'Motor current, one-minute average (logger, measured).' },
   { signal: 'motor_current_max', unit: 'A', required: false, description: 'Highest one-second current in the minute: starts and spikes.' },
   { signal: 'input_power', unit: 'kW', required: true, description: 'Input power V × I × PF, one-minute average (F2).' },
-  { signal: 'motor_temperature', unit: 'degC', required: false, description: 'Logger temperature channel, one-minute average.' },
+  { signal: 'motor_temperature', unit: 'degC', required: false, description: 'Logger temperature channel, one-minute average. On the Motor Monitor firmware this is ESTIMATED from current with a thermal model: there is no probe (integration spec, 24 Nov 2026).' },
   { signal: 'motor_speed_est', unit: 'rpm', required: false, description: 'Firmware speed figure. ESTIMATED, not measured (Formula Verification V-02).' },
   { signal: 'engine_running_status', unit: 'dimensionless', required: false,
     description: '1 when the motor ran in the minute (F1: V > 15% of rated, I > 5% of rated, per second). The platform\'s running signal.' },
@@ -66,6 +66,13 @@ export const SIGNALS: { signal: string; unit: string; required: boolean; descrip
   { signal: 'trip_supply', unit: 'trips', required: false, description: 'Stops with the supply under half the rated voltage: supply loss (inferred).' },
   { signal: 'trip_overtemp', unit: 'trips', required: false, description: 'Stops within 25 C of the insulation limit: the relay\'s over-temperature trip (F9, inferred).' },
   { signal: 'water_air_gap', unit: 'dimensionless', required: false, description: 'Water / air-gap sensor reading, stored as sent. Unit and meaning to confirm with the firmware team.' },
+  // The firmware's diagnostic scores (Motor Monitor integration spec, 24 Nov 2026): 0-100,
+  // from current over a rolling 10 s window. Indicators, not confirmed faults, and not
+  // vibration_velocity: nothing that reads mm/s may read these.
+  { signal: 'load_loss_score', unit: 'dimensionless', required: false, description: 'Firmware score 0-100: % drop of real power below the learned healthy power, mean over running seconds. EXPERIMENTAL indicator.' },
+  { signal: 'vibration_score', unit: 'dimensionless', required: false, description: 'Firmware score 0-100: current fluctuation against the learned healthy fluctuation, mean over running seconds. NOT a vibration velocity. EXPERIMENTAL indicator.' },
+  { signal: 'vibration_score_max', unit: 'dimensionless', required: false, description: 'Highest firmware vibration score in the minute\'s running seconds. EXPERIMENTAL indicator.' },
+  { signal: 'air_gap_score', unit: 'dimensionless', required: false, description: 'Firmware score 0-100: 60% load loss + 40% vibration, mean over running seconds. EXPERIMENTAL indicator.' },
 ];
 
 export interface FormulaRow {
