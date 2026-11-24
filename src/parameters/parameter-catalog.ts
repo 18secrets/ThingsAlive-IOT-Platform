@@ -70,6 +70,17 @@ export const OPERATIONAL_PARAMETERS: readonly OperationalParameter[] = [
     name: 'shield_due_soon_days', unit: 'd', kind: 'number', costTyped: false,
     description: 'How many days before an evidence record falls due it reads "due soon" on ThingsShield.',
   },
+  // The pump logger's P-code lines (Motor Monitor integration spec, 24 Nov 2026: "all
+  // thresholds configurable"). Unset, each is the spec's and the device's own value
+  // (p-code-rules.ts DEFAULT_THRESHOLDS). Not the D56 ratings: those describe the motor,
+  // these describe when to warn about it, and a model's voltage_warn_low must not move
+  // P101 for every machine of that model without anyone deciding it should.
+  pcodeThreshold('pcode_low_voltage', 'V', 'P101 Low voltage is raised below this supply voltage (supply present). Default 190.'),
+  pcodeThreshold('pcode_high_voltage', 'V', 'P102 High voltage is raised above this supply voltage. Default 250.'),
+  pcodeThreshold('pcode_overheat_temp', 'degC', 'P207 Winding overheating is raised above this estimated temperature. Default 70.'),
+  pcodeThreshold('pcode_dry_run_ratio', null, 'P401 Dry run: running current below this multiple of rated current. Default 0.8.'),
+  pcodeThreshold('pcode_overload_ratio', null, 'P702 Overload: running current above this multiple of rated current. Default 1.2.'),
+  pcodeThreshold('pcode_locked_rotor_ratio', null, 'P708 Locked rotor: running current at or above this multiple of rated current. Default 3.'),
 
   // Motor and pump ratings (D56). Every motor threshold is a ratio to one of these, so
   // unlike everything above they compile in their unit: `avg(motor_current) /
@@ -100,6 +111,10 @@ export const OPERATIONAL_PARAMETERS: readonly OperationalParameter[] = [
   motorRating('install_head', 'm', 'Static head at this installation, measured at commissioning.'),
   motorRating('ambient_temp_reference', 'degC', 'Ambient temperature to assume where none is measured on site.'),
 ];
+
+function pcodeThreshold(name: string, unit: string | null, description: string): OperationalParameter {
+  return { name, unit, kind: 'number', costTyped: false, description };
+}
 
 function motorRating(name: string, unit: string | null, description: string): OperationalParameter {
   return { name, unit, kind: 'number', costTyped: false, compilesWithUnit: true, description };
