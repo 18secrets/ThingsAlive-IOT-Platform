@@ -16,9 +16,21 @@ import { mappedImeisFor } from '../onboarding/mapped-devices';
  * Connection is the newest reading's age, not a verdict: reporting within five minutes is
  * online, within thirty delayed, older offline. Thresholds a backend owner may tune per
  * device type; they are the right order for loggers that report about once a minute.
+ * A motor logger that uploads in five-minute bursts is judged on its uploads instead
+ * (LOGGER_OFFLINE_SECONDS).
  */
 export const ONLINE_SECONDS = 5 * 60;
 export const DELAYED_SECONDS = 30 * 60;
+/**
+ * A batch-uploading motor logger (Motor Monitor integration spec, 24 Nov 2026) is judged
+ * on its uploads, not its readings. It holds five minutes of readings and sends them in
+ * one burst, and the motor job places them a pass later, so its newest reading is
+ * routinely more than five minutes old on a logger working perfectly: the thresholds
+ * above showed every one of them "delayed" between uploads. The spec's rule is the
+ * device's own: no successful POST for about ten minutes, two missed bursts, is offline.
+ * There is no "delayed" in between; one missed burst is still inside the window.
+ */
+export const LOGGER_OFFLINE_SECONDS = 10 * 60;
 /** A signal not heard from in this long is shown greyed: stale, not current. */
 export const SIGNAL_STALE_SECONDS = 15 * 60;
 /** How far back a newest value is looked for. */
@@ -44,6 +56,8 @@ export interface MachineLive {
   asOf: string;
   connection: LiveConnection;
   lastReadingAt: string | null;
+  /** The newest upload the receiver stored from a motor logger on this machine; null without one. */
+  lastUploadAt: string | null;
   /** From the machine's own running or ignition signal; null when it has none. */
   running: boolean | null;
   location: { lat: number; lng: number; at: string; ageSeconds: number } | null;
@@ -67,7 +81,7 @@ export async function readMachineLive(
   const imeis = await mappedImeisFor(m, tenantId, ref.externalId, now);
   const base = { asOf: now.toISOString(), legacyAsked: !!legacy?.connected };
   if (imeis.length === 0) {
-    return { ...base, connection: 'no-device', lastReadingAt: null, running: null, location: null, signals: [] };
+    return { ...base, connection: 'no-device', lastReadingAt: null, lastUploadAt: null, running: null, location: null, signals: [] };
   }
 
   const local: Reading[] = (await m.query(
@@ -97,9 +111,25 @@ export async function readMachineLive(
 
   const all = [...newest.values()];
   const last = all.reduce<Date | null>((a, r) => (!a || r.at > a ? r.at : a), null);
-  const lastAge = last ? age(last) : null;
-  const connection: LiveConnection = lastAge === null ? 'offline'
-    : lastAge <= ONLINE_SECONDS ? 'online' : lastAge <= DELAYED_SECONDS ? 'delayed' : 'offline';
+  // Only the receiver writes motor_upload_log, so a row there is what makes a device a
+  // batch-uploading logger. Asked by the machine's own mapped devices, never by tenant:
+  // the table has no tenant, and these names are already this account's.
+  const uploads: { deviceId: string; at: Date }[] = await m.query(
+    `SELECT "device_id" AS "deviceId", max("received_at") AS "at" FROM "motor_upload_log"
+      WHERE "device_id" = ANY($1::text[]) GROUP BY 1`, [imeis]);
+  const loggers = new Set(uploads.map((u) => u.deviceId));
+  const lastUpload = uploads.reduce<Date | null>((a, u) => (!a || new Date(u.at) > a ? new Date(u.at) : a), null);
+  // A logger's own readings say nothing here: they are always older than its upload.
+  const lastOther = [...local, ...fromLegacy].filter((r) => !loggers.has(r.imei))
+    .reduce<Date | null>((a, r) => (!a || r.at > a ? r.at : a), null);
+  const byReadings: LiveConnection | null = lastOther === null ? null
+    : age(lastOther) <= ONLINE_SECONDS ? 'online' : age(lastOther) <= DELAYED_SECONDS ? 'delayed' : 'offline';
+  const byUploads: LiveConnection | null = lastUpload === null ? null
+    : age(lastUpload) <= LOGGER_OFFLINE_SECONDS ? 'online' : 'offline';
+  // A machine with a logger and another device is as connected as the better of the two.
+  const rank: Record<LiveConnection, number> = { 'no-device': 0, offline: 1, delayed: 2, online: 3 };
+  const connection: LiveConnection = [byReadings, byUploads]
+    .reduce<LiveConnection>((best, c) => (c && rank[c] > rank[best] ? c : best), 'offline');
 
   const runningSignal = RUNNING_SIGNALS.map((s) => newest.get(s)).find(Boolean);
   const running = runningSignal && typeof runningSignal.value === 'number' ? runningSignal.value > 0 : null;
@@ -118,5 +148,8 @@ export async function readMachineLive(
       ageSeconds: age(r.at), stale: age(r.at) > SIGNAL_STALE_SECONDS, source: r.source,
     }));
 
-  return { ...base, connection, lastReadingAt: last?.toISOString() ?? null, running, location, signals };
+  return {
+    ...base, connection, lastReadingAt: last?.toISOString() ?? null, lastUploadAt: lastUpload?.toISOString() ?? null,
+    running, location, signals,
+  };
 }
