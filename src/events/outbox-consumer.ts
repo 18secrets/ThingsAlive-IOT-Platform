@@ -8,7 +8,10 @@ import { DomainEvent } from './domain-event.entity';
  * this list is refused at construction: a typo in a handler's `eventType` would
  * otherwise register a consumer that never claims anything, and look configured.
  */
-export const KNOWN_EVENT_TYPES = ['scenario.activated.v1', 'tenant.provisioned.v1', 'incident.escalated.v1'] as const;
+export const KNOWN_EVENT_TYPES = [
+  'scenario.activated.v1', 'tenant.provisioned.v1', 'incident.escalated.v1',
+  'motor.fault_code_raised.v1', 'motor.logger_offline.v1',
+] as const;
 export type KnownEventType = (typeof KNOWN_EVENT_TYPES)[number];
 
 /** What a handler decided about one event. */

@@ -6,6 +6,7 @@ import { runTenantSpanning } from '../scope/tenant-session';
 import { tryTakePassLock } from '../shift/services/pass-lock';
 import { RUNNING_SIGNAL } from '../shift/services/running-status';
 import { AlertService } from '../alert/services/alert.service';
+import { LOGGER_OFFLINE_SECONDS } from '../page/live-machine';
 import { recordMotorFaults } from './motor-fault-codes';
 
 /** Its own lock, not the shift runner's: the two may run side by side. */
@@ -74,6 +75,8 @@ export interface PassSummary {
   alerts?: number;
   /** Fault-code (P-code) episodes opened and cleared from these readings. */
   faults?: { opened: number; cleared: number };
+  /** Loggers newly found silent past LOGGER_OFFLINE_SECONDS, an email queued for each. */
+  offline?: number;
 }
 
 interface Owner { tenant_id: string; equipmentExternalId: string | null }
@@ -194,7 +197,11 @@ export class MotorIngestService {
     // After the commit, so the minutes just written are what the rules read.
     const alerts = await this.liveAlerts([...touched.values()], now);
     const faults = await this.faultCodes([...touched.values()]);
-    return { ...summary, ...(alerts ? { alerts } : {}), ...(faults.opened || faults.cleared ? { faults } : {}) };
+    const offline = await this.offlineLoggers(now);
+    return {
+      ...summary, ...(alerts ? { alerts } : {}), ...(faults.opened || faults.cleared ? { faults } : {}),
+      ...(offline ? { offline } : {}),
+    };
   }
 
   /**
@@ -313,6 +320,55 @@ export class MotorIngestService {
   // ----------------------------------------------------------------------------------
 
   /** The account a logger is assigned to, and the machine it is claimed onto, if any. */
+  /**
+   * Loggers gone quiet (Motor Monitor integration spec, 24 Nov 2026: alert "when … a
+   * device goes offline"): no upload for longer than the Live view's own offline line,
+   * on a machine they are mapped to. One event per silence, keyed by the logger and its
+   * last upload: the unique index (MotorAlertEvents) makes a second pass, or a second
+   * process, insert nothing, and the next silence after it comes back is a new event.
+   *
+   * Only a silence that began in the last day. A logger unplugged last month is not
+   * news, and without this bound the first pass after this ships would email about
+   * every logger ever retired. Never fatal: the readings are stored either way.
+   */
+  private async offlineLoggers(now: Date): Promise<number> {
+    try {
+      return await runTenantSpanning(this.ds, 'motor loggers gone offline', async (m) => {
+        const silent: { deviceId: string; last: Date; tenantId: string; externalId: string; sourceSystem: string }[] = await m.query(
+          `SELECT u."device_id" AS "deviceId", u."last", i."tenant_id" AS "tenantId",
+                  i."equipment_external_id" AS "externalId", p."source_system" AS "sourceSystem"
+             FROM (SELECT "device_id", max("received_at") AS "last" FROM "motor_upload_log" GROUP BY 1) u
+             JOIN "device_inventory" i ON i."imei" = u."device_id" AND i."state" = 'assigned' AND i."equipment_external_id" IS NOT NULL
+             CROSS JOIN LATERAL (
+               SELECT "source_system" FROM "equipment_profile"
+                WHERE "tenant_id" = i."tenant_id" AND "external_id" = i."equipment_external_id"
+                ORDER BY ("source_system" = 'ta-2.0') DESC LIMIT 1) p
+            WHERE u."last" < $1::timestamptz - make_interval(secs => $2)
+              AND u."last" > $1::timestamptz - interval '1 day'`,
+          [now, LOGGER_OFFLINE_SECONDS]);
+        let queued = 0;
+        for (const s of silent) {
+          const last = new Date(s.last);
+          const rows = await m.query(
+            `INSERT INTO "domain_event" ("event_type", "tenant_id", "subject", "payload", "occurred_at")
+             VALUES ('motor.logger_offline.v1', $1, $2, $3::jsonb, $4)
+             ON CONFLICT ("event_type", "tenant_id", "subject")
+               WHERE "event_type" IN ('motor.fault_code_raised.v1', 'motor.logger_offline.v1') DO NOTHING
+             RETURNING "id"`,
+            [s.tenantId, `${s.deviceId}@${last.toISOString()}`, JSON.stringify({
+              deviceId: s.deviceId, machine: { sourceSystem: s.sourceSystem, externalId: s.externalId }, lastUploadAt: last.toISOString(),
+            }), new Date(last.getTime() + LOGGER_OFFLINE_SECONDS * 1000)]);
+          if (rows.length) queued += 1;
+        }
+        if (queued) this.logger.log(`${queued} motor logger(s) went offline; alert queued.`);
+        return queued;
+      });
+    } catch (err) {
+      this.logger.error(`Offline check failed: ${(err as Error).message}`);
+      return 0;
+    }
+  }
+
   private async owner(m: EntityManager, deviceId: string): Promise<Owner | null> {
     const [row] = await m.query(
       `SELECT "tenant_id", "equipment_external_id" FROM "device_inventory"

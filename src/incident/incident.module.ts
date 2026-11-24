@@ -4,6 +4,7 @@ import { AlertModule } from '../alert/alert.module';
 import { OutboxConsumer } from '../events/outbox-consumer';
 import { IdentityModule } from '../identity/identity.module';
 import { MailModule } from '../mail/mail.module';
+import { MotorFaultNotifyHandler, MotorOfflineNotifyHandler } from '../motor-ingest/motor-alert-notify.handler';
 import { WorkModule } from '../work/work.module';
 import { IncidentController } from './incident.controller';
 import { IncidentEscalationScheduler } from './incident-escalation.scheduler';
@@ -18,13 +19,17 @@ import { IncidentService } from './incident.service';
   controllers: [IncidentController],
   providers: [
     IncidentService, IncidentRecordService, IncidentEscalationScheduler,
-    IncidentNotifyHandler, IncidentNotifyScheduler,
-    // The outbox's one consumer, with its handlers listed here. The next event type
-    // with a handler moves this to the events module and adds itself to the list.
+    IncidentNotifyHandler, IncidentNotifyScheduler, MotorFaultNotifyHandler, MotorOfflineNotifyHandler,
+    // The outbox's one consumer, with its handlers listed here. The pump logger's alerts
+    // join it rather than starting a second consumer: one drain, one switch
+    // (INCIDENT_NOTIFY_ENABLED), one backoff. Their handlers need only mail and the
+    // scope resolver, both already here; moving the consumer to the events module is
+    // the next step if a handler ever needs something this module does not have.
     {
       provide: OutboxConsumer,
-      useFactory: (ds: DataSource, escalated: IncidentNotifyHandler) => new OutboxConsumer(ds, [escalated]),
-      inject: [DataSource, IncidentNotifyHandler],
+      useFactory: (ds: DataSource, escalated: IncidentNotifyHandler, fault: MotorFaultNotifyHandler, offline: MotorOfflineNotifyHandler) =>
+        new OutboxConsumer(ds, [escalated, fault, offline]),
+      inject: [DataSource, IncidentNotifyHandler, MotorFaultNotifyHandler, MotorOfflineNotifyHandler],
     },
   ],
   exports: [IncidentRecordService],
