@@ -8,6 +8,13 @@ import {
 interface EpisodeRow { id: string; code: string; status: 'active' | 'cleared'; lastSeenAt: Date; clearedAt: Date | null }
 
 /**
+ * A code that clears and comes back within this long is the same trouble, not news: a
+ * pump hunting around the low-voltage line would otherwise email everyone each time it
+ * crossed. Its episodes are still recorded; only the email is held back.
+ */
+export const FAULT_EMAIL_QUIET_MINUTES = 30;
+
+/**
  * Turns a logger's newly placed readings into fault-code episodes on the machine it is
  * claimed onto: opened when the device would raise the code, seen while it holds,
  * cleared at the first reading without it — the device's own lifecycle, not the vehicle
@@ -74,6 +81,12 @@ export async function recordMotorFaults(
       if (e.status === 'active') open.set(e.code, { id: e.id, lastSeen: new Date(e.lastSeenAt), dirty: false });
     }
 
+    // When each code last cleared on this machine, for the quiet period above.
+    const lastCleared = new Map<string, number>();
+    for (const e of episodes) {
+      if (e.clearedAt) lastCleared.set(e.code, Math.max(lastCleared.get(e.code) ?? 0, new Date(e.clearedAt).getTime()));
+    }
+
     let opened = 0;
     let cleared = 0;
     for (const { at, active } of deviceFaults(samples, typeof rated === 'number' ? rated : null, thresholds)) {
@@ -90,6 +103,20 @@ export async function recordMotorFaults(
           );
           open.set(p.code, { id: row.id, lastSeen: at, dirty: false });
           opened += 1;
+          // In the same transaction as the episode, so an email is queued for exactly the
+          // episodes that exist (motor-alert-notify.handler.ts). Its time is the reading's:
+          // the outbox drops what is over a day old, so a backlog after an outage opens
+          // its episodes without emailing about last week.
+          const quietSince = lastCleared.get(p.code);
+          if (quietSince === undefined || at.getTime() - quietSince > FAULT_EMAIL_QUIET_MINUTES * 60_000) {
+            await m.query(
+              `INSERT INTO "domain_event" ("event_type", "tenant_id", "subject", "payload", "occurred_at")
+               VALUES ('motor.fault_code_raised.v1', $1, $2, $3::jsonb, $4)`,
+              [machine.tenantId, row.id, JSON.stringify({
+                episodeId: row.id, code: p.code, title: p.title, severity: p.severity, deviceId: machine.deviceId,
+                machine: { sourceSystem: profile.sourceSystem, externalId: machine.externalId }, at: at.toISOString(),
+              }), at]);
+          }
         } else if (active.has(p.code) && episode) {
           episode.lastSeen = at;
           episode.dirty = true;
@@ -99,6 +126,7 @@ export async function recordMotorFaults(
                 SET "status" = 'cleared', "cleared_at" = $1, "last_seen_at" = $2, "updated_at" = now()
               WHERE "id" = $3`, [at, episode.lastSeen, episode.id]);
           open.delete(p.code);
+          lastCleared.set(p.code, at.getTime());
           cleared += 1;
         }
       }
