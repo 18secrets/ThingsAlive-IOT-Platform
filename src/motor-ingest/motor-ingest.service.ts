@@ -21,6 +21,9 @@ export const MAX_READINGS_PER_PASS = 20_000;
  */
 export const LIVE_ALERT_LOOKBACK_MS = 60 * 60_000;
 
+/** The logger's own "running" (p-code-rules.ts isRunning), as SQL over a per-second row. */
+const SPEC_RUNNING = `"current_a" > 0.04 AND "voltage_v" > 30`;
+
 /**
  * What one minute of a logger becomes in `telemetry_reading`. Formulas, alerts and KPIs
  * read these, not the per-second rows: a reading a second is ~430,000 telemetry rows a
@@ -51,6 +54,16 @@ const MINUTE_SIGNALS: readonly { signal: string; unit: string | null; expr: stri
   { signal: 'device_load_pct', unit: 'dimensionless', expr: 'avg("load_pct")' },
   // Stored as sent until its unit and meaning are confirmed; nothing reads it yet.
   { signal: 'water_air_gap', unit: null, expr: 'avg("water_air_gap")' },
+  // The firmware's diagnostic scores, 0-100 (Motor Monitor integration spec, 24 Nov 2026):
+  // indicators the spec calls experimental, never sensor readings, so none of them shares
+  // a name with a measured signal. The firmware holds each at 0 while the pump is stopped,
+  // so a minute's mean over every second would halve a pump that ran for thirty of them;
+  // the mean is over the running seconds only, by the spec's own definition of running
+  // (the one the P-codes use), and a minute with none writes no score.
+  { signal: 'load_loss_score', unit: 'dimensionless', expr: `avg("load_loss") FILTER (WHERE ${SPEC_RUNNING})` },
+  { signal: 'vibration_score', unit: 'dimensionless', expr: `avg("vibration_score") FILTER (WHERE ${SPEC_RUNNING})` },
+  { signal: 'vibration_score_max', unit: 'dimensionless', expr: `max("vibration_score") FILTER (WHERE ${SPEC_RUNNING})` },
+  { signal: 'air_gap_score', unit: 'dimensionless', expr: `avg("air_gap_score") FILTER (WHERE ${SPEC_RUNNING})` },
 ];
 
 export interface PassSummary {
