@@ -366,17 +366,26 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
 
 
 def _store_bulk(body: dict, received_at: datetime):
-    """Write to all configured DB targets. Raises RuntimeError on all-failed."""
+    """
+    Write to every configured DB target. Raises if any of them failed.
+
+    The ACK is what makes the device free its flash, so "status":"ok" may only follow a
+    commit in every target it is meant to reach. This used to raise only when there was
+    a single target: with UPDATE_DEV_DB or UPDATE_QA_DB on, a batch every database had
+    refused was still ACKed, and the device deleted records nobody held. A retry after a
+    partial failure is safe: each target inserts ON CONFLICT (device_id, seq) DO NOTHING,
+    so the targets that already committed store nothing twice.
+    """
     targets = _get_target_db_configs()
     if not targets:
         raise RuntimeError("No valid DB targets configured")
 
-    last_exc = None
+    failed = []
     for env_name, db_cfg in targets:
         try:
             _store_to_db(env_name, db_cfg, body, received_at)
         except Exception as exc:
-            last_exc = exc
+            failed.append((env_name, exc))
             print(
                 f"[ERROR][{env_name}] motor DB write failed "
                 f"device={body.get('device_id')} batch={body.get('batch_id')}: {exc}"
@@ -384,8 +393,9 @@ def _store_bulk(body: dict, received_at: datetime):
             if DEBUG_MOTOR:
                 traceback.print_exc()
 
-    if last_exc and len(targets) == 1:
-        raise last_exc
+    if failed:
+        names = ", ".join(name for name, _ in failed)
+        raise RuntimeError(f"motor DB write failed in {names}") from failed[-1][1]
 
 
 # ---------------------------
