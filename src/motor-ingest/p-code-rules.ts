@@ -54,16 +54,52 @@ export const FAULT_LOOKBACK_SECONDS = 60;
 
 export interface FaultSample { at: Date; voltage: number; current: number; temperature: number }
 
+/**
+ * The lines each code is judged against. The integration spec (24 Nov 2026) says "all
+ * thresholds configurable"; these defaults are its table, and the device's own. An
+ * account, site, class or machine sets its own through the operational parameters of
+ * the same name (parameter-catalog.ts), resolved like any other (motor-fault-codes.ts).
+ * The current lines are multiples of the rated current, as the device's are.
+ */
+export interface PCodeThresholds {
+  /** P101 below this, with the supply present (> 30 V). V. */
+  lowVoltage: number;
+  /** P102 above this. V. */
+  highVoltage: number;
+  /** P207 above this estimated winding temperature. °C. */
+  overheatTemp: number;
+  /** P401 below this multiple of rated current while running. */
+  dryRunRatio: number;
+  /** P702 above this multiple. */
+  overloadRatio: number;
+  /** P708 at or above this multiple. */
+  lockedRotorRatio: number;
+}
+
+export const DEFAULT_THRESHOLDS: Readonly<PCodeThresholds> = {
+  lowVoltage: 190, highVoltage: 250, overheatTemp: 70, dryRunRatio: 0.8, overloadRatio: 1.2, lockedRotorRatio: 3,
+};
+
+/** Each threshold's operational parameter (parameter-catalog.ts). */
+export const THRESHOLD_PARAMETERS: Readonly<Record<keyof PCodeThresholds, string>> = {
+  lowVoltage: 'pcode_low_voltage',
+  highVoltage: 'pcode_high_voltage',
+  overheatTemp: 'pcode_overheat_temp',
+  dryRunRatio: 'pcode_dry_run_ratio',
+  overloadRatio: 'pcode_overload_ratio',
+  lockedRotorRatio: 'pcode_locked_rotor_ratio',
+};
+
 const isRunning = (s: FaultSample) => s.current > 0.04 && s.voltage > 30;
 
-function condition(code: string, s: FaultSample, rated: number | null): boolean {
+function condition(code: string, s: FaultSample, rated: number | null, t: PCodeThresholds): boolean {
   switch (code) {
-    case 'P101': return s.voltage > 30 && s.voltage < 190; // supply present, but low
-    case 'P102': return s.voltage > 250;
-    case 'P207': return s.temperature > 70;
-    case 'P401': return rated !== null && isRunning(s) && s.current < 0.8 * rated;
-    case 'P702': return rated !== null && isRunning(s) && s.current > 1.2 * rated;
-    case 'P708': return rated !== null && isRunning(s) && s.current >= 3 * rated;
+    case 'P101': return s.voltage > 30 && s.voltage < t.lowVoltage; // supply present, but low
+    case 'P102': return s.voltage > t.highVoltage;
+    case 'P207': return s.temperature > t.overheatTemp;
+    case 'P401': return rated !== null && isRunning(s) && s.current < t.dryRunRatio * rated;
+    case 'P702': return rated !== null && isRunning(s) && s.current > t.overloadRatio * rated;
+    case 'P708': return rated !== null && isRunning(s) && s.current >= t.lockedRotorRatio * rated;
     default: return false;
   }
 }
@@ -72,7 +108,9 @@ function condition(code: string, s: FaultSample, rated: number | null): boolean 
  * Which codes the device would hold active at each sample, oldest first. Pure, so the
  * simulator can print what the device would say about the readings it sends.
  */
-export function deviceFaults(samples: readonly FaultSample[], ratedCurrent: number | null): { at: Date; active: Set<string> }[] {
+export function deviceFaults(
+  samples: readonly FaultSample[], ratedCurrent: number | null, thresholds: PCodeThresholds = DEFAULT_THRESHOLDS,
+): { at: Date; active: Set<string> }[] {
   const streak = new Map<string, number>();
   let startedAt: number | null = null;
   let prev: FaultSample | null = null;
@@ -86,7 +124,7 @@ export function deviceFaults(samples: readonly FaultSample[], ratedCurrent: numb
     const inGrace = startedAt !== null && t - startedAt < START_GRACE_SECONDS * 1000;
     const active = new Set<string>();
     for (const p of P_CODES) {
-      const holds = !(p.currentBased && inGrace) && condition(p.code, s, ratedCurrent);
+      const holds = !(p.currentBased && inGrace) && condition(p.code, s, ratedCurrent, thresholds);
       const n = holds ? (streak.get(p.code) ?? 0) + 1 : 0;
       streak.set(p.code, n);
       if (n >= ACTIVE_AFTER_SAMPLES) active.add(p.code);

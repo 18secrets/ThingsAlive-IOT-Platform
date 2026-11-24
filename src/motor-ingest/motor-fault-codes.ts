@@ -1,7 +1,9 @@
 import { DataSource } from 'typeorm';
 import { chainForEquipment, resolveParameters } from '../parameters/services/parameter-resolution';
 import { withTenantId } from '../scope/tenant-session';
-import { FAULT_LOOKBACK_SECONDS, FaultSample, P_CODES, deviceFaults } from './p-code-rules';
+import {
+  DEFAULT_THRESHOLDS, FAULT_LOOKBACK_SECONDS, FaultSample, P_CODES, PCodeThresholds, THRESHOLD_PARAMETERS, deviceFaults,
+} from './p-code-rules';
 
 interface EpisodeRow { id: string; code: string; status: 'active' | 'cleared'; lastSeenAt: Date; clearedAt: Date | null }
 
@@ -35,8 +37,15 @@ export async function recordMotorFaults(
          FROM "equipment_profile" WHERE "tenant_id" = $1 AND "external_id" = $2
         ORDER BY ("source_system" = 'ta-2.0') DESC LIMIT 1`, [machine.tenantId, machine.externalId]);
     if (!profile) return { opened: 0, cleared: 0 };
-    const ratings = await resolveParameters(m, machine.tenantId, chainForEquipment(profile), ['rated_current'], new Date());
+    const names = Object.values(THRESHOLD_PARAMETERS);
+    const ratings = await resolveParameters(m, machine.tenantId, chainForEquipment(profile), ['rated_current', ...names], new Date());
     const rated = ratings.get('rated_current')?.value;
+    // Each line the machine's own where one is set at any scope, the spec's otherwise.
+    const thresholds = { ...DEFAULT_THRESHOLDS };
+    for (const [key, name] of Object.entries(THRESHOLD_PARAMETERS) as [keyof PCodeThresholds, string][]) {
+      const v = ratings.get(name)?.value;
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) thresholds[key] = v;
+    }
 
     const samples: FaultSample[] = (await m.query(
       `SELECT "reading_at" AS "at", "voltage_v"::float8 AS "voltage", "current_a"::float8 AS "current",
@@ -67,7 +76,7 @@ export async function recordMotorFaults(
 
     let opened = 0;
     let cleared = 0;
-    for (const { at, active } of deviceFaults(samples, typeof rated === 'number' ? rated : null)) {
+    for (const { at, active } of deviceFaults(samples, typeof rated === 'number' ? rated : null, thresholds)) {
       for (const p of P_CODES) {
         if (at.getTime() <= (done.get(p.code) ?? 0)) continue;
         const episode = open.get(p.code);
