@@ -157,10 +157,20 @@ export function operatingIntervals(
  */
 export function computeAvailability(
   shifts: readonly ShiftDefinition[], readings: WindowReading[], period: Period,
+  measurableFrom: Date | null = null,
 ): Availability {
   const observed = observedIn(readings, period);
 
-  const scheduled = scheduledIntervals(shifts, period);
+  const everScheduled = scheduledIntervals(shifts, period);
+  // Only the part of the schedule a logger was on the machine for (`firstLoggerBoundAt`).
+  // Before that nothing could have shown it running, so counting those shifts as downtime
+  // charged a machine for the days before anyone fitted it: CROMPTON-01's first fleet row,
+  // 25 Nov 2026, was 168 h of downtime for a logger bound that morning. A logger that went
+  // quiet after it was fitted still counts as downtime, as the header says.
+  const start = measurableFrom?.getTime() ?? -Infinity;
+  const scheduled = everScheduled
+    .map((i) => ({ start: Math.max(i.start, start), end: i.end }))
+    .filter((i) => i.end > i.start);
   const scheduledHours = round(scheduled.reduce((sum, i) => sum + (i.end - i.start), 0) / HOUR_MS);
 
   // Measured whether or not there is a schedule: a machine running with no shift
@@ -169,6 +179,13 @@ export function computeAvailability(
     ? round(hoursIn(engineOn(observed, complement(scheduled, period))))
     : null;
 
+  if (everScheduled.length && scheduledHours === 0) {
+    // Shifts there were, but no logger yet for any of them: unmeasured, not unconfigured.
+    return {
+      scheduledHours: 0, uptimeHours: null, downtimeHours: null, unscheduledRunningHours,
+      availability: null, readiness: 'not_available', reason: 'no_readings',
+    };
+  }
   if (scheduledHours === 0) {
     return {
       scheduledHours: 0, uptimeHours: null, downtimeHours: null, unscheduledRunningHours,
@@ -185,7 +202,7 @@ export function computeAvailability(
     };
   }
 
-  const uptimeHours = round(hoursIn(operatingIntervals(shifts, readings, period)));
+  const uptimeHours = round(hoursIn(engineOn(observed, scheduled)));
   return {
     scheduledHours,
     uptimeHours,

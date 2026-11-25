@@ -100,15 +100,33 @@ export class AvailabilityService {
           && d.validFrom <= period.to && (d.validTo === null || d.validTo > period.from))
         .map((d) => d.imei!))];
       const readings = await readEngineState(this.telemetry, m, tenantId, imeis, period);
+      const bound = devices.filter((d) => d.externalId === p.externalId && mine(d) && !!d.imei);
+      const measurableFrom = bound.length ? new Date(Math.min(...bound.map((d) => d.validFrom.getTime()))) : null;
 
       out.push({
         sourceSystem: p.sourceSystem,
         externalId: p.externalId,
-        ...computeAvailability(machineShifts, readings, period),
+        ...computeAvailability(machineShifts, readings, period, measurableFrom),
       });
     }
     return out;
   }
+}
+
+/**
+ * When a logger was first bound to this machine: the start of the schedule availability
+ * may judge (`computeAvailability`). Null when none ever was. Exported so OEE clips its
+ * scheduled minutes at the same instant, keeping the two denominators equal.
+ */
+export async function firstLoggerBoundAt(
+  m: EntityManager, tenantId: string, profile: { sourceSystem: string; externalId: string },
+): Promise<Date | null> {
+  const [row] = await m.query(
+    `SELECT min("valid_from") AS "from" FROM "signal_binding_version"
+      WHERE "tenant_id" = $1 AND "source_system" = $2 AND "external_id" = $3
+        AND "imei" IS NOT NULL AND "is_primary" AND "status" = 'active'`,
+    [tenantId, profile.sourceSystem, profile.externalId]);
+  return row?.from ? new Date(row.from) : null;
 }
 
 /**

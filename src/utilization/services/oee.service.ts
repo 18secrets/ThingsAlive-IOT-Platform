@@ -13,7 +13,7 @@ import { SignalBindingVersion } from '../../signal-binding/entities/signal-bindi
 import { bindingSegments, boundImeis, overlapping } from '../../signal-binding/services/signal-binding.service';
 import { BreakdownEvent } from '../entities/breakdown-event.entity';
 import { computeAvailability, Interval, operatingIntervals, scheduledIntervals } from './availability';
-import { readEngineState } from './availability.service';
+import { firstLoggerBoundAt, readEngineState } from './availability.service';
 import {
   detectBreakdowns, FactorState, fuelBurned, oeeOf, overlapMinutes, performanceOf, qualityOf, Readiness,
   Sample, subtract,
@@ -276,7 +276,7 @@ export class OeeService {
     // ------------------------------------------------------------- availability
     const imeis = await this.availabilityImeis(m, tenantId, profile, period);
     const engine = await readEngineState(this.reader, m, tenantId, imeis, period);
-    const avail = computeAvailability(shifts, engine, period);
+    const avail = computeAvailability(shifts, engine, period, await firstLoggerBoundAt(m, tenantId, profile));
     const scheduledMinutes = avail.scheduledHours * 60;
     const availableMinutes = avail.uptimeHours === null ? null : avail.uptimeHours * 60;
     const availability: OeeResult['availability'] = {
