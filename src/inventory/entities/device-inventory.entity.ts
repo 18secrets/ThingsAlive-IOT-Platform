@@ -84,6 +84,13 @@ export class DeviceInventory {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  /**
+   * The cellular modem's own IMEI, when `imei` above is a name the firmware chose
+   * (`MOTOR_001`). A label: uploads are matched on `imei`, never on this.
+   */
+  @Column({ name: 'modem_imei', type: 'text', nullable: true })
+  modemImei: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

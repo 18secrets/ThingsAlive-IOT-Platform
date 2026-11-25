@@ -58,6 +58,13 @@ export class UpdateDeviceDto {
 
   @IsOptional() @IsString()
   notes?: string | null;
+
+  /**
+   * The modem's 15-digit IMEI, when `imei` is a name the firmware chose. Settable in any
+   * state: uploads are not matched on it. `null` clears it.
+   */
+  @IsOptional() @IsString()
+  modemImei?: string | null;
 }
 
 export class AssignDto {
@@ -150,7 +157,7 @@ export class InventoryController {
 
   @Patch('devices/:imei')
   @Requires('device.manage')
-  @ApiOperation({ summary: 'Correct a device\'s IMEI (never left stock), model, tool profile (in stock only), batch or notes' })
+  @ApiOperation({ summary: 'Correct a device\'s IMEI (never left stock), model, tool profile (in stock only), batch, notes or modem IMEI' })
   updateDevice(@CurrentScope() scope: RequestScope, @Param('imei') imei: string, @Body() body: UpdateDeviceDto) {
     return this.inventory.updateDevice(scope, imei, body);
   }

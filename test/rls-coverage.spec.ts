@@ -101,6 +101,7 @@ describeDb('row-level security coverage', () => {
     uq_user_invitation_token: 'a token hash must be unique everywhere it could be presented',
     uq_app_user_external: 'an upstream user account maps to exactly one person here',
     uq_device_inventory_imei: 'the device pool is Things Alive stock, not a customer table',
+    uq_device_inventory_modem_imei: 'a modem IMEI is one physical modem, whichever account holds the device',
     uq_tenant_map_source: 'the table that decides which account an upstream client is',
     uq_equipment_projection_external: 'mirrors one upstream system, whose ids are its own',
     uq_device_projection_external: 'mirrors one upstream system, whose ids are its own',

@@ -358,10 +358,17 @@ export class InventoryService {
    * The IMEI itself can be corrected while the device has never been anywhere
    * (TC_152); the database holds that rule (ImeiCorrection), and the correction is the
    * one edit that is recorded, because the device is now known by another number.
+   *
+   * The modem IMEI is a label like the notes, settable in any state: uploads are matched
+   * on `imei`, so changing it moves nothing. Its format and its one-device-per-modem rule
+   * are the database's (DeviceModemImei); this only words the refusal.
    */
   async updateDevice(
     scope: RequestScope, imei: string,
-    patch: { imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null; notes?: string | null },
+    patch: {
+      imei?: string; model?: string | null; toolMappingId?: string | null; batchRef?: string | null;
+      notes?: string | null; modemImei?: string | null;
+    },
   ): Promise<DeviceInventory> {
     this.requirePlatform(scope, 'edit devices');
     return runTenantSpanning(this.ds, `inventory edit by ${scope.userId}`, async (m) => {
@@ -386,7 +393,9 @@ export class InventoryService {
       }
       const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
       const model = text(patch.model); const batchRef = text(patch.batchRef); const notes = text(patch.notes);
+      const modemImei = text(patch.modemImei);
       if (model !== undefined) device.model = model;
+      if (modemImei !== undefined) device.modemImei = modemImei;
       if (batchRef !== undefined) device.batchRef = batchRef;
       if (notes !== undefined) device.notes = notes;
       if (patch.toolMappingId !== undefined) device.toolMappingId = patch.toolMappingId;
@@ -403,8 +412,14 @@ export class InventoryService {
         if (err instanceof QueryFailedError && e.code === '23503') {
           throw new BadRequestException(`No tool mapping "${patch.toolMappingId}".`);
         }
+        if (err instanceof QueryFailedError && e.code === '23505' && e.constraint === 'uq_device_inventory_modem_imei') {
+          throw new BadRequestException(`Modem IMEI "${modemImei}" is already recorded on another device.`);
+        }
         if (err instanceof QueryFailedError && e.code === '23505') {
           throw new BadRequestException(`IMEI "${newImei}" is already in the inventory.`);
+        }
+        if (err instanceof QueryFailedError && e.code === '23514' && e.constraint === 'ck_device_inventory_modem_imei') {
+          throw new BadRequestException(`Modem IMEI "${modemImei}" is not a valid IMEI: 15 digits, the last a check digit.`);
         }
         if (err instanceof QueryFailedError && e.code === '23514' && e.constraint === 'ck_imei_fixed_once_used') {
           throw new BadRequestException(e.driverError?.message ?? err.message);
