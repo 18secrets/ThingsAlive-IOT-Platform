@@ -283,6 +283,33 @@ def _ensure_schema_once(cur, env_name: str):
             _schema_ensured[env_name] = True
 
 
+def _ensure_schema_at_startup(targets: list):
+    """
+    Bring every target's tables up to this build before the first request, not only on
+    the first upload. The read endpoints (/api/motor/recent, the dashboard) select every
+    column this build knows; after the 25 Nov redeploy that added device_faults, they
+    answered 500 until a logger happened to post. A target that cannot be reached now is
+    only logged: the upload path still runs the same ALTER before it writes.
+    """
+    for env_name, db_cfg in targets:
+        conn = None
+        try:
+            conn = psycopg2.connect(**db_cfg)
+            with conn.cursor() as cur:
+                _ensure_schema_once(cur, env_name)
+            conn.commit()
+            print(f"[OK] schema ensured on {env_name} at startup")
+        except Exception as exc:  # noqa: BLE001 - startup must not die on one target
+            if conn is not None:
+                conn.rollback()
+            # The once-flag must not stay set for a schema that was rolled back.
+            _schema_ensured.pop(env_name, None)
+            print(f"[WARN] could not ensure schema on {env_name} at startup: {exc}; the first upload will retry")
+        finally:
+            if conn is not None:
+                conn.close()
+
+
 # ---------------------------
 # Core insert logic
 # ---------------------------
@@ -1701,6 +1728,7 @@ def main():
     targets = _get_target_db_configs()
     for name, cfg in targets:
         print(f"[INFO] DB target {name}: host={cfg.get('host')} db={cfg.get('dbname')}")
+    _ensure_schema_at_startup(targets)
 
     # Use Werkzeug's threaded server (fine for the ~6 req/device/5-min load)
     from werkzeug.serving import make_server
