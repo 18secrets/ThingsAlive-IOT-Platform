@@ -100,12 +100,16 @@ describeDb('motor email alerts', () => {
 
   describe('a P-code becomes active', () => {
     let seq = 0;
-    /** `n` seconds at `volts` from `start`, placed in time as the motor job leaves them. */
+    /**
+     * `n` seconds at `volts` from `start`, placed in time as the motor job leaves them,
+     * each carrying the device's P101 while the supply is under its 190 V line.
+     */
     const seconds = async (start: Date, n: number, volts: number) => {
       await owner.query(
         `INSERT INTO motor_sensor_records (device_id, seq, device_ts, voltage_v, current_a, power_factor, temperature_c, rpm,
-                                           batch_id, received_at, reading_at, time_basis)
-         SELECT 'MOTOR_001', $1 + i, $1 + i, $2, 0, 0, 40, 0, 'b', now(), $3::timestamptz + make_interval(secs => i), 'approximate'
+                                           batch_id, received_at, reading_at, time_basis, device_faults)
+         SELECT 'MOTOR_001', $1 + i, $1 + i, $2, 0, 0, 40, 0, 'b', now(), $3::timestamptz + make_interval(secs => i), 'approximate',
+                CASE WHEN $2::numeric < 190 THEN ARRAY['P101'] ELSE '{}'::text[] END
            FROM generate_series(0, $4 - 1) i`, [seq, volts, start, n]);
       seq += n;
       await recordMotorFaults(ds, { tenantId: 'acme', externalId: 'M1', deviceId: 'MOTOR_001', from: start, to: new Date(start.getTime() + n * 1000) });
