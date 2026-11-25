@@ -252,7 +252,8 @@ def _ensure_schema(cur):
             ADD COLUMN IF NOT EXISTS water_air_gap   NUMERIC(10,2),
             ADD COLUMN IF NOT EXISTS load_loss       NUMERIC(10,2),
             ADD COLUMN IF NOT EXISTS vibration_score NUMERIC(6,1),
-            ADD COLUMN IF NOT EXISTS air_gap_score   NUMERIC(6,1);
+            ADD COLUMN IF NOT EXISTS air_gap_score   NUMERIC(6,1),
+            ADD COLUMN IF NOT EXISTS device_faults   TEXT[];
         """
     )
     cur.execute(
@@ -316,8 +317,8 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                         (device_id, seq, device_ts, voltage_v, current_a,
                          power_factor, temperature_c, rpm, batch_id, received_at,
                          ambient_c, vibration_mm_s, load_pct, water_air_gap, load_loss,
-                         vibration_score, air_gap_score)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         vibration_score, air_gap_score, device_faults)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (device_id, seq) DO NOTHING
                     """,
                     (
@@ -338,6 +339,7 @@ def _store_to_db(env_name: str, db_cfg: dict, body: dict, received_at: datetime)
                         _sensor(rec, "load_loss"),
                         _sensor(rec, "vibration_score"),
                         _sensor(rec, "air_gap_score"),
+                        _device_faults(rec),
                     ),
                 )
                 stored += cur.rowcount
@@ -429,6 +431,36 @@ _SCORE_FIELDS = {
 def _sensor(rec: dict, column: str):
     """The record's value for a sensor or score column, under the name the device sends."""
     return rec.get(_SCORE_FIELDS.get(column, column))
+
+
+# Fault codes the firmware reports active at that second (Motor Logger server payload
+# spec, 25 Nov 2026): "faults": ["P101","P702"], [] when none. Read leniently on purpose:
+# a 400 makes the device retry the batch for ever, and every reading queued behind it
+# waits too, so one malformed list must not cost the voltage and current beside it. What
+# is not a short code string is dropped and logged; a field that is not a list at all is
+# stored as null, the same as firmware that never sent it.
+_MAX_FAULTS = 16
+_MAX_FAULT_LEN = 16
+
+
+def _device_faults(rec: dict):
+    raw = rec.get("faults")
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        print(f"[WARN] motor seq={rec.get('seq')}: faults is not a list ({type(raw).__name__}); stored as null")
+        return None
+    codes = []
+    for item in raw:
+        if isinstance(item, str) and item.strip() and len(item.strip()) <= _MAX_FAULT_LEN:
+            if item.strip() not in codes:
+                codes.append(item.strip())
+        else:
+            print(f"[WARN] motor seq={rec.get('seq')}: dropped fault entry {item!r}")
+    if len(codes) > _MAX_FAULTS:
+        print(f"[WARN] motor seq={rec.get('seq')}: {len(codes)} fault codes, kept the first {_MAX_FAULTS}")
+        codes = codes[:_MAX_FAULTS]
+    return codes
 
 
 def _validate(body: dict) -> str | None:
@@ -671,7 +703,7 @@ def motor_recent():
         rows = _query_db(
             """
             SELECT device_id, seq, device_ts, voltage_v, current_a,
-                   power_factor, temperature_c, rpm, batch_id,
+                   power_factor, temperature_c, rpm, batch_id, device_faults,
                    received_at AT TIME ZONE 'UTC' AS received_at
             FROM motor_sensor_records
             WHERE device_id = %s
@@ -687,7 +719,7 @@ def motor_recent():
         rows = _query_db(
             """
             SELECT device_id, seq, device_ts, voltage_v, current_a,
-                   power_factor, temperature_c, rpm, batch_id,
+                   power_factor, temperature_c, rpm, batch_id, device_faults,
                    received_at AT TIME ZONE 'UTC' AS received_at
             FROM motor_sensor_records
             ORDER BY received_at DESC, seq DESC LIMIT %s OFFSET %s
@@ -1096,6 +1128,7 @@ h3{font-size:.88rem;font-weight:700;color:#1e293b;margin:18px 0 8px}
       <tr><td class="fname">load_loss</td><td class="ftype">integer | null</td><td>%</td><td>0 – 100</td><td>Optional. Firmware score: % drop of real power below the learned healthy power (rolling 10 s, 0 while stopped)</td></tr>
       <tr><td class="fname">vibration</td><td class="ftype">integer | null</td><td>score</td><td>0 – 100</td><td>Optional. Firmware score: current fluctuation against the learned healthy fluctuation. Stored as <code>vibration_score</code>; experimental</td></tr>
       <tr><td class="fname">air_gap</td><td class="ftype">integer | null</td><td>score</td><td>0 – 100</td><td>Optional. Firmware score: 60% load loss + 40% vibration. Stored as <code>air_gap_score</code>; experimental</td></tr>
+      <tr><td class="fname">faults</td><td class="ftype">string[] | null</td><td>—</td><td>P-codes</td><td>Optional. Fault codes the firmware saw active that second, e.g. <code>["P101","P702"]</code>; <code>[]</code> = none. Stored as <code>device_faults</code>; a malformed entry is dropped, never a 400</td></tr>
     </tbody>
   </table>
   <div class="warn-note">&#9888; &nbsp;Numbers are always plain decimal (e.g. <code>230.0</code>, <code>-5.2</code>). Never exponent notation. Stored as <code>NUMERIC</code> in PostgreSQL, not <code>FLOAT</code>, to avoid rounding errors.</div>
