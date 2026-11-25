@@ -12,10 +12,10 @@ const MIGRATION = 'MotorPCodes1765200000000';
 jest.setTimeout(60_000);
 
 /**
- * The pump logger's P-codes, worked out by 2.0 from the readings the logger uploads, by
- * the rules the device itself uses for its Bluetooth `/faults` (hardware team, 30 Oct
- * 2026). The HTTP upload carries no codes, so if these drift from the device's rules the
- * website and the mobile app disagree about the same pump.
+ * The pump logger's P-codes. The logger reports them in every record (Motor Logger server
+ * payload spec, 25 Nov 2026) and 2.0 records what it reports. The rules below are the
+ * firmware's, emulated for the simulator: the database tests use them to give each
+ * record the codes the real device would have sent with it.
  */
 describe('the device\'s P-code rules', () => {
   const T0 = Date.parse('2026-11-16T10:00:00.000Z');
@@ -108,15 +108,22 @@ describeDb('P-codes on the machine page, against the database', () => {
     }
   });
 
-  /** What the receiver writes for these readings: the records and one upload row a batch. */
+  /**
+   * What the receiver writes for these readings: the records, each with the codes the
+   * device (rated 5.5 A, as flashed) holds active at it, and one upload row a batch.
+   */
   const store = async (records: ReturnType<typeof simulate>) => {
+    const activeAt = new Map<number, string[]>();
+    deviceFaults(records.map((r) => ({ at: new Date(r.seq * 1000), voltage: r.voltage, current: r.current, temperature: r.temperature })), 5.5)
+      .forEach(({ active }, i) => activeAt.set(records[i].seq, [...active].sort()));
     for (const b of batches('MOTOR_001', records, 0)) {
       for (const r of b.records) {
         await owner.query(
-          `INSERT INTO motor_sensor_records (device_id, seq, device_ts, voltage_v, current_a, power_factor, temperature_c, rpm, batch_id, received_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING`,
+          `INSERT INTO motor_sensor_records (device_id, seq, device_ts, voltage_v, current_a, power_factor, temperature_c, rpm, batch_id, received_at,
+                                             device_faults)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING`,
           [b.device_id, r.seq, r.timestamp, r.voltage, r.current, r.power_factor, r.temperature, r.rpm, b.batch_id,
-            new Date((b.records[b.records.length - 1].seq + 1) * 1000)]);
+            new Date((b.records[b.records.length - 1].seq + 1) * 1000), activeAt.get(r.seq) ?? []]);
       }
       await owner.query(
         `INSERT INTO motor_upload_log (device_id, batch_id, first_seq, last_seq, record_count, stored_count, boot, lost_total, dropped_total, received_at)

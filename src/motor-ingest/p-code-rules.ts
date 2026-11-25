@@ -5,12 +5,16 @@ import { Severity } from '../common/severity';
 // service (deploy/README.md), where nothing else in src/ can be resolved.
 
 /**
- * The pump logger's fault codes, worked out from its readings by the device's own rules.
+ * The pump logger's six fault codes, and an emulation of how its firmware raises them.
  *
- * The logger raises these six itself but tells only the mobile app, over Bluetooth
- * (`/faults`); its HTTP upload carries readings and no codes. Deriving them here gives the
- * machine page the same answer the app shows, without a firmware change. The rules are
- * the hardware team's (Motor Logger Bluetooth API guide, 30 Oct 2026), word for word:
+ * 2.0 does not work these codes out for a real logger: the logger reports the codes it
+ * holds active in every record (Motor Logger server payload spec, 25 Nov 2026) and
+ * motor-fault-codes.ts records exactly those. `P_CODES` is what the platform knows of
+ * each code it may be told: title, lamp, severity.
+ *
+ * `deviceFaults` is the firmware's rules, for scripts/motor-logger-sim.ts and the tests
+ * that need a realistic stream of codes without a pump: the hardware team's (Motor Logger
+ * Bluetooth API guide, 30 Oct 2026), word for word:
  *
  * - a code becomes active after its condition holds for 3 samples in a row;
  * - it clears on the first sample without the condition;
@@ -18,12 +22,6 @@ import { Severity } from '../common/severity';
  *   pump starts, when inrush current would read as a locked rotor and a slow prime as a
  *   dry run;
  * - the pump is running when current > 0.04 A and voltage > 30 V.
- *
- * One difference, on purpose: the device judges current against the rated current it
- * was flashed with; this judges it against the machine's own rating (nameplate, then
- * model). A machine with no rated current gets no current-based codes at all, never a
- * guessed rating (G07). The voltage and temperature lines are the device's fixed ones,
- * for a 230 V pump.
  */
 
 /** Only the two lamps the guide's warning and critical map to; both are DtcLamp values. */
@@ -54,13 +52,7 @@ export const FAULT_LOOKBACK_SECONDS = 60;
 
 export interface FaultSample { at: Date; voltage: number; current: number; temperature: number }
 
-/**
- * The lines each code is judged against. The integration spec (24 Nov 2026) says "all
- * thresholds configurable"; these defaults are its table, and the device's own. An
- * account, site, class or machine sets its own through the operational parameters of
- * the same name (parameter-catalog.ts), resolved like any other (motor-fault-codes.ts).
- * The current lines are multiples of the rated current, as the device's are.
- */
+/** The lines the emulated firmware judges each code against. */
 export interface PCodeThresholds {
   /** P101 below this, with the supply present (> 30 V). V. */
   lowVoltage: number;
@@ -78,16 +70,6 @@ export interface PCodeThresholds {
 
 export const DEFAULT_THRESHOLDS: Readonly<PCodeThresholds> = {
   lowVoltage: 190, highVoltage: 250, overheatTemp: 70, dryRunRatio: 0.8, overloadRatio: 1.2, lockedRotorRatio: 3,
-};
-
-/** Each threshold's operational parameter (parameter-catalog.ts). */
-export const THRESHOLD_PARAMETERS: Readonly<Record<keyof PCodeThresholds, string>> = {
-  lowVoltage: 'pcode_low_voltage',
-  highVoltage: 'pcode_high_voltage',
-  overheatTemp: 'pcode_overheat_temp',
-  dryRunRatio: 'pcode_dry_run_ratio',
-  overloadRatio: 'pcode_overload_ratio',
-  lockedRotorRatio: 'pcode_locked_rotor_ratio',
 };
 
 const isRunning = (s: FaultSample) => s.current > 0.04 && s.voltage > 30;

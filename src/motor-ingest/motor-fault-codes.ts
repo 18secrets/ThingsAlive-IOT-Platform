@@ -1,9 +1,7 @@
 import { DataSource } from 'typeorm';
-import { chainForEquipment, resolveParameters } from '../parameters/services/parameter-resolution';
+import { Severity } from '../common/severity';
 import { withTenantId } from '../scope/tenant-session';
-import {
-  DEFAULT_THRESHOLDS, FAULT_LOOKBACK_SECONDS, FaultSample, P_CODES, PCodeThresholds, THRESHOLD_PARAMETERS, deviceFaults,
-} from './p-code-rules';
+import { PCode, P_CODES } from './p-code-rules';
 
 interface EpisodeRow { id: string; code: string; status: 'active' | 'cleared'; lastSeenAt: Date; clearedAt: Date | null }
 
@@ -15,11 +13,29 @@ interface EpisodeRow { id: string; code: string; status: 'active' | 'cleared'; l
 export const FAULT_EMAIL_QUIET_MINUTES = 30;
 
 /**
- * Turns a logger's newly placed readings into fault-code episodes on the machine it is
- * claimed onto: opened when the device would raise the code, seen while it holds,
- * cleared at the first reading without it — the device's own lifecycle, not the vehicle
- * DTCs' ten-minute one, which exists because a vehicle's packets say nothing about a
- * code that has gone.
+ * A code the logger reports that the library does not list. Recorded under its own name
+ * rather than dropped: the device is the authority on its faults, and a firmware that
+ * learns a seventh code should not go unheard until 2.0 is taught its title.
+ */
+function unknownCode(code: string): PCode {
+  return { code, title: `Device fault ${code}`, lamp: 'amber_warning', severity: Severity.High, currentBased: false };
+}
+
+/**
+ * Turns the fault codes a logger reported into fault-code episodes on the machine it is
+ * claimed onto: opened at the first record that lists a code, seen while records keep
+ * listing it, cleared at the first record without it — the device's own lifecycle, not
+ * the vehicle DTCs' ten-minute one, which exists because a vehicle's packets say nothing
+ * about a code that has gone.
+ *
+ * The codes are the device's (Motor Logger server payload spec, 25 Nov 2026: a `faults`
+ * array in every record), never worked out here from voltage and current. The firmware
+ * judges each second against the limits it was flashed with and applies its own
+ * three-second rule; a second opinion from 2.0 with other limits only ever disagreed
+ * with the pump's own relay (the user's decision, 25 Nov 2026). A record whose `faults`
+ * the firmware did not send (`device_faults` null: older firmware, the demo simulator)
+ * is not judged at all — it neither opens nor clears anything, because "not said" is not
+ * "no fault".
  *
  * Idempotent: a reading at or before what an episode of that code already accounts for
  * changes nothing, so a pass repeated, or a batch processed twice, writes nothing twice.
@@ -44,27 +60,14 @@ export async function recordMotorFaults(
          FROM "equipment_profile" WHERE "tenant_id" = $1 AND "external_id" = $2
         ORDER BY ("source_system" = 'ta-2.0') DESC LIMIT 1`, [machine.tenantId, machine.externalId]);
     if (!profile) return { opened: 0, cleared: 0 };
-    const names = Object.values(THRESHOLD_PARAMETERS);
-    const ratings = await resolveParameters(m, machine.tenantId, chainForEquipment(profile), ['rated_current', ...names], new Date());
-    const rated = ratings.get('rated_current')?.value;
-    // Each line the machine's own where one is set at any scope, the spec's otherwise.
-    const thresholds = { ...DEFAULT_THRESHOLDS };
-    for (const [key, name] of Object.entries(THRESHOLD_PARAMETERS) as [keyof PCodeThresholds, string][]) {
-      const v = ratings.get(name)?.value;
-      if (typeof v === 'number' && Number.isFinite(v) && v > 0) thresholds[key] = v;
-    }
-
-    const samples: FaultSample[] = (await m.query(
-      `SELECT "reading_at" AS "at", "voltage_v"::float8 AS "voltage", "current_a"::float8 AS "current",
-              "temperature_c"::float8 AS "temperature"
+    const timeline: { at: Date; active: Set<string> }[] = (await m.query(
+      `SELECT "reading_at" AS "at", "device_faults" AS "faults"
          FROM "motor_sensor_records"
-        WHERE "device_id" = $1 AND "reading_at" >= $2::timestamptz - make_interval(secs => $4) AND "reading_at" <= $3
+        WHERE "device_id" = $1 AND "reading_at" >= $2 AND "reading_at" <= $3 AND "device_faults" IS NOT NULL
         ORDER BY "reading_at", "seq"`,
-      [machine.deviceId, machine.from, machine.to, FAULT_LOOKBACK_SECONDS],
-    )).map((r: { at: Date; voltage: number; current: number; temperature: number }) => ({
-      at: new Date(r.at), voltage: Number(r.voltage), current: Number(r.current), temperature: Number(r.temperature),
-    }));
-    if (!samples.length) return { opened: 0, cleared: 0 };
+      [machine.deviceId, machine.from, machine.to],
+    )).map((r: { at: Date; faults: string[] }) => ({ at: new Date(r.at), active: new Set(r.faults) }));
+    if (!timeline.length) return { opened: 0, cleared: 0 };
 
     const episodes: EpisodeRow[] = await m.query(
       `SELECT "id", "code", "status", "last_seen_at" AS "lastSeenAt", "cleared_at" AS "clearedAt"
@@ -75,6 +78,11 @@ export async function recordMotorFaults(
     // How far each code is already accounted for; nothing at or before it is judged again.
     const done = new Map<string, number>();
     const open = new Map<string, { id: string; lastSeen: Date; dirty: boolean }>();
+    // Every code this pass must follow: the library's, any open one, and any the device
+    // named in these records. An open episode of a code the device stops naming clears.
+    const known = new Map<string, PCode>(P_CODES.map((p) => [p.code, p]));
+    for (const e of episodes) if (!known.has(e.code)) known.set(e.code, unknownCode(e.code));
+    for (const { active } of timeline) for (const code of active) if (!known.has(code)) known.set(code, unknownCode(code));
     for (const e of episodes) {
       const until = new Date(e.clearedAt ?? e.lastSeenAt).getTime();
       done.set(e.code, Math.max(done.get(e.code) ?? 0, until));
@@ -89,8 +97,8 @@ export async function recordMotorFaults(
 
     let opened = 0;
     let cleared = 0;
-    for (const { at, active } of deviceFaults(samples, typeof rated === 'number' ? rated : null, thresholds)) {
-      for (const p of P_CODES) {
+    for (const { at, active } of timeline) {
+      for (const p of known.values()) {
         if (at.getTime() <= (done.get(p.code) ?? 0)) continue;
         const episode = open.get(p.code);
         if (active.has(p.code) && !episode) {
