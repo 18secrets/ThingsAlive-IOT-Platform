@@ -121,14 +121,16 @@ export class ShiftRunner {
       // to 2.0 directly — a logger or stream posting to ingest, or uploaded history. A
       // window that has some is scored from them. A window that has none stays owed,
       // exactly as before: its readings may be waiting in the existing platform, and
-      // marking it scored-and-empty would lose them for good when a route appears.
+      // marking it scored-and-empty would lose them for good when a route appears —
+      // unless its loggers post only to 2.0 (onlyReceiverLoggers), when the silence is
+      // scored as silence.
       let waiting = 0;
       for (const window of owed) {
         const own = await pullOwnTelemetry(this.ds, {
           tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
           from: window.start, to: window.end,
         });
-        if (!own.envelope) {
+        if (!own.envelope && !(await this.onlyReceiverLoggers(window))) {
           waiting += 1;
           summary.skipped += 1;
           summary.outcomes.push(this.outcome(window, 'nothing-to-score', 'no connection'));
@@ -157,6 +159,37 @@ export class ShiftRunner {
       this.tally(summary, outcome);
     }
     return summary;
+  }
+
+  /**
+   * Whether this window's silence can only mean silence: every logger the machine had
+   * during it uploads to 2.0's own receiver, and none is one the existing platform maps.
+   *
+   * A window 2.0 holds nothing for stays owed because its readings may be waiting
+   * upstream. A receiver logger's never are — it posts to 2.0 and nowhere else — so
+   * owing its silent shift waits for something that cannot come. That was CROMPTON-01's
+   * night of 25 Nov 2026: the logger stopped at 17:58, the night shift was never scored,
+   * no `dark` verdict was written, and the dashboard said Online from the day shift's.
+   * If the logger's buffer arrives later, the late-arrival sweep rewinds the window and
+   * it is scored again from the readings, so scoring the silence loses nothing.
+   *
+   * A row in `motor_upload_log` is what makes a device a receiver logger (live-machine.ts
+   * reads it the same way). A machine with any other logger, or with none bound, keeps
+   * the old answer.
+   */
+  private async onlyReceiverLoggers(window: OwedWindow): Promise<boolean> {
+    const bound = [...(await ownExpectedSignals(this.ds, {
+      tenantId: window.tenantId, sourceSystem: window.sourceSystem, externalId: window.externalId,
+      from: window.start, to: window.end,
+    })).keys()];
+    if (!bound.length) return false;
+    const upstream = await this.reader.expectedSignalsFor(window);
+    if (bound.some((imei) => upstream.has(imei))) return false;
+    const [row]: { n: number }[] = await this.ds.query(
+      `SELECT count(DISTINCT "device_id")::int AS n FROM "motor_upload_log" WHERE "device_id" = ANY($1::text[])`,
+      [bound],
+    );
+    return row.n === bound.length;
   }
 
   private tally(summary: RunSummary, outcome: RunOutcome): void {
@@ -246,7 +279,10 @@ export class ShiftRunner {
         // online — survivorship bias with a chart on top, where the machines nobody
         // can see are exactly the ones missing from the report about them.
         await this.recordUtilization(window, []);
-        await this.recordLinkHealth(window, []);
+        // Judged against the machine's own loggers too when scored from 2.0's store, as
+        // the two paths below are: a receiver logger is in no sensor map, so without this
+        // its silent shift wrote no verdict at all and the last one it had stood.
+        await this.recordLinkHealth(window, [], !!own);
 
         // Otherwise a shift that produced no readings is a fact about the shift, not
         // a failure to be retried forever: coming back to the same empty window on

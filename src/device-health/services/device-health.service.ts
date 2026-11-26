@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { mappedDevicesSql } from '../../onboarding/mapped-devices';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { LOGGER_OFFLINE_SECONDS } from '../../page/live-machine';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
 import { DeviceLinkHealth } from '../entities/device-link-health.entity';
 import { LinkHealth, LinkState } from '../services/link-health';
@@ -30,6 +31,18 @@ export interface FleetLinkRow {
   longestGapSeconds: number | null;
   medianLagSeconds: number | null;
   missingSignals: string[];
+  /**
+   * Whether the logger is reaching 2.0 now, by its last upload: `online` within
+   * LOGGER_OFFLINE_SECONDS, `offline` after — the Live view's rule (live-machine.ts).
+   *
+   * `state` is a verdict on the last *closed* shift, written when it closes. A logger
+   * that went quiet an hour into a twelve-hour shift kept the previous shift's `healthy`
+   * for the eleven hours after, and a dashboard reading "is it connected" from `state`
+   * said Online for all of them. Null for a device that never uploaded to the receiver:
+   * its readings come by another route, and the age of its last upload says nothing.
+   */
+  live: 'online' | 'offline' | null;
+  lastUploadAt: Date | null;
 }
 
 /** How far back the fleet view looks when nobody says otherwise. */
@@ -198,7 +211,27 @@ export class DeviceHealthService {
         longestGapSeconds: r.longest_gap_seconds === null ? null : Number(r.longest_gap_seconds),
         medianLagSeconds: r.median_lag_seconds === null ? null : Number(r.median_lag_seconds),
         missingSignals: (r.missing_signals as string[]) ?? [],
+        live: null,
+        lastUploadAt: null,
       }));
+
+      // Asked by this account's own mapped loggers, never by tenant: motor_upload_log has
+      // no tenant, and the IMEIs above are already this account's (as live-machine.ts).
+      if (out.length) {
+        const uploads: { device_id: string; at: Date }[] = await m.query(
+          `SELECT "device_id", max("received_at") AS "at" FROM "motor_upload_log"
+            WHERE "device_id" = ANY($1::text[]) GROUP BY 1`,
+          [out.map((r) => r.imei)],
+        );
+        const lastUpload = new Map(uploads.map((u) => [u.device_id, new Date(u.at)]));
+        for (const row of out) {
+          const at = lastUpload.get(row.imei);
+          if (!at) continue;
+          row.lastUploadAt = at;
+          // At the limit is still online, as on the Live view: two missed bursts, not one.
+          row.live = (now.getTime() - at.getTime()) / 1000 <= LOGGER_OFFLINE_SECONDS ? 'online' : 'offline';
+        }
+      }
 
       const wanted = options.states;
       const filtered = wanted?.length ? out.filter((r) => wanted.includes(r.state)) : out;
