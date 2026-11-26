@@ -20,11 +20,11 @@ import { useTranslation } from 'react-i18next';
 import { Search, CheckCircle2, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import {
   ApiError, Workflow, WorkflowCompileResult, WorkflowNodeType, WorkflowScope, WorkflowVersion,
-  apiCompileWorkflow, apiCreateWorkflow, apiNewWorkflowVersion, apiPublishWorkflow, apiRenameWorkflow, apiReplaceWorkflowSpec,
+  apiCompileWorkflow, apiCreateWorkflow, apiListWorkflows, apiNewWorkflowVersion, apiPublishWorkflow, apiRenameWorkflow, apiReplaceWorkflowSpec,
   apiSetWorkflowLayout,
 } from '../../lib/api';
 import { asOneAction } from '../../lib/mutationNotice';
-import { WorkflowDraft, slugFor } from '../../utils/workflowParser';
+import { WorkflowDraft, distinctName, slugFor } from '../../utils/workflowParser';
 import { Chip } from '../common/Chip';
 import { WorkflowFlowNode } from './workflow/WorkflowFlowNode';
 import {
@@ -133,13 +133,22 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone, onS
    */
   const save = async (): Promise<Saved> => {
     const spec = flowToSpec(nodes, edges, scope);
+    // Checked against the account's other workflows whenever the name is being set — on
+    // the first save and on a rename — and shown in the field as it will be stored.
+    const wanted = workflowName.trim() || 'Alert workflow';
+    let name = wanted;
+    if (!saved || wanted !== savedName) {
+      const others = (await apiListWorkflows()).filter((w) => w.id !== saved?.workflowId).map((w) => w.name);
+      name = distinctName(wanted, others, scope.appliesTo === 'equipment' ? scope.externalId : null);
+      if (name !== workflowName) setWorkflowName(name);
+    }
     let at: Saved;
     if (!saved) {
       at = current(await apiCreateWorkflow({
-        slug: slugFor(workflowName), name: workflowName.trim() || 'Alert workflow', spec,
+        slug: slugFor(name), name, spec,
         ...(draft.description ? { description: draft.description } : {}),
       }));
-      setSavedName(workflowName.trim() || 'Alert workflow');
+      setSavedName(name);
     } else if (saved.status === 'draft') {
       at = current(await apiReplaceWorkflowSpec(saved.workflowId, saved.version, spec));
     } else {
@@ -149,9 +158,9 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone, onS
     await apiSetWorkflowLayout(at.workflowId, at.version, flowLayout(nodes));
     // The name could be set only before the first save (test log S.NO 14); now it is
     // renamed with the save that follows a change.
-    if (saved && workflowName.trim() && workflowName.trim() !== savedName) {
-      await apiRenameWorkflow(at.workflowId, workflowName.trim());
-      setSavedName(workflowName.trim());
+    if (saved && name !== savedName) {
+      await apiRenameWorkflow(at.workflowId, name);
+      setSavedName(name);
     }
     setSaved(at);
     return at;
