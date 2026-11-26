@@ -436,6 +436,24 @@ export function mentionsSensorKeyword(text: string): boolean {
 }
 
 /** A slug the server accepts (`^[a-z0-9][a-z0-9-]{1,63}$`), unique enough to not collide. */
+/**
+ * A name no other workflow in the account has, so two drafts never read the same in the
+ * list (testing sheet TC_214). The AI names a rule for what it watches, so the same prompt,
+ * failure mode or "Create Custom" gave the same name each time and five drafts called
+ * "Ambient temperature above 50" were five guesses. The machine is added first, because
+ * that is usually the difference; a number only when the machine is the same too.
+ * Compared ignoring case and surrounding spaces, as a person reading the list would.
+ */
+export function distinctName(name: string, taken: string[], machine?: string | null): string {
+  const used = new Set(taken.map((n) => n.trim().toLowerCase()));
+  const free = (n: string) => !used.has(n.trim().toLowerCase());
+  const base = name.trim() || 'Alert workflow';
+  if (free(base)) return base;
+  const withMachine = machine && !base.toLowerCase().includes(machine.toLowerCase()) ? `${base} · ${machine}` : base;
+  if (free(withMachine)) return withMachine;
+  for (let i = 2; ; i += 1) if (free(`${withMachine} (${i})`)) return `${withMachine} (${i})`;
+}
+
 export function slugFor(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'workflow';
   return `${base}-${Date.now().toString(36).slice(-6)}`;
