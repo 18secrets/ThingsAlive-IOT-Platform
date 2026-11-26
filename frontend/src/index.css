@@ -48,6 +48,16 @@
   color: var(--color-slate-400);
 }
 
+/* The same in dark mode (testing sheet TC_266, 26 Nov 2026). "Already fine" held only for
+ * slate-400: slate-500 sits at 3.7:1 on the dark panels and slate-600 at 2.4:1, and 229
+ * class names use one of them with no dark colour of their own, so secondary lines faded
+ * into the background. Those take dark mode's readable grey (slate-400, 6.9:1). A class
+ * list that names its own dark: colour is left as its author chose. */
+.dark .text-slate-500:not([class*="dark:text-"]),
+.dark .text-slate-600:not([class*="dark:text-"]) {
+  color: var(--color-slate-400);
+}
+
 /* The text size the reader picked (Small / Default / Large / Extra large, lib/textSize.ts)
  * is the root font size; Tailwind and rsuite size everything in rem, so all of it follows. */
 html {

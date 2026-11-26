@@ -128,6 +128,9 @@ function OeeSection({ sourceSystem, externalId }: { sourceSystem: string; extern
             onChange={(v) => setRange((v as [Date, Date] | null) ?? null)}
             // The server takes up to 92 days and nothing after today.
             shouldDisableDate={(date) => date.getTime() > Date.now()}
+            // One calendar, as on the Production list (TC_263, TC_265): the second added
+            // nothing and its width broke the OEE card's line.
+            showOneCalendar
             placeholder={t('oee.pickDates')}
             cleanable
             className="w-full sm:w-auto! sm:min-w-[220px]"

@@ -23,10 +23,24 @@ import { Skeleton } from '../components/common/Skeleton';
 
 const DAYS = 7;
 
+/**
+ * Whole calendar days, as the picker shows them, ending now at the latest: the first day
+ * from its midnight, the last to the midnight after it. "Last 7 days" is today and the
+ * six days before it (testing sheet TC_262). It was the last 168 hours, so it began part
+ * way through the eighth day back and the days it counted matched no calendar. A picked
+ * range ended at the midnight *starting* its last day, which left that day out; it now
+ * counts the way the machine page's OEE range already did.
+ */
+function periodOfDays(first: Date, last: Date): { from: string; to: string } {
+  const from = new Date(first.getFullYear(), first.getMonth(), first.getDate());
+  const after = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
+  const now = new Date();
+  return { from: from.toISOString(), to: (after > now ? now : after).toISOString() };
+}
+
 function periodLastNDays(days: number): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date(to.getTime() - days * 24 * 3_600_000);
-  return { from: from.toISOString(), to: to.toISOString() };
+  const today = new Date();
+  return periodOfDays(new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1)), today);
 }
 
 export const ProductionMonitoringPage: React.FC = () => {
@@ -50,7 +64,7 @@ export const ProductionMonitoringPage: React.FC = () => {
   // The availability period: the last seven days, or a range the person picks — the page
   // offered no other window (test report MIN-7 / P3-D4). OEE stays per calendar week.
   const [range, setRange] = useState<[Date, Date] | null>(null);
-  const period = range ? { from: range[0].toISOString(), to: range[1].toISOString() } : null;
+  const period = range ? periodOfDays(range[0], range[1]) : null;
 
   useEffect(() => {
     let live = true;
@@ -219,6 +233,9 @@ export const ProductionMonitoringPage: React.FC = () => {
             value={range}
             onChange={(v) => { setRange(v as [Date, Date] | null); pager.setPage(1); }}
             shouldDisableDate={(date) => date.getTime() > Date.now()}
+            // One calendar (TC_263): two clicks in it set from and to, so the second only
+            // took room and pushed the filters out of line.
+            showOneCalendar
             placeholder={t('hero.lastDays', { count: DAYS })}
             cleanable
             block
