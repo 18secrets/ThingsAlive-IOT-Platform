@@ -59,7 +59,16 @@ export const AlertAgentPage: React.FC = () => {
     return (
       <>
         {assistant}
-        {editing && <WorkflowEditor draft={activeWorkflow} onDone={leaveAssistant} />}
+        {editing && (
+          <WorkflowEditor
+            draft={activeWorkflow}
+            onDone={leaveAssistant}
+            // Saved as a draft: to the drafts, with the one just saved found (testing sheet
+            // TC_253). The editor stayed open with a one-line note, and the draft could
+            // only be found again by going back and filtering the list by hand.
+            onSaved={(name) => { setListStart({ status: 'Draft', search: name }); setView('list'); }}
+          />
+        )}
       </>
     );
   }

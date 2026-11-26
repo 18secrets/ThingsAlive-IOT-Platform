@@ -173,7 +173,9 @@ export const CostAdministrationPage: React.FC = () => {
         ) : scope !== 'client' && !scopeRef ? (
           <p className="text-sm text-slate-400">{t('scope.pick')}</p>
         ) : (
-          <div className="space-y-2">
+          // A fixed height that scrolls on its own, so the scope a value is being set at
+          // stays in view while scrolling to the parameter (testing sheet, 26 Nov).
+          <div className="space-y-2 h-[26rem] overflow-y-auto overscroll-contain pr-1">
             {catalog.map((entry) => {
               const eff = effective.find((p) => p.name === entry.name);
               const setHere = eff?.source?.scope === scope && eff.source.scopeRef === scopeRef;

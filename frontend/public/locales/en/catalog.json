@@ -261,6 +261,8 @@
     "activeCount": "{{count}} Active",
     "excluded": "Excluded",
     "noSensors": "No reference sensors yet — add one first.",
+    "searchSensors": "Search sensors or parameters…",
+    "noSensorMatch": "No sensor matches “{{query}}”. Ticked sensors stay mapped.",
     "footer": "Profile saves into master Admin Tool Mappings",
     "save": "Save Tool Mapping"
   },

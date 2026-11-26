@@ -396,7 +396,10 @@ const IncidentPanel: React.FC<{
 
       {live && (
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <label className="flex flex-col gap-1 w-full sm:w-56">
+          {/* A div, not a label (testing sheet TC_257): a label hands its click on to the
+              picker inside it, so the click that opened the owner list closed it again and
+              no owner could be picked, in the card view or the list. */}
+          <div className="flex flex-col gap-1 w-full sm:w-56">
             <span className={SECTION_LABEL}>{t('panel.ownerPlaceholder')}</span>
             <SelectPicker
               size="sm"
@@ -409,7 +412,7 @@ const IncidentPanel: React.FC<{
               placeholder={t('panel.ownerPlaceholder')}
               block
             />
-          </label>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {detail.status === 'open' && (
               <button disabled={busy} onClick={() => { if (window.confirm(t('panel.acknowledgeConfirm'))) run(() => apiAcknowledgeIncident(id)); }} className={ACTION_BUTTON}>{t('panel.acknowledge')}</button>
