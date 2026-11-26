@@ -131,7 +131,7 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone, onS
    * draft is replaced in place; a published or retired version is never edited, so a
    * new draft is started from it and the change lands there.
    */
-  const save = async (): Promise<Saved> => {
+  const save = async (): Promise<Saved & { name: string }> => {
     const spec = flowToSpec(nodes, edges, scope);
     // Checked against the account's other workflows whenever the name is being set — on
     // the first save and on a rename — and shown in the field as it will be stored.
@@ -163,23 +163,28 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone, onS
       setSavedName(name);
     }
     setSaved(at);
-    return at;
+    return { ...at, name };
   };
 
   const run = async (what: 'save' | 'check' | 'publish') => {
     setBusy(what);
     setStatusNote(null);
     let at: Saved | null = null;
+    // The name as stored, which the check against other workflows may have changed; the
+    // field's state still holds the one typed until the next render.
+    let storedName = '';
     try {
       // A save is up to four calls and a publish one more; the person clicked once.
       // `at` is set before the publish, so a refused publish can still be checked below.
       at = await asOneAction(async () => {
-        at = await save();
+        const stored = await save();
+        storedName = stored.name;
+        at = stored;
         if (what === 'publish') await apiPublishWorkflow(at.workflowId, at.version);
         return at;
       });
       if (what === 'save') {
-        if (onSaved) onSaved(workflowName.trim() || 'Alert workflow');
+        if (onSaved) onSaved(storedName);
         else setStatusNote({ message: t('workflow.saved', { version: at.version }), tone: 'ok' });
       } else if (what === 'check') {
         const compiled = await apiCompileWorkflow(at.workflowId, at.version);
