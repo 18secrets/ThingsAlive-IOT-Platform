@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Check, Activity, Layers, Info } from 'lucide-react';
-import { Input, SelectPicker } from 'rsuite';
+import { X, Check, Activity, Layers, Info, Search } from 'lucide-react';
+import { Input, InputGroup, SelectPicker } from 'rsuite';
 import { Trans, useTranslation } from 'react-i18next';
 import {
   ApiError, IndustryType, Sensor, ToolMapping, ToolMappingInput,
@@ -25,6 +25,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
   const [industryTypeId, setIndustryTypeId] = useState<string | null>(null);
   const [activeSensorMap, setActiveSensorMap] = useState<Record<string, boolean>>({});
   const [activeParamsMap, setActiveParamsMap] = useState<Record<string, string[]>>({});
+  const [sensorSearch, setSensorSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -34,6 +35,7 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
     if (!isOpen) return;
     setToolName(existingMapping?.toolName ?? '');
     setIndustryTypeId(existingMapping?.industryTypeId ?? null);
+    setSensorSearch('');
     setError(undefined);
 
     const sMap: Record<string, boolean> = {};
@@ -71,6 +73,14 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
       return { ...prev, [sensorId]: updated };
     });
   };
+
+  // The search only narrows what is listed (testing sheet TC_254). A sensor ticked and then
+  // filtered out stays mapped and counted, and is saved; the counts below say so.
+  const query = sensorSearch.trim().toLowerCase();
+  const shownSensors = query
+    ? availableSensors.filter((s) => s.sensorName.toLowerCase().includes(query)
+        || s.parameterSpecs.some((p) => p.parameter.toLowerCase().includes(query)))
+    : availableSensors;
 
   const totalActiveSensors = Object.keys(activeSensorMap).filter((k) => activeSensorMap[k]).length;
   const totalActiveParams = Object.keys(activeSensorMap)
@@ -197,8 +207,20 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               </span>
             </div>
 
+            {availableSensors.length > 0 && (
+              <InputGroup inside size="sm">
+                <InputGroup.Addon><Search className="w-3.5 h-3.5" /></InputGroup.Addon>
+                <Input
+                  value={sensorSearch}
+                  onChange={(value) => setSensorSearch(value)}
+                  placeholder={t('mapSensors.searchSensors')}
+                  aria-label={t('mapSensors.searchSensors')}
+                />
+              </InputGroup>
+            )}
+
             <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-              {availableSensors.map((sensor) => {
+              {shownSensors.map((sensor) => {
                 const isSensorActive = !!activeSensorMap[sensor.id];
                 const activeParams = activeParamsMap[sensor.id] || [];
                 const sensorParams = sensor.parameterSpecs.map((s) => s.parameter);
@@ -260,6 +282,9 @@ export const MapSensorsModal: React.FC<MapSensorsModalProps> = ({
               })}
               {availableSensors.length === 0 && (
                 <p className="text-slate-400 py-4 text-center">{t('mapSensors.noSensors')}</p>
+              )}
+              {availableSensors.length > 0 && shownSensors.length === 0 && (
+                <p className="text-slate-500 dark:text-slate-400 py-4 text-center">{t('mapSensors.noSensorMatch', { query: sensorSearch.trim() })}</p>
               )}
             </div>
           </div>

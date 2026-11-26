@@ -43,6 +43,11 @@ interface WorkflowEditorProps {
   draft: WorkflowDraft;
   /** After a publish: back to wherever the flow started. */
   onDone: () => void;
+  /**
+   * After "Save draft", with the name it was saved under. Without it the editor stays
+   * open and says which version was saved.
+   */
+  onSaved?: (name: string) => void;
 }
 
 const nodeTypes = { workflowNode: WorkflowFlowNode };
@@ -63,7 +68,7 @@ function current(wf: Workflow): Saved {
   return { workflowId: wf.id, version: v.version, status: v.status };
 }
 
-const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) => {
+const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone, onSaved }) => {
   const { t } = useTranslation('alerts');
   const scopeData = useWorkflowScope();
   const [workflowName, setWorkflowName] = useState(draft.name);
@@ -165,7 +170,8 @@ const WorkflowEditorInner: React.FC<WorkflowEditorProps> = ({ draft, onDone }) =
         return at;
       });
       if (what === 'save') {
-        setStatusNote({ message: t('workflow.saved', { version: at.version }), tone: 'ok' });
+        if (onSaved) onSaved(workflowName.trim() || 'Alert workflow');
+        else setStatusNote({ message: t('workflow.saved', { version: at.version }), tone: 'ok' });
       } else if (what === 'check') {
         const compiled = await apiCompileWorkflow(at.workflowId, at.version);
         setResult(compiled);
