@@ -114,8 +114,10 @@ export const FleetFuelPanel: React.FC<{
           : view.shifts.length === 0 ? <p className="text-xs text-slate-500">{t('fleetFuel.empty')}</p> : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* The fleet's totals, tinted (testing sheet TC_264): they sat in the same
+                    white as the machine rows below, and read as one more row of the table. */}
                 {view.shifts.map((s) => (
-                  <div key={s.key} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3 space-y-1">
+                  <div key={s.key} className="border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 rounded-lg p-3 space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs text-slate-500 dark:text-slate-400">{label(s)}</p>
                       {stateChip(s)}
