@@ -17,7 +17,7 @@ interface AddSensorModalProps {
 }
 
 const emptySpec = (): SensorParameterSpec => ({
-  parameter: '', unit: '', min: 0, max: 0, normalRange: '', notes: '',
+  parameter: '', unit: '', min: 0, max: 0, normalRange: '', notes: '', signal: '',
 });
 
 const NEW_CATEGORY = '__new__';
@@ -228,6 +228,16 @@ export const AddSensorModal: React.FC<AddSensorModalProps> = ({
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
+                  {/* Which signal the parameter carries. Without it a logger fitted with
+                      this sensor's tool profile gave Signal Bindings no channels (TC_277). */}
+                  <Input
+                    size="sm"
+                    value={spec.signal ?? ''}
+                    onChange={(value) => updateSpec(index, 'signal', value)}
+                    placeholder={t('sensorModal.signalPlaceholder')}
+                    aria-label={t('sensorModal.signalPlaceholder')}
+                    className="col-span-11 font-mono"
+                  />
                 </div>
               ))}
             </div>

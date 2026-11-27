@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { withTenantId, withTenantSession } from '../../scope/tenant-session';
+import { EquipmentClassProfile } from '../../catalog/entities/equipment-class-profile.entity';
 import { EquipmentClassSensorRequirement } from '../../catalog/entities/equipment-class-sensor-requirement.entity';
 import { ClientScenario } from '../../client-catalog/entities/client-scenario.entity';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
@@ -135,19 +136,41 @@ export interface ProposeBindingInput {
  * engine_load is "recommended" on the excavator class while three of its five scenarios
  * need it, so coverage listed five signals and never asked for the sixth (test report
  * OB-2). A recommended signal no scenario needs stays out, as before.
+ *
+ * A class version with no requirement row at all asks for its signal list instead. The
+ * New Class form writes only that list, so every machine of a type made on it read "This
+ * machine type has no required signals yet" and mapping could never finish, while the
+ * same type imported from a workbook worked (TC_276). Read here rather than written by
+ * the form: an import, the demo seeder and hand-authored content write their own rows
+ * into a class, before and after publishing, and rows written for them would take their
+ * keys. Any row at all means the version says what it requires, and only rows count.
+ * Types made before this were given rows by 1766500000000-RequirementsFromSignals.
  */
 async function coverageRequirements(
   m: EntityManager, tenantId: string, classSlugs: string[],
 ): Promise<EquipmentClassSensorRequirement[]> {
-  const [rows, scenarios] = await Promise.all([
-    m.getRepository(EquipmentClassSensorRequirement).find({
-      where: { classSlug: In(classSlugs), criticality: In(['required', 'recommended']) },
+  const [stored, versions, scenarios] = await Promise.all([
+    m.getRepository(EquipmentClassSensorRequirement).find({ where: { classSlug: In(classSlugs) } }),
+    m.getRepository(EquipmentClassProfile).find({
+      where: { slug: In(classSlugs) }, select: { slug: true, version: true, expectedSignals: true },
     }),
     m.getRepository(ClientScenario).find({
       where: { tenantId, clientEquipmentClassSlug: In(classSlugs), enabled: true, status: 'active' },
       select: { clientEquipmentClassSlug: true, requiredSignals: true },
     }),
   ]);
+  const withRows = new Set(stored.map((r) => `${r.classSlug}@${r.classVersion}`));
+  const fromList = versions
+    .filter((v) => !withRows.has(`${v.slug}@${v.version}`))
+    .flatMap((v) => (Array.isArray(v.expectedSignals) ? v.expectedSignals : [])
+      .filter((sig, i, all) => sig?.signal?.trim() && all.findIndex((o) => o?.signal === sig.signal) === i)
+      .map((sig) => m.getRepository(EquipmentClassSensorRequirement).create({
+        classSlug: v.slug, classVersion: v.version, measurementRole: sig.signal.trim(), componentScope: '',
+        criticality: sig.required ? 'required' : 'recommended', minCount: 1, canonicalUnit: sig.unit || null,
+        enables: [], notes: null, source: 'manual', importBatchId: null, staleAfterSeconds: null,
+        forecastEnabled: false, forecastHorizonHours: null,
+      })));
+  const rows = [...stored, ...fromList].filter((r) => r.criticality === 'required' || r.criticality === 'recommended');
   const needed = new Map<string, Set<string>>();
   for (const s of scenarios) {
     const set = needed.get(s.clientEquipmentClassSlug) ?? new Set<string>();
@@ -614,8 +637,19 @@ function computeCoverage(
   const missing: MissingRequirement[] = [];
   const blockedByLayer = new Map<string, Set<string>>();
 
+  // A binding made on Signal Bindings carries no component (''): the screen has no
+  // component to choose, and every reader of live data — KPIs, OEE, the machine page —
+  // looks bindings up with '' too. A type that put its signals on "engine" therefore
+  // showed them Active and Unbound at once, and mapping never completed (TC_278). The
+  // whole-machine binding answers for a component only when the type names one
+  // component for that signal; with left and right it cannot say which side it is.
+  const scopesOf = new Map<string, number>();
+  for (const req of requirements) scopesOf.set(req.measurementRole, (scopesOf.get(req.measurementRole) ?? 0) + 1);
+
   for (const req of requirements) {
-    const rows = allRows.filter((r) => r.measurementRole === req.measurementRole && r.componentId === req.componentScope);
+    const soleScope = scopesOf.get(req.measurementRole) === 1;
+    const rows = allRows.filter((r) => r.measurementRole === req.measurementRole
+      && (r.componentId === req.componentScope || (soleScope && r.componentId === '')));
 
     const activeNow = rows.filter((r) => r.isPrimary && r.status === 'active' && windowContains(r, at));
     const activeCount = activeNow.length;

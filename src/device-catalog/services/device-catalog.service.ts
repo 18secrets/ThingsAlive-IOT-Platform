@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { Sensor, SensorParameterSpec } from '../entities/sensor.entity';
 import { SensorCategory } from '../entities/sensor-category.entity';
+import { SensorRoleCapability } from '../entities/sensor-role-capability.entity';
 import { MappedSensorRef, ToolMapping } from '../entities/tool-mapping.entity';
 import { IndustryType, IndustryTypeStatus } from '../entities/industry-type.entity';
 import { slugify } from '../../catalog-import/services/sensor-review';
@@ -207,14 +208,19 @@ export class DeviceCatalogService {
     if (draft.categoryId) await this.requireCategory(draft.categoryId);
     const sensorName = draft.sensorName.trim();
     const slug = await this.uniqueSlugFor(draft.sensorName);
-    return this.translateRefusal(() => this.sensors.save(this.sensors.create({
-      sensorName,
-      slug,
-      categoryId: draft.categoryId ?? null,
-      description: draft.description ?? null,
-      protocol: draft.protocol ?? null,
-      parameterSpecs: draft.parameterSpecs ?? [],
-    })));
+    const parameterSpecs = withTrimmedSignals(draft.parameterSpecs ?? []);
+    return this.translateRefusal(() => this.sensors.manager.transaction(async (m) => {
+      const saved = await m.getRepository(Sensor).save(this.sensors.create({
+        sensorName,
+        slug,
+        categoryId: draft.categoryId ?? null,
+        description: draft.description ?? null,
+        protocol: draft.protocol ?? null,
+        parameterSpecs,
+      }));
+      await linkSignals(m, saved.id, parameterSpecs);
+      return saved;
+    }));
   }
 
   /** The same derivation `sensor-review.ts` uses for a proposed sensor (task
@@ -239,8 +245,12 @@ export class DeviceCatalogService {
     const sensor = await this.sensors.findOne({ where: { id } });
     if (!sensor) throw new NotFoundException(`No sensor "${id}".`);
     if (draft.categoryId) await this.requireCategory(draft.categoryId);
-    assignDefined(sensor, draft);
-    return this.translateRefusal(() => this.sensors.save(sensor));
+    assignDefined(sensor, { ...draft, ...(draft.parameterSpecs ? { parameterSpecs: withTrimmedSignals(draft.parameterSpecs) } : {}) });
+    return this.translateRefusal(() => this.sensors.manager.transaction(async (m) => {
+      const saved = await m.getRepository(Sensor).save(sensor);
+      if (draft.parameterSpecs) await linkSignals(m, saved.id, saved.parameterSpecs);
+      return saved;
+    }));
   }
 
   /**
@@ -505,3 +515,37 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const day = (at: Date) => at.toISOString().slice(0, 10);
 
 export type { SensorParameterSpec };
+
+function withTrimmedSignals(specs: SensorParameterSpec[]): SensorParameterSpec[] {
+  return specs.map(({ signal, ...spec }) => (signal?.trim() ? { ...spec, signal: signal.trim() } : spec));
+}
+
+/**
+ * A parameter's signal, as the capability row discovery reads to know which channels a
+ * tool profile carries. Only the import wrote these, so a sensor made on the Add Sensor
+ * form gave a fitted logger no channels at all (TC_277).
+ *
+ * Keyed by parameter: a parameter whose signal changed has its row moved to the new
+ * signal rather than gaining a second one, and `ta_app` cannot delete one anyway. A
+ * parameter with no signal written is left as it is, so an imported sensor edited on
+ * the form keeps the links its workbook made.
+ */
+async function linkSignals(m: EntityManager, sensorId: string, specs: SensorParameterSpec[]): Promise<void> {
+  const repo = m.getRepository(SensorRoleCapability);
+  const existing = await repo.find({ where: { sensorId } });
+  for (const spec of specs) {
+    if (!spec.signal) continue;
+    const canonicalUnit = spec.unit?.trim() || null;
+    const forParameter = existing.filter((c) => c.parameterKey === spec.parameter);
+    const same = forParameter.find((c) => c.measurementRole === spec.signal);
+    if (same) {
+      if (same.canonicalUnit !== canonicalUnit) await repo.update({ id: same.id }, { canonicalUnit });
+      continue;
+    }
+    if (forParameter.length === 1) {
+      await repo.update({ id: forParameter[0].id }, { measurementRole: spec.signal, canonicalUnit });
+      continue;
+    }
+    await repo.save(repo.create({ sensorId, measurementRole: spec.signal, parameterKey: spec.parameter, canonicalUnit }));
+  }
+}

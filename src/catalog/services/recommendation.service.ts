@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RequestScope } from '../../auth/types/request-scope';
 import { EquipmentProfile } from '../../equipment/equipment-profile.entity';
+import { DeviceInventory } from '../../inventory/entities/device-inventory.entity';
 import { boundImeis } from '../../signal-binding/services/signal-binding.service';
 import { SensorMapProjection } from '../../projection/entities/sensor-map-projection.entity';
 import { TelemetryReading } from '../../telemetry/telemetry-reading.entity';
@@ -120,7 +121,11 @@ export class RecommendationService {
     // question for support.
     if (!scenario.enabled) blockers.push({ code: 'scenario-disabled' });
 
-    const noDevice = facts.imeis.length === 0;
+    // Fitted counts, not only mapped: a logger fitted and not yet mapped is listed as
+    // fitted on the same screen, and "No device fitted" under the scenario sent people
+    // to fit one again (TC_295). With nothing mapped its signals are missing below,
+    // which is the step actually left.
+    const noDevice = facts.imeis.length === 0 && !facts.fitted;
     if (noDevice) blockers.push({ code: 'no-device' });
 
     // With no logger fitted, every signal is missing and naming them is noise: the
@@ -229,10 +234,17 @@ export class RecommendationService {
         ? (now.getTime() - firstReadingAt.getTime()) / 86_400_000
         : 0;
 
+      // Fitting sets the machine on the logger's inventory row and binds nothing; the
+      // bindings come later, from Signal Bindings. Inventory knows the machine by code.
+      const fitted = imeis.length > 0 || (await m.getRepository(DeviceInventory).count({
+        where: { tenantId: scope.tenantId, equipmentExternalId: externalId },
+      })) > 0;
+
       return {
         classSlug: profile?.equipmentClassSlug ?? null,
         tier: profile?.tier ?? 'basic',
         imeis,
+        fitted,
         signals,
         firstReadingAt,
         historyDays,
@@ -245,6 +257,8 @@ interface AssetFacts {
   classSlug: string | null;
   tier: string;
   imeis: string[];
+  /** A logger is fitted to the machine, mapped or not. */
+  fitted: boolean;
   signals: Set<string>;
   firstReadingAt: Date | null;
   historyDays: number;

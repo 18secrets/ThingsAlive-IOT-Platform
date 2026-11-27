@@ -94,6 +94,30 @@ export class CatalogImportApplyService {
       })));
       if (signalProblems.length) throw new BadRequestException(signalProblems.join(' '));
 
+      // A class whose own row was refused cannot take the rest of its rows. Applied
+      // anyway, a new class came into being named after its slug, with none of what the
+      // refused row said, holding signals, KPIs and rules; an existing one took them as
+      // a new version nobody reviewed (TC_287). Some refusals (OEM figures) come after
+      // the validator's pass that invalidates a missing class's rows, so it is checked
+      // here, before anything is written, whatever the validator left valid.
+      const refusedClasses = new Map(invalidRows
+        .filter((r) => r.sheet === 'equipment_class' && typeof r.payload.slug === 'string' && r.payload.slug)
+        .map((r) => [r.payload.slug as string, r.rowNumber]));
+      if (refusedClasses.size) {
+        const held = validRows.filter((r) => {
+          const slug = isRuleSheet(r.sheet) ? r.payload.class_slug : classSlugOf(r);
+          return typeof slug === 'string' && refusedClasses.has(slug);
+        });
+        if (held.length) {
+          const named = [...new Set(held.map((r) => (isRuleSheet(r.sheet) ? r.payload.class_slug : classSlugOf(r)) as string))]
+            .map((slug) => `"${slug}" (equipment_class row ${refusedClasses.get(slug)})`).join(', ');
+          throw new BadRequestException(
+            `The machine type row for ${named} was rejected, and ${held.length} valid row(s) belong to it. `
+            + 'Fix the machine type row and import the file again; its rows cannot be applied without it.',
+          );
+        }
+      }
+
       const bySlug = new Map<string, CatalogImportRow[]>();
       for (const r of validRows) {
         if (r.sheet === 'sensor_capability') continue;

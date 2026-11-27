@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Capability, can } from '../auth/capabilities';
+import { ClientEquipmentClass } from '../client-catalog/entities/client-equipment-class.entity';
 import { RequestScope } from '../auth/types/request-scope';
 import { CLIENT_SOURCE_SYSTEM, ServiceTier } from '../equipment/equipment-profile.entity';
 
@@ -55,7 +56,11 @@ export class AssistantProposalService {
     if (!can(scope, PROPOSAL_CAPABILITY[kind])) {
       throw new ForbiddenException(`This role cannot ${kind.replace('_', ' ')}.`);
     }
-    const { payload, summary } = shape(kind, args);
+    // The type is checked before the sentence is built, so the sentence can name it.
+    const typeName = kind === 'create_equipment'
+      ? await this.requireAvailableClass(scope, typeof args.classSlug === 'string' ? args.classSlug.trim() : null)
+      : null;
+    const { payload, summary } = shape(kind, args, typeName);
     if (kind === 'create_equipment') await this.requireOwnSite(scope, payload.siteCode as string | null);
     return withTenantSession(this.ds, scope, (m) => {
       const repo = m.getRepository(AssistantProposal);
@@ -83,6 +88,27 @@ export class AssistantProposalService {
     if (!mine.some((p) => p.code.toLowerCase() === siteCode.toLowerCase())) {
       throw new BadRequestException(`Site "${siteCode}" is not one of your sites (${names}); a machine there would be hidden from you.`);
     }
+  }
+
+  /**
+   * A machine type this account was not given is refused, naming the ones it has. Nothing
+   * else checked the type: asked for one it could not find, the model put the nearest
+   * granted type in its place and the card said only that slug, so a machine was created
+   * as something the person never asked for (TC_271). Refused here, the model hears why
+   * and has to ask. Returns the type's name for the sentence the person approves.
+   */
+  private async requireAvailableClass(scope: RequestScope, slug: string | null): Promise<string | null> {
+    if (!slug) return null;
+    const active = await withTenantSession(this.ds, scope, (m) => m.getRepository(ClientEquipmentClass).find({
+      where: { tenantId: scope.tenantId, status: 'active' }, order: { name: 'ASC' },
+    }));
+    const found = active.find((c) => c.slug === slug);
+    if (found) return found.name;
+    throw new BadRequestException(
+      `Machine type "${slug}" is not available to this account. Its machine types are: `
+      + `${active.map((c) => `${c.name} (${c.slug})`).join(', ') || 'none'}. Do not choose one for the person: `
+      + 'tell them the type they asked for is not available and ask which of these to use.',
+    );
   }
 
   async list(scope: RequestScope, status?: ProposalStatus): Promise<AssistantProposal[]> {
@@ -155,6 +181,8 @@ export class AssistantProposalService {
         return { siteId: site.id, code: site.code };
       }
       case 'create_equipment': {
+        // Again at confirm: a type can be withdrawn while the card waits.
+        await this.requireAvailableClass(scope, v.classSlug ?? null);
         let plantId: string | null = null;
         if (v.siteCode) {
           const site = (await this.plants.list(scope)).find((s) => s.code.toLowerCase() === v.siteCode!.toLowerCase());
@@ -180,7 +208,9 @@ export class AssistantProposalService {
 }
 
 /** The model's arguments, checked and reduced to the payload, with the sentence a person approves. */
-function shape(kind: ProposalKind, args: Record<string, unknown>): { payload: Record<string, unknown>; summary: string } {
+function shape(
+  kind: ProposalKind, args: Record<string, unknown>, typeName: string | null = null,
+): { payload: Record<string, unknown>; summary: string } {
   const text = (k: string, max = 120): string | null => {
     const v = args[k];
     if (v === undefined || v === null || v === '') return null;
@@ -193,17 +223,25 @@ function shape(kind: ProposalKind, args: Record<string, unknown>): { payload: Re
     return v;
   };
 
+  // A name copied out of a list the person typed ("Genset 4, Ashok Leyland, ...") kept
+  // its comma and was saved as "Genset 4," (TC_283). A trailing full stop stays: "Co.".
+  const nameOf = (): string => {
+    const v = need('name').replace(/[\s,;:]+$/, '');
+    if (!v) throw new BadRequestException('name is required.');
+    return v;
+  };
+
   switch (kind) {
     case 'create_site': {
       const code = need('code', 40);
       if (!SITE_CODE.test(code)) throw new BadRequestException(`Site code "${code}" is not valid: letters, digits, dots, hyphens or underscores.`);
-      const name = need('name');
+      const name = nameOf();
       return { payload: { code, name }, summary: `Add the site "${name}" (code ${code}).` };
     }
     case 'create_equipment': {
       const code = need('code', 64);
       if (!EQUIPMENT_CODE.test(code)) throw new BadRequestException(`Machine code "${code}" is not valid: letters, digits, dots, hyphens or underscores.`);
-      const name = need('name');
+      const name = nameOf();
       const siteCode = text('siteCode', 40);
       const tier = text('tier', 16);
       if (tier && !SERVICE_TIERS.includes(tier as ServiceTier)) {
@@ -225,7 +263,7 @@ function shape(kind: ProposalKind, args: Record<string, unknown>): { payload: Re
       };
       // The person approves this sentence, so every field that will be written is in it.
       const details = [
-        payload.classSlug && `type ${payload.classSlug}`,
+        payload.classSlug && `type ${typeName ?? payload.classSlug}`,
         [payload.manufacturer, payload.modelNumber].filter(Boolean).join(' '),
         payload.serialNumber && `serial ${payload.serialNumber}`,
         tier && `${tier} tier`,

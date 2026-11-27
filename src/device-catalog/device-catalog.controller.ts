@@ -21,6 +21,9 @@ export class SensorParameterSpecDto {
   @IsNumber() max: number;
   @IsString() normalRange: string;
   @IsOptional() @IsString() notes?: string;
+  // Without it a sensor made on the form never reached Signal Bindings: only an import
+  // could say which signal a parameter carries (TC_277).
+  @IsOptional() @IsString() signal?: string;
 }
 
 export class SensorDto {

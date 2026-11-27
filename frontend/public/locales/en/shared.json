@@ -94,7 +94,7 @@
       },
       "devices": {
         "title": "Device Onboarding & Tool Mapping",
-        "body": "Register hardware modems by IMEI and auto-bind sensor parameter channels via preconfigured Tool Profiles."
+        "body": "Register hardware modems by IMEI. Once a logger with a Tool Profile is fitted, its sensor channels appear in Signal Bindings to map."
       }
     },
     "sources": "From: {{sources}}",

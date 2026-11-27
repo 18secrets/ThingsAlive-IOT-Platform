@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Activity, Bell, Fuel, GitBranch, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Activity, Bell, Fuel, GitBranch, Image as ImageIcon, Radio } from 'lucide-react';
 import {
   AlertRuleTemplate, AlertRuleTemplateInput, CausalChain, CausalChainInput, EquipmentClass, Scenario, ScenarioInput,
 } from '../lib/api';
@@ -14,7 +14,7 @@ import { ClassModelPanel } from '../components/admin/class-detail/ClassModelPane
 import { ClassFuelFiguresPanel } from '../components/admin/class-detail/ClassFuelFiguresPanel';
 import { representativeOf } from '../lib/classVersion';
 
-type DetailTab = 'predictions' | 'alerts' | 'chains' | 'visual' | 'fuel';
+type DetailTab = 'signals' | 'predictions' | 'alerts' | 'chains' | 'visual' | 'fuel';
 
 interface EquipmentClassDetailPageProps {
   classes: EquipmentClass[];
@@ -77,6 +77,10 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
   const availableSignals = cls.expectedSignals.map((s) => s.signal);
 
   const tabs: { id: DetailTab; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
+    // The signals the type asks every machine to map, and which it requires: nowhere on
+    // this page before, so a type with none looked complete here and blocked mapping on
+    // every machine (TC_276).
+    { id: 'signals', label: t('classDetail.tabs.signals'), icon: Radio, count: cls.expectedSignals.length },
     { id: 'predictions', label: t('classDetail.tabs.predictions'), icon: Activity, count: scenariosForClass.length },
     { id: 'alerts', label: t('classDetail.tabs.alerts'), icon: Bell, count: alertTemplatesForClass.length },
     { id: 'chains', label: t('classDetail.tabs.chains'), icon: GitBranch, count: causalChainsForClass.length },
@@ -126,6 +130,32 @@ export const EquipmentClassDetailPage: React.FC<EquipmentClassDetailPageProps> =
         })}
       </div>
 
+      {tab === 'signals' && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
+          {cls.expectedSignals.length === 0 ? (
+            <p className="text-sm text-amber-700 dark:text-amber-300">{t('classDetail.signals.none')}</p>
+          ) : (
+            <>
+              {!cls.expectedSignals.some((s) => s.required) && (
+                <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">{t('classDetail.signals.noneRequired')}</p>
+              )}
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {cls.expectedSignals.map((s) => (
+                  <li key={s.signal} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-mono text-sm text-slate-800 dark:text-slate-100 break-all">{s.signal}</span>
+                    {s.unit && <span className="text-xs text-slate-500 dark:text-slate-400">{s.unit}</span>}
+                    <span className={`ml-auto text-xs px-2 py-0.5 rounded-full border ${s.required
+                      ? 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>
+                      {s.required ? t('classDetail.signals.required') : t('classDetail.signals.optional')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
       {tab === 'predictions' && (
         <ClassScenariosPanel
           equipmentClassSlug={cls.slug}
