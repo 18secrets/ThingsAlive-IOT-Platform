@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Sparkles, Send, X, HelpCircle, LayoutGrid, Wrench, Cpu, Maximize2, Minimize2, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Input } from 'rsuite';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import { ApiError, AssistantMessage, apiAssistantChat } from '../lib/api';
 import { ChatMarkdown } from './common/ChatMarkdown';
 
@@ -13,6 +14,24 @@ interface AskAIWidgetProps {
 // Questions about whatever fleet the account has; two named equipment this tenant
 // does not own (a dust collector, a Volvo EC210) read as a demo of somebody else's (MIN-10).
 const QUICK_PROMPTS = ['offline', 'highestRisk', 'serviceDue'];
+
+// The same three on every page read as canned (testing sheet 26 Nov, #8): on Work Orders
+// the obvious question is about jobs, not offline loggers. Each is one the assistant can
+// answer from its own lookups; a page not listed keeps the general three. First match wins,
+// so a machine's own page under /admin/equipment is Equipment, not Administration.
+const PAGE_PROMPTS: { match: RegExp; prompts: string[] }[] = [
+  { match: /^\/dashboard\/?$/, prompts: ['offline', 'openAlerts', 'serviceDue'] },
+  { match: /^\/admin\/(plant|sites)(\/|$)/, prompts: ['siteMachines', 'siteAddresses', 'emptySites'] },
+  { match: /^\/(admin\/equipment|dashboard\/[^/]+\/[^/]+)(\/|$)/, prompts: ['listMachines', 'noLogger', 'machineAlerts'] },
+  { match: /^\/admin\/devices(\/|$)/, prompts: ['offline', 'unfittedLoggers', 'loggersByStatus'] },
+  { match: /^\/alerts(\/|$)/, prompts: ['openAlerts', 'alertsThisWeek', 'mostAlerts'] },
+  { match: /^\/work-orders(\/|$)/, prompts: ['openJobs', 'overdueJobs', 'serviceDue'] },
+  { match: /^\/incident-management(\/|$)/, prompts: ['openIncidents', 'slaBreached', 'incidentOwners'] },
+];
+
+export function promptsFor(pathname: string): string[] {
+  return PAGE_PROMPTS.find((p) => p.match.test(pathname))?.prompts ?? QUICK_PROMPTS;
+}
 
 const HELP_TOPICS = [
   { icon: LayoutGrid, key: 'admin' },
@@ -56,6 +75,7 @@ function errorKey(err: unknown): string {
 
 export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
   const { t } = useTranslation('shared');
+  const quickPrompts = promptsFor(useLocation().pathname);
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -81,7 +101,8 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
     const observer = new ResizeObserver(measureChips);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [isOpen, isExpanded]);
+    // The chips change with the page, and their row's width with them; the box does not.
+  }, [isOpen, isExpanded, quickPrompts.join()]);
   const scrollChips = (dir: 1 | -1) =>
     chipsRef.current?.scrollBy({ left: dir * chipsRef.current.clientWidth * 0.7, behavior: 'smooth' });
   const tooLong = inputQuery.trim().length > MAX_CHARS;
@@ -129,7 +150,8 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
   // Administration tab bar is (wrapped, they took three lines from the chat; a bare
   // scrolling row hid the third behind a thin bar nobody noticed, TC #9). They open the
   // conversation, above the welcome, and scroll away with it after the first question,
-  // so the whole panel is the chat. They never change, so nothing is lost by that.
+  // so the whole panel is the chat. They follow the page, not the conversation, so
+  // nothing the person needs is lost by that.
   const chips = (
           <div className="relative -mx-4">
             {chipEdges.left && (
@@ -142,7 +164,7 @@ export const AskAIWidget: React.FC<AskAIWidgetProps> = () => {
               </>
             )}
             <div ref={chipsRef} onScroll={measureChips} className="flex gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {QUICK_PROMPTS.map((prompt) => (
+              {quickPrompts.map((prompt) => (
                 <button
                   key={prompt}
                   onClick={() => handleSend(undefined, t(`askAI.prompts.${prompt}`))}
