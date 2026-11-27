@@ -177,6 +177,8 @@ export interface SensorParameterSpec {
   max: number;
   normalRange: string;
   notes?: string;
+  /** The canonical signal this parameter measures; links the sensor to Signal Bindings (TC_277). */
+  signal?: string;
 }
 
 export interface SensorItem {

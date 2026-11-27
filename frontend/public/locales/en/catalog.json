@@ -183,6 +183,7 @@
     "telemetryParameters": "Telemetry Parameters",
     "addParameter": "Add Parameter",
     "parameterPlaceholder": "Parameter (e.g. Engine RPM)",
+    "signalPlaceholder": "Signal it measures (e.g. coolant_temp_c), for Signal Bindings",
     "unit": "Unit",
     "min": "Min",
     "max": "Max",
@@ -235,7 +236,7 @@
     "delete": "Delete Tool Mapping",
     "showing_one": "Showing <b>{{count}}</b> Tool Mapping Profile",
     "showing_other": "Showing <b>{{count}}</b> Tool Mapping Profiles",
-    "autoBind": "Telemetry channels auto-bind upon device registration"
+    "autoBind": "Fit a logger with this tool profile and its channels appear in Signal Bindings, ready to map"
   },
   "mapSensors": {
     "inactiveOption": "{{name}} ({{code}}) — inactive",
@@ -328,7 +329,14 @@
     "breadcrumb": "Equipment Classes",
     "notFound": "No equipment class found.",
     "back": "Back to Equipment Classes",
+    "signals": {
+      "none": "This machine type lists no signals, so machines of this type have nothing to map. Edit the type to add its signals and mark the required ones.",
+      "noneRequired": "No signal is marked required, so signal mapping on machines of this type cannot complete. Edit the type and mark the signals every machine must report.",
+      "required": "Required",
+      "optional": "Optional"
+    },
     "tabs": {
+      "signals": "Signals",
       "predictions": "Predictive Maintenance",
       "alerts": "Alert Rules",
       "chains": "Causal Chains",
@@ -555,6 +563,7 @@
     "dismiss": "Dismiss",
     "rejectedApplyNote_one": "{{count}} row was rejected and will not be applied. Fix it in the workbook and upload it again, or apply the valid rows now.",
     "rejectedApplyNote_other": "{{count}} rows were rejected and will not be applied. Fix them in the workbook and upload it again, or apply the valid rows now.",
+    "classRejectedNote": "The machine type row was rejected. Its signals, KPIs and rules cannot be applied without it. Fix the machine type row in the workbook and upload it again.",
     "skipRejectedConfirm_one": "Apply the valid rows and skip the {{count}} rejected row",
     "skipRejectedConfirm_other": "Apply the valid rows and skip the {{count}} rejected rows",
     "warningsNote": "Applying this batch needs your confirmation:",

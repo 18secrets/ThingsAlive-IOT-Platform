@@ -10,6 +10,11 @@ export interface SensorParameterSpec {
   max: number | null;
   normalRange: string;
   notes?: string;
+  /**
+   * The canonical signal this parameter measures (coolant_temp_c). What links the sensor
+   * to Signal Bindings: written as a sensor_role_capability row on save (TC_277).
+   */
+  signal?: string;
 }
 
 /**

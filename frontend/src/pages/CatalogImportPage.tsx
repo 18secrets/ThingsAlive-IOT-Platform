@@ -119,6 +119,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
   };
 
   const warned = (diff?.classes ?? []).filter((c) => c.warnings?.length);
+  const classRejected = (diff?.rejectedRows ?? []).some((r) => r.sheet === 'equipment_class');
 
   const handleApply = async () => {
     if (!selectedBatchId) return;
@@ -379,7 +380,15 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
                     {/* Rejected rows are skipped by design, but Apply looked like it would
                         take them too (TC_125): it now waits for an explicit choice. */}
-                    {diff.rejectedRows.length > 0 && (
+                    {/* A refused machine type row cannot be skipped: its signals, KPIs and rules
+                        would land in a class with nothing it said (TC_287). The server refuses
+                        it too; this says so before anyone presses Apply. */}
+                    {classRejected && (
+                      <p className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                        {t('import.classRejectedNote')}
+                      </p>
+                    )}
+                    {diff.rejectedRows.length > 0 && !classRejected && (
                       <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 space-y-1.5">
                         <p className="text-xs text-amber-800 dark:text-amber-300">{t('import.rejectedApplyNote', { count: diff.rejectedRows.length })}</p>
                         <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
@@ -412,7 +421,7 @@ export const CatalogImportPage: React.FC<CatalogImportPageProps> = ({
                     <div className="flex justify-end">
                       <button
                         onClick={handleApply}
-                        disabled={applying || hasOutstandingProposals
+                        disabled={applying || hasOutstandingProposals || classRejected
                           || (diff.rejectedRows.length > 0 && !skipRejected) || (warned.length > 0 && !ackWarnings)}
                         title={hasOutstandingProposals ? t('import.resolveFirstHint') : undefined}
                         className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
